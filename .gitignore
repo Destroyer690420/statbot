@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+dashboard/node_modules/
+dashboard/dist/
+gopartrack-firebase-adminsdk-fbsvc-a0aac9a893.json
+ssh-key-*.key
+ssh-key-*.key.pub
+logs/

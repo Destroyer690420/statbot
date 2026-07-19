@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # Bot + API (single container)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reddit-task-manager
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    networks:
+      - app-network
+
+  # Redis (for BullMQ job queue)
+  redis:
+    image: redis:7-alpine
+    container_name: rtm-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - app-network
+
+  # Dashboard (React frontend)
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: rtm-dashboard
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - app
+    networks:
+      - app-network
+
+volumes:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge
