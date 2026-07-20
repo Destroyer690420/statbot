@@ -59,6 +59,17 @@ export function TaskDetails() {
 
   const RETRY_DELAYS = [2 * 3600 * 1000, 6 * 3600 * 1000];
 
+  function getScheduledLabel(type: string): string {
+    if (type === 'POST_70H') return 'Second View Data';
+    return 'First View Data';
+  }
+
+  function getCompletedLabel(type: string): string {
+    if (type === 'COMMENT_20H') return 'View Data Received';
+    if (type === 'POST_20H') return 'First View Data Received';
+    return 'Second View Data Received';
+  }
+
   function buildTimelineEvents(reminders: any[], task: any) {
     const events: {
       id: string;
@@ -80,8 +91,8 @@ export function TaskDetails() {
       events.push({
         id: `${r.id}-scheduled`,
         date: new Date(r.dueAt),
-        label: `${r.type.replace('_', ' ')} Scheduled`,
-        description: `Due ${new Date(r.dueAt).toLocaleString()}`,
+        label: getScheduledLabel(r.type),
+        description: new Date(r.dueAt).toLocaleString(),
         type: 'scheduled',
       });
 
@@ -113,8 +124,8 @@ export function TaskDetails() {
         events.push({
           id: `${r.id}-completed`,
           date: new Date(r.completedAt),
-          label: 'Insight Received',
-          description: `Via ${r.type.replace('_', ' ')} · ${new Date(r.completedAt).toLocaleString()}`,
+          label: getCompletedLabel(r.type),
+          description: new Date(r.completedAt).toLocaleString(),
           type: 'completed',
         });
       }
