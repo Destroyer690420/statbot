@@ -57,7 +57,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
   try {
     const redditUrl = interaction.options.getString('reddit_url', true);

@@ -102,6 +102,14 @@ export function TaskDetails() {
                 <p className="text-dark-200 text-sm bg-dark-800 rounded-lg p-3">{task.notes}</p>
               </div>
             )}
+            {task.cancelledReason && (
+              <div className="col-span-2">
+                <p className="text-dark-400 text-sm font-medium mb-1">Cancelled Reason</p>
+                <p className="text-white text-sm font-medium">
+                  {task.cancelledReason === 'deleted' ? '🗑️ Deleted (Early)' : '🗑️ Deleted Later'}
+                </p>
+              </div>
+            )}
           </div>
 
           <div>

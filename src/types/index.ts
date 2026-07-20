@@ -43,6 +43,7 @@ export interface Task {
   createdById: string;
 
   notes: string | null;
+  cancelledReason: string | null;
 
   createdAt: Date;
   updatedAt: Date;

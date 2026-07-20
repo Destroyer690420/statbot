@@ -30,11 +30,17 @@ export function taskCreatedEmbed(task: Task, reminderCount: number): EmbedBuilde
  * Build a task status embed.
  */
 export function taskStatusEmbed(task: Task, reminders: Reminder[]): EmbedBuilder {
+  let statusDisplay: string = task.status;
+  if (task.status === 'CANCELLED' && task.cancelledReason) {
+    const label = task.cancelledReason === 'deleted' ? 'Deleted' : 'Deleted Later';
+    statusDisplay += ` — ${label}`;
+  }
+
   const embed = new EmbedBuilder()
     .setTitle(`📋 Task Status — ${task.id}`)
     .setColor(getStatusColor(task.status))
     .addFields(
-      { name: 'Status', value: task.status, inline: true },
+      { name: 'Status', value: statusDisplay, inline: true },
       { name: 'Type', value: task.type, inline: true },
       { name: 'Assigned', value: `<@${task.assignedUserId}>`, inline: true },
       { name: 'Ticket', value: `<#${task.channelId}>`, inline: true },
@@ -90,9 +96,13 @@ export function taskListEmbed(
   }
 
   const lines = tasks.map((task) => {
-    const statusIcon = getStatusIcon(task.status);
+    const statusIcon = getStatusIcon(task.status, task);
     const ago = dayjs(task.createdAt).fromNow();
-    return `${statusIcon} \`${task.id}\` • **${task.type}** • <@${task.assignedUserId}> • ${ago}`;
+    let extra = '';
+    if (task.status === 'CANCELLED' && task.cancelledReason) {
+      extra = task.cancelledReason === 'deleted' ? ' • 🗑️ Deleted' : ' • 🗑️ Deleted Later';
+    }
+    return `${statusIcon} \`${task.id}\` • **${task.type}** • <@${task.assignedUserId}> • ${ago}${extra}`;
   });
 
   embed.setDescription(lines.join('\n'));
@@ -221,7 +231,7 @@ function getStatusColor(status: string): number {
   }
 }
 
-function getStatusIcon(status: string): string {
+function getStatusIcon(status: string, task?: Task): string {
   switch (status) {
     case 'PENDING': return '🟡';
     case 'REMINDER_20_SENT': return '🔵';
@@ -230,7 +240,9 @@ function getStatusIcon(status: string): string {
     case 'INSIGHT_70_RECEIVED': return '🟢';
     case 'COMPLETED': return '✅';
     case 'ARCHIVED': return '📦';
-    case 'CANCELLED': return '❌';
+    case 'CANCELLED':
+      if (task?.cancelledReason === 'deleted' || task?.cancelledReason === 'deleted_later') return '🗑️';
+      return '❌';
     default: return '⚪';
   }
 }

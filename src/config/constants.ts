@@ -17,6 +17,9 @@ export const MAX_REMINDER_ATTEMPTS = 3;
 /** Auto-archive threshold (in days) */
 export const ARCHIVE_AFTER_DAYS = 30;
 
+/** Threshold for early vs late deletion detection (30 minutes) */
+export const DELETED_DETECTION_THRESHOLD_MS = 30 * 60 * 1000;
+
 /** Maximum search results */
 export const MAX_SEARCH_RESULTS = 20;
 

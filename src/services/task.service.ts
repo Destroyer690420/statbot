@@ -59,6 +59,7 @@ class TaskService {
       assignedUserName: input.assignedUserName || null,
       createdById: input.createdById,
       notes: input.notes || null,
+      cancelledReason: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -200,6 +201,39 @@ class TaskService {
   }
 
   /**
+   * Cancel a task with an optional reason tag.
+   * reason: 'deleted' (early detection) or 'deleted_later' (after reminder sent / >30m).
+   */
+  async cancelTask(taskId: string, userId: string, reason?: string): Promise<Task> {
+    const task = await this.findById(taskId);
+    if (!task) throw new Error('Task not found.');
+
+    const validatedStatus = transition(task.status, TaskStatus.CANCELLED);
+
+    const updateData: Record<string, unknown> = {
+      status: validatedStatus,
+      updatedAt: toTimestamp(new Date()),
+    };
+
+    if (reason) {
+      updateData.cancelledReason = reason;
+    }
+
+    await tasksCollection().doc(taskId).update(updateData);
+
+    logger.info('Task cancelled', { taskId, reason, from: task.status });
+
+    await auditLogService.log(
+      AuditAction.TASK_CANCELLED,
+      taskId,
+      userId,
+      reason ? `Task cancelled (${reason})` : 'Task cancelled',
+    );
+
+    return { ...task, status: validatedStatus, updatedAt: new Date(), cancelledReason: reason || null };
+  }
+
+  /**
    * Delete a task and its associated reminders.
    */
   async delete(taskId: string, userId: string): Promise<void> {
@@ -336,6 +370,7 @@ class TaskService {
       assignedUserName: data.assignedUserName || null,
       createdById: data.createdById,
       notes: data.notes || null,
+      cancelledReason: data.cancelledReason || null,
       createdAt: toDate(data.createdAt) || new Date(),
       updatedAt: toDate(data.updatedAt) || new Date(),
     };
