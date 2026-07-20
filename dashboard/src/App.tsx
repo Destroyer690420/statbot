@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
 import { TaskDetails } from './pages/TaskDetails';
 import { Analytics } from './pages/Analytics';
+import { Activity } from './pages/Activity';
 import { Settings } from './pages/Settings';
 import { NotFound } from './pages/NotFound';
 
@@ -56,6 +57,14 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Analytics />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/activity" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Activity />
                 </Layout>
               </ProtectedRoute>
             } />

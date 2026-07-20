@@ -113,6 +113,13 @@ export async function downloadCsv(params?: Record<string, string>): Promise<void
   URL.revokeObjectURL(url);
 }
 
+// ─── Audit Logs ──────────────────────────────────────────────
+
+export async function getAuditLogs(params?: Record<string, string>) {
+  const { data } = await api.get('/audit-logs', { params });
+  return data;
+}
+
 // ─── Health ──────────────────────────────────────────────────
 
 export async function getHealth() {

@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getTask, getReminders } from '../api/client';
-import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { getTask, getReminders, getAuditLogs } from '../api/client';
+import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History } from 'lucide-react';
 
 export function TaskDetails() {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +15,12 @@ export function TaskDetails() {
   const { data: remindersData, isLoading: remindersLoading } = useQuery({
     queryKey: ['reminders', id],
     queryFn: () => getReminders(id!),
+    enabled: !!id,
+  });
+
+  const { data: auditData, isLoading: auditLoading } = useQuery({
+    queryKey: ['audit-logs', id],
+    queryFn: () => getAuditLogs({ taskId: id! }),
     enabled: !!id,
   });
 
@@ -124,6 +130,46 @@ export function TaskDetails() {
               <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
             </a>
           </div>
+        </div>
+
+        {/* Audit Log */}
+        <div className="glass-card p-6">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <History className="w-5 h-5 text-primary-400" />
+            Activity Log
+          </h3>
+
+          {auditLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+            </div>
+          ) : !auditData?.data?.length ? (
+            <p className="text-dark-400 text-sm">No activity recorded for this task.</p>
+          ) : (
+            <div className="space-y-2">
+              {auditData.data.slice(0, 5).map((log: any) => (
+                <div key={log.id} className="bg-dark-800/50 rounded-xl p-3 border border-dark-700/50 flex items-center justify-between">
+                  <div>
+                    <span className="text-sm text-dark-100 font-medium">{log.action.replace(/_/g, ' ')}</span>
+                    {log.details && (
+                      <p className="text-xs text-dark-400 mt-0.5">{log.details}</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-dark-500 whitespace-nowrap ml-4">
+                    {new Date(log.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+              {auditData.data.length > 5 && (
+                <Link
+                  to={`/activity?taskId=${encodeURIComponent(id!)}`}
+                  className="block text-center text-sm text-primary-400 hover:text-primary-300 mt-3 transition-colors"
+                >
+                  View all {auditData.data.length} events →
+                </Link>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Reminder Timeline */}

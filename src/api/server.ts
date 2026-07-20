@@ -13,6 +13,7 @@ import reminderRoutes from './routes/reminders';
 import statsRoutes from './routes/stats';
 import healthRoutes from './routes/health';
 import exportRoutes from './routes/export';
+import auditRoutes from './routes/audit';
 
 /**
  * Create and configure the Express API server.
@@ -57,6 +58,7 @@ export function createApiServer(): express.Application {
   app.use('/api/v1/tasks', taskRoutes);
   app.use('/api/v1/stats', statsRoutes);
   app.use('/api/v1/export', exportRoutes);
+  app.use('/api/v1/audit-logs', auditRoutes);
   // reminderRoutes mounts at /api/v1 to catch nested paths like /tasks/:id/reminders
   // MUST come last so specific paths above take priority
   app.use('/api/v1', reminderRoutes);
