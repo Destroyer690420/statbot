@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getTask, getReminders, getAuditLogs } from '../api/client';
-import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History, PlusCircle, CalendarDays, Bell, RefreshCw, Flag } from 'lucide-react';
 
 export function TaskDetails() {
   const { id } = useParams<{ id: string }>();
@@ -56,6 +56,116 @@ export function TaskDetails() {
       default: return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
     }
   };
+
+  const RETRY_DELAYS = [2 * 3600 * 1000, 6 * 3600 * 1000];
+
+  function buildTimelineEvents(reminders: any[], task: any) {
+    const events: {
+      id: string;
+      date: Date | null;
+      label: string;
+      description: string;
+      type: 'task-created' | 'scheduled' | 'sent' | 'retry' | 'completed' | 'task-completed';
+    }[] = [];
+
+    events.push({
+      id: 'task-created',
+      date: new Date(task.createdAt),
+      label: 'Task Created',
+      description: `${task.type} · ${new Date(task.createdAt).toLocaleString()}`,
+      type: 'task-created',
+    });
+
+    for (const r of reminders) {
+      events.push({
+        id: `${r.id}-scheduled`,
+        date: new Date(r.dueAt),
+        label: `${r.type.replace('_', ' ')} Scheduled`,
+        description: `Due ${new Date(r.dueAt).toLocaleString()}`,
+        type: 'scheduled',
+      });
+
+      if (r.sent && r.sentAt) {
+        events.push({
+          id: `${r.id}-sent`,
+          date: new Date(r.sentAt),
+          label: 'Reminder Sent',
+          description: new Date(r.sentAt).toLocaleString(),
+          type: 'sent',
+        });
+      }
+
+      if (r.retryCount > 0 && r.sentAt) {
+        const sentMs = new Date(r.sentAt).getTime();
+        for (let i = 1; i <= r.retryCount; i++) {
+          const retryDate = new Date(sentMs + RETRY_DELAYS.slice(0, i).reduce((a, b) => a + b, 0));
+          events.push({
+            id: `${r.id}-retry-${i}`,
+            date: retryDate,
+            label: `Retry ${i}`,
+            description: new Date(retryDate).toLocaleString(),
+            type: 'retry',
+          });
+        }
+      }
+
+      if (r.completed && r.completedAt) {
+        events.push({
+          id: `${r.id}-completed`,
+          date: new Date(r.completedAt),
+          label: 'Insight Received',
+          description: `Via ${r.type.replace('_', ' ')} · ${new Date(r.completedAt).toLocaleString()}`,
+          type: 'completed',
+        });
+      }
+    }
+
+    if (task.status === 'COMPLETED') {
+      events.push({
+        id: 'task-completed',
+        date: new Date(task.updatedAt),
+        label: 'Task Completed',
+        description: new Date(task.updatedAt).toLocaleString(),
+        type: 'task-completed',
+      });
+    }
+
+    events.sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return a.date.getTime() - b.date.getTime();
+    });
+
+    return events;
+  }
+
+  function TimelineIcon({ type }: { type: string }) {
+    const icons: Record<string, typeof PlusCircle> = {
+      'task-created': PlusCircle,
+      scheduled: CalendarDays,
+      sent: Bell,
+      retry: RefreshCw,
+      completed: CheckCircle2,
+      'task-completed': Flag,
+    };
+    const Icon = icons[type] || Clock;
+    return <Icon className="w-5 h-5" />;
+  }
+
+  function dotColor(type: string): string {
+    switch (type) {
+      case 'task-created': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'scheduled': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+      case 'sent': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+      case 'retry': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      case 'completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'task-completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
+      default: return 'bg-dark-700/50 text-dark-400 border-dark-600';
+    }
+  }
+
+  const timeline = buildTimelineEvents(reminders, task);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -174,9 +284,9 @@ export function TaskDetails() {
 
         {/* Reminder Timeline */}
         <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
             <Clock className="w-5 h-5 text-primary-400" />
-            Reminders
+            Reminder Timeline
           </h3>
 
           {remindersLoading ? (
@@ -186,41 +296,24 @@ export function TaskDetails() {
           ) : reminders.length === 0 ? (
             <p className="text-dark-400 text-sm">No reminders for this task.</p>
           ) : (
-            <div className="space-y-3">
-              {reminders.map((r: any) => (
-                <div key={r.id} className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold px-2 py-1 bg-primary-900/50 text-primary-400 rounded-lg">
-                      {r.type.replace('_', ' ')}
-                    </span>
-                    {r.completed ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-400" />
-                    ) : r.sent ? (
-                      <Clock className="w-4 h-4 text-yellow-400" />
-                    ) : (
-                      <Clock className="w-4 h-4 text-dark-400" />
-                    )}
-                  </div>
-                  <p className="text-xs text-dark-400">
-                    Due: {new Date(r.dueAt).toLocaleString()}
-                  </p>
-                  {r.sentAt && (
-                    <p className="text-xs text-dark-400">
-                      Sent: {new Date(r.sentAt).toLocaleString()}
-                    </p>
-                  )}
-                  {r.completedAt && (
-                    <p className="text-xs text-dark-400">
-                      Completed: {new Date(r.completedAt).toLocaleString()}
-                    </p>
-                  )}
-                  {r.retryCount > 0 && (
-                    <p className="text-xs text-yellow-400 mt-1">
-                      Retries: {r.retryCount}
-                    </p>
-                  )}
-                </div>
-              ))}
+            <div className="relative">
+              <div className="absolute left-[19px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-dark-600 via-dark-700 to-dark-800" />
+              <div className="space-y-0">
+                {timeline.map((event) => {
+                  const isFuture = event.date && event.date.getTime() > Date.now();
+                  return (
+                    <div key={event.id} className="relative flex gap-4 pb-5 last:pb-0 group">
+                      <div className={`relative z-10 flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center border transition-all duration-200 group-hover:scale-110 ${dotColor(event.type)} ${isFuture ? 'opacity-40' : ''}`}>
+                        <TimelineIcon type={event.type} />
+                      </div>
+                      <div className={`flex-1 min-w-0 pt-2 ${isFuture ? 'opacity-40' : ''}`}>
+                        <p className="text-sm font-medium text-dark-100">{event.label}</p>
+                        <p className="text-xs text-dark-500 mt-0.5">{event.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
