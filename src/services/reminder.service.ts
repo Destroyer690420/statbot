@@ -157,6 +157,26 @@ class ReminderService {
   }
 
   /**
+   * Store the Discord message ID for a sent reminder.
+   */
+  async updateReminderMessageId(reminderId: string, messageId: string): Promise<void> {
+    await remindersCollection().doc(reminderId).update({ reminderMessageId: messageId });
+  }
+
+  /**
+   * Find a reminder by its Discord reminder message ID.
+   */
+  async findByMessageId(messageId: string): Promise<Reminder | null> {
+    const snapshot = await remindersCollection()
+      .where('reminderMessageId', '==', messageId)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return null;
+    return this.docToReminder(snapshot.docs[0]);
+  }
+
+  /**
    * Reschedule a reminder to a new time.
    */
   async reschedule(reminderId: string, newDueAt: Date): Promise<Reminder> {
@@ -223,6 +243,7 @@ class ReminderService {
       completedAt: null,
       retryCount: 0,
       jobId: null,
+      reminderMessageId: null,
     };
   }
 
@@ -239,6 +260,7 @@ class ReminderService {
       completedAt: toDate(data.completedAt),
       retryCount: data.retryCount ?? 0,
       jobId: data.jobId || null,
+      reminderMessageId: data.reminderMessageId || null,
     };
   }
 }

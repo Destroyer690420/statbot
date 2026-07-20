@@ -41,24 +41,22 @@ export async function getTasks(params?: Record<string, string>) {
 }
 
 export async function getTask(id: string) {
-  const { data } = await api.get(`/tasks/${id}`);
+  const { data } = await api.get(`/tasks/${encodeURIComponent(id)}`);
   return data;
 }
 
 export async function deleteTask(id: string) {
-  const { data } = await api.delete(`/tasks/${id}`);
+  const { data } = await api.delete(`/tasks/${encodeURIComponent(id)}`);
   return data;
 }
 
 export async function updateTask(id: string, body: Record<string, unknown>) {
-  const { data } = await api.patch(`/tasks/${id}`, body);
+  const { data } = await api.patch(`/tasks/${encodeURIComponent(id)}`, body);
   return data;
 }
 
-// ─── Reminders ───────────────────────────────────────────────
-
 export async function getReminders(taskId: string) {
-  const { data } = await api.get(`/tasks/${taskId}/reminders`);
+  const { data } = await api.get(`/tasks/${encodeURIComponent(taskId)}/reminders`);
   return data;
 }
 
@@ -94,6 +92,25 @@ export async function getEmployeePerformance() {
 export function getExportCsvUrl(params?: Record<string, string>): string {
   const searchParams = new URLSearchParams(params || {});
   return `/api/v1/export/csv?${searchParams}`;
+}
+
+export async function downloadCsv(params?: Record<string, string>): Promise<void> {
+  const { data, headers } = await api.get('/export/csv', {
+    params,
+    responseType: 'blob',
+  });
+  const contentDisposition = headers['content-disposition'] || '';
+  const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+  const filename = filenameMatch?.[1] || `tasks-export-${Date.now()}.csv`;
+
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ─── Health ──────────────────────────────────────────────────

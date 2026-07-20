@@ -19,6 +19,7 @@ import exportRoutes from './routes/export';
  */
 export function createApiServer(): express.Application {
   const app = express();
+  app.set('trust proxy', 1);
 
   // ─── Security Middleware ────────────────────────────────────
   app.use(helmet());

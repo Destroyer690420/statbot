@@ -13,7 +13,7 @@ router.use(authMiddleware);
  */
 router.get('/tasks/:taskId/reminders', async (req: Request, res: Response): Promise<void> => {
   try {
-    const reminders = await reminderService.findByTaskId(String(req.params.taskId).toUpperCase());
+    const reminders = await reminderService.findByTaskId(String(req.params.taskId));
     res.json({ success: true, data: reminders });
   } catch (error) {
     logger.error('GET reminders failed', { error });

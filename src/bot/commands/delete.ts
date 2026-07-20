@@ -28,7 +28,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const taskId = interaction.options.getString('task_id', true).toUpperCase();
+  const taskId = interaction.options.getString('task_id', true);
 
   // Check if task exists
   const task = await taskService.findById(taskId);

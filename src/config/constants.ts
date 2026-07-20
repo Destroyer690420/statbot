@@ -29,8 +29,8 @@ export const SUPPORTED_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as cons
 /** BullMQ queue name */
 export const QUEUE_NAME = 'reminder-queue';
 
-/** Task ID validation pattern (uppercase alphanumeric, hyphens, underscores, 1-32 chars) */
-export const TASK_ID_PATTERN = /^[A-Z0-9_-]{1,32}$/;
+/** Task ID validation pattern (alphanumeric, spaces, hash, hyphens, underscores, 1-32 chars) */
+export const TASK_ID_PATTERN = /^[A-Za-z0-9 _#-]{1,32}$/;
 
 /** Reddit URL regex pattern */
 export const REDDIT_URL_PATTERN = /^https?:\/\/(www\.|old\.|new\.)?reddit\.com\/.+/i;

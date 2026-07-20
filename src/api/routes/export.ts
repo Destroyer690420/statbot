@@ -9,22 +9,24 @@ const router = Router();
 router.use(authMiddleware);
 
 function escapeCSV(val: string): string {
-  if (val.includes(',') || val.includes('"') || val.includes('\n')) {
-    return `"${val.replace(/"/g, '""')}"`;
+  if (val == null) return '';
+  const str = String(val);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
   }
-  return val;
+  return str;
 }
 
 function tasksToCSV(tasks: any[]): string {
-  const headers = ['ID', 'Type', 'Status', 'Reddit URL', 'Assigned User', 'Channel ID', 'Notes', 'Created At', 'Updated At'];
+  const headers = ['ID', 'Type', 'Status', 'Reddit URL', 'Assigned User', 'Ticket', 'Notes', 'Created At', 'Updated At'];
   const rows = tasks.map((t) =>
     [
       escapeCSV(t.id),
       escapeCSV(t.type),
       escapeCSV(t.status),
       escapeCSV(t.redditUrl),
-      escapeCSV(t.assignedUserId),
-      escapeCSV(t.channelId),
+      escapeCSV(t.assignedUserName || t.assignedUserId),
+      escapeCSV(t.channelName || t.channelId),
       escapeCSV(t.notes || ''),
       escapeCSV(t.createdAt?.toDate?.()?.toISOString() || t.createdAt || ''),
       escapeCSV(t.updatedAt?.toDate?.()?.toISOString() || t.updatedAt || ''),

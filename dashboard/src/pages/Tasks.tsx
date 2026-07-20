@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { getTasks, deleteTask, getExportCsvUrl } from '../api/client';
+import { getTasks, deleteTask, downloadCsv } from '../api/client';
 import { Search, Filter, Trash2, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download } from 'lucide-react';
 
 const PAGE_SIZE = 15;
@@ -27,7 +27,9 @@ export function Tasks() {
   
   const filteredTasks = tasks.filter((task: any) => 
     task.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    task.redditUrl.toLowerCase().includes(searchTerm.toLowerCase())
+    task.redditUrl.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (task.channelId && task.channelId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (task.channelName && task.channelName.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
@@ -78,13 +80,13 @@ export function Tasks() {
             </select>
           </div>
 
-          <a
-            href={getExportCsvUrl(statusFilter ? { status: statusFilter } : undefined)}
+          <button
+            onClick={() => downloadCsv(statusFilter ? { status: statusFilter } : undefined)}
             className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
             title="Export CSV"
           >
             <Download className="w-5 h-5" />
-          </a>
+          </button>
         </div>
       </div>
 
@@ -96,21 +98,22 @@ export function Tasks() {
                 <th className="px-6 py-4 font-semibold text-dark-200">Task ID</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Type</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Status</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Reddit URL</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">URL</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Created</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Ticket</th>
                 <th className="px-6 py-4 font-semibold text-dark-200 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dark-700/50">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
+                  <td colSpan={7} className="px-6 py-12 text-center">
                     <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : paginatedTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-dark-400">
+                  <td colSpan={7} className="px-6 py-12 text-center text-dark-400">
                     No tasks found matching your criteria.
                   </td>
                 </tr>
@@ -118,7 +121,7 @@ export function Tasks() {
                 paginatedTasks.map((task: any) => (
                   <tr key={task.id} className="hover:bg-dark-800/30 transition-colors">
                     <td className="px-6 py-4 font-mono text-sm font-medium text-dark-100">
-                      <Link to={`/tasks/${task.id}`} className="hover:text-primary-400 transition-colors">
+                      <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="hover:text-primary-400 transition-colors">
                         {task.id}
                       </Link>
                     </td>
@@ -146,10 +149,15 @@ export function Tasks() {
                     <td className="px-6 py-4 text-sm text-dark-300">
                       {new Date(task.createdAt).toLocaleDateString()}
                     </td>
+                    <td className="px-6 py-4">
+                      <span className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50">
+                        {task.channelName ? `#${task.channelName}` : task.channelId}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Link
-                          to={`/tasks/${task.id}`}
+                          to={`/tasks/${encodeURIComponent(task.id)}`}
                           className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
                           title="View Details"
                         >

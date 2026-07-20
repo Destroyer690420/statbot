@@ -86,7 +86,7 @@ export function TaskDetails() {
             </div>
             <div>
               <p className="text-dark-400 text-sm font-medium mb-1">Ticket Channel</p>
-              <p className="text-white font-mono text-sm">{task.channelId}</p>
+              <p className="text-white font-mono text-sm">{task.channelName ? `#${task.channelName}` : task.channelId}</p>
             </div>
             <div>
               <p className="text-dark-400 text-sm font-medium mb-1">Created</p>

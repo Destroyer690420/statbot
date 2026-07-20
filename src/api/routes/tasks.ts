@@ -22,6 +22,8 @@ const createTaskSchema = z.object({
   assignedUserId: z.string().min(1),
   guildId: z.string().min(1),
   createdById: z.string().min(1),
+  channelName: z.string().optional(),
+  assignedUserName: z.string().optional(),
   notes: z.string().max(500).optional(),
 });
 
@@ -62,7 +64,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
  */
 router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const task = await taskService.findById(String(req.params.id).toUpperCase());
+    const task = await taskService.findById(String(req.params.id));
     if (!task) {
       res.status(404).json({ success: false, message: 'Task not found.' });
       return;
@@ -100,7 +102,7 @@ router.post('/', validateBody(createTaskSchema), async (req: Request, res: Respo
  */
 router.patch('/:id', validateBody(updateTaskSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const taskId = String(req.params.id).toUpperCase();
+    const taskId = String(req.params.id);
     const task = await taskService.findById(taskId);
 
     if (!task) {
@@ -127,7 +129,7 @@ router.patch('/:id', validateBody(updateTaskSchema), async (req: Request, res: R
  */
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const taskId = String(req.params.id).toUpperCase();
+    const taskId = String(req.params.id);
 
     await cancelTaskJobs(taskId);
     await taskService.delete(taskId, 'api');

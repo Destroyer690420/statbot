@@ -78,7 +78,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const redditUrl = interaction.options.getString('reddit_url');
     const page = interaction.options.getInteger('page') || 1;
 
-    if (taskId) filters.taskId = taskId.toUpperCase();
+    if (taskId) filters.taskId = taskId;
     if (status) filters.status = status as TaskStatus;
     if (type) filters.type = type as TaskType;
     if (user) filters.assignedUserId = user.id;

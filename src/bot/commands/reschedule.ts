@@ -40,7 +40,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   await interaction.deferReply();
 
   try {
-    const taskId = interaction.options.getString('task_id', true).toUpperCase();
+    const taskId = interaction.options.getString('task_id', true);
     const reminderChoice = interaction.options.getString('reminder', true);
     const hours = interaction.options.getInteger('hours', true);
 

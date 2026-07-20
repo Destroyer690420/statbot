@@ -36,8 +36,10 @@ export interface Task {
 
   guildId: string;
   channelId: string;
+  channelName: string | null;
 
   assignedUserId: string;
+  assignedUserName: string | null;
   createdById: string;
 
   notes: string | null;
@@ -63,6 +65,7 @@ export interface Reminder {
 
   retryCount: number;
   jobId: string | null;
+  reminderMessageId: string | null;
 }
 
 // ─── Audit Log ───────────────────────────────────────────────
@@ -99,7 +102,9 @@ export interface CreateTaskInput {
   redditUrl: string;
   type: TaskType;
   channelId: string;
+  channelName?: string;
   assignedUserId: string;
+  assignedUserName?: string;
   createdById: string;
   guildId: string;
   notes?: string;

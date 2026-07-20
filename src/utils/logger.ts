@@ -10,20 +10,21 @@ const logFormat = winston.format.combine(
   }),
 );
 
-export const logger = winston.createLogger({
-  level: env.LOG_LEVEL,
-  format: logFormat,
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        logFormat,
-      ),
-    }),
+const consoleTransport = new winston.transports.Console({
+  format: winston.format.combine(
+    winston.format.colorize(),
+    logFormat,
+  ),
+});
+
+const transports: winston.transport[] = [consoleTransport];
+
+if (env.NODE_ENV !== 'production') {
+  transports.push(
     new winston.transports.File({
       filename: 'logs/error.log',
       level: 'error',
-      maxsize: 5242880, // 5MB
+      maxsize: 5242880,
       maxFiles: 5,
     }),
     new winston.transports.File({
@@ -31,5 +32,11 @@ export const logger = winston.createLogger({
       maxsize: 5242880,
       maxFiles: 5,
     }),
-  ],
+  );
+}
+
+export const logger = winston.createLogger({
+  level: env.LOG_LEVEL,
+  format: logFormat,
+  transports,
 });

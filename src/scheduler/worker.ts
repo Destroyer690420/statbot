@@ -19,6 +19,7 @@ function buildReminderEmbed(
   type: ReminderType,
   redditUrl: string,
   taskType: string,
+  taskId: string,
   isRetry: boolean,
   retryCount: number,
 ): EmbedBuilder {
@@ -30,6 +31,7 @@ function buildReminderEmbed(
     .setTitle(title)
     .setDescription(`Please upload the **${hourLabel}** insight.`)
     .addFields(
+      { name: 'Task ID', value: taskId, inline: true },
       { name: 'Task', value: taskType, inline: true },
       { name: 'Reddit', value: redditUrl },
     )
@@ -37,9 +39,9 @@ function buildReminderEmbed(
     .setTimestamp();
 
   if (isRetry) {
-    embed.setFooter({ text: `Retry ${retryCount} of ${MAX_REMINDER_ATTEMPTS}` });
+    embed.setFooter({ text: `Retry ${retryCount} of ${MAX_REMINDER_ATTEMPTS} — Reply with your screenshot.` });
   } else {
-    embed.setFooter({ text: 'Reply with the screenshot in this ticket.' });
+    embed.setFooter({ text: 'Reply to this message with your screenshot.' });
   }
 
   return embed;
@@ -92,12 +94,14 @@ export function initializeWorker(discordClient: Client): Worker {
           return;
         }
 
-        const embed = buildReminderEmbed(type, task.redditUrl, task.type, isRetry, retryCount);
+        const embed = buildReminderEmbed(type, task.redditUrl, task.type, task.id, isRetry, retryCount);
 
-        await channel.send({
+        const sentMessage = await channel.send({
           content: `<@${task.assignedUserId}>`,
           embeds: [embed],
         });
+
+        await reminderService.updateReminderMessageId(reminderId, sentMessage.id);
 
         if (!reminder.sent) {
           await reminderService.markSent(reminderId);
@@ -151,6 +155,10 @@ export function initializeWorker(discordClient: Client): Worker {
       error: error.message,
       attempts: job?.attemptsMade,
     });
+
+    if (job?.data?.taskId) {
+      notifyAdminOverdue(discordClient, job.data.taskId, job.data.type);
+    }
   });
 
   worker.on('error', (error) => {

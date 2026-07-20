@@ -1,31 +1,18 @@
 import { Message } from 'discord.js';
-import { taskService } from '../../services/task.service';
 import { reminderService } from '../../services/reminder.service';
+import { taskService } from '../../services/task.service';
 import { isSupportedImage } from '../../utils/validators';
 import { TaskStatus, AuditAction } from '../../types';
 import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
 import { auditLogService } from '../../services/audit.service';
 import { logger } from '../../utils/logger';
 
-/**
- * Handle messageCreate event — detect insight uploads in ticket channels.
- */
 export async function handleMessageCreate(message: Message): Promise<void> {
-  // Ignore bots
   if (message.author.bot) return;
-
-  // Ignore empty messages without attachments
   if (message.attachments.size === 0) return;
-
-  // Ignore DMs
   if (!message.guild) return;
 
   try {
-    // Check if this channel has any active tasks
-    const tasks = await taskService.findByChannel(message.channel.id);
-    if (tasks.length === 0) return;
-
-    // Check if any attachments are supported images
     const imageAttachments = message.attachments.filter((att) => {
       const name = att.name || '';
       return isSupportedImage(name);
@@ -33,61 +20,47 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 
     if (imageAttachments.size === 0) return;
 
-    // Find a task assigned to this user that is waiting for an insight
-    const userTask = tasks.find((t) => t.assignedUserId === message.author.id);
-    if (!userTask) return;
+    if (!message.reference?.messageId) return;
 
-    // Find the active reminder waiting for insight
-    const waitingReminder = await reminderService.findWaitingForInsight(userTask.id);
+    const repliedToId = message.reference.messageId;
+    const reminder = await reminderService.findByMessageId(repliedToId);
+    if (!reminder) return;
 
-    if (!waitingReminder) {
-      // Check if there's already a completed reminder (duplicate upload)
-      const allReminders = await reminderService.findByTaskId(userTask.id);
-      const lastCompleted = allReminders
-        .filter((r) => r.completed)
-        .sort((a, b) => (b.completedAt?.getTime() || 0) - (a.completedAt?.getTime() || 0))[0];
+    const task = await taskService.findById(reminder.taskId);
+    if (!task) return;
 
-      if (lastCompleted) {
-        // All reminders completed — duplicate upload
-        await message.reply('⚠️ Insight already received.');
-        return;
-      }
+    if (task.assignedUserId !== message.author.id) return;
 
-      // No pending reminder exists — ignore
+    if (reminder.completed) {
+      await message.reply('⚠️ Insight already received.');
       return;
     }
 
-    // Mark the reminder as completed
-    await reminderService.markCompleted(waitingReminder.id, message.author.id);
+    await reminderService.markCompleted(reminder.id, message.author.id);
 
-    // Update task status
-    const newStatus = getStatusAfterInsightReceived(userTask.status, userTask.type);
-    if (newStatus !== userTask.status) {
-      await taskService.updateStatus(userTask.id, newStatus, message.author.id);
+    const newStatus = getStatusAfterInsightReceived(task.status, task.type);
+    if (newStatus !== task.status) {
+      await taskService.updateStatus(task.id, newStatus, message.author.id);
     }
 
-    // Check if task should be fully completed
-    const updatedTask = await taskService.findById(userTask.id);
+    const updatedTask = await taskService.findById(task.id);
     if (updatedTask && shouldComplete(updatedTask.status, updatedTask.type)) {
       await taskService.updateStatus(updatedTask.id, TaskStatus.COMPLETED, message.author.id);
     }
 
-    // React with checkmark
     await message.react('✅');
-
-    // Reply with confirmation
     await message.reply('✅ Insight received successfully.');
 
     await auditLogService.log(
       AuditAction.INSIGHT_RECEIVED,
-      userTask.id,
+      task.id,
       message.author.id,
-      `Insight uploaded for ${waitingReminder.type}`,
+      `Insight uploaded for ${reminder.type}`,
     );
 
-    logger.info('Insight received', {
-      taskId: userTask.id,
-      reminderId: waitingReminder.id,
+    logger.info('Insight received via reply', {
+      taskId: task.id,
+      reminderId: reminder.id,
       userId: message.author.id,
       channelId: message.channel.id,
     });
