@@ -35,11 +35,14 @@ export function Tasks() {
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
   const paginatedTasks = filteredTasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, cancelledReason?: string) => {
     switch (status) {
       case 'COMPLETED': return 'bg-green-500/10 text-green-400 border-green-500/20';
       case 'ARCHIVED': return 'bg-dark-500/10 text-dark-400 border-dark-500/20';
-      case 'CANCELLED': return 'bg-red-500/10 text-red-400 border-red-500/20';
+      case 'CANCELLED':
+        if (cancelledReason === 'deleted' || cancelledReason === 'deleted_later')
+          return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
+        return 'bg-red-500/10 text-red-400 border-red-500/20';
       case 'PENDING': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
       default: return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
     }
@@ -131,8 +134,10 @@ export function Tasks() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`status-badge border ${getStatusColor(task.status)}`}>
-                        {task.status.replace(/_/g, ' ')}
+                      <span className={`status-badge border ${getStatusColor(task.status, task.cancelledReason)}`}>
+                        {task.cancelledReason === 'deleted' ? '🗑️ Deleted' :
+                         task.cancelledReason === 'deleted_later' ? '🗑️ Deleted Later' :
+                         task.status.replace(/_/g, ' ')}
                       </span>
                     </td>
                     <td className="px-6 py-4">
