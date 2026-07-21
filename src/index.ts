@@ -79,6 +79,37 @@ async function main(): Promise<void> {
 
   logger.info(`Auto-archive checks daily for tasks older than ${ARCHIVE_AFTER_DAYS} days`);
 
+  // ─── Sunday Archive Schedule ─────────────────────────────────
+
+  function msUntilNextSunday(): number {
+    const now = new Date();
+    const nextSunday = new Date(now);
+    nextSunday.setUTCDate(now.getUTCDate() + (7 - now.getUTCDay()) % 7);
+    nextSunday.setUTCHours(0, 0, 0, 0);
+    if (nextSunday <= now) {
+      nextSunday.setUTCDate(nextSunday.getUTCDate() + 7);
+    }
+    return nextSunday.getTime() - now.getTime();
+  }
+
+  async function runSundayArchive(): Promise<void> {
+    try {
+      const archived = await taskService.archiveAllCompleted();
+      if (archived > 0) {
+        logger.info(`Sunday archive: moved ${archived} completed tasks to ARCHIVED`);
+      }
+    } catch (error) {
+      logger.error('Sunday archive failed', { error });
+    }
+    setTimeout(runSundayArchive, msUntilNextSunday());
+  }
+
+  // Start the Sunday archive cycle after a 1-hour delay on startup
+  setTimeout(() => {
+    setTimeout(runSundayArchive, msUntilNextSunday());
+    logger.info('Sunday archive scheduled (weekly, moves all COMPLETED → ARCHIVED)');
+  }, 60 * 60 * 1000);
+
   // ─── Graceful Shutdown ──────────────────────────────────────
 
   const shutdown = async (signal: string) => {

@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ListTodo, BarChart3, History, Settings, LogOut, Menu } from 'lucide-react';
+import { LayoutDashboard, ListTodo, BarChart3, History, Archive, Settings, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useState } from 'react';
 
@@ -19,6 +19,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { name: 'Tasks', path: '/tasks', icon: ListTodo },
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },
     { name: 'Activity', path: '/activity', icon: History },
+    { name: 'Archives', path: '/archives', icon: Archive },
     { name: 'Settings', path: '/settings', icon: Settings },
   ];
 

@@ -234,6 +234,60 @@ class TaskService {
   }
 
   /**
+   * Restore a previously auto-cancelled task back to PENDING and clear its cancelledReason.
+   * Only works if task status is CANCELLED.
+   */
+  async restoreCancelledTask(taskId: string, userId: string): Promise<Task> {
+    const task = await this.findById(taskId);
+    if (!task) throw new Error('Task not found.');
+    if (task.status !== TaskStatus.CANCELLED) throw new Error('Task is not cancelled; cannot restore.');
+
+    await tasksCollection().doc(taskId).update({
+      status: TaskStatus.PENDING,
+      cancelledReason: null,
+      updatedAt: toTimestamp(new Date()),
+    });
+
+    logger.info('Task restored from CANCELLED to PENDING', { taskId });
+
+    await auditLogService.log(
+      AuditAction.TASK_UPDATED,
+      taskId,
+      userId,
+      `Task uncancelled: ${task.status} → PENDING, cancelledReason cleared`,
+    );
+
+    return { ...task, status: TaskStatus.PENDING, cancelledReason: null, updatedAt: new Date() };
+  }
+
+  /**
+   * Update only the cancelledReason field (manual admin override).
+   * Does NOT change task status.
+   * Non-null value stops further reminders; null restores normal operation.
+   */
+  async updateCancelledReason(taskId: string, reason: string | null, userId: string): Promise<Task> {
+    const task = await this.findById(taskId);
+    if (!task) throw new Error('Task not found.');
+
+    await tasksCollection().doc(taskId).update({
+      cancelledReason: reason,
+      updatedAt: toTimestamp(new Date()),
+    });
+
+    const logReason = reason === null ? 'cleared' : reason;
+    logger.info('Task cancelledReason updated', { taskId, reason: logReason });
+
+    await auditLogService.log(
+      AuditAction.TASK_UPDATED,
+      taskId,
+      userId,
+      `Cancelled reason override: ${task.cancelledReason || 'null'} → ${logReason}`,
+    );
+
+    return { ...task, cancelledReason: reason, updatedAt: new Date() };
+  }
+
+  /**
    * Delete a task and its associated reminders.
    */
   async delete(taskId: string, userId: string): Promise<void> {
@@ -348,6 +402,34 @@ class TaskService {
 
     if (archivedCount > 0) {
       logger.info(`Archived ${archivedCount} old tasks`);
+    }
+
+    return archivedCount;
+  }
+
+  /**
+   * Archive all completed tasks (moves them to ARCHIVED status).
+   * Designed to run weekly (every Sunday).
+   */
+  async archiveAllCompleted(): Promise<number> {
+    const snapshot = await tasksCollection()
+      .where('status', '==', TaskStatus.COMPLETED)
+      .get();
+
+    let archivedCount = 0;
+    for (const doc of snapshot.docs) {
+      const task = this.docToTask(doc);
+      if (canTransition(task.status, TaskStatus.ARCHIVED)) {
+        await doc.ref.update({
+          status: TaskStatus.ARCHIVED,
+          updatedAt: toTimestamp(new Date()),
+        });
+        archivedCount++;
+      }
+    }
+
+    if (archivedCount > 0) {
+      logger.info(`Archived ${archivedCount} completed tasks (weekly archive)`);
     }
 
     return archivedCount;

@@ -7,9 +7,7 @@ import { ReminderJobData, TaskStatus, ReminderType } from '../types';
 import { taskService } from '../services/task.service';
 import { reminderService } from '../services/reminder.service';
 import { getStatusAfterReminderSent } from '../services/state-machine';
-import { scheduleRetryJob, cancelTaskJobs } from './jobs';
-import { isPostDeleted } from '../utils/check-reddit';
-import { DELETED_DETECTION_THRESHOLD_MS } from '../config/constants';
+import { scheduleRetryJob } from './jobs';
 import { logger } from '../utils/logger';
 
 let worker: Worker;
@@ -73,8 +71,8 @@ export function initializeWorker(discordClient: Client): Worker {
         return;
       }
 
-      if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED) {
-        logger.info('Task cancelled/archived, skipping reminder', { taskId });
+      if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED || task.cancelledReason !== null) {
+        logger.info('Task cancelled/archived/has cancelledReason, skipping reminder', { taskId, cancelledReason: task.cancelledReason });
         return;
       }
 
@@ -87,29 +85,6 @@ export function initializeWorker(discordClient: Client): Worker {
       if (reminder.completed) {
         logger.info('Reminder already completed, skipping', { reminderId });
         return;
-      }
-
-      // ─── Check if Reddit post/comment has been deleted ──────────
-      try {
-        const postDeleted = await isPostDeleted(task.redditUrl);
-        if (postDeleted) {
-          const nowMs = Date.now();
-          const createdMs = task.createdAt.getTime();
-          const reminderSentAlready = reminder.sent;
-          const isEarly = (nowMs - createdMs) < DELETED_DETECTION_THRESHOLD_MS && !reminderSentAlready;
-          const reason = isEarly ? 'deleted' : 'deleted_later';
-
-          logger.info('Reddit post deleted, cancelling task', { taskId, reason });
-
-          await cancelTaskJobs(taskId);
-          await taskService.cancelTask(taskId, 'system', reason);
-          return;
-        }
-      } catch (checkError) {
-        logger.warn('Error checking Reddit post status, proceeding with reminder', {
-          taskId,
-          error: checkError instanceof Error ? checkError.message : String(checkError),
-        });
       }
 
       try {
@@ -160,7 +135,7 @@ export function initializeWorker(discordClient: Client): Worker {
 
     // Skip retry if the task was cancelled/archived (e.g. post deleted)
     const taskDoc = await taskService.findById(taskId);
-    if (!taskDoc || taskDoc.status === TaskStatus.CANCELLED || taskDoc.status === TaskStatus.ARCHIVED) return;
+    if (!taskDoc || taskDoc.status === TaskStatus.CANCELLED || taskDoc.status === TaskStatus.ARCHIVED || taskDoc.cancelledReason !== null) return;
 
     const reminder = await reminderService.findById(reminderId);
     if (!reminder || !reminder.sent || reminder.completed) return;

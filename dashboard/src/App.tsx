@@ -9,6 +9,7 @@ import { Tasks } from './pages/Tasks';
 import { TaskDetails } from './pages/TaskDetails';
 import { Analytics } from './pages/Analytics';
 import { Activity } from './pages/Activity';
+import { Archives } from './pages/Archives';
 import { Settings } from './pages/Settings';
 import { NotFound } from './pages/NotFound';
 
@@ -65,6 +66,14 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Activity />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/archives" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Archives />
                 </Layout>
               </ProtectedRoute>
             } />

@@ -2,9 +2,9 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { taskService } from '../../services/task.service';
 import { reminderService } from '../../services/reminder.service';
-import { scheduleAllReminders, cancelTaskJobs } from '../../scheduler/jobs';
-import { TaskType, TaskStatus, TaskFilters } from '../../types';
-import { authMiddleware } from '../middleware/auth';
+import { scheduleAllReminders, scheduleReminderJob, cancelTaskJobs } from '../../scheduler/jobs';
+import { Task, TaskType, TaskStatus, TaskFilters } from '../../types';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { logger } from '../../utils/logger';
 
@@ -30,6 +30,7 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   status: z.nativeEnum(TaskStatus).optional(),
   notes: z.string().max(500).optional(),
+  cancelledReason: z.string().nullable().optional(),
 });
 
 // ─── Routes ──────────────────────────────────────────────────
@@ -48,7 +49,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     if (req.query.channelId) filters.channelId = req.query.channelId as string;
     if (req.query.redditUrl) filters.redditUrl = req.query.redditUrl as string;
 
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = parseInt(req.query.limit as string) || 1000;
     const tasks = await taskService.search(filters, limit);
 
     res.json({ success: true, data: tasks, total: tasks.length });
@@ -107,6 +108,37 @@ router.patch('/:id', validateBody(updateTaskSchema), async (req: Request, res: R
 
     if (!task) {
       res.status(404).json({ success: false, message: 'Task not found.' });
+      return;
+    }
+
+    // Handle cancelledReason override (admin manual deletion status)
+    if ('cancelledReason' in req.body) {
+      const reason = req.body.cancelledReason;
+      const userId = (req as AuthRequest).userId || 'api';
+
+      let updated: Task;
+
+      if (reason !== null) {
+        // Non-null → stop future reminders, keep current status
+        updated = await taskService.updateCancelledReason(taskId, reason, userId);
+        await cancelTaskJobs(taskId);
+      } else {
+        // Null → restore normal operation
+        if (task.status === TaskStatus.CANCELLED) {
+          // Previously auto-cancelled: reset to PENDING so worker resumes it
+          updated = await taskService.restoreCancelledTask(taskId, userId);
+        } else {
+          // Was never cancelled, just clear the override field
+          updated = await taskService.updateCancelledReason(taskId, null, userId);
+        }
+        // Schedule the next pending reminder so notifications resume
+        const nextPending = await reminderService.findNextPending(taskId);
+        if (nextPending) {
+          await scheduleReminderJob(nextPending);
+        }
+      }
+
+      res.json({ success: true, data: updated });
       return;
     }
 
