@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { getTasks, deleteTask, updateTask, downloadCsv } from '../api/client';
-import { Search, Filter, Trash2, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download } from 'lucide-react';
+import { getTasks, deleteTask, updateTask, downloadCsv, getTask } from '../api/client';
+import { Search, Filter, Trash2, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download, ImageDown } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
@@ -20,6 +20,40 @@ export function Tasks() {
     if (confirm('Are you sure you want to delete this task? This cannot be undone.')) {
       await deleteTask(id);
       refetch();
+    }
+  };
+
+  const handleDownloadImage = async (taskId: string) => {
+    try {
+      const res = await getTask(taskId);
+      const reminders = res?.data?.reminders || [];
+      // Find the latest reminder that has an insightImageUrl
+      const withImage = reminders
+        .filter((r: any) => r.insightImageUrl)
+        .sort((a: any, b: any) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime());
+      if (withImage.length === 0) {
+        alert('No image available for this task.');
+        return;
+      }
+      const imageUrl = withImage[0].insightImageUrl;
+      const imageName = withImage[0].insightImageName || 'insight.png';
+      // Fetch through the proxy and trigger download
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        alert('Image has expired or been deleted.');
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = imageName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Failed to download image.');
     }
   };
 
@@ -99,7 +133,8 @@ export function Tasks() {
         </div>
       </div>
 
-      <div className="glass-card overflow-hidden">
+      {/* Desktop Table (hidden on mobile) */}
+      <div className="glass-card overflow-hidden hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -176,6 +211,13 @@ export function Tasks() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleDownloadImage(task.id)}
+                          className="p-2 text-dark-400 hover:text-cyan-400 hover:bg-cyan-400/10 rounded-lg transition-colors"
+                          title="Download Image"
+                        >
+                          <ImageDown className="w-4 h-4" />
+                        </button>
                         <Link
                           to={`/tasks/${encodeURIComponent(task.id)}`}
                           className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
@@ -198,6 +240,122 @@ export function Tasks() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile Card Layout (hidden on desktop) */}
+      <div className="md:hidden space-y-4">
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          </div>
+        ) : paginatedTasks.length === 0 ? (
+          <div className="glass-card p-8 text-center text-dark-400">
+            No tasks found matching your criteria.
+          </div>
+        ) : (
+          paginatedTasks.map((task: any) => {
+            const cardStyle = task.cancelledReason === 'deleted'
+              ? 'border-red-500/30 bg-red-900/15'
+              : task.cancelledReason === 'deleted_later'
+              ? 'border-green-500/30 bg-green-900/15'
+              : 'border-dark-700/50';
+
+            return (
+              <div
+                key={task.id}
+                className={`glass-card border ${cardStyle} overflow-hidden`}
+              >
+                {/* Card Header */}
+                <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                  <Link
+                    to={`/tasks/${encodeURIComponent(task.id)}`}
+                    className="min-w-0"
+                  >
+                    <span className="text-primary-400 font-bold font-mono text-base truncate">{task.id}</span>
+                  </Link>
+                  <span className={`status-badge border text-[10px] ${getStatusColor(task.status, task.cancelledReason)}`}>
+                    {task.status.replace(/_/g, ' ')}
+                  </span>
+                </div>
+
+                {/* Card Body — detail rows */}
+                <div className="grid grid-cols-3 gap-1 px-4 py-2 border-t border-dark-700/30">
+                  <div>
+                    <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Task ID</p>
+                    <p className="text-dark-200 text-xs font-mono font-medium truncate">{task.id.replace(/^(POST|COMMENT)\s*#?/i, '')}</p>
+                  </div>
+                  <div>
+                    <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Created</p>
+                    <p className="text-dark-200 text-xs font-medium">
+                      {new Date(task.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Ticket</p>
+                    <p className="text-dark-200 text-xs font-mono font-medium truncate">
+                      {task.channelName ? `#${task.channelName}` : task.channelId}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Reddit URL */}
+                <div className="px-4 py-2">
+                  <a
+                    href={task.redditUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary-400 text-xs flex items-center gap-1 truncate"
+                  >
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{task.redditUrl}</span>
+                  </a>
+                </div>
+
+                {/* Card Footer — Actions */}
+                <div className="flex items-center justify-between px-4 py-3 border-t border-dark-700/30 bg-dark-800/30">
+                  <select
+                    className="bg-dark-800 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-dark-200 cursor-pointer appearance-none"
+                    value={task.cancelledReason ?? ''}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      await updateTask(task.id, { cancelledReason: val === '' ? null : val });
+                      refetch();
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <option value="">OK</option>
+                    <option value="deleted">Deleted</option>
+                    <option value="deleted_later">Deleted Later</option>
+                  </select>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleDownloadImage(task.id)}
+                      className="p-1.5 text-dark-400 hover:text-cyan-400 hover:bg-cyan-400/10 rounded-lg transition-colors"
+                      title="Download Image"
+                    >
+                      <ImageDown className="w-4 h-4" />
+                    </button>
+                    <Link
+                      to={`/tasks/${encodeURIComponent(task.id)}`}
+                      className="p-1.5 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
+                      title="View Details"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(task.id)}
+                      className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                      title="Delete Task"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Pagination */}
