@@ -109,7 +109,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <header 
           className={`fixed top-0 left-0 right-0 h-14 px-4 bg-dark-900/90 backdrop-blur-md border-b border-dark-800/80 shadow-md shadow-black/30 z-10 flex items-center justify-between transition-transform duration-300 ${
             showHeader ? 'translate-y-0' : '-translate-y-full'
-          } lg:static lg:translate-y-0 lg:h-20 lg:px-6 lg:glass-card lg:border-r-0 lg:border-t-0 lg:shadow-none`}
+          } lg:static lg:translate-y-0 lg:h-20 lg:px-6 lg:glass-card lg:border-r-0 lg:border-t-0 lg:rounded-none lg:shadow-none`}
         >
           <div className="flex items-center space-x-3">
             <button 
