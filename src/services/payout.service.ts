@@ -72,7 +72,13 @@ class PayoutService {
     const completed = reminders
       .filter((r) => r.completed && r.completedAt)
       .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime());
-    return completed[0]?.completedAt ?? null;
+
+    if (completed[0]?.completedAt) return completed[0].completedAt;
+
+    const task = await tasksCollection().doc(taskId).get();
+    if (!task.exists) return null;
+    const data = task.data()!;
+    return toDate(data.updatedAt);
   }
 
   /**
