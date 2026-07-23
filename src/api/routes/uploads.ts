@@ -1,11 +1,9 @@
 import { Router, Request, Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
-import { authMiddleware } from '../middleware/auth';
 import { logger } from '../../utils/logger';
 
 const router = Router();
-router.use(authMiddleware);
 
 const UPLOADS_DIR = path.resolve('uploads');
 
