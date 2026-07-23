@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getTask, getReminders, getAuditLogs } from '../api/client';
-import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Image } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Download, Image } from 'lucide-react';
 
 export function TaskDetails() {
   const { id } = useParams<{ id: string }>();
@@ -355,6 +355,19 @@ export function TaskDetails() {
                       style={{ maxHeight: '300px', objectFit: 'contain' }}
                     />
                   </a>
+                  <div className="mt-2 flex items-center justify-between">
+                    {r.insightImageName && (
+                      <span className="text-xs text-dark-500 truncate">{r.insightImageName}</span>
+                    )}
+                    <a
+                      href={r.insightImageUrl}
+                      download={r.insightImageName || 'screenshot.png'}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>

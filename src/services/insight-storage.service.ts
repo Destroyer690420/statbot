@@ -22,7 +22,7 @@ class InsightStorageService {
     const filePath = path.join(dir, safeName);
     await fs.writeFile(filePath, buffer);
 
-    return `/api/v1/uploads/insights/${taskId}/${safeName}`;
+    return `/api/v1/uploads/insights/${encodeURIComponent(taskId)}/${safeName}`;
   }
 
   async cleanup(): Promise<number> {
