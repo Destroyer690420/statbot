@@ -90,47 +90,53 @@ export function Tasks() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Tasks</h1>
-          <p className="text-dark-400 mt-1">Manage and track all Reddit tasks.</p>
+      <div className="flex items-center gap-2 w-full">
+        {/* Search Input */}
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-dark-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search ID or URL..."
+            className="w-full h-10 pl-10 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-xl text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+          />
         </div>
-        
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-dark-400" />
-            <input
-              type="text"
-              placeholder="Search ID or URL..."
-              className="input-field pl-10 w-full sm:w-64"
-              value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-            />
-          </div>
-          
-          <div className="relative">
-            <Filter className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-dark-400" />
-            <select
-              className="input-field pl-10 appearance-none bg-dark-800 pr-8"
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-            >
-              <option value="">All Statuses</option>
-              <option value="PENDING">Pending</option>
-              <option value="REMINDER_20_SENT">20H Sent</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="CANCELLED">Cancelled</option>
-            </select>
-          </div>
 
-          <button
-            onClick={() => downloadCsv(statusFilter ? { status: statusFilter } : undefined)}
-            className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
-            title="Export CSV"
+        {/* Filter Icon Button */}
+        <div 
+          className={`relative flex items-center justify-center w-10 h-10 rounded-xl border shrink-0 transition-all ${
+            statusFilter 
+              ? 'bg-primary-500/20 border-primary-500/40 text-primary-400' 
+              : 'bg-dark-800/80 border-dark-700/80 text-dark-300 hover:border-dark-600 hover:text-white'
+          }`}
+          title={statusFilter ? `Filter: ${statusFilter}` : "Filter by status"}
+        >
+          <Filter className="w-4.5 h-4.5" />
+          {statusFilter && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary-500 rounded-full ring-2 ring-dark-950" />
+          )}
+          <select
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           >
-            <Download className="w-5 h-5" />
-          </button>
+            <option value="" className="bg-dark-900 text-white">All Statuses</option>
+            <option value="PENDING" className="bg-dark-900 text-white">Pending</option>
+            <option value="REMINDER_20_SENT" className="bg-dark-900 text-white">20H Sent</option>
+            <option value="COMPLETED" className="bg-dark-900 text-white">Completed</option>
+            <option value="CANCELLED" className="bg-dark-900 text-white">Cancelled</option>
+          </select>
         </div>
+
+        {/* Download Button */}
+        <button
+          onClick={() => downloadCsv(statusFilter ? { status: statusFilter } : undefined)}
+          className="flex items-center justify-center w-10 h-10 rounded-xl bg-dark-800/80 border border-dark-700/80 hover:border-dark-600 text-dark-300 hover:text-white shrink-0 transition-all"
+          title="Export CSV"
+        >
+          <Download className="w-4.5 h-4.5" />
+        </button>
       </div>
 
       {/* Desktop Table (hidden on mobile) */}

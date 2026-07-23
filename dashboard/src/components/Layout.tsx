@@ -51,6 +51,18 @@ export function Layout({ children }: { children: ReactNode }) {
     { name: 'Settings', path: '/settings', icon: Settings },
   ];
 
+  const getPageTitle = (pathname: string) => {
+    if (pathname === '/') return 'Dashboard';
+    if (pathname.startsWith('/tasks')) return 'Tasks';
+    if (pathname.startsWith('/analytics')) return 'Analytics';
+    if (pathname.startsWith('/activity')) return 'Activity';
+    if (pathname.startsWith('/archives')) return 'Archives';
+    if (pathname.startsWith('/settings')) return 'Settings';
+    return 'Task Manager';
+  };
+
+  const pageTitle = getPageTitle(location.pathname);
+
   return (
     <div className="flex h-screen bg-dark-950 overflow-hidden">
       {/* Mobile Sidebar Overlay */}
@@ -118,8 +130,8 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-base font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent lg:hidden">
-              Task Manager
+            <span className="text-base sm:text-lg font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+              {pageTitle}
             </span>
           </div>
 

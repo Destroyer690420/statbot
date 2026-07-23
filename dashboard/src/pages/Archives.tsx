@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getTasks, downloadCsv } from '../api/client';
-import { Search, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Archive, Download } from 'lucide-react';
+import { Search, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
@@ -29,35 +29,27 @@ export function Archives() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Archive className="w-8 h-8 text-dark-400" />
-          <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Archives</h1>
-            <p className="text-dark-400 mt-1">Completed tasks that have been archived.</p>
-          </div>
+      <div className="flex items-center gap-2 w-full">
+        {/* Search Input */}
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-dark-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search ID or URL..."
+            className="w-full h-10 pl-10 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-xl text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+          />
         </div>
 
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-dark-400" />
-            <input
-              type="text"
-              placeholder="Search ID or URL..."
-              className="input-field pl-10 w-full sm:w-64"
-              value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-            />
-          </div>
-
-          <button
-            onClick={() => downloadCsv({ status: 'ARCHIVED' })}
-            className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
-            title="Export CSV"
-          >
-            <Download className="w-5 h-5" />
-          </button>
-        </div>
+        {/* Download Button */}
+        <button
+          onClick={() => downloadCsv({ status: 'ARCHIVED' })}
+          className="flex items-center justify-center w-10 h-10 rounded-xl bg-dark-800/80 border border-dark-700/80 hover:border-dark-600 text-dark-300 hover:text-white shrink-0 transition-all"
+          title="Export CSV"
+        >
+          <Download className="w-4.5 h-4.5" />
+        </button>
       </div>
 
       <div className="glass-card overflow-hidden">

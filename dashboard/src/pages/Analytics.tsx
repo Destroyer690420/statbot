@@ -54,10 +54,7 @@ export function Analytics() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">Analytics</h1>
-        <p className="text-dark-400 mt-1">Detailed task analytics and trends.</p>
-      </div>
+      {/* Stats Cards */}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">

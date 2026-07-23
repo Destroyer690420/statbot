@@ -71,12 +71,7 @@ export function Activity() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Activity Log</h1>
-          <p className="text-dark-400 mt-1">Real-time audit trail of all actions and events.</p>
-        </div>
-
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         <div className="flex items-center gap-3">
           <select
             className="input-field appearance-none bg-dark-800 pr-8"
