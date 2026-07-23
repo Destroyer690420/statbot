@@ -67,6 +67,10 @@ export interface Reminder {
   retryCount: number;
   jobId: string | null;
   reminderMessageId: string | null;
+
+  insightImageUrl: string | null;
+  insightImageName: string | null;
+  insightUploadedAt: Date | null;
 }
 
 // ─── Audit Log ───────────────────────────────────────────────

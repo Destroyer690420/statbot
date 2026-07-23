@@ -110,6 +110,22 @@ async function main(): Promise<void> {
     logger.info('Sunday archive scheduled (weekly, moves all COMPLETED → ARCHIVED)');
   }, 60 * 60 * 1000);
 
+  // ─── Insight Image Cleanup (30-hour TTL) ────────────────────
+
+  const INSIGHT_CLEANUP_INTERVAL = 60 * 60 * 1000;
+
+  const insightCleanupInterval = setInterval(async () => {
+    try {
+      const { insightStorageService } = await import('./services/insight-storage.service');
+      const deleted = await insightStorageService.cleanup();
+      if (deleted > 0) {
+        logger.info(`Cleaned up ${deleted} expired insight images`);
+      }
+    } catch (error) {
+      logger.error('Insight image cleanup failed', { error });
+    }
+  }, INSIGHT_CLEANUP_INTERVAL);
+
   // ─── Graceful Shutdown ──────────────────────────────────────
 
   const shutdown = async (signal: string) => {
@@ -117,6 +133,7 @@ async function main(): Promise<void> {
 
     try {
       clearInterval(archiveInterval);
+      clearInterval(insightCleanupInterval);
 
       discordClient.destroy();
       logger.info('Discord client destroyed');

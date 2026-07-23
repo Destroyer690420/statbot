@@ -14,6 +14,7 @@ import statsRoutes from './routes/stats';
 import healthRoutes from './routes/health';
 import exportRoutes from './routes/export';
 import auditRoutes from './routes/audit';
+import uploadRoutes from './routes/uploads';
 
 /**
  * Create and configure the Express API server.
@@ -62,6 +63,9 @@ export function createApiServer(): express.Application {
   // reminderRoutes mounts at /api/v1 to catch nested paths like /tasks/:id/reminders
   // MUST come last so specific paths above take priority
   app.use('/api/v1', reminderRoutes);
+
+  // Upload routes for serving insight images
+  app.use('/api/v1', uploadRoutes);
 
   // ─── Error Handling ────────────────────────────────────────
   app.use(notFoundHandler);

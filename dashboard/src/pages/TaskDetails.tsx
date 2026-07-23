@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getTask, getReminders, getAuditLogs } from '../api/client';
-import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History, PlusCircle, CalendarDays, Bell, RefreshCw, Flag } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Image } from 'lucide-react';
 
 export function TaskDetails() {
   const { id } = useParams<{ id: string }>();
@@ -328,6 +328,38 @@ export function TaskDetails() {
             </div>
           )}
         </div>
+
+        {/* Submitted Screenshots */}
+        {reminders.some((r: any) => r.insightImageUrl) && (
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Image className="w-5 h-5 text-primary-400" />
+              Submitted Screenshots
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {reminders.filter((r: any) => r.insightImageUrl).map((r: any) => (
+                <div key={r.id} className="bg-dark-800/50 rounded-xl p-3 border border-dark-700/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-dark-200">
+                      {r.type.replace(/_/g, ' ')}
+                    </span>
+                    {r.insightImageName && (
+                      <span className="text-xs text-dark-500 truncate ml-2">{r.insightImageName}</span>
+                    )}
+                  </div>
+                  <a href={r.insightImageUrl} target="_blank" rel="noreferrer" className="block">
+                    <img
+                      src={r.insightImageUrl}
+                      alt={`Insight for ${r.type}`}
+                      className="w-full rounded-lg border border-dark-700/50 cursor-pointer hover:opacity-90 transition-opacity"
+                      style={{ maxHeight: '300px', objectFit: 'contain' }}
+                    />
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

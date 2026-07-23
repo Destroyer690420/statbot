@@ -164,6 +164,19 @@ class ReminderService {
   }
 
   /**
+   * Store the insight image URL for a completed reminder.
+   */
+  async updateInsightImage(reminderId: string, imageUrl: string, imageName: string): Promise<void> {
+    await remindersCollection().doc(reminderId).update({
+      insightImageUrl: imageUrl,
+      insightImageName: imageName,
+      insightUploadedAt: toTimestamp(new Date()),
+    });
+
+    logger.info('Insight image saved for reminder', { reminderId, imageUrl });
+  }
+
+  /**
    * Find a reminder by its Discord reminder message ID.
    */
   async findByMessageId(messageId: string): Promise<Reminder | null> {
@@ -244,6 +257,9 @@ class ReminderService {
       retryCount: 0,
       jobId: null,
       reminderMessageId: null,
+      insightImageUrl: null,
+      insightImageName: null,
+      insightUploadedAt: null,
     };
   }
 
@@ -261,6 +277,9 @@ class ReminderService {
       retryCount: data.retryCount ?? 0,
       jobId: data.jobId || null,
       reminderMessageId: data.reminderMessageId || null,
+      insightImageUrl: data.insightImageUrl || null,
+      insightImageName: data.insightImageName || null,
+      insightUploadedAt: toDate(data.insightUploadedAt),
     };
   }
 }

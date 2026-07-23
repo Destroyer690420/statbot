@@ -1,6 +1,7 @@
 import { Message } from 'discord.js';
 import { reminderService } from '../../services/reminder.service';
 import { taskService } from '../../services/task.service';
+import { insightStorageService } from '../../services/insight-storage.service';
 import { isSupportedImage } from '../../utils/validators';
 import { TaskStatus, AuditAction } from '../../types';
 import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
@@ -46,6 +47,21 @@ export async function handleMessageCreate(message: Message): Promise<void> {
     const updatedTask = await taskService.findById(task.id);
     if (updatedTask && shouldComplete(updatedTask.status, updatedTask.type)) {
       await taskService.updateStatus(updatedTask.id, TaskStatus.COMPLETED, message.author.id);
+    }
+
+    // Save the insight image to disk (non-fatal — insight already marked completed)
+    try {
+      const firstAttachment = imageAttachments.first();
+      if (firstAttachment) {
+        const imageUrl = await insightStorageService.save(task.id, reminder.id, firstAttachment.url, firstAttachment.name || 'image.png');
+        await reminderService.updateInsightImage(reminder.id, imageUrl, firstAttachment.name || 'image.png');
+      }
+    } catch (saveError) {
+      logger.warn('Failed to save insight image, insight already recorded', {
+        taskId: task.id,
+        reminderId: reminder.id,
+        error: saveError instanceof Error ? saveError.message : String(saveError),
+      });
     }
 
     await message.react('✅');
