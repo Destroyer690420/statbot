@@ -125,6 +125,10 @@ export function statsEmbed(stats: TaskStats): EmbedBuilder {
       { name: 'Completion Rate', value: `${stats.completionRate}%`, inline: true },
       { name: 'Avg Completion Time', value: `${stats.avgCompletionTimeHours}h`, inline: true },
       { name: 'Tasks Today', value: `${stats.tasksToday}`, inline: true },
+      { name: "Today's Posts", value: `${stats.todayPosts ?? 0}`, inline: true },
+      { name: "Today's Comments", value: `${stats.todayComments ?? 0}`, inline: true },
+      { name: "Today's Deleted", value: `${stats.todayDeleted ?? 0}`, inline: true },
+      { name: 'Total Deleted', value: `${stats.totalDeleted ?? 0}`, inline: true },
       { name: 'Tasks This Week', value: `${stats.tasksThisWeek}`, inline: true },
     )
     .setTimestamp()

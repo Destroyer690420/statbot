@@ -60,12 +60,12 @@ export function createApiServer(): express.Application {
   app.use('/api/v1/stats', statsRoutes);
   app.use('/api/v1/export', exportRoutes);
   app.use('/api/v1/audit-logs', auditRoutes);
+  // Upload routes for serving insight images (MUST come before reminderRoutes)
+  app.use('/api/v1', uploadRoutes);
+
   // reminderRoutes mounts at /api/v1 to catch nested paths like /tasks/:id/reminders
   // MUST come last so specific paths above take priority
   app.use('/api/v1', reminderRoutes);
-
-  // Upload routes for serving insight images
-  app.use('/api/v1', uploadRoutes);
 
   // ─── Error Handling ────────────────────────────────────────
   app.use(notFoundHandler);

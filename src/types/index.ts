@@ -141,6 +141,10 @@ export interface TaskStats {
   avgCompletionTimeHours: number;
   tasksToday: number;
   tasksThisWeek: number;
+  todayPosts: number;
+  todayComments: number;
+  todayDeleted: number;
+  totalDeleted: number;
 }
 
 // ─── Search Filters ──────────────────────────────────────────

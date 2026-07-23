@@ -43,6 +43,30 @@ class AnalyticsService {
         dayjs(t.createdAt).isSame(now, 'day')
       ).length;
 
+      // Posts today
+      const todayPosts = tasks.filter((t) =>
+        t.type === TaskType.POST && dayjs(t.createdAt).isSame(now, 'day')
+      ).length;
+
+      // Comments today
+      const todayComments = tasks.filter((t) =>
+        t.type === TaskType.COMMENT && dayjs(t.createdAt).isSame(now, 'day')
+      ).length;
+
+      // Helper to determine if task is deleted/cancelled
+      const isTaskDeleted = (t: any) =>
+        t.status === TaskStatus.CANCELLED ||
+        t.cancelledReason === 'deleted' ||
+        t.cancelledReason === 'deleted_later';
+
+      // Today's deleted tasks
+      const todayDeleted = tasks.filter((t) =>
+        isTaskDeleted(t) && (dayjs(t.updatedAt).isSame(now, 'day') || dayjs(t.createdAt).isSame(now, 'day'))
+      ).length;
+
+      // Total deleted tasks
+      const totalDeleted = tasks.filter((t) => isTaskDeleted(t)).length;
+
       // Tasks this week
       const tasksThisWeek = tasks.filter((t) =>
         dayjs(t.createdAt).isSame(now, 'week')
@@ -58,6 +82,10 @@ class AnalyticsService {
         avgCompletionTimeHours,
         tasksToday,
         tasksThisWeek,
+        todayPosts,
+        todayComments,
+        todayDeleted,
+        totalDeleted,
       };
     } catch (error) {
       logger.error('Failed to calculate stats', { error });

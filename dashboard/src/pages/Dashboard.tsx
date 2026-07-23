@@ -1,7 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
-import { getStats, getDailyStats, getUpcomingReminders } from '../api/client';
-import { CheckCircle2, Clock, AlertCircle, ListTodo, Bot, Loader2 } from 'lucide-react';
+import { getStats, getDailyStats, getTasks } from '../api/client';
+import { CheckCircle2, Clock, AlertCircle, ListTodo, Loader2, FileText, MessageSquare, Trash2, XCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+function isToday(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+}
+
+function isDeleted(task: any): boolean {
+  return task.status === 'CANCELLED' ||
+    task.cancelledReason === 'deleted' ||
+    task.cancelledReason === 'deleted_later';
+}
 
 export function Dashboard() {
   const { data: statsData, isLoading: statsLoading } = useQuery({
@@ -14,9 +28,9 @@ export function Dashboard() {
     queryFn: () => getDailyStats(7),
   });
 
-  const { data: remindersData, isLoading: remindersLoading } = useQuery({
-    queryKey: ['upcoming-reminders'],
-    queryFn: () => getUpcomingReminders(5),
+  const { data: tasksData } = useQuery({
+    queryKey: ['all-tasks-dashboard'],
+    queryFn: () => getTasks(),
   });
 
   if (statsLoading) {
@@ -28,8 +42,15 @@ export function Dashboard() {
   }
 
   const stats = statsData?.data || {};
-  const reminders = remindersData?.data || [];
   const daily = dailyData?.data || [];
+  const allTasks: any[] = tasksData?.data || [];
+
+  // Client-side computed stats from tasks
+  const todayPosts = allTasks.filter((t) => t.type === 'POST' && isToday(t.createdAt)).length;
+  const todayComments = allTasks.filter((t) => t.type === 'COMMENT' && isToday(t.createdAt)).length;
+  const todayPostsDeleted = allTasks.filter((t) => t.type === 'POST' && isDeleted(t) && (isToday(t.updatedAt) || isToday(t.createdAt))).length;
+  const todayCommentsDeleted = allTasks.filter((t) => t.type === 'COMMENT' && isDeleted(t) && (isToday(t.updatedAt) || isToday(t.createdAt))).length;
+  const totalDeleted = allTasks.filter((t) => isDeleted(t)).length;
 
   const chartData = daily.map((d: { date: string; count: number }) => ({
     name: d.date.slice(5),
@@ -56,7 +77,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Primary Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat, i) => (
           <div key={i} className="stat-card relative overflow-hidden group">
@@ -97,41 +118,64 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Upcoming Reminders */}
-        <div className="glass-card p-6 flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-white">Upcoming Reminders</h3>
-            <Bot className="w-5 h-5 text-primary-400" />
+        {/* Secondary Activity & Deletion Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Today's Post */}
+          <div className="stat-card relative overflow-hidden group flex flex-col justify-between p-5">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <FileText className="w-12 h-12 text-purple-400" />
+            </div>
+            <div className="relative z-10">
+              <p className="text-dark-400 text-xs font-medium mb-1">Today's Post</p>
+              <h2 className="text-3xl font-bold text-white">{todayPosts}</h2>
+            </div>
           </div>
-          
-          <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-            {remindersLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
-              </div>
-            ) : reminders.length === 0 ? (
-              <div className="text-center py-8 text-dark-400">
-                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p>No upcoming reminders</p>
-              </div>
-            ) : (
-              reminders.map((reminder: any) => (
-                <div key={reminder.id} className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50 transition-all hover:bg-dark-800">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-semibold px-2 py-1 bg-primary-900/50 text-primary-400 rounded-lg">
-                      {reminder.type.replace('_', ' ')}
-                    </span>
-                    <span className="text-xs text-dark-400 font-medium">
-                      {new Date(reminder.dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p className="text-sm font-medium text-dark-200 font-mono truncate">{reminder.taskId}</p>
+
+          {/* Today's Comment */}
+          <div className="stat-card relative overflow-hidden group flex flex-col justify-between p-5">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <MessageSquare className="w-12 h-12 text-indigo-400" />
+            </div>
+            <div className="relative z-10">
+              <p className="text-dark-400 text-xs font-medium mb-1">Today's Comment</p>
+              <h2 className="text-3xl font-bold text-white">{todayComments}</h2>
+            </div>
+          </div>
+
+          {/* Today's Deleted — split into Post / Comment */}
+          <div className="stat-card relative overflow-hidden group flex flex-col justify-between p-5">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Trash2 className="w-12 h-12 text-orange-400" />
+            </div>
+            <div className="relative z-10">
+              <p className="text-dark-400 text-xs font-medium mb-2">Today's Deleted</p>
+              <div className="flex items-center gap-4">
+                <div>
+                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Post</p>
+                  <h2 className="text-2xl font-bold text-white">{todayPostsDeleted}</h2>
                 </div>
-              ))
-            )}
+                <div className="w-px h-8 bg-dark-700/60" />
+                <div>
+                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Comment</p>
+                  <h2 className="text-2xl font-bold text-white">{todayCommentsDeleted}</h2>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Total Deleted */}
+          <div className="stat-card relative overflow-hidden group flex flex-col justify-between p-5">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <XCircle className="w-12 h-12 text-red-400" />
+            </div>
+            <div className="relative z-10">
+              <p className="text-dark-400 text-xs font-medium mb-1">Total Deleted</p>
+              <h2 className="text-3xl font-bold text-white">{totalDeleted}</h2>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+
