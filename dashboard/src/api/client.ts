@@ -120,6 +120,55 @@ export async function getAuditLogs(params?: Record<string, string>) {
   return data;
 }
 
+// ─── Payouts ─────────────────────────────────────────────────
+
+export async function getPayoutSummary() {
+  const { data } = await api.get('/payouts/summary');
+  return data;
+}
+
+export async function getEligibleTasks() {
+  const { data } = await api.get('/payouts/eligible');
+  return data;
+}
+
+export async function getWorkerDetail(workerId: string) {
+  const { data } = await api.get(`/payouts/workers/${encodeURIComponent(workerId)}`);
+  return data;
+}
+
+export async function payWorker(workerId: string) {
+  const { data } = await api.post(`/payouts/pay-worker/${encodeURIComponent(workerId)}`);
+  return data;
+}
+
+export async function payAll() {
+  const { data } = await api.post('/payouts/pay-all');
+  return data;
+}
+
+export async function getBatchHistory(params?: Record<string, string>) {
+  const { data } = await api.get('/payouts/batches', { params });
+  return data;
+}
+
+export async function getBatchDetail(batchId: string) {
+  const { data } = await api.get(`/payouts/batches/${encodeURIComponent(batchId)}`);
+  return data;
+}
+
+// ─── Settings ────────────────────────────────────────────────
+
+export async function getPayoutRates() {
+  const { data } = await api.get('/settings/payout-rates');
+  return data;
+}
+
+export async function updatePayoutRates(body: { commentRate: number; postRate: number }) {
+  const { data } = await api.put('/settings/payout-rates', body);
+  return data;
+}
+
 // ─── Health ──────────────────────────────────────────────────
 
 export async function getHealth() {

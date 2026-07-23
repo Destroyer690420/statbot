@@ -11,6 +11,7 @@ import { Analytics } from './pages/Analytics';
 import { Activity } from './pages/Activity';
 import { Archives } from './pages/Archives';
 import { Settings } from './pages/Settings';
+import { Payout } from './pages/Payout';
 import { NotFound } from './pages/NotFound';
 
 const queryClient = new QueryClient({
@@ -82,6 +83,14 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Settings />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/payout" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Payout />
                 </Layout>
               </ProtectedRoute>
             } />

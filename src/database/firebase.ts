@@ -63,6 +63,18 @@ export function auditLogsCollection() {
   return getDb().collection('auditLogs');
 }
 
+export function payoutBatchesCollection() {
+  return getDb().collection('payoutBatches');
+}
+
+export function payoutItemsCollection() {
+  return getDb().collection('payoutItems');
+}
+
+export function settingsCollection() {
+  return getDb().collection('settings');
+}
+
 // ─── Helper: Convert Firestore Timestamp to Date ─────────────
 
 export function toDate(timestamp: admin.firestore.Timestamp | Date | null): Date | null {

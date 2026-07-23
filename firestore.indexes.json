@@ -148,6 +148,50 @@
         { "fieldPath": "channelId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
+    },
+    // ─── Payout indexes ────────────────────────────────────────
+    {
+      "collectionGroup": "payoutItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "taskId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payoutItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "batchId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payoutItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workerId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payoutBatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "weekEnd", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payoutBatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "weekStart", "order": "ASCENDING" },
+        { "fieldPath": "weekEnd", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payoutBatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "batchNumber", "order": "DESCENDING" }
+      ]
     }
   ]
 }

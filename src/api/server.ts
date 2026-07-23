@@ -15,6 +15,8 @@ import healthRoutes from './routes/health';
 import exportRoutes from './routes/export';
 import auditRoutes from './routes/audit';
 import uploadRoutes from './routes/uploads';
+import payoutRoutes from './routes/payouts';
+import payoutSettingsRoutes from './routes/settings';
 
 /**
  * Create and configure the Express API server.
@@ -60,6 +62,10 @@ export function createApiServer(): express.Application {
   app.use('/api/v1/stats', statsRoutes);
   app.use('/api/v1/export', exportRoutes);
   app.use('/api/v1/audit-logs', auditRoutes);
+  // Payout routes
+  app.use('/api/v1/payouts', payoutRoutes);
+  // Settings routes
+  app.use('/api/v1/settings', payoutSettingsRoutes);
   // Upload routes for serving insight images (MUST come before reminderRoutes)
   app.use('/api/v1', uploadRoutes);
 

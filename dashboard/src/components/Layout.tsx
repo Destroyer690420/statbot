@@ -1,6 +1,6 @@
 import { ReactNode, useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ListTodo, BarChart3, History, Archive, Settings, LogOut, Menu } from 'lucide-react';
+import { LayoutDashboard, ListTodo, BarChart3, History, Archive, Settings, Wallet, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -48,6 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },
     { name: 'Activity', path: '/activity', icon: History },
     { name: 'Archives', path: '/archives', icon: Archive },
+    { name: 'Payout', path: '/payout', icon: Wallet },
     { name: 'Settings', path: '/settings', icon: Settings },
   ];
 
@@ -57,6 +58,7 @@ export function Layout({ children }: { children: ReactNode }) {
     if (pathname.startsWith('/analytics')) return 'Analytics';
     if (pathname.startsWith('/activity')) return 'Activity';
     if (pathname.startsWith('/archives')) return 'Archives';
+    if (pathname.startsWith('/payout')) return 'Payout';
     if (pathname.startsWith('/settings')) return 'Settings';
     return 'Task Manager';
   };
@@ -67,14 +69,14 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="flex h-screen bg-dark-950 overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-20 bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <aside 
+      <aside
         className={`fixed inset-y-0 left-0 z-30 w-64 glass-card border-l-0 border-y-0 rounded-none transform transition-transform duration-300 lg:translate-x-0 lg:static lg:inset-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex items-center justify-center h-20 border-b border-dark-700/50">
@@ -90,10 +92,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 key={item.name}
                 to={item.path}
                 className={({ isActive }) =>
-                  `flex items-center px-4 py-3 rounded-xl transition-all duration-200 ${
-                    isActive
-                      ? 'bg-primary-600/10 text-primary-400 border border-primary-500/20'
-                      : 'text-dark-400 hover:bg-dark-800 hover:text-dark-100'
+                  `flex items-center px-4 py-3 rounded-xl transition-all duration-200 ${isActive
+                    ? 'bg-primary-600/10 text-primary-400 border border-primary-500/20'
+                    : 'text-dark-400 hover:bg-dark-800 hover:text-dark-100'
                   }`
                 }
                 onClick={() => setSidebarOpen(false)}
@@ -118,13 +119,12 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden w-full relative">
-        <header 
-          className={`fixed top-0 left-0 right-0 h-14 px-4 bg-dark-900/90 backdrop-blur-md border-b border-dark-800/80 shadow-md shadow-black/30 z-10 flex items-center justify-between transition-transform duration-300 ${
-            showHeader ? 'translate-y-0' : '-translate-y-full'
-          } lg:static lg:translate-y-0 lg:h-20 lg:px-6 lg:glass-card lg:border-r-0 lg:border-t-0 lg:rounded-none lg:shadow-none`}
+        <header
+          className={`fixed top-0 left-0 right-0 h-14 px-4 bg-dark-900/90 backdrop-blur-md border-b border-dark-800/80 shadow-md shadow-black/30 z-10 flex items-center justify-between transition-transform duration-300 ${showHeader ? 'translate-y-0' : '-translate-y-full'
+            } lg:static lg:translate-y-0 lg:h-20 lg:px-6 lg:glass-card lg:border-r-0 lg:border-t-0 lg:rounded-none lg:shadow-none`}
         >
           <div className="flex items-center space-x-3">
-            <button 
+            <button
               className="lg:hidden text-dark-300 hover:text-white p-1 rounded-lg hover:bg-dark-800 transition-colors"
               onClick={() => setSidebarOpen(true)}
             >
@@ -142,7 +142,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main 
+        <main
           ref={mainRef}
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-4 pt-20 sm:p-6 sm:pt-24 lg:p-8"

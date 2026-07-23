@@ -23,3 +23,19 @@ export function generateReminderId(): string {
 export function generateLogId(): string {
   return `LOG-${nanoid(8).toUpperCase()}`;
 }
+
+/**
+ * Generate a short, unique payout batch ID.
+ * Format: PB-XXXXXXXX (8 chars)
+ */
+export function generateBatchId(): string {
+  return `PB-${nanoid(8).toUpperCase()}`;
+}
+
+/**
+ * Generate a short, unique payout item ID.
+ * Format: PI-XXXXXXXX (8 chars)
+ */
+export function generatePayoutItemId(): string {
+  return `PI-${nanoid(8).toUpperCase()}`;
+}

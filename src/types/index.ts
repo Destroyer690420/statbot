@@ -89,6 +89,8 @@ export enum AuditAction {
   INSIGHT_RECEIVED = 'INSIGHT_RECEIVED',
   ADMIN_ALERT = 'ADMIN_ALERT',
   COMMAND_USED = 'COMMAND_USED',
+  PAYOUT_BATCH_CREATED = 'PAYOUT_BATCH_CREATED',
+  PAYOUT_ITEM_CREATED = 'PAYOUT_ITEM_CREATED',
 }
 
 export interface AuditLog {
@@ -98,6 +100,45 @@ export interface AuditLog {
   userId: string | null;
   details: string | null;
   createdAt: Date;
+}
+
+// ─── Payout Batch ────────────────────────────────────────────
+
+export interface PayoutBatch {
+  id: string;
+  batchNumber: number;
+  weekStart: Date;
+  weekEnd: Date;
+  totalWorkers: number;
+  totalTasks: number;
+  totalPosts: number;
+  totalComments: number;
+  totalAmount: number;
+  paidAt: Date | null;
+  createdBy: string;
+  createdAt: Date;
+}
+
+// ─── Payout Item ─────────────────────────────────────────────
+
+export interface PayoutItem {
+  id: string;
+  batchId: string;
+  taskId: string;
+  workerId: string;
+  taskType: TaskType;
+  amount: number;
+  completedAt: Date;
+  createdAt: Date;
+}
+
+// ─── Payout Settings ─────────────────────────────────────────
+
+export interface PayoutSettings {
+  commentRate: number;
+  postRate: number;
+  updatedAt: Date;
+  updatedBy: string;
 }
 
 // ─── Create Task Input ───────────────────────────────────────
