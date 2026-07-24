@@ -1,11 +1,15 @@
 {
+  "id": "/",
   "name": "Reddit Task Manager",
   "short_name": "Task Manager",
   "description": "Admin Dashboard for managing Reddit tasks, reminders, and analytics.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#090d16",
   "theme_color": "#090d16",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
       "src": "/favicon.png",
@@ -15,12 +19,14 @@
     {
       "src": "/icon-192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ]
 }

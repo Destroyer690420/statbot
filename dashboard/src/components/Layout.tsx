@@ -1,6 +1,6 @@
 import { ReactNode, useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ListTodo, BarChart3, History, Archive, Settings, Wallet, LogOut, Menu } from 'lucide-react';
+import { LayoutDashboard, ListTodo, BarChart3, History, Archive, Settings, Wallet, LogOut, Menu, Download } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -10,8 +10,34 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showHeader, setShowHeader] = useState(true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
   const mainRef = useRef<HTMLDivElement>(null);
   const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowInstallBtn(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   const handleLogout = () => {
     logout();
@@ -136,7 +162,17 @@ export function Layout({ children }: { children: ReactNode }) {
             </span>
           </div>
 
-          <div className="flex items-center space-x-4 ml-auto">
+          <div className="flex items-center space-x-3 sm:space-x-4 ml-auto">
+            {showInstallBtn && (
+              <button
+                onClick={handleInstallClick}
+                className="flex items-center gap-1.5 bg-primary-600/20 hover:bg-primary-600/30 text-primary-400 border border-primary-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm"
+                title="Install App"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Install App</span>
+              </button>
+            )}
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary-600 to-primary-400 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-primary-500/20">
               A
             </div>

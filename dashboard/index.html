@@ -2,9 +2,18 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="description" content="Reddit Task Manager - Admin Dashboard for managing Reddit tasks, reminders, and analytics." />
     <meta name="theme-color" content="#090d16" />
+
+    <!-- iOS / Safari PWA support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Task Manager" />
+
+    <!-- Android / Chrome PWA support -->
+    <meta name="mobile-web-app-capable" content="yes" />
+
     <title>Reddit Task Manager — Dashboard</title>
 
     <link rel="icon" type="image/png" href="/favicon.png" />
@@ -18,5 +27,16 @@
   <body class="bg-dark-950 text-dark-100 font-sans antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Register Service Worker -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('PWA ServiceWorker registered:', reg.scope))
+            .catch((err) => console.error('PWA ServiceWorker registration failed:', err));
+        });
+      }
+    </script>
   </body>
 </html>
