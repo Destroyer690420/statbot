@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Bot } from 'lucide-react';
+
 import { useAuth } from '../hooks/useAuth';
 
 export function Login() {
@@ -38,8 +38,8 @@ export function Login() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-gradient-to-tr from-primary-600 to-primary-400 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/20 transform rotate-3">
-            <Bot className="w-10 h-10 text-white transform -rotate-3" />
+          <div className="w-16 h-16 bg-dark-900/80 border border-primary-500/30 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/20 transform rotate-3 overflow-hidden p-2">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain transform -rotate-3" />
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-white tracking-tight">

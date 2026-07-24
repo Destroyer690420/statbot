@@ -79,7 +79,8 @@ export function Layout({ children }: { children: ReactNode }) {
       <aside
         className={`fixed inset-y-0 left-0 z-30 w-64 glass-card border-l-0 border-y-0 rounded-none transform transition-transform duration-300 lg:translate-x-0 lg:static lg:inset-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        <div className="flex items-center justify-center h-20 border-b border-dark-700/50">
+        <div className="flex items-center justify-center gap-3 h-20 border-b border-dark-700/50 px-4">
+          <img src="/logo.png" alt="Logo" className="w-9 h-9 object-contain rounded-xl shadow-md" />
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
             Task Manager
           </h1>
