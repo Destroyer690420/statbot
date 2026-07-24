@@ -22,11 +22,13 @@ import { logger } from '../utils/logger';
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 class PayoutService {
+  // ─── Week Calculations ────────────────────────────────────────
+
   /**
-   * Get the current payout week boundaries in IST.
+   * Get the current ongoing payout week boundaries in IST.
    *
    * Payout week runs Sunday 00:00:00 IST → Saturday 23:59:59 IST.
-   * The most recent fully completed Saturday determines the window.
+   * Returns the week that contains today.
    */
   getCurrentPayoutWeek(): { weekStart: Date; weekEnd: Date } {
     const now = new Date();
@@ -36,20 +38,27 @@ class PayoutService {
     const year = istNow.getUTCFullYear();
     const month = istNow.getUTCMonth();
     const day = istNow.getUTCDate();
-    const dayOfWeek = istNow.getUTCDay();
+    const dayOfWeek = istNow.getUTCDay(); // 0 = Sunday
 
-    const daysSinceLastSaturday = dayOfWeek === 6 ? 7 : dayOfWeek + 1;
-
-    const lastSaturdayIST = new Date(
-      Date.UTC(year, month, day - daysSinceLastSaturday, 23, 59, 59, 999)
-    );
-    const lastSundayIST = new Date(
-      Date.UTC(year, month, day - daysSinceLastSaturday - 6, 0, 0, 0, 0)
-    );
+    // Sunday of the current week in IST
+    const sundayIST = new Date(Date.UTC(year, month, day - dayOfWeek, 0, 0, 0, 0));
+    // Saturday of the current week in IST
+    const saturdayIST = new Date(Date.UTC(year, month, day - dayOfWeek + 6, 23, 59, 59, 999));
 
     return {
-      weekStart: new Date(lastSundayIST.getTime() - istOffset),
-      weekEnd: new Date(lastSaturdayIST.getTime() - istOffset),
+      weekStart: new Date(sundayIST.getTime() - istOffset),
+      weekEnd: new Date(saturdayIST.getTime() - istOffset),
+    };
+  }
+
+  /**
+   * Get the previous payout week boundaries.
+   */
+  getPreviousPayoutWeek(): { weekStart: Date; weekEnd: Date } {
+    const current = this.getCurrentPayoutWeek();
+    return {
+      weekStart: new Date(current.weekStart.getTime() - 7 * 24 * 60 * 60 * 1000),
+      weekEnd: new Date(current.weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000),
     };
   }
 
@@ -63,6 +72,23 @@ class PayoutService {
       d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
     return `${fmt(startIST)} — ${fmt(endIST)}`;
   }
+
+  /**
+   * Get week boundaries and label for the given range or current week.
+   */
+  getPayoutWeekInfo(): {
+    current: { weekStart: Date; weekEnd: Date; weekLabel: string };
+    previous: { weekStart: Date; weekEnd: Date; weekLabel: string };
+  } {
+    const curr = this.getCurrentPayoutWeek();
+    const prev = this.getPreviousPayoutWeek();
+    return {
+      current: { ...curr, weekLabel: this.getWeekLabel(curr.weekStart, curr.weekEnd) },
+      previous: { ...prev, weekLabel: this.getWeekLabel(prev.weekStart, prev.weekEnd) },
+    };
+  }
+
+  // ─── Task Completion ──────────────────────────────────────────
 
   /**
    * Get a task's completion time from its last completed reminder.
@@ -80,6 +106,8 @@ class PayoutService {
     const data = task.data()!;
     return toDate(data.updatedAt);
   }
+
+  // ─── Payment Status Checks ────────────────────────────────────
 
   /**
    * Check if a task already has a payout item.
@@ -99,6 +127,8 @@ class PayoutService {
     const snapshot = await payoutItemsCollection().get();
     return new Set(snapshot.docs.map((doc) => doc.data().taskId as string));
   }
+
+  // ─── Task Retrieval ───────────────────────────────────────────
 
   /**
    * Get all completed or archived tasks.
@@ -120,49 +150,54 @@ class PayoutService {
   }
 
   /**
-   * Find all eligible tasks for the current payout week.
-   * A task is eligible when:
-   * 1. Status = COMPLETED or ARCHIVED
-   * 2. Completion time (from last completed reminder) is within the payout week
-   * 3. Task is NOT already in any payout item
+   * Find all eligible (unpaid, completed) tasks.
+   * If weekStart/weekEnd are provided, only returns tasks completed within that range.
+   * If no dates are provided, returns ALL unpaid completed tasks.
    */
-  async findEligibleTasks(): Promise<Task[]> {
+  async findEligibleTasks(weekStart?: Date, weekEnd?: Date): Promise<Task[]> {
     const tasks = await this.getCompletedOrArchivedTasks();
     const paidTaskIds = await this.getPaidTaskIds();
-    const { weekStart, weekEnd } = this.getCurrentPayoutWeek();
     const eligible: Task[] = [];
 
     for (const task of tasks) {
       if (paidTaskIds.has(task.id)) continue;
       if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
 
-      const completionTime = await this.getTaskCompletionTime(task.id);
-      if (!completionTime) continue;
-
-      if (completionTime >= weekStart && completionTime <= weekEnd) {
-        eligible.push(task);
+      // Only filter by date range if explicitly provided
+      if (weekStart && weekEnd) {
+        const completionTime = await this.getTaskCompletionTime(task.id);
+        if (!completionTime) continue;
+        if (completionTime < weekStart || completionTime > weekEnd) continue;
       }
+
+      eligible.push(task);
     }
 
     return eligible;
   }
 
+  // ─── Summary & Breakdown ──────────────────────────────────────
+
   /**
    * Get payout summary for dashboard cards.
+   * Optionally filter by a custom week range.
    */
-  async getSummary(): Promise<{
+  async getSummary(weekStart?: Date, weekEnd?: Date): Promise<{
     workersToPay: number;
     completedTasks: number;
     pendingAmount: number;
     alreadyPaid: number;
+    totalPosts: number;
+    totalComments: number;
+    weekLabel: string;
   }> {
-    const eligible = await this.findEligibleTasks();
+    const eligible = await this.findEligibleTasks(weekStart, weekEnd);
     const rates = await settingsService.getPayoutRates();
 
     const uniqueWorkers = new Set(eligible.map((t) => t.assignedUserId));
-    const totalAmount = eligible.reduce((sum, t) => {
-      return sum + (t.type === TaskType.POST ? rates.postRate : rates.commentRate);
-    }, 0);
+    const totalPosts = eligible.filter((t) => t.type === TaskType.POST).length;
+    const totalComments = eligible.filter((t) => t.type === TaskType.COMMENT).length;
+    const totalAmount = totalPosts * rates.postRate + totalComments * rates.commentRate;
 
     // Calculate already paid total across all batches
     const allItems = await payoutItemsCollection().get();
@@ -171,31 +206,58 @@ class PayoutService {
       alreadyPaid += doc.data().amount || 0;
     }
 
+    const weekLabel = weekStart && weekEnd
+      ? this.getWeekLabel(weekStart, weekEnd)
+      : 'All Unpaid Tasks';
+
     return {
       workersToPay: uniqueWorkers.size,
       completedTasks: eligible.length,
       pendingAmount: totalAmount,
       alreadyPaid,
+      totalPosts,
+      totalComments,
+      weekLabel,
     };
   }
 
   /**
-   * Get eligible tasks grouped by worker.
+   * Get ALL completed tasks for a week grouped by worker.
+   * Includes both paid and unpaid tasks, with paid status per worker.
+   * Worker name is resolved from channelName (ticket).
    */
-  async getWorkerBreakdown(): Promise<
+  async getWorkerBreakdown(weekStart?: Date, weekEnd?: Date): Promise<
     {
       workerId: string;
+      workerName: string;
       posts: number;
       comments: number;
       totalAmount: number;
+      status: string;
       tasks: Task[];
     }[]
   > {
-    const eligible = await this.findEligibleTasks();
+    const allTasks = await this.getCompletedOrArchivedTasks();
+    const paidTaskIds = await this.getPaidTaskIds();
     const rates = await settingsService.getPayoutRates();
-    const workerMap = new Map<string, Task[]>();
 
-    for (const task of eligible) {
+    // Find completed tasks matching the filter (or all if no filter)
+    const matchingTasks: Task[] = [];
+    for (const task of allTasks) {
+      if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
+
+      if (weekStart && weekEnd) {
+        const completionTime = await this.getTaskCompletionTime(task.id);
+        if (!completionTime) continue;
+        if (completionTime < weekStart || completionTime > weekEnd) continue;
+      }
+
+      matchingTasks.push(task);
+    }
+
+    // Group by worker
+    const workerMap = new Map<string, Task[]>();
+    for (const task of matchingTasks) {
       const existing = workerMap.get(task.assignedUserId) || [];
       existing.push(task);
       workerMap.set(task.assignedUserId, existing);
@@ -206,43 +268,103 @@ class PayoutService {
       const posts = tasks.filter((t) => t.type === TaskType.POST).length;
       const comments = tasks.filter((t) => t.type === TaskType.COMMENT).length;
       const totalAmount = posts * rates.postRate + comments * rates.commentRate;
-      result.push({ workerId, posts, comments, totalAmount, tasks });
+      const allPaid = tasks.every((t) => paidTaskIds.has(t.id));
+      // Use channelName (ticket) as worker name
+      const workerName = tasks[0]?.channelName || workerId.slice(0, 8);
+
+      result.push({
+        workerId,
+        workerName,
+        posts,
+        comments,
+        totalAmount,
+        status: allPaid ? 'Paid' : 'Ready',
+        tasks,
+      });
     }
+
+    // Sort: Ready workers first, then Paid; within same status, sort by amount descending
+    result.sort((a, b) => {
+      if (a.status === b.status) return b.totalAmount - a.totalAmount;
+      return a.status === 'Ready' ? -1 : 1;
+    });
 
     return result;
   }
 
   /**
-   * Get worker detail with eligible tasks and earnings breakdown.
+   * Get detailed payout breakdown for a single worker.
+   * Returns dynamic rates, enriched task list with completion dates, and paid status.
    */
-  async getWorkerDetail(workerId: string): Promise<{
+  async getWorkerDetail(workerId: string, weekStart?: Date, weekEnd?: Date): Promise<{
+    workerName: string;
     posts: number;
     comments: number;
     totalAmount: number;
     postsEarnings: number;
     commentsEarnings: number;
-    tasks: Task[];
+    postRate: number;
+    commentRate: number;
+    status: string;
+    tasks: { id: string; type: TaskType; completedAt: string | null; amount: number; paid: boolean }[];
   } | null> {
-    const eligible = await this.findEligibleTasks();
+    const allTasks = await this.getCompletedOrArchivedTasks();
+    const paidTaskIds = await this.getPaidTaskIds();
     const rates = await settingsService.getPayoutRates();
-    const tasks = eligible.filter((t) => t.assignedUserId === workerId);
 
-    if (tasks.length === 0) return null;
+    // Find worker's tasks matching the filter (or all if no filter)
+    const workerTasks: Task[] = [];
+    for (const task of allTasks) {
+      if (task.assignedUserId !== workerId) continue;
+      if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
 
-    const posts = tasks.filter((t) => t.type === TaskType.POST).length;
-    const comments = tasks.filter((t) => t.type === TaskType.COMMENT).length;
+      if (weekStart && weekEnd) {
+        const completionTime = await this.getTaskCompletionTime(task.id);
+        if (!completionTime) continue;
+        if (completionTime < weekStart || completionTime > weekEnd) continue;
+      }
+
+      workerTasks.push(task);
+    }
+
+    if (workerTasks.length === 0) return null;
+
+    const posts = workerTasks.filter((t) => t.type === TaskType.POST).length;
+    const comments = workerTasks.filter((t) => t.type === TaskType.COMMENT).length;
     const postsEarnings = posts * rates.postRate;
     const commentsEarnings = comments * rates.commentRate;
+    const workerName = workerTasks[0]?.channelName || workerId.slice(0, 8);
+    const allPaid = workerTasks.every((t) => paidTaskIds.has(t.id));
+
+    // Build enriched task list with completion dates
+    const enrichedTasks = [];
+    for (const task of workerTasks) {
+      const completedAt = await this.getTaskCompletionTime(task.id);
+      const amount = task.type === TaskType.POST ? rates.postRate : rates.commentRate;
+      enrichedTasks.push({
+        id: task.id,
+        type: task.type,
+        completedAt: completedAt ? completedAt.toISOString() : null,
+        amount,
+        paid: paidTaskIds.has(task.id),
+      });
+    }
 
     return {
+      workerName,
       posts,
       comments,
       totalAmount: postsEarnings + commentsEarnings,
       postsEarnings,
       commentsEarnings,
-      tasks,
+      postRate: rates.postRate,
+      commentRate: rates.commentRate,
+      status: allPaid ? 'Paid' : 'Ready',
+      tasks: enrichedTasks,
     };
   }
+
+  // ─── Batch Management ─────────────────────────────────────────
 
   /**
    * Get or create a payout batch for the current week.
@@ -538,6 +660,8 @@ class PayoutService {
     return { batch, items };
   }
 
+  // ─── History & Detail ─────────────────────────────────────────
+
   /**
    * Get payout batch history.
    */
@@ -551,11 +675,12 @@ class PayoutService {
   }
 
   /**
-   * Get a single payout batch with its items.
+   * Get a single payout batch with its items and worker names.
    */
   async getBatchDetail(batchId: string): Promise<{
     batch: PayoutBatch;
     items: PayoutItem[];
+    workerNames: Record<string, string>;
   } | null> {
     const doc = await payoutBatchesCollection().doc(batchId).get();
     if (!doc.exists) return null;
@@ -568,7 +693,22 @@ class PayoutService {
 
     const items = itemsSnapshot.docs.map((d) => this.docToPayoutItem(d));
 
-    return { batch, items };
+    // Resolve worker names from their tasks (channelName = ticket)
+    const workerIds = [...new Set(items.map((i) => i.workerId))];
+    const workerNames: Record<string, string> = {};
+    for (const wId of workerIds) {
+      const taskDoc = await tasksCollection()
+        .where('assignedUserId', '==', wId)
+        .limit(1)
+        .get();
+      if (!taskDoc.empty) {
+        workerNames[wId] = taskDoc.docs[0].data().channelName || wId.slice(0, 8);
+      } else {
+        workerNames[wId] = wId.slice(0, 8);
+      }
+    }
+
+    return { batch, items, workerNames };
   }
 
   /**
@@ -580,6 +720,62 @@ class PayoutService {
       .get();
 
     return snapshot.docs.map((d) => d.data().taskId as string);
+  }
+
+  // ─── Export ───────────────────────────────────────────────────
+
+  /**
+   * Get structured data for CSV export.
+   * If batchId is provided, exports from that batch.
+   * Otherwise, exports the current eligible worker breakdown.
+   */
+  async getPayoutExportData(batchId?: string, weekStart?: Date, weekEnd?: Date): Promise<{
+    rows: { workerName: string; posts: number; comments: number; totalAmount: number; paymentDate: string; batchNumber: number }[];
+  }> {
+    if (batchId) {
+      // Export from a specific batch
+      const detail = await this.getBatchDetail(batchId);
+      if (!detail) throw new Error('Batch not found.');
+
+      const { batch, items, workerNames } = detail;
+      const workerMap = new Map<string, { posts: number; comments: number; amount: number }>();
+
+      for (const item of items) {
+        const existing = workerMap.get(item.workerId) || { posts: 0, comments: 0, amount: 0 };
+        if (item.taskType === TaskType.POST) existing.posts++;
+        else existing.comments++;
+        existing.amount += item.amount;
+        workerMap.set(item.workerId, existing);
+      }
+
+      const rows = [];
+      for (const [wId, data] of workerMap) {
+        rows.push({
+          workerName: workerNames[wId] || wId.slice(0, 8),
+          posts: data.posts,
+          comments: data.comments,
+          totalAmount: data.amount,
+          paymentDate: batch.paidAt
+            ? new Date(batch.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '',
+          batchNumber: batch.batchNumber,
+        });
+      }
+
+      return { rows };
+    } else {
+      // Export current eligible breakdown
+      const breakdown = await this.getWorkerBreakdown(weekStart, weekEnd);
+      const rows = breakdown.map((w) => ({
+        workerName: w.workerName,
+        posts: w.posts,
+        comments: w.comments,
+        totalAmount: w.totalAmount,
+        paymentDate: '',
+        batchNumber: 0,
+      }));
+      return { rows };
+    }
   }
 
   // ─── Document Converters ──────────────────────────────────────

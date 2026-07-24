@@ -122,18 +122,23 @@ export async function getAuditLogs(params?: Record<string, string>) {
 
 // ─── Payouts ─────────────────────────────────────────────────
 
-export async function getPayoutSummary() {
-  const { data } = await api.get('/payouts/summary');
+export async function getPayoutWeek() {
+  const { data } = await api.get('/payouts/week');
   return data;
 }
 
-export async function getEligibleTasks() {
-  const { data } = await api.get('/payouts/eligible');
+export async function getPayoutSummary(params?: Record<string, string>) {
+  const { data } = await api.get('/payouts/summary', { params });
   return data;
 }
 
-export async function getWorkerDetail(workerId: string) {
-  const { data } = await api.get(`/payouts/workers/${encodeURIComponent(workerId)}`);
+export async function getEligibleTasks(params?: Record<string, string>) {
+  const { data } = await api.get('/payouts/eligible', { params });
+  return data;
+}
+
+export async function getWorkerDetail(workerId: string, params?: Record<string, string>) {
+  const { data } = await api.get(`/payouts/workers/${encodeURIComponent(workerId)}`, { params });
   return data;
 }
 
@@ -155,6 +160,25 @@ export async function getBatchHistory(params?: Record<string, string>) {
 export async function getBatchDetail(batchId: string) {
   const { data } = await api.get(`/payouts/batches/${encodeURIComponent(batchId)}`);
   return data;
+}
+
+export async function downloadPayoutCsv(params?: Record<string, string>): Promise<void> {
+  const { data, headers } = await api.get('/payouts/export/csv', {
+    params,
+    responseType: 'blob',
+  });
+  const contentDisposition = headers['content-disposition'] || '';
+  const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+  const filename = filenameMatch?.[1] || `payout-export-${Date.now()}.csv`;
+
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ─── Settings ────────────────────────────────────────────────
