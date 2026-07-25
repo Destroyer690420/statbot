@@ -193,6 +193,90 @@ export async function updatePayoutRates(body: { commentRate: number; postRate: n
   return data;
 }
 
+// ─── Commissions ─────────────────────────────────────────────
+
+export async function getCommissionSummary(params?: Record<string, string>) {
+  const { data } = await api.get('/commissions/summary', { params });
+  return data;
+}
+
+export async function getCommissionBreakdown(params?: Record<string, string>) {
+  const { data } = await api.get('/commissions/breakdown', { params });
+  return data;
+}
+
+export async function getInviterDetail(inviterId: string, params?: Record<string, string>) {
+  const { data } = await api.get(`/commissions/inviters/${encodeURIComponent(inviterId)}`, { params });
+  return data;
+}
+
+export async function getReferrals() {
+  const { data } = await api.get('/commissions/referrals');
+  return data;
+}
+
+export async function createReferral(body: {
+  inviterId: string;
+  inviterName: string;
+  inviteeId: string;
+  inviteeName: string;
+  inviterType: 'normal' | 'special';
+}) {
+  const { data } = await api.post('/commissions/referrals', body);
+  return data;
+}
+
+export async function deleteReferral(referralId: string) {
+  const { data } = await api.delete(`/commissions/referrals/${encodeURIComponent(referralId)}`);
+  return data;
+}
+
+export async function payInviter(inviterId: string) {
+  const { data } = await api.post(`/commissions/pay-inviter/${encodeURIComponent(inviterId)}`);
+  return data;
+}
+
+export async function payAllCommissions() {
+  const { data } = await api.post('/commissions/pay-all');
+  return data;
+}
+
+export async function getCommissionRates() {
+  const { data } = await api.get('/commissions/rates');
+  return data;
+}
+
+export async function updateCommissionRates(body: {
+  normalInviteBonus: number;
+  normalInviteTaskThreshold: number;
+  specialInviteBonus: number;
+  specialInviteTaskThreshold: number;
+  specialPerComment: number;
+  specialPerPost: number;
+}) {
+  const { data } = await api.put('/commissions/rates', body);
+  return data;
+}
+
+export async function downloadCommissionCsv(params?: Record<string, string>): Promise<void> {
+  const { data, headers } = await api.get('/commissions/export/csv', {
+    params,
+    responseType: 'blob',
+  });
+  const contentDisposition = headers['content-disposition'] || '';
+  const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+  const filename = filenameMatch?.[1] || `commission-export-${Date.now()}.csv`;
+
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── Health ──────────────────────────────────────────────────
 
 export async function getHealth() {

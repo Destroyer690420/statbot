@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, Sun, Moon, Monitor, Loader2, IndianRupee } from 'lucide-react';
-import { getPayoutRates, updatePayoutRates } from '../api/client';
+import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus } from 'lucide-react';
+import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates } from '../api/client';
 
 export function Settings() {
   const queryClient = useQueryClient();
@@ -35,6 +35,57 @@ export function Settings() {
 
   const handleSaveRates = () => {
     ratesMutation.mutate({ commentRate, postRate });
+  };
+
+  // ─── Commission Rates ──────────────────────────────────────
+
+  const commRatesQuery = useQuery({
+    queryKey: ['commission-rates'],
+    queryFn: getCommissionRates,
+  });
+
+  const [normalInviteBonus, setNormalInviteBonus] = useState(100);
+  const [normalThreshold, setNormalThreshold] = useState(2);
+  const [specialInviteBonus, setSpecialInviteBonus] = useState(50);
+  const [specialThreshold, setSpecialThreshold] = useState(1);
+  const [specialPerComment, setSpecialPerComment] = useState(10);
+  const [specialPerPost, setSpecialPerPost] = useState(20);
+  const [commRatesDirty, setCommRatesDirty] = useState(false);
+
+  const commRatesMutation = useMutation({
+    mutationFn: (body: {
+      normalInviteBonus: number;
+      normalInviteTaskThreshold: number;
+      specialInviteBonus: number;
+      specialInviteTaskThreshold: number;
+      specialPerComment: number;
+      specialPerPost: number;
+    }) => updateCommissionRates(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['commission-rates'] });
+      setCommRatesDirty(false);
+    },
+  });
+
+  if (commRatesQuery.data?.data && !commRatesDirty && !commRatesMutation.isSuccess) {
+    const cr = commRatesQuery.data.data;
+    if (normalInviteBonus !== cr.normalInviteBonus && !commRatesDirty) setNormalInviteBonus(cr.normalInviteBonus);
+    if (normalThreshold !== cr.normalInviteTaskThreshold && !commRatesDirty) setNormalThreshold(cr.normalInviteTaskThreshold);
+    if (specialInviteBonus !== cr.specialInviteBonus && !commRatesDirty) setSpecialInviteBonus(cr.specialInviteBonus);
+    if (specialThreshold !== cr.specialInviteTaskThreshold && !commRatesDirty) setSpecialThreshold(cr.specialInviteTaskThreshold);
+    if (specialPerComment !== cr.specialPerComment && !commRatesDirty) setSpecialPerComment(cr.specialPerComment);
+    if (specialPerPost !== cr.specialPerPost && !commRatesDirty) setSpecialPerPost(cr.specialPerPost);
+  }
+
+  const handleSaveCommRates = () => {
+    commRatesMutation.mutate({
+      normalInviteBonus,
+      normalInviteTaskThreshold: normalThreshold,
+      specialInviteBonus,
+      specialInviteTaskThreshold: specialThreshold,
+      specialPerComment,
+      specialPerPost,
+    });
   };
 
   return (
@@ -184,6 +235,145 @@ export function Settings() {
               <p className="text-white font-mono text-lg">+6 hours</p>
             </div>
           </div>
+        </div>
+
+        {/* Commission Rates */}
+        <div className="glass-card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <UserPlus className="w-5 h-5 text-primary-400" />
+            <h3 className="text-lg font-semibold text-white">Commission Rates</h3>
+          </div>
+          <p className="text-dark-400 text-sm mb-4">
+            Set commission rates for the invitation program. Normal inviters earn a one-time bonus per successful invite. Special inviters earn a bonus plus per-task commission.
+          </p>
+
+          {commRatesQuery.isLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
+            </div>
+          ) : (
+            <>
+              <p className="text-dark-300 text-xs font-semibold uppercase tracking-wider mb-3">Normal Inviter</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                <div>
+                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                    Invite Bonus (₹)
+                  </label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                    <input
+                      type="number"
+                      min={1}
+                      max={10000}
+                      value={normalInviteBonus}
+                      onChange={(e) => { setNormalInviteBonus(Number(e.target.value)); setCommRatesDirty(true); }}
+                      className="input-field w-full pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                    Task Threshold
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={normalThreshold}
+                    onChange={(e) => { setNormalThreshold(Number(e.target.value)); setCommRatesDirty(true); }}
+                    className="input-field w-full"
+                  />
+                  <p className="text-dark-500 text-xs mt-1">Tasks invitee must complete for bonus</p>
+                </div>
+              </div>
+
+              <p className="text-dark-300 text-xs font-semibold uppercase tracking-wider mb-3">Special Inviter</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                <div>
+                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                    Invite Bonus (₹)
+                  </label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                    <input
+                      type="number"
+                      min={1}
+                      max={10000}
+                      value={specialInviteBonus}
+                      onChange={(e) => { setSpecialInviteBonus(Number(e.target.value)); setCommRatesDirty(true); }}
+                      className="input-field w-full pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                    Task Threshold
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={specialThreshold}
+                    onChange={(e) => { setSpecialThreshold(Number(e.target.value)); setCommRatesDirty(true); }}
+                    className="input-field w-full"
+                  />
+                  <p className="text-dark-500 text-xs mt-1">Tasks invitee must complete for bonus</p>
+                </div>
+                <div>
+                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                    Per Comment (₹)
+                  </label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={specialPerComment}
+                      onChange={(e) => { setSpecialPerComment(Number(e.target.value)); setCommRatesDirty(true); }}
+                      className="input-field w-full pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                    Per Post (₹)
+                  </label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                    <input
+                      type="number"
+                      min={1}
+                      max={10000}
+                      value={specialPerPost}
+                      onChange={(e) => { setSpecialPerPost(Number(e.target.value)); setCommRatesDirty(true); }}
+                      className="input-field w-full pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <button
+            onClick={handleSaveCommRates}
+            disabled={!commRatesDirty || commRatesMutation.isPending}
+            className="btn-primary flex items-center gap-2"
+          >
+            {commRatesMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save Commission Rates
+          </button>
+
+          {commRatesMutation.isSuccess && (
+            <p className="mt-2 text-green-400 text-sm">✅ Commission rates updated successfully.</p>
+          )}
+          {commRatesMutation.isError && (
+            <p className="mt-2 text-red-400 text-sm">❌ Failed to update commission rates: {(commRatesMutation.error as Error).message}</p>
+          )}
         </div>
       </div>
     </div>

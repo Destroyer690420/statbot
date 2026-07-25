@@ -15,6 +15,7 @@ import {
   MessageSquare,
   AlertTriangle,
   X,
+  UserPlus,
 } from 'lucide-react';
 import {
   getPayoutSummary,
@@ -26,11 +27,18 @@ import {
   getBatchDetail,
   getPayoutWeek,
   downloadPayoutCsv,
+  getCommissionSummary,
+  getCommissionBreakdown,
+  getInviterDetail,
+  payInviter,
+  payAllCommissions,
+  downloadCommissionCsv,
 } from '../api/client';
 
 // ─── Types ─────────────────────────────────────────────────────
 
 type FilterMode = 'all' | 'current' | 'previous' | 'custom';
+type PayoutTab = 'tasks' | 'commissions';
 
 // ─── Main Component ────────────────────────────────────────────
 
@@ -49,6 +57,14 @@ export function Payout() {
   // ─── Confirmation State ───────────────────────────────────
   const [confirmPayAll, setConfirmPayAll] = useState(false);
   const [confirmPayWorker, setConfirmPayWorker] = useState<string | null>(null);
+
+  // ─── Tab State ─────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<PayoutTab>('tasks');
+
+  // ─── Commission State ──────────────────────────────────────
+  const [expandedInviter, setExpandedInviter] = useState<string | null>(null);
+  const [confirmPayInviter, setConfirmPayInviter] = useState<string | null>(null);
+  const [confirmPayAllCommissions, setConfirmPayAllCommissions] = useState(false);
 
   // ─── Week Info Query ──────────────────────────────────────
   const weekQuery = useQuery({
@@ -137,6 +153,51 @@ export function Payout() {
     queryClient.invalidateQueries({ queryKey: ['worker-detail'] });
   }
 
+  // ─── Commission Queries ───────────────────────────────────
+
+  const commissionSummaryQuery = useQuery({
+    queryKey: ['commission-summary', dateParams],
+    queryFn: () => getCommissionSummary(dateParams),
+    enabled: activeTab === 'commissions' && (filterMode === 'all' || !!dateParams),
+  });
+
+  const commissionBreakdownQuery = useQuery({
+    queryKey: ['commission-breakdown', dateParams],
+    queryFn: () => getCommissionBreakdown(dateParams),
+    enabled: activeTab === 'commissions' && (filterMode === 'all' || !!dateParams),
+  });
+
+  const inviterDetailQuery = useQuery({
+    queryKey: ['inviter-detail', expandedInviter, dateParams],
+    queryFn: () => getInviterDetail(expandedInviter!, dateParams),
+    enabled: !!expandedInviter,
+  });
+
+  // ─── Commission Mutations ─────────────────────────────────
+
+  const payInviterMutation = useMutation({
+    mutationFn: (inviterId: string) => payInviter(inviterId),
+    onSuccess: () => {
+      setConfirmPayInviter(null);
+      setExpandedInviter(null);
+      invalidateCommissionQueries();
+    },
+  });
+
+  const payAllCommissionsMutation = useMutation({
+    mutationFn: payAllCommissions,
+    onSuccess: () => {
+      setConfirmPayAllCommissions(false);
+      invalidateCommissionQueries();
+    },
+  });
+
+  function invalidateCommissionQueries() {
+    queryClient.invalidateQueries({ queryKey: ['commission-summary'] });
+    queryClient.invalidateQueries({ queryKey: ['commission-breakdown'] });
+    queryClient.invalidateQueries({ queryKey: ['inviter-detail'] });
+  }
+
   // ─── Export Handler ───────────────────────────────────────
 
   const handleExportCsv = () => {
@@ -150,6 +211,10 @@ export function Payout() {
   const batches = historyQuery.data?.data || [];
   const weekData = weekQuery.data?.data;
   const readyWorkers = workers.filter((w: any) => w.status === 'Ready');
+
+  const commissionSummary = commissionSummaryQuery.data?.data;
+  const commissionInviters = commissionBreakdownQuery.data?.data || [];
+  const readyInviters = commissionInviters.filter((i: any) => i.status === 'Ready');
 
   const weekLabel = useMemo(() => {
     if (filterMode === 'all') return 'All Unpaid Tasks';
@@ -185,15 +250,41 @@ export function Payout() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
           <button
-            onClick={handleExportCsv}
+            onClick={() => activeTab === 'tasks' ? handleExportCsv() : downloadCommissionCsv(dateParams).catch(() => {})}
             className="btn-secondary text-sm flex items-center gap-2 py-2 px-4"
           >
             <Download className="w-4 h-4" />
             Export CSV
           </button>
         </div>
+      </div>
+
+      {/* ─── Tab Navigation ───────────────────────────────────── */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => { setActiveTab('tasks'); setExpandedInviter(null); }}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+            activeTab === 'tasks'
+              ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30 shadow-lg shadow-primary-500/10'
+              : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:border-dark-500'
+          }`}
+        >
+          <Wallet className="w-4 h-4" />
+          Task Payments
+        </button>
+        <button
+          onClick={() => { setActiveTab('commissions'); setExpandedWorker(null); }}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+            activeTab === 'commissions'
+              ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30 shadow-lg shadow-primary-500/10'
+              : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:border-dark-500'
+          }`}
+        >
+          <UserPlus className="w-4 h-4" />
+          Commissions
+        </button>
       </div>
 
       {/* ─── Date Filter ─────────────────────────────────────── */}
@@ -259,6 +350,9 @@ export function Payout() {
           )}
         </div>
       </div>
+
+      {activeTab === 'tasks' && (
+      <>
 
       {/* ─── Dashboard Cards ─────────────────────────────────── */}
       {summaryQuery.isLoading ? (
@@ -518,6 +612,29 @@ export function Payout() {
           </div>
         )}
       </div>
+    </>
+    )}
+
+    {activeTab === 'commissions' && (
+      <CommissionsPanel
+        dateParams={dateParams}
+        isCurrentWeek={isCurrentWeek}
+        commissionSummary={commissionSummary}
+        commissionSummaryLoading={commissionSummaryQuery.isLoading}
+        commissionInviters={commissionInviters}
+        commissionBreakdownLoading={commissionBreakdownQuery.isLoading}
+        readyInviters={readyInviters}
+        expandedInviter={expandedInviter}
+        setExpandedInviter={setExpandedInviter}
+        inviterDetailQuery={inviterDetailQuery}
+        confirmPayInviter={confirmPayInviter}
+        setConfirmPayInviter={setConfirmPayInviter}
+        payInviterMutation={payInviterMutation}
+        confirmPayAllCommissions={confirmPayAllCommissions}
+        setConfirmPayAllCommissions={setConfirmPayAllCommissions}
+        payAllCommissionsMutation={payAllCommissionsMutation}
+      />
+    )}
     </div>
   );
 }
@@ -739,6 +856,352 @@ function BatchDetail({ batchId }: { batchId: string }) {
                   </span>
                 </td>
                 <td className="py-1.5 px-2 text-right text-white">₹{item.amount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+// ─── Commissions Panel Sub-component ───────────────────────────
+
+function CommissionsPanel({
+  isCurrentWeek,
+  commissionSummary,
+  commissionSummaryLoading,
+  commissionInviters,
+  commissionBreakdownLoading,
+  readyInviters,
+  expandedInviter,
+  setExpandedInviter,
+  inviterDetailQuery,
+  confirmPayInviter,
+  setConfirmPayInviter,
+  payInviterMutation,
+  confirmPayAllCommissions,
+  setConfirmPayAllCommissions,
+  payAllCommissionsMutation,
+}: any) {
+  return (
+    <>
+      {/* ─── Commission Summary Cards ──────────────────────────── */}
+      {commissionSummaryLoading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-dark-400 text-sm font-medium">Total Inviters</p>
+              <Users className="w-5 h-5 text-primary-400" />
+            </div>
+            <p className="text-3xl font-bold text-white">{commissionSummary?.totalInviters ?? 0}</p>
+          </div>
+
+          <div className="stat-card">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-dark-400 text-sm font-medium">Successful Invites</p>
+              <UserPlus className="w-5 h-5 text-green-400" />
+            </div>
+            <p className="text-3xl font-bold text-white">{commissionSummary?.totalSuccessfulInvites ?? 0}</p>
+          </div>
+
+          <div className="stat-card">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-dark-400 text-sm font-medium">Total Commission</p>
+              <IndianRupee className="w-5 h-5 text-yellow-400" />
+            </div>
+            <p className="text-3xl font-bold text-white">₹{(commissionSummary?.totalCommission ?? 0).toLocaleString('en-IN')}</p>
+            <div className="flex items-center gap-3 mt-2">
+              <span className="text-dark-400 text-xs">
+                Bonus: ₹{(commissionSummary?.totalBonusAmount ?? 0).toLocaleString('en-IN')}
+              </span>
+              <span className="text-dark-400 text-xs">
+                Per-task: ₹{(commissionSummary?.totalPerTaskAmount ?? 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-dark-400 text-sm font-medium">Already Paid</p>
+              <Wallet className="w-5 h-5 text-blue-400" />
+            </div>
+            <p className="text-3xl font-bold text-white">₹{(commissionSummary?.alreadyPaidCommission ?? 0).toLocaleString('en-IN')}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Pay All Commissions ───────────────────────────────── */}
+      {isCurrentWeek && readyInviters.length > 0 && (
+        <div className="glass-card p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Commission Payout</h3>
+              <p className="text-dark-400 text-sm mt-1">
+                {readyInviters.length} inviter{readyInviters.length !== 1 ? 's' : ''} with unpaid commissions
+              </p>
+            </div>
+
+            {!confirmPayAllCommissions ? (
+              <button
+                onClick={() => setConfirmPayAllCommissions(true)}
+                className="btn-primary flex items-center gap-2"
+              >
+                <IndianRupee className="w-4 h-4" />
+                Pay All
+              </button>
+            ) : (
+              <div className="flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-400 shrink-0" />
+                <p className="text-yellow-300 text-sm">Pay all {readyInviters.length} inviters?</p>
+                <button
+                  onClick={() => payAllCommissionsMutation.mutate()}
+                  disabled={payAllCommissionsMutation.isPending}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors"
+                >
+                  {payAllCommissionsMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}
+                </button>
+                <button
+                  onClick={() => setConfirmPayAllCommissions(false)}
+                  className="text-dark-400 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+          {payAllCommissionsMutation.isError && (
+            <p className="mt-3 text-red-400 text-sm">{(payAllCommissionsMutation.error as Error).message}</p>
+          )}
+          {payAllCommissionsMutation.isSuccess && (
+            <p className="mt-3 text-green-400 text-sm">
+              ✅ Paid {payAllCommissionsMutation.data?.data?.invitersPaid ?? 0} inviters — ₹{(payAllCommissionsMutation.data?.data?.totalAmount ?? 0).toLocaleString('en-IN')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ─── Inviter Breakdown Table ───────────────────────────── */}
+      <div className="glass-card p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Inviter Breakdown</h3>
+
+        {commissionBreakdownLoading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+          </div>
+        ) : commissionInviters.length === 0 ? (
+          <div className="text-center py-12">
+            <UserPlus className="w-12 h-12 text-dark-600 mx-auto mb-3" />
+            <p className="text-dark-400">No referrals found. Use the <code className="text-primary-400">/referral add</code> bot command to add referrals.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-dark-700/50">
+                  <th className="text-left text-dark-400 font-medium py-3 px-2">Inviter</th>
+                  <th className="text-center text-dark-400 font-medium py-3 px-2">Type</th>
+                  <th className="text-center text-dark-400 font-medium py-3 px-2">Referrals</th>
+                  <th className="text-center text-dark-400 font-medium py-3 px-2">Successful</th>
+                  <th className="text-right text-dark-400 font-medium py-3 px-2">Commission (₹)</th>
+                  <th className="text-center text-dark-400 font-medium py-3 px-2">Status</th>
+                  {isCurrentWeek && <th className="text-center text-dark-400 font-medium py-3 px-2">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {commissionInviters.map((inv: any) => (
+                  <tr
+                    key={inv.inviterId}
+                    className={`border-b border-dark-800/50 transition-colors ${
+                      expandedInviter === inv.inviterId ? 'bg-dark-800/40' : 'hover:bg-dark-800/30'
+                    }`}
+                  >
+                    <td className="py-3 px-2">
+                      <button
+                        onClick={() => setExpandedInviter(expandedInviter === inv.inviterId ? null : inv.inviterId)}
+                        className="flex items-center gap-2 text-white hover:text-primary-400 transition-colors"
+                      >
+                        {expandedInviter === inv.inviterId ? (
+                          <ChevronDown className="w-4 h-4 text-dark-400" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-dark-400" />
+                        )}
+                        <span className="font-medium text-sm">{inv.inviterName}</span>
+                      </button>
+                    </td>
+                    <td className="py-3 px-2 text-center">
+                      <span className={`status-badge ${
+                        inv.inviterType === 'special'
+                          ? 'bg-yellow-500/10 text-yellow-400'
+                          : 'bg-dark-700/50 text-dark-300'
+                      }`}>
+                        {inv.inviterType === 'special' ? '⭐ Special' : 'Normal'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-center text-white">{inv.totalReferrals}</td>
+                    <td className="py-3 px-2 text-center text-white">{inv.successfulReferrals}</td>
+                    <td className="py-3 px-2 text-right text-white font-semibold">₹{inv.totalCommission.toLocaleString('en-IN')}</td>
+                    <td className="py-3 px-2 text-center">
+                      <span className={`status-badge ${
+                        inv.status === 'Paid'
+                          ? 'bg-blue-500/10 text-blue-400'
+                          : inv.status === 'Ready'
+                          ? 'bg-green-500/10 text-green-400'
+                          : 'bg-dark-700/50 text-dark-400'
+                      }`}>
+                        {inv.status}
+                      </span>
+                    </td>
+                    {isCurrentWeek && (
+                      <td className="py-3 px-2 text-center">
+                        {inv.status === 'Ready' && (
+                          confirmPayInviter === inv.inviterId ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => payInviterMutation.mutate(inv.inviterId)}
+                                disabled={payInviterMutation.isPending}
+                                className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium py-1.5 px-3 rounded-lg transition-colors"
+                              >
+                                {payInviterMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm'}
+                              </button>
+                              <button
+                                onClick={() => setConfirmPayInviter(null)}
+                                className="text-dark-400 hover:text-white text-xs"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmPayInviter(inv.inviterId)}
+                              className="btn-primary text-xs py-1.5 px-3"
+                            >
+                              Pay Worker
+                            </button>
+                          )
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {payInviterMutation.isError && (
+          <p className="mt-3 text-red-400 text-sm">{(payInviterMutation.error as Error).message}</p>
+        )}
+      </div>
+
+      {/* ─── Expanded Inviter Detail ───────────────────────────── */}
+      {expandedInviter && (
+        <div className="glass-card p-6">
+          {inviterDetailQuery.isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+            </div>
+          ) : inviterDetailQuery.data?.data ? (
+            <InviterDetailView data={inviterDetailQuery.data.data} />
+          ) : (
+            <p className="text-dark-400 text-center py-4">Inviter detail not available.</p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Inviter Detail Sub-component ──────────────────────────────
+
+function InviterDetailView({ data }: { data: any }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <h4 className="text-white font-semibold text-lg">{data.inviterName}</h4>
+          <span className={`status-badge ${
+            data.inviterType === 'special'
+              ? 'bg-yellow-500/10 text-yellow-400'
+              : 'bg-dark-700/50 text-dark-300'
+          }`}>
+            {data.inviterType === 'special' ? '⭐ Special' : 'Normal'}
+          </span>
+        </div>
+        <span className={`status-badge ${
+          data.status === 'Paid'
+            ? 'bg-blue-500/10 text-blue-400'
+            : data.status === 'Ready'
+            ? 'bg-green-500/10 text-green-400'
+            : 'bg-dark-700/50 text-dark-400'
+        }`}>
+          {data.status}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+          <p className="text-dark-400 text-xs font-medium mb-1">Total Referrals</p>
+          <p className="text-white font-bold text-lg">{data.referrals?.length ?? 0}</p>
+        </div>
+        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+          <p className="text-dark-400 text-xs font-medium mb-1">Invite Bonus</p>
+          <p className="text-white font-bold text-lg">₹{(data.totalBonus ?? 0).toLocaleString('en-IN')}</p>
+        </div>
+        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+          <p className="text-dark-400 text-xs font-medium mb-1">Per-Task Commission</p>
+          <p className="text-white font-bold text-lg">₹{(data.totalPerTask ?? 0).toLocaleString('en-IN')}</p>
+        </div>
+        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+          <p className="text-dark-400 text-xs font-medium mb-1">Total Commission</p>
+          <p className="text-primary-400 font-bold text-lg">₹{(data.totalCommission ?? 0).toLocaleString('en-IN')}</p>
+        </div>
+      </div>
+
+      {/* Referral details */}
+      <p className="text-dark-400 text-xs font-medium mb-2">Invited Workers ({data.referrals?.length ?? 0})</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-dark-700/50">
+              <th className="text-left text-dark-400 font-medium py-2 px-2">Invitee</th>
+              <th className="text-center text-dark-400 font-medium py-2 px-2">Tasks</th>
+              <th className="text-center text-dark-400 font-medium py-2 px-2">Posts</th>
+              <th className="text-center text-dark-400 font-medium py-2 px-2">Comments</th>
+              <th className="text-right text-dark-400 font-medium py-2 px-2">Bonus (₹)</th>
+              <th className="text-right text-dark-400 font-medium py-2 px-2">Per-Task (₹)</th>
+              <th className="text-center text-dark-400 font-medium py-2 px-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.referrals ?? []).map((ref: any) => (
+              <tr key={ref.referralId} className="border-b border-dark-800/50">
+                <td className="py-2 px-2">
+                  <span className="text-white text-sm font-medium">{ref.inviteeName}</span>
+                </td>
+                <td className="py-2 px-2 text-center text-white">{ref.inviteeTasks?.total ?? 0}</td>
+                <td className="py-2 px-2 text-center text-dark-300">{ref.inviteeTasks?.posts ?? 0}</td>
+                <td className="py-2 px-2 text-center text-dark-300">{ref.inviteeTasks?.comments ?? 0}</td>
+                <td className="py-2 px-2 text-right text-white">
+                  {ref.bonusAmount > 0 ? `₹${ref.bonusAmount}` : '-'}
+                </td>
+                <td className="py-2 px-2 text-right text-white">
+                  {ref.perTaskAmount > 0 ? `₹${ref.perTaskAmount}` : '-'}
+                </td>
+                <td className="py-2 px-2 text-center">
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    ref.isSuccessful
+                      ? ref.bonusPaid
+                        ? 'bg-blue-500/10 text-blue-400'
+                        : 'bg-green-500/10 text-green-400'
+                      : 'bg-yellow-500/10 text-yellow-400'
+                  }`}>
+                    {ref.isSuccessful ? (ref.bonusPaid ? 'Paid' : 'Ready') : 'Pending'}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
