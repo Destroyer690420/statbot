@@ -12,6 +12,7 @@ import { data as completedData } from './commands/completed';
 import { data as overdueData } from './commands/overdue';
 import { data as statsData } from './commands/stats';
 import { data as rescheduleData } from './commands/reschedule';
+import { data as sendNowData } from './commands/send-now';
 import { data as helpData } from './commands/help';
 
 const commands = [
@@ -24,6 +25,7 @@ const commands = [
   overdueData.toJSON(),
   statsData.toJSON(),
   rescheduleData.toJSON(),
+  sendNowData.toJSON(),
   helpData.toJSON(),
 ];
 

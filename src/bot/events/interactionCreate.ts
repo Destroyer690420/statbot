@@ -13,6 +13,7 @@ import * as completedCmd from '../commands/completed';
 import * as overdueCmd from '../commands/overdue';
 import * as statsCmd from '../commands/stats';
 import * as rescheduleCmd from '../commands/reschedule';
+import * as sendNowCmd from '../commands/send-now';
 import * as helpCmd from '../commands/help';
 
 const commands = new Map<string, { execute: (interaction: ChatInputCommandInteraction) => Promise<void> }>();
@@ -25,6 +26,7 @@ commands.set('completed', completedCmd);
 commands.set('overdue', overdueCmd);
 commands.set('stats', statsCmd);
 commands.set('reschedule', rescheduleCmd);
+commands.set('send-now', sendNowCmd);
 commands.set('help', helpCmd);
 
 /**

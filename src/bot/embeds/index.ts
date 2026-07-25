@@ -208,6 +208,10 @@ export function helpEmbed(): EmbedBuilder {
         value: 'Reschedule a reminder.\n`/reschedule task_id reminder new_time`',
       },
       {
+        name: '⚡ /send-now',
+        value: 'Send a reminder immediately.\n`/send-now task_id reminder`',
+      },
+      {
         name: '🗑️ /delete',
         value: 'Delete a task and its reminders.\n`/delete task_id`',
       },
