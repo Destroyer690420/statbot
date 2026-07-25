@@ -219,6 +219,10 @@ export function helpEmbed(): EmbedBuilder {
         name: '❓ /help',
         value: 'Show this help message.',
       },
+      {
+        name: '🔗 /referral add',
+        value: 'Add a referral link (admin only).\n`/referral add inviter invitee type`\n🔒',
+      },
     )
     .setFooter({ text: '🔒 = Admin only • Reddit Task Manager' });
 }

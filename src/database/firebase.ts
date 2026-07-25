@@ -75,6 +75,18 @@ export function settingsCollection() {
   return getDb().collection('settings');
 }
 
+export function referralsCollection() {
+  return getDb().collection('referrals');
+}
+
+export function commissionItemsCollection() {
+  return getDb().collection('commissionItems');
+}
+
+export function commissionBatchesCollection() {
+  return getDb().collection('commissionBatches');
+}
+
 // ─── Helper: Convert Firestore Timestamp to Date ─────────────
 
 export function toDate(timestamp: admin.firestore.Timestamp | Date | null): Date | null {

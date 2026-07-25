@@ -14,6 +14,7 @@ import { data as statsData } from './commands/stats';
 import { data as rescheduleData } from './commands/reschedule';
 import { data as sendNowData } from './commands/send-now';
 import { data as helpData } from './commands/help';
+import { data as referralData } from './commands/referral';
 
 const commands = [
   taskData.toJSON(),
@@ -27,6 +28,7 @@ const commands = [
   rescheduleData.toJSON(),
   sendNowData.toJSON(),
   helpData.toJSON(),
+  referralData.toJSON(),
 ];
 
 async function deployCommands() {

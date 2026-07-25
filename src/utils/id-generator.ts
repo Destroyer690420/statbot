@@ -39,3 +39,15 @@ export function generateBatchId(): string {
 export function generatePayoutItemId(): string {
   return `PI-${nanoid(8).toUpperCase()}`;
 }
+
+export function generateReferralId(): string {
+  return `REF-${nanoid(8).toUpperCase()}`;
+}
+
+export function generateCommissionBatchId(): string {
+  return `CB-${nanoid(8).toUpperCase()}`;
+}
+
+export function generateCommissionItemId(): string {
+  return `CI-${nanoid(8).toUpperCase()}`;
+}

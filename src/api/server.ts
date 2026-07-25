@@ -17,6 +17,7 @@ import auditRoutes from './routes/audit';
 import uploadRoutes from './routes/uploads';
 import payoutRoutes from './routes/payouts';
 import payoutSettingsRoutes from './routes/settings';
+import commissionRoutes from './routes/commissions';
 
 /**
  * Create and configure the Express API server.
@@ -43,7 +44,7 @@ export function createApiServer(): express.Application {
   app.use('/api/', limiter);
 
   // ─── Body Parsing ──────────────────────────────────────────
-  app.use(express.json({ limit: '10kb' }));
+  app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
 
   // ─── Request Logging ───────────────────────────────────────
@@ -66,6 +67,8 @@ export function createApiServer(): express.Application {
   app.use('/api/v1/payouts', payoutRoutes);
   // Settings routes
   app.use('/api/v1/settings', payoutSettingsRoutes);
+  // Commission routes
+  app.use('/api/v1/commissions', commissionRoutes);
   // Upload routes for serving insight images (MUST come before reminderRoutes)
   app.use('/api/v1', uploadRoutes);
 

@@ -91,6 +91,10 @@ export enum AuditAction {
   COMMAND_USED = 'COMMAND_USED',
   PAYOUT_BATCH_CREATED = 'PAYOUT_BATCH_CREATED',
   PAYOUT_ITEM_CREATED = 'PAYOUT_ITEM_CREATED',
+  REFERRAL_ADDED = 'REFERRAL_ADDED',
+  REFERRAL_REMOVED = 'REFERRAL_REMOVED',
+  COMMISSION_PAID = 'COMMISSION_PAID',
+  COMMISSION_BATCH_CREATED = 'COMMISSION_BATCH_CREATED',
 }
 
 export interface AuditLog {
@@ -137,6 +141,60 @@ export interface PayoutItem {
 export interface PayoutSettings {
   commentRate: number;
   postRate: number;
+  updatedAt: Date;
+  updatedBy: string;
+}
+
+// ─── Referral / Commission Types ─────────────────────────────
+
+export type ReferralStatus = 'pending' | 'qualified' | 'active_per_task' | 'closed';
+export type InviterType = 'normal' | 'special';
+export type CommissionKind = 'one_time' | 'per_task';
+
+export interface Referral {
+  id: string;
+  inviterId: string;
+  inviterName: string;
+  inviteeId: string;
+  inviteeName: string;
+  inviterType: InviterType;
+  status: ReferralStatus;
+  oneTimeCommissionPaid: boolean;
+  oneTimeCommissionPaidAt: Date | null;
+  perTaskCommissionActive: boolean;
+  ticketId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CommissionItem {
+  id: string;
+  batchId: string;
+  referralId: string;
+  inviterId: string;
+  invitedWorkerId: string;
+  sourceTaskId: string | null;
+  commissionKind: CommissionKind;
+  amount: number;
+  createdAt: Date;
+}
+
+export interface CommissionBatch {
+  id: string;
+  batchNumber: number;
+  totalInviters: number;
+  totalAmount: number;
+  paidAt: Date | null;
+  createdAt: Date;
+}
+
+export interface CommissionRates {
+  normalInviteBonus: number;
+  normalInviteTaskThreshold: number;
+  specialInviteBonus: number;
+  specialInviteTaskThreshold: number;
+  specialPerComment: number;
+  specialPerPost: number;
   updatedAt: Date;
   updatedBy: string;
 }
