@@ -8,29 +8,36 @@ const TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   [TaskStatus.PENDING]: [
     TaskStatus.REMINDER_20_SENT,
     TaskStatus.CANCELLED,
+    TaskStatus.ARCHIVED,
   ],
   [TaskStatus.REMINDER_20_SENT]: [
     TaskStatus.INSIGHT_20_RECEIVED,
     TaskStatus.CANCELLED,
+    TaskStatus.ARCHIVED,
   ],
   [TaskStatus.INSIGHT_20_RECEIVED]: [
     TaskStatus.REMINDER_70_SENT,   // Post only
     TaskStatus.COMPLETED,           // Comment (no 70h)
     TaskStatus.CANCELLED,
+    TaskStatus.ARCHIVED,
   ],
   [TaskStatus.REMINDER_70_SENT]: [
     TaskStatus.INSIGHT_70_RECEIVED,
     TaskStatus.CANCELLED,
+    TaskStatus.ARCHIVED,
   ],
   [TaskStatus.INSIGHT_70_RECEIVED]: [
     TaskStatus.COMPLETED,
     TaskStatus.CANCELLED,
+    TaskStatus.ARCHIVED,
   ],
   [TaskStatus.COMPLETED]: [
     TaskStatus.ARCHIVED,
   ],
+  [TaskStatus.CANCELLED]: [
+    TaskStatus.ARCHIVED,
+  ],
   [TaskStatus.ARCHIVED]: [],    // Terminal state
-  [TaskStatus.CANCELLED]: [],   // Terminal state
 };
 
 /**

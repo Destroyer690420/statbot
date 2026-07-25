@@ -269,10 +269,16 @@ class TaskService {
     const task = await this.findById(taskId);
     if (!task) throw new Error('Task not found.');
 
-    await tasksCollection().doc(taskId).update({
+    const updateData: Record<string, unknown> = {
       cancelledReason: reason,
       updatedAt: toTimestamp(new Date()),
-    });
+    };
+
+    if (reason === 'deleted' || reason === 'deleted_later') {
+      updateData.status = transition(task.status, TaskStatus.ARCHIVED);
+    }
+
+    await tasksCollection().doc(taskId).update(updateData);
 
     const logReason = reason === null ? 'cleared' : reason;
     logger.info('Task cancelledReason updated', { taskId, reason: logReason });
@@ -284,7 +290,11 @@ class TaskService {
       `Cancelled reason override: ${task.cancelledReason || 'null'} → ${logReason}`,
     );
 
-    return { ...task, cancelledReason: reason, updatedAt: new Date() };
+    const updatedTask = reason === 'deleted' || reason === 'deleted_later'
+      ? { ...task, cancelledReason: reason, status: TaskStatus.ARCHIVED as TaskStatus, updatedAt: new Date() }
+      : { ...task, cancelledReason: reason, updatedAt: new Date() };
+
+    return updatedTask;
   }
 
   /**

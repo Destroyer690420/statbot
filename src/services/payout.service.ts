@@ -473,6 +473,14 @@ class PayoutService {
         createdAt: toTimestamp(item.createdAt),
       });
 
+      // Archive the task after paying it
+      if (task.status === TaskStatus.COMPLETED) {
+        firestoreBatch.update(tasksCollection().doc(task.id), {
+          status: TaskStatus.ARCHIVED,
+          updatedAt: toTimestamp(now),
+        });
+      }
+
       items.push(item);
     }
 
@@ -599,6 +607,14 @@ class PayoutService {
         completedAt: toTimestamp(item.completedAt),
         createdAt: toTimestamp(item.createdAt),
       });
+
+      // Archive the task after paying it
+      if (task.status === TaskStatus.COMPLETED) {
+        firestoreBatch.update(tasksCollection().doc(task.id), {
+          status: TaskStatus.ARCHIVED,
+          updatedAt: toTimestamp(now),
+        });
+      }
 
       items.push(item);
     }
