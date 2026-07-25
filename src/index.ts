@@ -1,12 +1,103 @@
 import { Client } from 'discord.js';
-import { initializeFirebase } from './database/firebase';
-import { initializeQueue } from './scheduler/queue';
+import { initializeFirebase, remindersCollection, toDate } from './database/firebase';
+import { initializeQueue, getQueue } from './scheduler/queue';
 import { initializeWorker } from './scheduler/worker';
 import { createBotClient, startBot } from './bot';
 import { createApiServer, startApiServer } from './api/server';
 import { logger } from './utils/logger';
 import { taskService } from './services/task.service';
-import { ARCHIVE_AFTER_DAYS } from './config/constants';
+import { ARCHIVE_AFTER_DAYS, MAX_REMINDER_ATTEMPTS } from './config/constants';
+import { scheduleReminderJob, scheduleRetryJob } from './scheduler/jobs';
+import { Reminder, ReminderType, TaskStatus } from './types';
+
+// ─── Re-Hydrate Reminders from Firestore ───────────────────
+
+async function rehydrateReminders(): Promise<void> {
+  const queue = getQueue();
+  let scheduled = 0;
+
+  // 1. Re-hydrate unsent, incomplete reminders (primary jobs)
+  const pendingSnapshot = await remindersCollection()
+    .where('sent', '==', false)
+    .where('completed', '==', false)
+    .get();
+
+  for (const doc of pendingSnapshot.docs) {
+    const data = doc.data();
+    const reminder: Reminder = {
+      id: doc.id,
+      taskId: data.taskId,
+      type: data.type as ReminderType,
+      dueAt: toDate(data.dueAt) || new Date(),
+      sent: data.sent ?? false,
+      completed: data.completed ?? false,
+      sentAt: toDate(data.sentAt),
+      completedAt: toDate(data.completedAt),
+      retryCount: data.retryCount ?? 0,
+      jobId: data.jobId || null,
+      reminderMessageId: data.reminderMessageId || null,
+      insightImageUrl: data.insightImageUrl || null,
+      insightImageName: data.insightImageName || null,
+      insightUploadedAt: toDate(data.insightUploadedAt),
+    };
+
+    // Skip if the parent task is cancelled/archived
+    const task = await taskService.findById(reminder.taskId);
+    if (!task || task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED || task.cancelledReason !== null) continue;
+
+    // Skip if BullMQ already has this job
+    const existingJob = await queue.getJob(`reminder-${reminder.id}`);
+    if (existingJob) continue;
+
+    await scheduleReminderJob(reminder);
+    scheduled++;
+  }
+
+  // 2. Re-hydrate sent-but-not-completed reminders (retry jobs)
+  const sentSnapshot = await remindersCollection()
+    .where('sent', '==', true)
+    .where('completed', '==', false)
+    .get();
+
+  for (const doc of sentSnapshot.docs) {
+    const data = doc.data();
+    const reminder: Reminder = {
+      id: doc.id,
+      taskId: data.taskId,
+      type: data.type as ReminderType,
+      dueAt: toDate(data.dueAt) || new Date(),
+      sent: data.sent ?? false,
+      completed: data.completed ?? false,
+      sentAt: toDate(data.sentAt),
+      completedAt: toDate(data.completedAt),
+      retryCount: data.retryCount ?? 0,
+      jobId: data.jobId || null,
+      reminderMessageId: data.reminderMessageId || null,
+      insightImageUrl: data.insightImageUrl || null,
+      insightImageName: data.insightImageName || null,
+      insightUploadedAt: toDate(data.insightUploadedAt),
+    };
+
+    const task = await taskService.findById(reminder.taskId);
+    if (!task || task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED || task.cancelledReason !== null) continue;
+
+    if (reminder.retryCount < MAX_REMINDER_ATTEMPTS) {
+      const nextRetry = reminder.retryCount + 1;
+      const retryJobId = `retry-${reminder.id}-${nextRetry}`;
+      const existingRetry = await queue.getJob(retryJobId);
+      if (!existingRetry) {
+        await scheduleRetryJob(reminder, nextRetry);
+        scheduled++;
+      }
+    }
+  }
+
+  if (scheduled > 0) {
+    logger.info(`Re-hydrated ${scheduled} reminder jobs from Firestore`);
+  } else {
+    logger.info('Reminder re-hydration complete — no orphaned reminders found');
+  }
+}
 
 async function main(): Promise<void> {
   logger.info('═══════════════════════════════════════════');
@@ -30,11 +121,15 @@ async function main(): Promise<void> {
     await startBot(discordClient);
 
     // 4. Initialize BullMQ Worker (needs Discord client for sending messages)
-    logger.info('[4/5] Initializing BullMQ worker...');
+    logger.info('[4/6] Initializing BullMQ worker...');
     initializeWorker(discordClient);
 
-    // 5. Start REST API server
-    logger.info('[5/5] Starting REST API server...');
+    // 5. Re-hydrate reminder jobs from Firestore (recover from Redis/bot restarts)
+    logger.info('[5/6] Re-hydrating reminder jobs from Firestore...');
+    await rehydrateReminders();
+
+    // 6. Start REST API server
+    logger.info('[6/6] Starting REST API server...');
     const apiApp = createApiServer();
     startApiServer(apiApp);
 
@@ -126,6 +221,20 @@ async function main(): Promise<void> {
     }
   }, INSIGHT_CLEANUP_INTERVAL);
 
+  // ─── Periodic Reminder Reconciliation (every 30 min) ────────
+
+  const REHYDRATE_INTERVAL_MS = 30 * 60 * 1000;
+
+  const rehydrateInterval = setInterval(async () => {
+    try {
+      await rehydrateReminders();
+    } catch (error) {
+      logger.error('Periodic reminder re-hydration failed', { error });
+    }
+  }, REHYDRATE_INTERVAL_MS);
+
+  logger.info('Reminder reconciliation scheduled (every 30 minutes)');
+
   // ─── Graceful Shutdown ──────────────────────────────────────
 
   const shutdown = async (signal: string) => {
@@ -134,6 +243,7 @@ async function main(): Promise<void> {
     try {
       clearInterval(archiveInterval);
       clearInterval(insightCleanupInterval);
+      clearInterval(rehydrateInterval);
 
       discordClient.destroy();
       logger.info('Discord client destroyed');
