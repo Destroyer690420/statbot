@@ -122,305 +122,314 @@ export function Settings() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="max-w-2xl space-y-6">
-        {/* Theme Selection */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Dashboard Theme</h3>
-          <div className="grid grid-cols-3 gap-4">
-            <button
-              onClick={() => setTheme('dark')}
-              className={`p-4 rounded-xl border-2 transition-all ${
-                theme === 'dark'
-                  ? 'border-primary-500 bg-primary-900/20'
-                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
-              }`}
-            >
-              <Moon className="w-6 h-6 text-primary-400 mx-auto mb-2" />
-              <p className="text-sm text-white font-medium">Dark</p>
-            </button>
-            <button
-              onClick={() => setTheme('light')}
-              className={`p-4 rounded-xl border-2 transition-all ${
-                theme === 'light'
-                  ? 'border-primary-500 bg-primary-900/20'
-                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
-              }`}
-            >
-              <Sun className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-              <p className="text-sm text-white font-medium">Light</p>
-            </button>
-            <button
-              onClick={() => setTheme('system')}
-              className={`p-4 rounded-xl border-2 transition-all ${
-                theme === 'system'
-                  ? 'border-primary-500 bg-primary-900/20'
-                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
-              }`}
-            >
-              <Monitor className="w-6 h-6 text-dark-300 mx-auto mb-2" />
-              <p className="text-sm text-white font-medium">System</p>
-            </button>
-          </div>
-        </div>
-
-        {/* Payout Rates */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Payout Rates</h3>
-          <p className="text-dark-400 text-sm mb-4">
-            Set the payment amount per task type. Changes apply to future payouts immediately.
-          </p>
-
-          {ratesQuery.isLoading ? (
-            <div className="flex justify-center py-4">
-              <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-dark-400 text-sm font-medium mb-1.5">
-                  Comment Rate (₹)
-                </label>
-                <div className="relative">
-                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-                  <input
-                    type="number"
-                    min={1}
-                    max={1000}
-                    value={commentRate}
-                    onChange={(e) => { setCommentRate(Number(e.target.value)); setRatesDirty(true); }}
-                    className="input-field w-full pl-10"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-dark-400 text-sm font-medium mb-1.5">
-                  Post Rate (₹)
-                </label>
-                <div className="relative">
-                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-                  <input
-                    type="number"
-                    min={1}
-                    max={10000}
-                    value={postRate}
-                    onChange={(e) => { setPostRate(Number(e.target.value)); setRatesDirty(true); }}
-                    className="input-field w-full pl-10"
-                  />
-                </div>
+        {earningsData ? (
+          <OwnerEarningsPanel
+            data={earningsData}
+            onClose={handleCloseEarnings}
+          />
+        ) : (
+          <>
+            {/* Theme Selection */}
+            <div className="glass-card p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Dashboard Theme</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <button
+                  onClick={() => setTheme('dark')}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    theme === 'dark'
+                      ? 'border-primary-500 bg-primary-900/20'
+                      : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
+                  }`}
+                >
+                  <Moon className="w-6 h-6 text-primary-400 mx-auto mb-2" />
+                  <p className="text-sm text-white font-medium">Dark</p>
+                </button>
+                <button
+                  onClick={() => setTheme('light')}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    theme === 'light'
+                      ? 'border-primary-500 bg-primary-900/20'
+                      : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
+                  }`}
+                >
+                  <Sun className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
+                  <p className="text-sm text-white font-medium">Light</p>
+                </button>
+                <button
+                  onClick={() => setTheme('system')}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    theme === 'system'
+                      ? 'border-primary-500 bg-primary-900/20'
+                      : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
+                  }`}
+                >
+                  <Monitor className="w-6 h-6 text-dark-300 mx-auto mb-2" />
+                  <p className="text-sm text-white font-medium">System</p>
+                </button>
               </div>
             </div>
-          )}
 
-          <button
-            onClick={handleSaveRates}
-            disabled={!ratesDirty || ratesMutation.isPending}
-            className="btn-primary flex items-center gap-2"
-          >
-            {ratesMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            Save Rates
-          </button>
+            {/* Payout Rates */}
+            <div className="glass-card p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Payout Rates</h3>
+              <p className="text-dark-400 text-sm mb-4">
+                Set the payment amount per task type. Changes apply to future payouts immediately.
+              </p>
 
-          {ratesMutation.isSuccess && (
-            <p className="mt-2 text-green-400 text-sm">✅ Payout rates updated successfully.</p>
-          )}
-          {ratesMutation.isError && (
-            <p className="mt-2 text-red-400 text-sm">❌ Failed to update rates: {(ratesMutation.error as Error).message}</p>
-          )}
-        </div>
-
-        {/* Reminder Delays */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Reminder Delays</h3>
-          <p className="text-dark-400 text-sm mb-4">
-            Configured in environment variables. Restart required for changes.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-              <p className="text-dark-400 text-xs font-medium mb-1">Post 20H</p>
-              <p className="text-white font-mono text-lg">20 hours</p>
-            </div>
-            <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-              <p className="text-dark-400 text-xs font-medium mb-1">Post 70H</p>
-              <p className="text-white font-mono text-lg">70 hours</p>
-            </div>
-            <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-              <p className="text-dark-400 text-xs font-medium mb-1">Comment 20H</p>
-              <p className="text-white font-mono text-lg">20 hours</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Retry Configuration */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Retry Configuration</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-              <p className="text-dark-400 text-xs font-medium mb-1">First Retry</p>
-              <p className="text-white font-mono text-lg">+2 hours</p>
-            </div>
-            <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-              <p className="text-dark-400 text-xs font-medium mb-1">Second Retry</p>
-              <p className="text-white font-mono text-lg">+6 hours</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Commission Rates */}
-        <div className="glass-card p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <UserPlus className="w-5 h-5 text-primary-400" />
-            <h3 className="text-lg font-semibold text-white">Commission Rates</h3>
-          </div>
-          <p className="text-dark-400 text-sm mb-4">
-            Set commission rates for the invitation program. Normal inviters earn a one-time bonus per successful invite. Special inviters earn a bonus plus per-task commission.
-          </p>
-
-          {commRatesQuery.isLoading ? (
-            <div className="flex justify-center py-4">
-              <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
-            </div>
-          ) : (
-            <>
-              <p className="text-dark-300 text-xs font-semibold uppercase tracking-wider mb-3">Normal Inviter</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-                <div>
-                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
-                    Invite Bonus (₹)
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-                    <input
-                      type="number"
-                      min={1}
-                      max={10000}
-                      value={normalInviteBonus}
-                      onChange={(e) => { setNormalInviteBonus(Number(e.target.value)); setCommRatesDirty(true); }}
-                      className="input-field w-full pl-10"
-                    />
+              {ratesQuery.isLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                      Comment Rate (₹)
+                    </label>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                      <input
+                        type="number"
+                        min={1}
+                        max={1000}
+                        value={commentRate}
+                        onChange={(e) => { setCommentRate(Number(e.target.value)); setRatesDirty(true); }}
+                        className="input-field w-full pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                      Post Rate (₹)
+                    </label>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                      <input
+                        type="number"
+                        min={1}
+                        max={10000}
+                        value={postRate}
+                        onChange={(e) => { setPostRate(Number(e.target.value)); setRatesDirty(true); }}
+                        className="input-field w-full pl-10"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
-                    Task Threshold
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={normalThreshold}
-                    onChange={(e) => { setNormalThreshold(Number(e.target.value)); setCommRatesDirty(true); }}
-                    className="input-field w-full"
-                  />
-                  <p className="text-dark-500 text-xs mt-1">Tasks invitee must complete for bonus</p>
+              )}
+
+              <button
+                onClick={handleSaveRates}
+                disabled={!ratesDirty || ratesMutation.isPending}
+                className="btn-primary flex items-center gap-2"
+              >
+                {ratesMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Save Rates
+              </button>
+
+              {ratesMutation.isSuccess && (
+                <p className="mt-2 text-green-400 text-sm">✅ Payout rates updated successfully.</p>
+              )}
+              {ratesMutation.isError && (
+                <p className="mt-2 text-red-400 text-sm">❌ Failed to update rates: {(ratesMutation.error as Error).message}</p>
+              )}
+            </div>
+
+            {/* Reminder Delays */}
+            <div className="glass-card p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Reminder Delays</h3>
+              <p className="text-dark-400 text-sm mb-4">
+                Configured in environment variables. Restart required for changes.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+                  <p className="text-dark-400 text-xs font-medium mb-1">Post 20H</p>
+                  <p className="text-white font-mono text-lg">20 hours</p>
+                </div>
+                <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+                  <p className="text-dark-400 text-xs font-medium mb-1">Post 70H</p>
+                  <p className="text-white font-mono text-lg">70 hours</p>
+                </div>
+                <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+                  <p className="text-dark-400 text-xs font-medium mb-1">Comment 20H</p>
+                  <p className="text-white font-mono text-lg">20 hours</p>
                 </div>
               </div>
+            </div>
 
-              <p className="text-dark-300 text-xs font-semibold uppercase tracking-wider mb-3">Special Inviter</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-                <div>
-                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
-                    Invite Bonus (₹)
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-                    <input
-                      type="number"
-                      min={1}
-                      max={10000}
-                      value={specialInviteBonus}
-                      onChange={(e) => { setSpecialInviteBonus(Number(e.target.value)); setCommRatesDirty(true); }}
-                      className="input-field w-full pl-10"
-                    />
-                  </div>
+            {/* Retry Configuration */}
+            <div className="glass-card p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Retry Configuration</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+                  <p className="text-dark-400 text-xs font-medium mb-1">First Retry</p>
+                  <p className="text-white font-mono text-lg">+2 hours</p>
                 </div>
-                <div>
-                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
-                    Task Threshold
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={specialThreshold}
-                    onChange={(e) => { setSpecialThreshold(Number(e.target.value)); setCommRatesDirty(true); }}
-                    className="input-field w-full"
-                  />
-                  <p className="text-dark-500 text-xs mt-1">Tasks invitee must complete for bonus</p>
-                </div>
-                <div>
-                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
-                    Per Comment (₹)
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-                    <input
-                      type="number"
-                      min={1}
-                      max={1000}
-                      value={specialPerComment}
-                      onChange={(e) => { setSpecialPerComment(Number(e.target.value)); setCommRatesDirty(true); }}
-                      className="input-field w-full pl-10"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-dark-400 text-sm font-medium mb-1.5">
-                    Per Post (₹)
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-                    <input
-                      type="number"
-                      min={1}
-                      max={10000}
-                      value={specialPerPost}
-                      onChange={(e) => { setSpecialPerPost(Number(e.target.value)); setCommRatesDirty(true); }}
-                      className="input-field w-full pl-10"
-                    />
-                  </div>
+                <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+                  <p className="text-dark-400 text-xs font-medium mb-1">Second Retry</p>
+                  <p className="text-white font-mono text-lg">+6 hours</p>
                 </div>
               </div>
-            </>
-          )}
+            </div>
 
-          <button
-            onClick={handleSaveCommRates}
-            disabled={!commRatesDirty || commRatesMutation.isPending}
-            className="btn-primary flex items-center gap-2"
-          >
-            {commRatesMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            Save Commission Rates
-          </button>
+            {/* Commission Rates */}
+            <div className="glass-card p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <UserPlus className="w-5 h-5 text-primary-400" />
+                <h3 className="text-lg font-semibold text-white">Commission Rates</h3>
+              </div>
+              <p className="text-dark-400 text-sm mb-4">
+                Set commission rates for the invitation program. Normal inviters earn a one-time bonus per successful invite. Special inviters earn a bonus plus per-task commission.
+              </p>
 
-          {commRatesMutation.isSuccess && (
-            <p className="mt-2 text-green-400 text-sm">✅ Commission rates updated successfully.</p>
-          )}
-          {commRatesMutation.isError && (
-            <p className="mt-2 text-red-400 text-sm">❌ Failed to update commission rates: {(commRatesMutation.error as Error).message}</p>
-          )}
-        </div>
+              {commRatesQuery.isLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
+                </div>
+              ) : (
+                <>
+                  <p className="text-dark-300 text-xs font-semibold uppercase tracking-wider mb-3">Normal Inviter</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                    <div>
+                      <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                        Invite Bonus (₹)
+                      </label>
+                      <div className="relative">
+                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                        <input
+                          type="number"
+                          min={1}
+                          max={10000}
+                          value={normalInviteBonus}
+                          onChange={(e) => { setNormalInviteBonus(Number(e.target.value)); setCommRatesDirty(true); }}
+                          className="input-field w-full pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                        Task Threshold
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={normalThreshold}
+                        onChange={(e) => { setNormalThreshold(Number(e.target.value)); setCommRatesDirty(true); }}
+                        className="input-field w-full"
+                      />
+                      <p className="text-dark-500 text-xs mt-1">Tasks invitee must complete for bonus</p>
+                    </div>
+                  </div>
 
-        {/* ─── Danger Zone (hidden trigger for Owner Earnings) ── */}
-        <div className="glass-card p-6 border-red-500/30">
-          <h3 className="text-lg font-semibold text-red-400 mb-4">Danger Zone</h3>
-          <p className="text-dark-400 text-sm mb-4">
-            Irreversible actions. Proceed with caution.
-          </p>
-          <button
-            onClick={() => setShowPinModal(true)}
-            className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 rounded-xl py-2 px-4 text-sm font-medium transition-colors flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete All Data
-          </button>
-        </div>
+                  <p className="text-dark-300 text-xs font-semibold uppercase tracking-wider mb-3">Special Inviter</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                    <div>
+                      <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                        Invite Bonus (₹)
+                      </label>
+                      <div className="relative">
+                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                        <input
+                          type="number"
+                          min={1}
+                          max={10000}
+                          value={specialInviteBonus}
+                          onChange={(e) => { setSpecialInviteBonus(Number(e.target.value)); setCommRatesDirty(true); }}
+                          className="input-field w-full pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                        Task Threshold
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={specialThreshold}
+                        onChange={(e) => { setSpecialThreshold(Number(e.target.value)); setCommRatesDirty(true); }}
+                        className="input-field w-full"
+                      />
+                      <p className="text-dark-500 text-xs mt-1">Tasks invitee must complete for bonus</p>
+                    </div>
+                    <div>
+                      <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                        Per Comment (₹)
+                      </label>
+                      <div className="relative">
+                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                        <input
+                          type="number"
+                          min={1}
+                          max={1000}
+                          value={specialPerComment}
+                          onChange={(e) => { setSpecialPerComment(Number(e.target.value)); setCommRatesDirty(true); }}
+                          className="input-field w-full pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-dark-400 text-sm font-medium mb-1.5">
+                        Per Post (₹)
+                      </label>
+                      <div className="relative">
+                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                        <input
+                          type="number"
+                          min={1}
+                          max={10000}
+                          value={specialPerPost}
+                          onChange={(e) => { setSpecialPerPost(Number(e.target.value)); setCommRatesDirty(true); }}
+                          className="input-field w-full pl-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <button
+                onClick={handleSaveCommRates}
+                disabled={!commRatesDirty || commRatesMutation.isPending}
+                className="btn-primary flex items-center gap-2"
+              >
+                {commRatesMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Save Commission Rates
+              </button>
+
+              {commRatesMutation.isSuccess && (
+                <p className="mt-2 text-green-400 text-sm">✅ Commission rates updated successfully.</p>
+              )}
+              {commRatesMutation.isError && (
+                <p className="mt-2 text-red-400 text-sm">❌ Failed to update commission rates: {(commRatesMutation.error as Error).message}</p>
+              )}
+            </div>
+
+            {/* ─── Danger Zone (hidden trigger for Owner Earnings) ── */}
+            <div className="glass-card p-6 border-red-500/30">
+              <h3 className="text-lg font-semibold text-red-400 mb-4">Danger Zone</h3>
+              <p className="text-dark-400 text-sm mb-4">
+                Irreversible actions. Proceed with caution.
+              </p>
+              <button
+                onClick={() => setShowPinModal(true)}
+                className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 rounded-xl py-2 px-4 text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete All Data
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ─── PIN Modal ────────────────────────────────────────── */}
@@ -470,14 +479,6 @@ export function Settings() {
             </button>
           </div>
         </div>
-      )}
-
-      {/* ─── Earnings Panel ───────────────────────────────────── */}
-      {earningsData && (
-        <OwnerEarningsPanel
-          data={earningsData}
-          onClose={handleCloseEarnings}
-        />
       )}
     </div>
   );

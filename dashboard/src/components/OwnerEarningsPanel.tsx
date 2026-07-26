@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, ChevronDown, ChevronRight, IndianRupee, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, IndianRupee, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 interface PeriodBounds {
   start: string | null;
@@ -145,40 +145,36 @@ function PeriodCard({ label, period }: { label: string; period: PeriodBreakdown 
 export function OwnerEarningsPanel({ data, onClose }: Props) {
   if (!data) {
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="glass-card p-8">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
-        </div>
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="glass-card p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <IndianRupee className="w-5 h-5 text-primary-400" />
-            <h2 className="text-xl font-bold text-white">Owner Earnings</h2>
-          </div>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
           <button
             onClick={onClose}
-            className="text-dark-400 hover:text-white transition-colors"
+            className="text-dark-400 hover:text-white transition-colors p-1"
           >
-            <X className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
+          <IndianRupee className="w-5 h-5 text-primary-400" />
+          <h2 className="text-xl font-bold text-white">Owner Earnings</h2>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <PeriodCard label="Daily" period={data.daily} />
-          <PeriodCard label="Weekly" period={data.weekly} />
-          <PeriodCard label="All Time" period={data.allTime} />
-        </div>
-
-        <p className="text-dark-500 text-xs text-center mt-4">
-          All amounts in Indian Rupees (₹). Earnings = Revenue − Worker Payments − Commissions.
-        </p>
       </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <PeriodCard label="Daily" period={data.daily} />
+        <PeriodCard label="Weekly" period={data.weekly} />
+        <PeriodCard label="All Time" period={data.allTime} />
+      </div>
+
+      <p className="text-dark-500 text-xs text-center">
+        All amounts in Indian Rupees (₹). Earnings = Revenue − Worker Payments − Commissions.
+      </p>
     </div>
   );
 }
