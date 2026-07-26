@@ -18,6 +18,7 @@ import uploadRoutes from './routes/uploads';
 import payoutRoutes from './routes/payouts';
 import payoutSettingsRoutes from './routes/settings';
 import commissionRoutes from './routes/commissions';
+import ownerRoutes from './routes/owner';
 
 /**
  * Create and configure the Express API server.
@@ -69,6 +70,8 @@ export function createApiServer(): express.Application {
   app.use('/api/v1/settings', payoutSettingsRoutes);
   // Commission routes
   app.use('/api/v1/commissions', commissionRoutes);
+  // Owner routes (hidden earnings panel)
+  app.use('/api/v1/owner', ownerRoutes);
   // Upload routes for serving insight images (MUST come before reminderRoutes)
   app.use('/api/v1', uploadRoutes);
 

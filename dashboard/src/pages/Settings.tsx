@@ -1,11 +1,42 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus } from 'lucide-react';
-import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates } from '../api/client';
+import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X } from 'lucide-react';
+import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, getOwnerEarnings } from '../api/client';
+import { OwnerEarningsPanel } from '../components/OwnerEarningsPanel';
 
 export function Settings() {
   const queryClient = useQueryClient();
   const [theme, setTheme] = useState('dark');
+
+  // ─── Owner Earnings (hidden behind PIN) ─────────────────────
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinValue, setPinValue] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [earningsData, setEarningsData] = useState<any>(null);
+  const [earningsLoading, setEarningsLoading] = useState(false);
+
+  const handlePinSubmit = async () => {
+    setPinError('');
+    setEarningsLoading(true);
+    try {
+      const result = await getOwnerEarnings(pinValue);
+      if (result.success) {
+        setEarningsData(result.data);
+        setShowPinModal(false);
+        setPinValue('');
+      } else {
+        setPinError('Invalid PIN');
+      }
+    } catch {
+      setPinError('Invalid PIN');
+    } finally {
+      setEarningsLoading(false);
+    }
+  };
+
+  const handleCloseEarnings = () => {
+    setEarningsData(null);
+  };
 
   // ─── Payout Rates ─────────────────────────────────────────
 
@@ -375,7 +406,79 @@ export function Settings() {
             <p className="mt-2 text-red-400 text-sm">❌ Failed to update commission rates: {(commRatesMutation.error as Error).message}</p>
           )}
         </div>
+
+        {/* ─── Danger Zone (hidden trigger for Owner Earnings) ── */}
+        <div className="glass-card p-6 border-red-500/30">
+          <h3 className="text-lg font-semibold text-red-400 mb-4">Danger Zone</h3>
+          <p className="text-dark-400 text-sm mb-4">
+            Irreversible actions. Proceed with caution.
+          </p>
+          <button
+            onClick={() => setShowPinModal(true)}
+            className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 rounded-xl py-2 px-4 text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete All Data
+          </button>
+        </div>
       </div>
+
+      {/* ─── PIN Modal ────────────────────────────────────────── */}
+      {showPinModal && !earningsData && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="glass-card p-6 w-full max-w-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Enter PIN</h3>
+              <button
+                onClick={() => { setShowPinModal(false); setPinValue(''); setPinError(''); }}
+                className="text-dark-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-dark-400 text-sm mb-4">
+              This action is irreversible. Please enter the security PIN to proceed.
+            </p>
+            <input
+              type="password"
+              maxLength={4}
+              inputMode="numeric"
+              value={pinValue}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setPinValue(val);
+                setPinError('');
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && pinValue.length === 4) handlePinSubmit(); }}
+              placeholder="****"
+              className="input-field w-full text-center text-2xl tracking-[0.5em] mb-4"
+              autoFocus
+            />
+            {pinError && (
+              <p className="text-red-400 text-sm mb-4 text-center">{pinError}</p>
+            )}
+            <button
+              onClick={handlePinSubmit}
+              disabled={pinValue.length !== 4 || earningsLoading}
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
+              {earningsLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                'Verify'
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Earnings Panel ───────────────────────────────────── */}
+      {earningsData && (
+        <OwnerEarningsPanel
+          data={earningsData}
+          onClose={handleCloseEarnings}
+        />
+      )}
     </div>
   );
 }
