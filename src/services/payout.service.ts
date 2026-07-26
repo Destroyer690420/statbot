@@ -206,7 +206,7 @@ class PayoutService {
       return a.status === 'Ready' ? -1 : 1;
     });
 
-    return result;
+    return result.filter((w) => w.status !== 'Paid');
   }
 
   async getWorkerDetail(workerId: string, weekStart?: Date, weekEnd?: Date): Promise<{
@@ -228,6 +228,7 @@ class PayoutService {
     const workerTasks: Task[] = [];
     for (const task of allTasks) {
       if (task.assignedUserId !== workerId) continue;
+      if (paidTaskIds.has(task.id)) continue;
       if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
 
       if (weekStart && weekEnd) {

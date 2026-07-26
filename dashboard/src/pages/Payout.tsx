@@ -528,41 +528,33 @@ export function Payout() {
                     <td className="py-3 px-2 text-center text-white">{w.comments}</td>
                     <td className="py-3 px-2 text-right text-white font-semibold">₹{w.totalAmount.toLocaleString('en-IN')}</td>
                     <td className="py-3 px-2 text-center">
-                      <span className={`status-badge ${
-                        w.status === 'Paid'
-                          ? 'bg-blue-500/10 text-blue-400'
-                          : 'bg-green-500/10 text-green-400'
-                      }`}>
-                        {w.status}
-                      </span>
+                      <span className="status-badge bg-green-500/10 text-green-400">Ready</span>
                     </td>
                     {isCurrentWeek && (
                       <td className="py-3 px-2 text-center">
-                        {w.status === 'Ready' && (
-                          confirmPayWorker === w.workerId ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <button
-                                onClick={() => payWorkerMutation.mutate(w.workerId)}
-                                disabled={payWorkerMutation.isPending}
-                                className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium py-1.5 px-3 rounded-lg transition-colors"
-                              >
-                                {payWorkerMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm'}
-                              </button>
-                              <button
-                                onClick={() => setConfirmPayWorker(null)}
-                                className="text-dark-400 hover:text-white text-xs"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : (
+                        {confirmPayWorker === w.workerId ? (
+                          <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => setConfirmPayWorker(w.workerId)}
-                              className="btn-primary text-xs py-1.5 px-3"
+                              onClick={() => payWorkerMutation.mutate(w.workerId)}
+                              disabled={payWorkerMutation.isPending}
+                              className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium py-1.5 px-3 rounded-lg transition-colors"
                             >
-                              Pay Worker
+                              {payWorkerMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm'}
                             </button>
-                          )
+                            <button
+                              onClick={() => setConfirmPayWorker(null)}
+                              className="text-dark-400 hover:text-white text-xs"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmPayWorker(w.workerId)}
+                            className="btn-primary text-xs py-1.5 px-3"
+                          >
+                            Pay Worker
+                          </button>
                         )}
                       </td>
                     )}
@@ -672,13 +664,7 @@ function WorkerDetail({ data }: { data: any }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h4 className="text-white font-semibold text-lg">{data.workerName}</h4>
-        <span className={`status-badge ${
-          data.status === 'Paid'
-            ? 'bg-blue-500/10 text-blue-400'
-            : 'bg-green-500/10 text-green-400'
-        }`}>
-          {data.status}
-        </span>
+        <span className="status-badge bg-green-500/10 text-green-400">Ready</span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
@@ -731,7 +717,6 @@ function WorkerDetail({ data }: { data: any }) {
                 <th className="text-center text-dark-400 font-medium py-2 px-2">Type</th>
                 <th className="text-center text-dark-400 font-medium py-2 px-2">Completed</th>
                 <th className="text-right text-dark-400 font-medium py-2 px-2">Amount</th>
-                <th className="text-center text-dark-400 font-medium py-2 px-2">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -749,15 +734,6 @@ function WorkerDetail({ data }: { data: any }) {
                     {task.completedAt ? formatISODate(task.completedAt) : '-'}
                   </td>
                   <td className="py-2 px-2 text-right text-white">₹{task.amount}</td>
-                  <td className="py-2 px-2 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      task.paid
-                        ? 'bg-blue-500/10 text-blue-400'
-                        : 'bg-yellow-500/10 text-yellow-400'
-                    }`}>
-                      {task.paid ? 'Paid' : 'Unpaid'}
-                    </span>
-                  </td>
                 </tr>
               ))}
             </tbody>
