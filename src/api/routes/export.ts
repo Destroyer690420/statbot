@@ -28,8 +28,8 @@ function tasksToCSV(tasks: any[]): string {
       escapeCSV(t.assignedUserName || t.assignedUserId),
       escapeCSV(t.channelName || t.channelId),
       escapeCSV(t.notes || ''),
-      escapeCSV(t.createdAt?.toDate?.()?.toISOString() || t.createdAt || ''),
-      escapeCSV(t.updatedAt?.toDate?.()?.toISOString() || t.updatedAt || ''),
+      escapeCSV(t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt || '')),
+      escapeCSV(t.updatedAt instanceof Date ? t.updatedAt.toISOString() : String(t.updatedAt || '')),
     ].join(','),
   );
   return [headers.join(','), ...rows].join('\n');

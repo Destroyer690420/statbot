@@ -1,11 +1,20 @@
 import { Router, Request, Response } from 'express';
-import { checkFirebaseHealth } from '../../database/firebase';
 import { checkRedisHealth } from '../../scheduler/queue';
+import { getDb } from '../../database/db';
 import { logger } from '../../utils/logger';
 
 const router = Router();
 
 const startTime = Date.now();
+
+async function checkDatabaseHealth(): Promise<boolean> {
+  try {
+    await getDb().$queryRaw`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * GET /api/v1/health
@@ -14,7 +23,7 @@ const startTime = Date.now();
 router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {
     const [dbHealthy, redisHealthy] = await Promise.all([
-      checkFirebaseHealth(),
+      checkDatabaseHealth(),
       checkRedisHealth(),
     ]);
 

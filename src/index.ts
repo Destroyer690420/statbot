@@ -1,5 +1,4 @@
 import { Client } from 'discord.js';
-import { initializeFirebase, remindersCollection, toDate } from './database/firebase';
 import { initializeQueue, getQueue } from './scheduler/queue';
 import { initializeWorker } from './scheduler/worker';
 import { createBotClient, startBot } from './bot';
@@ -7,46 +6,41 @@ import { createApiServer, startApiServer } from './api/server';
 import { logger } from './utils/logger';
 import { taskService } from './services/task.service';
 import { initializeDatabase } from './database/db';
+import { reminderRepository } from './database/repositories';
 import { ARCHIVE_AFTER_DAYS, MAX_REMINDER_ATTEMPTS } from './config/constants';
 import { scheduleReminderJob, scheduleRetryJob } from './scheduler/jobs';
 import { Reminder, ReminderType, TaskStatus } from './types';
 
-// ─── Re-Hydrate Reminders from Firestore ───────────────────
+// ─── Re-Hydrate Reminders from PostgreSQL ─────────────────
 
 async function rehydrateReminders(): Promise<void> {
   const queue = getQueue();
   let scheduled = 0;
 
   // 1. Re-hydrate unsent, incomplete reminders (primary jobs)
-  const pendingSnapshot = await remindersCollection()
-    .where('sent', '==', false)
-    .where('completed', '==', false)
-    .get();
+  const pendingReminders = await reminderRepository.findPending();
 
-  for (const doc of pendingSnapshot.docs) {
-    const data = doc.data();
+  for (const data of pendingReminders) {
     const reminder: Reminder = {
-      id: doc.id,
+      id: data.id,
       taskId: data.taskId,
       type: data.type as ReminderType,
-      dueAt: toDate(data.dueAt) || new Date(),
-      sent: data.sent ?? false,
-      completed: data.completed ?? false,
-      sentAt: toDate(data.sentAt),
-      completedAt: toDate(data.completedAt),
-      retryCount: data.retryCount ?? 0,
-      jobId: data.jobId || null,
-      reminderMessageId: data.reminderMessageId || null,
-      insightImageUrl: data.insightImageUrl || null,
-      insightImageName: data.insightImageName || null,
-      insightUploadedAt: toDate(data.insightUploadedAt),
+      dueAt: data.dueAt,
+      sent: data.sent,
+      completed: data.completed,
+      sentAt: data.sentAt,
+      completedAt: data.completedAt,
+      retryCount: data.retryCount,
+      jobId: data.jobId,
+      reminderMessageId: data.reminderMessageId,
+      insightImageUrl: data.insightImageUrl,
+      insightImageName: data.insightImageName,
+      insightUploadedAt: data.insightUploadedAt,
     };
 
-    // Skip if the parent task is cancelled/archived
     const task = await taskService.findById(reminder.taskId);
     if (!task || task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED || task.cancelledReason !== null) continue;
 
-    // Skip if BullMQ already has this job
     const existingJob = await queue.getJob(`reminder-${reminder.id}`);
     if (existingJob) continue;
 
@@ -55,28 +49,24 @@ async function rehydrateReminders(): Promise<void> {
   }
 
   // 2. Re-hydrate sent-but-not-completed reminders (retry jobs)
-  const sentSnapshot = await remindersCollection()
-    .where('sent', '==', true)
-    .where('completed', '==', false)
-    .get();
+  const sentReminders = await reminderRepository.findPendingSent();
 
-  for (const doc of sentSnapshot.docs) {
-    const data = doc.data();
+  for (const data of sentReminders) {
     const reminder: Reminder = {
-      id: doc.id,
+      id: data.id,
       taskId: data.taskId,
       type: data.type as ReminderType,
-      dueAt: toDate(data.dueAt) || new Date(),
-      sent: data.sent ?? false,
-      completed: data.completed ?? false,
-      sentAt: toDate(data.sentAt),
-      completedAt: toDate(data.completedAt),
-      retryCount: data.retryCount ?? 0,
-      jobId: data.jobId || null,
-      reminderMessageId: data.reminderMessageId || null,
-      insightImageUrl: data.insightImageUrl || null,
-      insightImageName: data.insightImageName || null,
-      insightUploadedAt: toDate(data.insightUploadedAt),
+      dueAt: data.dueAt,
+      sent: data.sent,
+      completed: data.completed,
+      sentAt: data.sentAt,
+      completedAt: data.completedAt,
+      retryCount: data.retryCount,
+      jobId: data.jobId,
+      reminderMessageId: data.reminderMessageId,
+      insightImageUrl: data.insightImageUrl,
+      insightImageName: data.insightImageName,
+      insightUploadedAt: data.insightUploadedAt,
     };
 
     const task = await taskService.findById(reminder.taskId);
@@ -94,7 +84,7 @@ async function rehydrateReminders(): Promise<void> {
   }
 
   if (scheduled > 0) {
-    logger.info(`Re-hydrated ${scheduled} reminder jobs from Firestore`);
+    logger.info(`Re-hydrated ${scheduled} reminder jobs from PostgreSQL`);
   } else {
     logger.info('Reminder re-hydration complete — no orphaned reminders found');
   }
@@ -108,33 +98,29 @@ async function main(): Promise<void> {
   let discordClient: Client;
 
   try {
-    // 1. Initialize Firebase
-    logger.info('[1/7] Initializing Firebase...');
-    initializeFirebase();
-
-    // 2. Initialize PostgreSQL via Prisma
-    logger.info('[2/7] Initializing PostgreSQL...');
+    // 1. Initialize PostgreSQL via Prisma
+    logger.info('[1/6] Initializing PostgreSQL...');
     initializeDatabase();
 
-    // 3. Initialize Redis + BullMQ Queue
-    logger.info('[3/7] Initializing Redis & BullMQ...');
+    // 2. Initialize Redis + BullMQ Queue
+    logger.info('[2/6] Initializing Redis & BullMQ...');
     initializeQueue();
 
-    // 4. Create and start Discord bot
-    logger.info('[4/7] Starting Discord bot...');
+    // 3. Create and start Discord bot
+    logger.info('[3/6] Starting Discord bot...');
     discordClient = createBotClient();
     await startBot(discordClient);
 
-    // 5. Initialize BullMQ Worker (needs Discord client for sending messages)
-    logger.info('[5/7] Initializing BullMQ worker...');
+    // 4. Initialize BullMQ Worker (needs Discord client for sending messages)
+    logger.info('[4/6] Initializing BullMQ worker...');
     initializeWorker(discordClient);
 
-    // 6. Re-hydrate reminder jobs from Firestore (recover from Redis/bot restarts)
-    logger.info('[6/7] Re-hydrating reminder jobs from Firestore...');
+    // 5. Re-hydrate reminder jobs from PostgreSQL (recover from Redis/bot restarts)
+    logger.info('[5/6] Re-hydrating reminder jobs...');
     await rehydrateReminders();
 
-    // 7. Start REST API server
-    logger.info('[7/7] Starting REST API server...');
+    // 6. Start REST API server
+    logger.info('[6/6] Starting REST API server...');
     const apiApp = createApiServer();
     startApiServer(apiApp);
 
