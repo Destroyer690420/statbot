@@ -434,8 +434,6 @@ class CommissionService {
         }
       }
 
-      if (activeReferrals === 0) continue;
-
       result.push({
         inviterId,
         inviterName: data.inviterName,

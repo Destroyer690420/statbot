@@ -1062,7 +1062,9 @@ function CommissionsPanel({
                     <td className="py-3 px-2 text-right text-white font-semibold">₹{inv.totalCommission.toLocaleString('en-IN')}</td>
                     {isCurrentWeek && (
                       <td className="py-3 px-2 text-center">
-                        {confirmPayInviter === inv.inviterId
+                        {inv.totalCommission === 0 ? (
+                          <span className="text-dark-500 text-xs">—</span>
+                        ) : confirmPayInviter === inv.inviterId
                           ? (
                               <div className="flex items-center justify-center gap-2">
                                 <button
