@@ -302,25 +302,28 @@ class CommissionService {
 
     if (ref.status === 'closed') return items;
 
-    if (!ref.oneTimeCommissionPaid) {
-      const threshold = ref.inviterType === 'special'
-        ? rates.specialInviteTaskThreshold
-        : rates.normalInviteTaskThreshold;
-      const tasks = await this.getCompletedTasksForUser(ref.inviteeId);
-      if (tasks.length >= threshold) {
-        const bonusAmount = ref.inviterType === 'special'
-          ? rates.specialInviteBonus
-          : rates.normalInviteBonus;
-        if (bonusAmount > 0) {
-          const existing = await this.hasExistingOneTimeCommission(ref.id, ref.inviterId);
-          if (!existing) {
-            items.push({ commissionKind: 'one_time', amount: bonusAmount, sourceTaskId: null });
-          }
+    const threshold = ref.inviterType === 'special'
+      ? rates.specialInviteTaskThreshold
+      : rates.normalInviteTaskThreshold;
+
+    const payableOneTime = !ref.oneTimeCommissionPaid;
+    const meetsThreshold = (await this.getCompletedTasksForUser(ref.inviteeId)).length >= threshold;
+    const perTaskActive = ref.perTaskCommissionActive ||
+      (ref.inviterType === 'special' && payableOneTime && meetsThreshold);
+
+    if (payableOneTime && meetsThreshold) {
+      const bonusAmount = ref.inviterType === 'special'
+        ? rates.specialInviteBonus
+        : rates.normalInviteBonus;
+      if (bonusAmount > 0) {
+        const existing = await this.hasExistingOneTimeCommission(ref.id, ref.inviterId);
+        if (!existing) {
+          items.push({ commissionKind: 'one_time', amount: bonusAmount, sourceTaskId: null });
         }
       }
     }
 
-    if (ref.perTaskCommissionActive && ref.inviterType === 'special') {
+    if (perTaskActive && ref.inviterType === 'special') {
       const tasks = await this.getTasksForReferral(ref);
       for (const task of tasks) {
         const amount = task.type === TaskType.POST ? rates.specialPerPost : rates.specialPerComment;
