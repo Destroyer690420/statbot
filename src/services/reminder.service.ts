@@ -4,18 +4,14 @@ import {
   TaskType,
   AuditAction,
 } from '../types';
-import { remindersCollection, toDate, toTimestamp } from '../database/firebase';
+import { reminderRepository } from '../database/repositories';
 import { generateReminderId } from '../utils/id-generator';
 import { REMINDER_DELAYS } from '../config/constants';
 import { logger } from '../utils/logger';
+import { toReminder } from '../database/converters';
 import { auditLogService } from './audit.service';
 
 class ReminderService {
-  /**
-   * Create reminders for a task based on its type.
-   * - Comment: 1 reminder (COMMENT_20H)
-   * - Post: 2 reminders (POST_20H, POST_70H)
-   */
   async createForTask(taskId: string, taskType: TaskType, createdAt: Date): Promise<Reminder[]> {
     const reminders: Reminder[] = [];
 
@@ -26,13 +22,22 @@ class ReminderService {
       reminders.push(this.buildReminder(taskId, ReminderType.POST_70H, createdAt, REMINDER_DELAYS.POST_70H));
     }
 
-    // Save all reminders
     for (const reminder of reminders) {
-      await remindersCollection().doc(reminder.id).set({
-        ...reminder,
-        dueAt: toTimestamp(reminder.dueAt),
-        sentAt: reminder.sentAt ? toTimestamp(reminder.sentAt) : null,
-        completedAt: reminder.completedAt ? toTimestamp(reminder.completedAt) : null,
+      await reminderRepository.create({
+        id: reminder.id,
+        taskId: reminder.taskId,
+        type: reminder.type,
+        dueAt: reminder.dueAt,
+        sent: reminder.sent,
+        completed: reminder.completed,
+        sentAt: reminder.sentAt,
+        completedAt: reminder.completedAt,
+        retryCount: reminder.retryCount,
+        jobId: reminder.jobId,
+        reminderMessageId: reminder.reminderMessageId,
+        insightImageUrl: reminder.insightImageUrl,
+        insightImageName: reminder.insightImageName,
+        insightUploadedAt: reminder.insightUploadedAt,
       });
     }
 
@@ -45,85 +50,34 @@ class ReminderService {
     return reminders;
   }
 
-  /**
-   * Find a reminder by ID.
-   */
   async findById(id: string): Promise<Reminder | null> {
-    const doc = await remindersCollection().doc(id).get();
-    if (!doc.exists) return null;
-    return this.docToReminder(doc);
+    const doc = await reminderRepository.findById(id);
+    return doc ? toReminder(doc) : null;
   }
 
-  /**
-   * Get all reminders for a task.
-   */
   async findByTaskId(taskId: string): Promise<Reminder[]> {
-    const snapshot = await remindersCollection()
-      .where('taskId', '==', taskId)
-      .get();
-
-    const reminders = snapshot.docs.map((doc) => this.docToReminder(doc));
-    reminders.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
-    return reminders;
+    const reminders = await reminderRepository.findByTaskId(taskId);
+    return reminders.map(toReminder);
   }
 
-  /**
-   * Find the next pending (unsent) reminder for a task.
-   */
   async findNextPending(taskId: string): Promise<Reminder | null> {
-    const snapshot = await remindersCollection()
-      .where('taskId', '==', taskId)
-      .where('sent', '==', false)
-      .where('completed', '==', false)
-      .get();
-
-    if (snapshot.empty) return null;
-    const reminders = snapshot.docs.map((doc) => this.docToReminder(doc));
-    reminders.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
-    return reminders[0];
+    const doc = await reminderRepository.findNextPending(taskId);
+    return doc ? toReminder(doc) : null;
   }
 
-  /**
-   * Find the next sent-but-not-completed reminder for a task.
-   * This is the reminder waiting for an insight upload.
-   */
   async findWaitingForInsight(taskId: string): Promise<Reminder | null> {
-    const snapshot = await remindersCollection()
-      .where('taskId', '==', taskId)
-      .where('sent', '==', true)
-      .where('completed', '==', false)
-      .get();
-
-    if (snapshot.empty) return null;
-    const reminders = snapshot.docs.map((doc) => this.docToReminder(doc));
-    reminders.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
-    return reminders[0];
+    const doc = await reminderRepository.findWaitingForInsight(taskId);
+    return doc ? toReminder(doc) : null;
   }
 
-  /**
-   * Mark a reminder as sent.
-   */
   async markSent(reminderId: string): Promise<void> {
-    const now = new Date();
-    await remindersCollection().doc(reminderId).update({
-      sent: true,
-      sentAt: toTimestamp(now),
-    });
-
+    await reminderRepository.markSent(reminderId);
     logger.info('Reminder marked as sent', { reminderId });
     await auditLogService.log(AuditAction.REMINDER_SENT, null, null, `Reminder ${reminderId} sent`);
   }
 
-  /**
-   * Mark a reminder as completed (insight received).
-   */
   async markCompleted(reminderId: string, userId?: string): Promise<void> {
-    const now = new Date();
-    await remindersCollection().doc(reminderId).update({
-      completed: true,
-      completedAt: toTimestamp(now),
-    });
-
+    await reminderRepository.markCompleted(reminderId);
     logger.info('Reminder completed', { reminderId });
     await auditLogService.log(
       AuditAction.REMINDER_COMPLETED,
@@ -133,111 +87,56 @@ class ReminderService {
     );
   }
 
-  /**
-   * Increment the retry count for a reminder.
-   */
   async incrementRetry(reminderId: string): Promise<number> {
-    const reminder = await this.findById(reminderId);
+    const reminder = await reminderRepository.findById(reminderId);
     if (!reminder) throw new Error('Reminder not found.');
 
     const newCount = reminder.retryCount + 1;
-    await remindersCollection().doc(reminderId).update({
-      retryCount: newCount,
-    });
+    await reminderRepository.updateRetryCount(reminderId, newCount);
 
     await auditLogService.log(AuditAction.REMINDER_RETRY, null, null, `Retry ${newCount} for ${reminderId}`);
     return newCount;
   }
 
-  /**
-   * Update the job ID reference for a reminder.
-   */
   async updateJobId(reminderId: string, jobId: string): Promise<void> {
-    await remindersCollection().doc(reminderId).update({ jobId });
+    await reminderRepository.updateJobId(reminderId, jobId);
   }
 
-  /**
-   * Store the Discord message ID for a sent reminder.
-   */
   async updateReminderMessageId(reminderId: string, messageId: string): Promise<void> {
-    await remindersCollection().doc(reminderId).update({ reminderMessageId: messageId });
+    await reminderRepository.updateReminderMessageId(reminderId, messageId);
   }
 
-  /**
-   * Store the insight image URL for a completed reminder.
-   */
   async updateInsightImage(reminderId: string, imageUrl: string, imageName: string): Promise<void> {
-    await remindersCollection().doc(reminderId).update({
-      insightImageUrl: imageUrl,
-      insightImageName: imageName,
-      insightUploadedAt: toTimestamp(new Date()),
-    });
-
+    await reminderRepository.updateInsightImage(reminderId, imageUrl, imageName);
     logger.info('Insight image saved for reminder', { reminderId, imageUrl });
   }
 
-  /**
-   * Find a reminder by its Discord reminder message ID.
-   */
   async findByMessageId(messageId: string): Promise<Reminder | null> {
-    const snapshot = await remindersCollection()
-      .where('reminderMessageId', '==', messageId)
-      .limit(1)
-      .get();
-
-    if (snapshot.empty) return null;
-    return this.docToReminder(snapshot.docs[0]);
+    const doc = await reminderRepository.findByMessageId(messageId);
+    return doc ? toReminder(doc) : null;
   }
 
-  /**
-   * Reschedule a reminder to a new time.
-   */
   async reschedule(reminderId: string, newDueAt: Date): Promise<Reminder> {
-    await remindersCollection().doc(reminderId).update({
-      dueAt: toTimestamp(newDueAt),
-      sent: false,
-      sentAt: null,
-    });
+    await reminderRepository.reschedule(reminderId, newDueAt);
 
-    const updated = await this.findById(reminderId);
+    const updated = await reminderRepository.findById(reminderId);
     if (!updated) throw new Error('Reminder not found after update.');
 
     logger.info('Reminder rescheduled', { reminderId, newDueAt });
     await auditLogService.log(AuditAction.REMINDER_RESCHEDULED, null, null, `Rescheduled to ${newDueAt.toISOString()}`);
 
-    return updated;
+    return toReminder(updated);
   }
 
-  /**
-   * Delete all reminders for a task.
-   */
   async deleteByTaskId(taskId: string): Promise<void> {
-    const snapshot = await remindersCollection()
-      .where('taskId', '==', taskId)
-      .get();
-
-    const batch = remindersCollection().firestore.batch();
-    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-    await batch.commit();
-
-    logger.info('Reminders deleted for task', { taskId, count: snapshot.size });
+    const result = await reminderRepository.deleteByTaskId(taskId);
+    logger.info('Reminders deleted for task', { taskId, count: result.count });
   }
 
-  /**
-   * Get upcoming reminders (for dashboard display).
-   */
   async findUpcoming(limit = 10): Promise<Reminder[]> {
-    const snapshot = await remindersCollection()
-      .where('sent', '==', false)
-      .where('completed', '==', false)
-      .get();
-
-    const reminders = snapshot.docs.map((doc) => this.docToReminder(doc));
-    reminders.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
-    return reminders.slice(0, limit);
+    const reminders = await reminderRepository.findUpcoming(limit);
+    return reminders.map(toReminder);
   }
-
-  // ─── Private Helpers ─────────────────────────────────────────
 
   private buildReminder(
     taskId: string,
@@ -260,26 +159,6 @@ class ReminderService {
       insightImageUrl: null,
       insightImageName: null,
       insightUploadedAt: null,
-    };
-  }
-
-  private docToReminder(doc: FirebaseFirestore.DocumentSnapshot): Reminder {
-    const data = doc.data()!;
-    return {
-      id: doc.id,
-      taskId: data.taskId,
-      type: data.type as ReminderType,
-      dueAt: toDate(data.dueAt) || new Date(),
-      sent: data.sent ?? false,
-      completed: data.completed ?? false,
-      sentAt: toDate(data.sentAt),
-      completedAt: toDate(data.completedAt),
-      retryCount: data.retryCount ?? 0,
-      jobId: data.jobId || null,
-      reminderMessageId: data.reminderMessageId || null,
-      insightImageUrl: data.insightImageUrl || null,
-      insightImageName: data.insightImageName || null,
-      insightUploadedAt: toDate(data.insightUploadedAt),
     };
   }
 }

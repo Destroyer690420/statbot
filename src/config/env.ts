@@ -19,6 +19,9 @@ const envSchema = z.object({
   FIREBASE_CLIENT_EMAIL: z.string().min(1, 'FIREBASE_CLIENT_EMAIL is required'),
   FIREBASE_PRIVATE_KEY: z.string().min(1, 'FIREBASE_PRIVATE_KEY is required'),
 
+  // Database
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+
   // Redis
   REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
 

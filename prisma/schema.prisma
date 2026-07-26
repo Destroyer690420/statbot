@@ -1,0 +1,250 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskType {
+  POST
+  COMMENT
+}
+
+enum TaskStatus {
+  PENDING
+  REMINDER_20_SENT
+  INSIGHT_20_RECEIVED
+  REMINDER_70_SENT
+  INSIGHT_70_RECEIVED
+  COMPLETED
+  ARCHIVED
+  CANCELLED
+}
+
+enum ReminderType {
+  POST_20H
+  POST_70H
+  COMMENT_20H
+}
+
+enum AuditAction {
+  TASK_CREATED
+  TASK_DELETED
+  TASK_UPDATED
+  TASK_COMPLETED
+  TASK_CANCELLED
+  TASK_ARCHIVED
+  REMINDER_SENT
+  REMINDER_COMPLETED
+  REMINDER_RETRY
+  REMINDER_RESCHEDULED
+  INSIGHT_RECEIVED
+  ADMIN_ALERT
+  COMMAND_USED
+  PAYOUT_BATCH_CREATED
+  PAYOUT_ITEM_CREATED
+  REFERRAL_ADDED
+  REFERRAL_REMOVED
+  COMMISSION_PAID
+  COMMISSION_BATCH_CREATED
+}
+
+enum ReferralStatus {
+  pending
+  qualified
+  active_per_task
+  closed
+}
+
+enum InviterType {
+  normal
+  special
+}
+
+enum CommissionKind {
+  one_time
+  per_task
+}
+
+model Task {
+  id               String   @id
+  redditUrl        String
+  type             TaskType
+  status           TaskStatus
+  guildId          String
+  channelId        String
+  channelName      String?
+  assignedUserId   String
+  assignedUserName String?
+  createdById      String
+  notes            String?
+  cancelledReason  String?
+  createdAt        DateTime
+  updatedAt        DateTime
+
+  reminders        Reminder[]
+  auditLogs        AuditLog[]
+  payoutItems      PayoutItem[]
+  commissionItems  CommissionItem[]
+
+  @@index([status])
+  @@index([status, guildId])
+  @@index([channelId])
+  @@index([assignedUserId])
+  @@index([redditUrl, guildId])
+  @@index([channelName, status])
+  @@index([assignedUserId, status])
+  @@index([createdAt])
+}
+
+model Reminder {
+  id                 String       @id
+  taskId             String
+  type               ReminderType
+  dueAt              DateTime
+  sent               Boolean      @default(false)
+  completed          Boolean      @default(false)
+  sentAt             DateTime?
+  completedAt        DateTime?
+  retryCount         Int          @default(0)
+  jobId              String?
+  reminderMessageId  String?
+  insightImageUrl    String?
+  insightImageName   String?
+  insightUploadedAt  DateTime?
+
+  task               Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([sent, completed])
+  @@index([reminderMessageId])
+}
+
+model AuditLog {
+  id        String       @id
+  action    AuditAction
+  taskId    String?
+  userId    String?
+  details   String?
+  createdAt DateTime
+
+  task      Task?        @relation(fields: [taskId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@index([createdAt])
+}
+
+model PayoutBatch {
+  id            String       @id
+  batchNumber   Int
+  weekStart     DateTime
+  weekEnd       DateTime
+  totalWorkers  Int
+  totalTasks    Int
+  totalPosts    Int
+  totalComments Int
+  totalAmount   Float
+  paidAt        DateTime?
+  createdBy     String
+  createdAt     DateTime
+
+  items         PayoutItem[]
+
+  @@index([batchNumber])
+  @@index([weekStart, weekEnd])
+  @@index([weekEnd])
+}
+
+model PayoutItem {
+  id          String    @id
+  batchId     String
+  taskId      String
+  workerId    String
+  taskType    TaskType
+  amount      Float
+  completedAt DateTime
+  createdAt   DateTime
+
+  batch       PayoutBatch @relation(fields: [batchId], references: [id])
+  task        Task        @relation(fields: [taskId], references: [id])
+
+  @@index([batchId])
+  @@index([taskId])
+}
+
+model Referral {
+  id                       String          @id
+  inviterId                String
+  inviterName              String
+  inviteeId                String
+  inviteeName              String
+  inviterType              InviterType
+  status                   ReferralStatus
+  oneTimeCommissionPaid    Boolean         @default(false)
+  oneTimeCommissionPaidAt  DateTime?
+  perTaskCommissionActive  Boolean         @default(false)
+  ticketId                 String?
+  createdAt                DateTime
+  updatedAt                DateTime
+
+  commissionItems          CommissionItem[]
+
+  @@index([inviterId])
+  @@index([inviteeId, inviterId])
+  @@index([createdAt])
+}
+
+model CommissionBatch {
+  id            String          @id
+  batchNumber   Int
+  totalInviters Int
+  totalAmount   Float
+  paidAt        DateTime?
+  createdAt     DateTime
+
+  items         CommissionItem[]
+
+  @@index([batchNumber])
+}
+
+model CommissionItem {
+  id               String        @id
+  batchId          String
+  referralId       String
+  inviterId        String
+  invitedWorkerId  String
+  sourceTaskId     String?
+  commissionKind   CommissionKind
+  amount           Float
+  createdAt        DateTime
+
+  batch            CommissionBatch @relation(fields: [batchId], references: [id])
+  referral         Referral        @relation(fields: [referralId], references: [id])
+  task             Task?            @relation(fields: [sourceTaskId], references: [id])
+
+  @@index([batchId])
+  @@index([referralId, inviterId, commissionKind])
+  @@index([inviterId, sourceTaskId, commissionKind])
+}
+
+model PayoutSettings {
+  id          String   @id @default("payout-rates")
+  commentRate Float
+  postRate    Float
+  updatedAt   DateTime
+  updatedBy   String
+}
+
+model CommissionRates {
+  id                        String   @id @default("commission-rates")
+  normalInviteBonus         Float
+  normalInviteTaskThreshold Int
+  specialInviteBonus        Float
+  specialInviteTaskThreshold Int
+  specialPerComment         Float
+  specialPerPost            Float
+  updatedAt                 DateTime
+  updatedBy                 String
+}

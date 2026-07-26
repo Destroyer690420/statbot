@@ -1,7 +1,5 @@
-import { settingsCollection, toTimestamp } from '../database/firebase';
+import { settingsRepository } from '../database/repositories';
 import { logger } from '../utils/logger';
-
-const PAYOUT_RATES_DOC_ID = 'payout-rates';
 
 const DEFAULT_COMMENT_RATE = 30;
 const DEFAULT_POST_RATE = 60;
@@ -9,14 +7,13 @@ const DEFAULT_POST_RATE = 60;
 class SettingsService {
   async getPayoutRates(): Promise<{ commentRate: number; postRate: number }> {
     try {
-      const doc = await settingsCollection().doc(PAYOUT_RATES_DOC_ID).get();
-      if (!doc.exists) {
+      const doc = await settingsRepository.getPayoutRates();
+      if (!doc) {
         return { commentRate: DEFAULT_COMMENT_RATE, postRate: DEFAULT_POST_RATE };
       }
-      const data = doc.data()!;
       return {
-        commentRate: data.commentRate ?? DEFAULT_COMMENT_RATE,
-        postRate: data.postRate ?? DEFAULT_POST_RATE,
+        commentRate: doc.commentRate ?? DEFAULT_COMMENT_RATE,
+        postRate: doc.postRate ?? DEFAULT_POST_RATE,
       };
     } catch (error) {
       logger.error('Failed to read payout rates, using defaults', { error });
@@ -25,10 +22,10 @@ class SettingsService {
   }
 
   async updatePayoutRates(commentRate: number, postRate: number, userId: string): Promise<void> {
-    await settingsCollection().doc(PAYOUT_RATES_DOC_ID).set({
+    await settingsRepository.setPayoutRates({
       commentRate,
       postRate,
-      updatedAt: toTimestamp(new Date()),
+      updatedAt: new Date(),
       updatedBy: userId,
     });
 

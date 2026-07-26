@@ -3,7 +3,6 @@ import {
   TaskStatus,
   TaskType,
   Referral,
-  ReferralStatus,
   InviterType,
   CommissionItem,
   CommissionKind,
@@ -11,20 +10,12 @@ import {
   CommissionRates,
   AuditAction,
 } from '../types';
-import {
-  referralsCollection,
-  commissionItemsCollection,
-  commissionBatchesCollection,
-  tasksCollection,
-  settingsCollection,
-  toDate,
-  toTimestamp,
-} from '../database/firebase';
-import { generateReferralId, generateCommissionBatchId, generateCommissionItemId } from '../utils/id-generator';
+import { taskRepository, referralRepository, commissionRepository, settingsRepository } from '../database/repositories';
+import { getDb } from '../database/db';
+import { generateReferralId, generateBatchId, generateCommissionItemId } from '../utils/id-generator';
 import { auditLogService } from './audit.service';
+import { toTask, toReferral } from '../database/converters';
 import { logger } from '../utils/logger';
-
-const COMMISSION_RATES_DOC_ID = 'commission-rates';
 
 const DEFAULT_RATES: CommissionRates = {
   normalInviteBonus: 100,
@@ -38,22 +29,19 @@ const DEFAULT_RATES: CommissionRates = {
 };
 
 class CommissionService {
-  // ─── Rates ─────────────────────────────────────────────────────
-
   async getCommissionRates(): Promise<CommissionRates> {
     try {
-      const doc = await settingsCollection().doc(COMMISSION_RATES_DOC_ID).get();
-      if (!doc.exists) return { ...DEFAULT_RATES };
-      const data = doc.data()!;
+      const doc = await settingsRepository.getCommissionRates();
+      if (!doc) return { ...DEFAULT_RATES };
       return {
-        normalInviteBonus: data.normalInviteBonus ?? DEFAULT_RATES.normalInviteBonus,
-        normalInviteTaskThreshold: data.normalInviteTaskThreshold ?? DEFAULT_RATES.normalInviteTaskThreshold,
-        specialInviteBonus: data.specialInviteBonus ?? DEFAULT_RATES.specialInviteBonus,
-        specialInviteTaskThreshold: data.specialInviteTaskThreshold ?? DEFAULT_RATES.specialInviteTaskThreshold,
-        specialPerComment: data.specialPerComment ?? DEFAULT_RATES.specialPerComment,
-        specialPerPost: data.specialPerPost ?? DEFAULT_RATES.specialPerPost,
-        updatedAt: toDate(data.updatedAt) || new Date(),
-        updatedBy: data.updatedBy || 'system',
+        normalInviteBonus: doc.normalInviteBonus ?? DEFAULT_RATES.normalInviteBonus,
+        normalInviteTaskThreshold: doc.normalInviteTaskThreshold ?? DEFAULT_RATES.normalInviteTaskThreshold,
+        specialInviteBonus: doc.specialInviteBonus ?? DEFAULT_RATES.specialInviteBonus,
+        specialInviteTaskThreshold: doc.specialInviteTaskThreshold ?? DEFAULT_RATES.specialInviteTaskThreshold,
+        specialPerComment: doc.specialPerComment ?? DEFAULT_RATES.specialPerComment,
+        specialPerPost: doc.specialPerPost ?? DEFAULT_RATES.specialPerPost,
+        updatedAt: doc.updatedAt,
+        updatedBy: doc.updatedBy,
       };
     } catch (error) {
       logger.error('Failed to read commission rates, using defaults', { error });
@@ -62,26 +50,21 @@ class CommissionService {
   }
 
   async updateCommissionRates(rates: Omit<CommissionRates, 'updatedAt' | 'updatedBy'>, userId: string): Promise<void> {
-    await settingsCollection().doc(COMMISSION_RATES_DOC_ID).set({
+    await settingsRepository.setCommissionRates({
       ...rates,
-      updatedAt: toTimestamp(new Date()),
+      updatedAt: new Date(),
       updatedBy: userId,
     });
     logger.info('Commission rates updated', { rates, userId });
   }
 
-  // ─── Helpers ───────────────────────────────────────────────────
-
   private async getCompletedTasksForUser(userId: string, weekStart?: Date, weekEnd?: Date): Promise<Task[]> {
-    const statuses = [TaskStatus.COMPLETED, TaskStatus.ARCHIVED];
+    const statuses: TaskStatus[] = [TaskStatus.COMPLETED, TaskStatus.ARCHIVED];
     const all: Task[] = [];
     for (const status of statuses) {
-      const snapshot = await tasksCollection()
-        .where('assignedUserId', '==', userId)
-        .where('status', '==', status)
-        .get();
-      for (const doc of snapshot.docs) {
-        const task = this.docToTask(doc);
+      const tasks = await taskRepository.findByAssignedUserIdAndStatus(userId, status);
+      for (const t of tasks) {
+        const task = toTask(t);
         if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
         all.push(task);
       }
@@ -102,15 +85,12 @@ class CommissionService {
   }
 
   private async getCompletedTasksByChannelName(channelName: string, weekStart?: Date, weekEnd?: Date): Promise<Task[]> {
-    const statuses = [TaskStatus.COMPLETED, TaskStatus.ARCHIVED];
+    const statuses: TaskStatus[] = [TaskStatus.COMPLETED, TaskStatus.ARCHIVED];
     const all: Task[] = [];
     for (const status of statuses) {
-      const snapshot = await tasksCollection()
-        .where('channelName', '==', channelName)
-        .where('status', '==', status)
-        .get();
-      for (const doc of snapshot.docs) {
-        const task = this.docToTask(doc);
+      const tasks = await taskRepository.findByChannelNameAndStatus(channelName, status);
+      for (const t of tasks) {
+        const task = toTask(t);
         if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
         all.push(task);
       }
@@ -139,24 +119,22 @@ class CommissionService {
   }
 
   private async getTaskCompletionTime(taskId: string): Promise<Date | null> {
-    const { reminderService } = await import('./reminder.service');
-    const reminders = await reminderService.findByTaskId(taskId);
+    const { reminderService } = require('./reminder.service');
+    const reminders: any[] = await reminderService.findByTaskId(taskId);
     const completed = reminders
-      .filter((r) => r.completed && r.completedAt)
-      .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime());
+      .filter((r: any) => r.completed && r.completedAt)
+      .sort((a: any, b: any) => b.completedAt!.getTime() - a.completedAt!.getTime());
 
     if (completed[0]?.completedAt) return completed[0].completedAt;
 
-    const task = await tasksCollection().doc(taskId).get();
-    if (!task.exists) return null;
-    return toDate(task.data()!.updatedAt);
+    const task = await taskRepository.findById(taskId);
+    if (!task) return null;
+    return task.updatedAt;
   }
 
-  // ─── Referral CRUD ────────────────────────────────────────────
-
   async getReferrals(): Promise<Referral[]> {
-    const snapshot = await referralsCollection().orderBy('createdAt', 'desc').get();
-    return snapshot.docs.map((doc) => this.docToReferral(doc));
+    const referrals = await referralRepository.findAll();
+    return referrals.map(toReferral);
   }
 
   async createReferral(data: {
@@ -167,13 +145,8 @@ class CommissionService {
     inviterType: InviterType;
     ticketId?: string;
   }, createdBy: string): Promise<Referral> {
-    const existing = await referralsCollection()
-      .where('inviteeId', '==', data.inviteeId)
-      .where('inviterId', '==', data.inviterId)
-      .limit(1)
-      .get();
-
-    if (!existing.empty) {
+    const existing = await referralRepository.findByInviteeAndInviter(data.inviteeId, data.inviterId);
+    if (existing) {
       throw new Error(`A referral already exists for invitee <@${data.inviteeId}>.`);
     }
 
@@ -194,7 +167,21 @@ class CommissionService {
       updatedAt: now,
     };
 
-    await referralsCollection().doc(referral.id).set(this.serializeReferral(referral));
+    await referralRepository.create({
+      id: referral.id,
+      inviterId: referral.inviterId,
+      inviterName: referral.inviterName,
+      inviteeId: referral.inviteeId,
+      inviteeName: referral.inviteeName,
+      inviterType: referral.inviterType,
+      status: referral.status,
+      oneTimeCommissionPaid: referral.oneTimeCommissionPaid,
+      oneTimeCommissionPaidAt: referral.oneTimeCommissionPaidAt,
+      perTaskCommissionActive: referral.perTaskCommissionActive,
+      ticketId: referral.ticketId,
+      createdAt: referral.createdAt,
+      updatedAt: referral.updatedAt,
+    });
 
     await auditLogService.log(
       AuditAction.REFERRAL_ADDED,
@@ -208,10 +195,10 @@ class CommissionService {
   }
 
   async deleteReferral(referralId: string, deletedBy: string): Promise<void> {
-    const doc = await referralsCollection().doc(referralId).get();
-    if (!doc.exists) throw new Error('Referral not found.');
+    const ref = await referralRepository.findById(referralId);
+    if (!ref) throw new Error('Referral not found.');
 
-    await referralsCollection().doc(referralId).delete();
+    await referralRepository.delete(referralId);
 
     await auditLogService.log(
       AuditAction.REFERRAL_REMOVED,
@@ -222,8 +209,6 @@ class CommissionService {
 
     logger.info('Referral deleted', { referralId });
   }
-
-  // ─── Commission Computation ──────────────────────────────────
 
   async computeReferralStatus(
     ref: Referral,
@@ -275,51 +260,36 @@ class CommissionService {
     };
   }
 
-  // ─── Duplicate Protection ─────────────────────────────────────
-
   async hasExistingOneTimeCommission(referralId: string, inviterId: string): Promise<boolean> {
-    const snapshot = await commissionItemsCollection()
-      .where('referralId', '==', referralId)
-      .where('inviterId', '==', inviterId)
-      .where('commissionKind', '==', 'one_time')
-      .limit(1)
-      .get();
-    return !snapshot.empty;
+    const item = await commissionRepository.findOneTimeCommission(referralId, inviterId);
+    return item !== null;
   }
 
   async hasExistingPerTaskCommission(inviterId: string, sourceTaskId: string): Promise<boolean> {
-    const snapshot = await commissionItemsCollection()
-      .where('inviterId', '==', inviterId)
-      .where('sourceTaskId', '==', sourceTaskId)
-      .where('commissionKind', '==', 'per_task')
-      .limit(1)
-      .get();
-    return !snapshot.empty;
+    const item = await commissionRepository.findPerTaskCommission(inviterId, sourceTaskId);
+    return item !== null;
   }
 
   async getPaidCommissionAmountsByReferral(): Promise<Map<string, { total: number; bonus: number; perTask: number; paid: boolean }>> {
-    const snapshot = await commissionItemsCollection().get();
+    const items = await commissionRepository.findAllItems();
     const map = new Map<string, { total: number; bonus: number; perTask: number; paid: boolean }>();
 
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      const refId = data.referralId as string;
-      const inviterId = data.inviterId as string;
+    for (const data of items) {
+      const refId = data.referralId;
+      const inviterId = data.inviterId;
       const key = `${refId}_${inviterId}`;
-      const amount = data.amount as number;
-      const kind = (data.commissionKind || data.type) as string;
+      const amount = data.amount;
+      const kind = data.commissionKind;
 
       const existing = map.get(key) || { total: 0, bonus: 0, perTask: 0, paid: true };
       existing.total += amount;
-      if (kind === 'one_time' || kind === 'bonus') existing.bonus += amount;
+      if (kind === 'one_time') existing.bonus += amount;
       else existing.perTask += amount;
       map.set(key, existing);
     }
 
     return map;
   }
-
-  // ─── Payable Items (for payout engine) ────────────────────────
 
   async getPayableItems(ref: Referral, rates: CommissionRates): Promise<{
     commissionKind: CommissionKind;
@@ -330,7 +300,6 @@ class CommissionService {
 
     if (ref.status === 'closed') return items;
 
-    // One-time bonus
     if (!ref.oneTimeCommissionPaid) {
       const threshold = ref.inviterType === 'special'
         ? rates.specialInviteTaskThreshold
@@ -349,7 +318,6 @@ class CommissionService {
       }
     }
 
-    // Per-task commission
     if (ref.perTaskCommissionActive && ref.inviterType === 'special') {
       const tasks = await this.getTasksForReferral(ref);
       for (const task of tasks) {
@@ -365,8 +333,6 @@ class CommissionService {
 
     return items;
   }
-
-  // ─── Summary & Breakdown ──────────────────────────────────────
 
   async getSummary(weekStart?: Date, weekEnd?: Date): Promise<{
     totalInviters: number;
@@ -411,12 +377,10 @@ class CommissionService {
   }
 
   private async getPaidAmountsByInviter(): Promise<Map<string, number>> {
-    const snapshot = await commissionItemsCollection().get();
+    const items = await commissionRepository.findAllItems();
     const map = new Map<string, number>();
-    for (const doc of snapshot.docs) {
-      const inviterId = doc.data().inviterId as string;
-      const amount = doc.data().amount as number;
-      map.set(inviterId, (map.get(inviterId) || 0) + amount);
+    for (const item of items) {
+      map.set(item.inviterId, (map.get(item.inviterId) || 0) + item.amount);
     }
     return map;
   }
@@ -518,17 +482,12 @@ class CommissionService {
     totalPerTask: number;
     totalCommission: number;
   } | null> {
-    const snapshot = await referralsCollection()
-      .where('inviterId', '==', inviterId)
-      .get();
-
-    if (snapshot.empty) return null;
-
-    const referrals: Referral[] = snapshot.docs
-      .map((doc) => this.docToReferral(doc))
-      .filter((r) => r.status !== 'closed');
+    const referrals = await referralRepository.findByInviterId(inviterId);
 
     if (referrals.length === 0) return null;
+
+    const refs = referrals.map(toReferral).filter((r) => r.status !== 'closed');
+    if (refs.length === 0) return null;
 
     const rates = await this.getCommissionRates();
     const paidByReferral = await this.getPaidCommissionAmountsByReferral();
@@ -539,7 +498,7 @@ class CommissionService {
     let anySuccessful = false;
 
     const referralDetails = [];
-    for (const ref of referrals) {
+    for (const ref of refs) {
       const status = await this.computeReferralStatus(ref, rates, weekStart, weekEnd);
       const paidKey = `${ref.id}_${inviterId}`;
       const paidInfo = paidByReferral.get(paidKey);
@@ -564,8 +523,8 @@ class CommissionService {
     }
 
     return {
-      inviterName: referrals[0].inviterName,
-      inviterType: referrals[0].inviterType,
+      inviterName: refs[0].inviterName,
+      inviterType: refs[0].inviterType,
       status: anySuccessful ? (allPaid ? 'Paid' : 'Ready') : 'Ready',
       referrals: referralDetails,
       totalBonus,
@@ -574,19 +533,13 @@ class CommissionService {
     };
   }
 
-  // ─── Payment ──────────────────────────────────────────────────
-
   private async getOrCreateCommissionBatch(): Promise<CommissionBatch> {
-    const allBatches = await commissionBatchesCollection()
-      .orderBy('batchNumber', 'desc')
-      .limit(1)
-      .get();
-
-    const nextNumber = allBatches.empty ? 1 : (allBatches.docs[0].data().batchNumber as number) + 1;
+    const latest = await commissionRepository.findLatestBatch();
+    const nextNumber = latest ? latest.batchNumber + 1 : 1;
 
     const now = new Date();
     const batch: CommissionBatch = {
-      id: generateCommissionBatchId(),
+      id: generateBatchId(),
       batchNumber: nextNumber,
       totalInviters: 0,
       totalAmount: 0,
@@ -594,34 +547,32 @@ class CommissionService {
       createdAt: now,
     };
 
-    await commissionBatchesCollection().doc(batch.id).set({
-      ...batch,
-      paidAt: toTimestamp(batch.paidAt!),
-      createdAt: toTimestamp(batch.createdAt),
+    await commissionRepository.createBatch({
+      id: batch.id,
+      batchNumber: batch.batchNumber,
+      totalInviters: batch.totalInviters,
+      totalAmount: batch.totalAmount,
+      paidAt: batch.paidAt,
+      createdAt: batch.createdAt,
     });
 
     return batch;
   }
 
   async payInviter(inviterId: string, createdBy: string): Promise<{ batch: CommissionBatch; items: CommissionItem[] }> {
-    const snapshot = await referralsCollection()
-      .where('inviterId', '==', inviterId)
-      .get();
+    const referrals = await referralRepository.findByInviterId(inviterId);
 
-    if (snapshot.empty) throw new Error('No referrals found for this inviter.');
+    if (referrals.length === 0) throw new Error('No referrals found for this inviter.');
 
-    const referrals: Referral[] = snapshot.docs
-      .map((doc) => this.docToReferral(doc))
-      .filter((r) => r.status !== 'closed');
-
-    if (referrals.length === 0) throw new Error('No active referrals found for this inviter.');
+    const refs = referrals.map(toReferral).filter((r) => r.status !== 'closed');
+    if (refs.length === 0) throw new Error('No active referrals found for this inviter.');
 
     const rates = await this.getCommissionRates();
     const items: CommissionItem[] = [];
     const now = new Date();
     let totalAmount = 0;
 
-    for (const ref of referrals) {
+    for (const ref of refs) {
       const payableItems = await this.getPayableItems(ref, rates);
       if (payableItems.length === 0) continue;
 
@@ -643,22 +594,18 @@ class CommissionService {
       }
 
       if (hasOneTime) {
-        ref.oneTimeCommissionPaid = true;
-        ref.oneTimeCommissionPaidAt = now;
-        if (ref.inviterType === 'special') {
-          ref.perTaskCommissionActive = true;
-          ref.status = 'active_per_task';
-        } else {
-          ref.status = 'qualified';
-        }
-        ref.updatedAt = now;
-        await referralsCollection().doc(ref.id).update({
+        const updateData: any = {
           oneTimeCommissionPaid: true,
-          oneTimeCommissionPaidAt: toTimestamp(now),
-          status: ref.status,
-          perTaskCommissionActive: ref.perTaskCommissionActive,
-          updatedAt: toTimestamp(now),
-        });
+          oneTimeCommissionPaidAt: now,
+          updatedAt: now,
+        };
+        if (ref.inviterType === 'special') {
+          updateData.perTaskCommissionActive = true;
+          updateData.status = 'active_per_task';
+        } else {
+          updateData.status = 'qualified';
+        }
+        await referralRepository.update(ref.id, updateData);
       }
     }
 
@@ -667,26 +614,29 @@ class CommissionService {
     }
 
     const batch = await this.getOrCreateCommissionBatch();
-    batch.totalInviters = 1;
-    batch.totalAmount = totalAmount;
 
-    const firestoreBatch = commissionItemsCollection().firestore.batch();
+    const db = getDb();
+    await db.$transaction(async (tx: any) => {
+      for (const item of items) {
+        item.batchId = batch.id;
+        await tx.commissionItem.create({
+          data: {
+            id: item.id, batchId: item.batchId, referralId: item.referralId,
+            inviterId: item.inviterId, invitedWorkerId: item.invitedWorkerId,
+            sourceTaskId: item.sourceTaskId, commissionKind: item.commissionKind,
+            amount: item.amount, createdAt: item.createdAt,
+          },
+        });
+      }
 
-    for (const item of items) {
-      item.batchId = batch.id;
-      const docRef = commissionItemsCollection().doc(item.id);
-      firestoreBatch.set(docRef, {
-        ...item,
-        createdAt: toTimestamp(item.createdAt),
+      await tx.commissionBatch.update({
+        where: { id: batch.id },
+        data: { totalInviters: 1, totalAmount },
       });
-    }
-
-    firestoreBatch.update(commissionBatchesCollection().doc(batch.id), {
-      totalInviters: batch.totalInviters,
-      totalAmount: batch.totalAmount,
     });
 
-    await firestoreBatch.commit();
+    batch.totalInviters = 1;
+    batch.totalAmount = totalAmount;
 
     await auditLogService.log(
       AuditAction.COMMISSION_PAID,
@@ -739,22 +689,18 @@ class CommissionService {
         }
 
         if (hasOneTime) {
-          ref.oneTimeCommissionPaid = true;
-          ref.oneTimeCommissionPaidAt = now;
-          if (ref.inviterType === 'special') {
-            ref.perTaskCommissionActive = true;
-            ref.status = 'active_per_task';
-          } else {
-            ref.status = 'qualified';
-          }
-          ref.updatedAt = now;
-          await referralsCollection().doc(ref.id).update({
+          const updateData: any = {
             oneTimeCommissionPaid: true,
-            oneTimeCommissionPaidAt: toTimestamp(now),
-            status: ref.status,
-            perTaskCommissionActive: ref.perTaskCommissionActive,
-            updatedAt: toTimestamp(now),
-          });
+            oneTimeCommissionPaidAt: now,
+            updatedAt: now,
+          };
+          if (ref.inviterType === 'special') {
+            updateData.perTaskCommissionActive = true;
+            updateData.status = 'active_per_task';
+          } else {
+            updateData.status = 'qualified';
+          }
+          await referralRepository.update(ref.id, updateData);
         }
       }
 
@@ -770,26 +716,29 @@ class CommissionService {
     }
 
     const batch = await this.getOrCreateCommissionBatch();
-    batch.totalInviters = invitersPaid;
-    batch.totalAmount = totalAmount;
 
-    const firestoreBatch = commissionItemsCollection().firestore.batch();
+    const db = getDb();
+    await db.$transaction(async (tx: any) => {
+      for (const item of items) {
+        item.batchId = batch.id;
+        await tx.commissionItem.create({
+          data: {
+            id: item.id, batchId: item.batchId, referralId: item.referralId,
+            inviterId: item.inviterId, invitedWorkerId: item.invitedWorkerId,
+            sourceTaskId: item.sourceTaskId, commissionKind: item.commissionKind,
+            amount: item.amount, createdAt: item.createdAt,
+          },
+        });
+      }
 
-    for (const item of items) {
-      item.batchId = batch.id;
-      const docRef = commissionItemsCollection().doc(item.id);
-      firestoreBatch.set(docRef, {
-        ...item,
-        createdAt: toTimestamp(item.createdAt),
+      await tx.commissionBatch.update({
+        where: { id: batch.id },
+        data: { totalInviters: invitersPaid, totalAmount },
       });
-    }
-
-    firestoreBatch.update(commissionBatchesCollection().doc(batch.id), {
-      totalInviters: batch.totalInviters,
-      totalAmount: batch.totalAmount,
     });
 
-    await firestoreBatch.commit();
+    batch.totalInviters = invitersPaid;
+    batch.totalAmount = totalAmount;
 
     await auditLogService.log(
       AuditAction.COMMISSION_BATCH_CREATED,
@@ -809,8 +758,6 @@ class CommissionService {
     return { batch, items };
   }
 
-  // ─── Export ───────────────────────────────────────────────────
-
   async getCommissionExportData(batchId?: string, weekStart?: Date, weekEnd?: Date): Promise<{
     rows: {
       inviterName: string;
@@ -823,11 +770,7 @@ class CommissionService {
     }[];
   }> {
     if (batchId) {
-      const snapshot = await commissionItemsCollection()
-        .where('batchId', '==', batchId)
-        .get();
-
-      const items = snapshot.docs.map((d) => this.docToCommissionItem(d));
+      const items = await commissionRepository.findItemsByBatchId(batchId);
       const referrals = await this.getReferrals();
       const refMap = new Map(referrals.map((r) => [r.id, r]));
 
@@ -871,77 +814,14 @@ class CommissionService {
     return { rows };
   }
 
-  // ─── Document Converters ──────────────────────────────────────
-
-  private serializeReferral(ref: Referral): Record<string, unknown> {
-    return {
-      inviterId: ref.inviterId,
-      inviterName: ref.inviterName,
-      inviteeId: ref.inviteeId,
-      inviteeName: ref.inviteeName,
-      inviterType: ref.inviterType,
-      status: ref.status,
-      oneTimeCommissionPaid: ref.oneTimeCommissionPaid,
-      oneTimeCommissionPaidAt: ref.oneTimeCommissionPaidAt ? toTimestamp(ref.oneTimeCommissionPaidAt) : null,
-      perTaskCommissionActive: ref.perTaskCommissionActive,
-      ticketId: ref.ticketId || null,
-      createdAt: toTimestamp(ref.createdAt),
-      updatedAt: toTimestamp(ref.updatedAt),
-    };
-  }
-
-  private docToReferral(doc: FirebaseFirestore.DocumentSnapshot): Referral {
-    const data = doc.data()!;
-    return {
-      id: doc.id,
-      inviterId: data.inviterId,
-      inviterName: data.inviterName || '',
-      inviteeId: data.inviteeId,
-      inviteeName: data.inviteeName || '',
-      inviterType: (data.inviterType as InviterType) || 'normal',
-      status: (data.status as ReferralStatus) || 'pending',
-      oneTimeCommissionPaid: data.oneTimeCommissionPaid ?? false,
-      oneTimeCommissionPaidAt: toDate(data.oneTimeCommissionPaidAt),
-      perTaskCommissionActive: data.perTaskCommissionActive ?? false,
-      ticketId: data.ticketId || null,
-      createdAt: toDate(data.createdAt) || new Date(),
-      updatedAt: toDate(data.updatedAt) || new Date(),
-    };
-  }
-
-  private docToCommissionItem(doc: FirebaseFirestore.DocumentSnapshot): CommissionItem {
-    const data = doc.data()!;
-    return {
-      id: doc.id,
-      batchId: data.batchId,
-      referralId: data.referralId,
-      inviterId: data.inviterId,
-      invitedWorkerId: data.invitedWorkerId || data.inviteeId || '',
-      sourceTaskId: data.sourceTaskId || null,
-      commissionKind: (data.commissionKind || data.type || 'one_time') as CommissionKind,
-      amount: data.amount ?? 0,
-      createdAt: toDate(data.createdAt) || new Date(),
-    };
-  }
-
-  private docToTask(doc: FirebaseFirestore.DocumentSnapshot): Task {
-    const data = doc.data()!;
-    return {
-      id: doc.id,
-      redditUrl: data.redditUrl,
-      type: data.type as TaskType,
-      status: data.status as TaskStatus,
-      guildId: data.guildId,
-      channelId: data.channelId,
-      channelName: data.channelName || null,
-      assignedUserId: data.assignedUserId,
-      assignedUserName: data.assignedUserName || null,
-      createdById: data.createdById,
-      notes: data.notes || null,
-      cancelledReason: data.cancelledReason || null,
-      createdAt: toDate(data.createdAt) || new Date(),
-      updatedAt: toDate(data.updatedAt) || new Date(),
-    };
+  async getItemsByBatchId(batchId: string): Promise<CommissionItem[]> {
+    const items = await commissionRepository.findItemsByBatchId(batchId);
+    return items.map((i) => ({
+      id: i.id, batchId: i.batchId, referralId: i.referralId,
+      inviterId: i.inviterId, invitedWorkerId: i.invitedWorkerId,
+      sourceTaskId: i.sourceTaskId, commissionKind: i.commissionKind as CommissionKind,
+      amount: i.amount, createdAt: i.createdAt,
+    }));
   }
 }
 
