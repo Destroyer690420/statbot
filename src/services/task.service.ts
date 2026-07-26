@@ -6,7 +6,7 @@ import {
   TaskFilters,
   AuditAction,
 } from '../types';
-import { tasksCollection, toDate, toTimestamp } from '../database/firebase';
+import { tasksCollection, payoutItemsCollection, toDate, toTimestamp } from '../database/firebase';
 import { generateTaskId } from '../utils/id-generator';
 import { isValidRedditUrl, isValidNotes, isValidTaskId } from '../utils/validators';
 import { logger } from '../utils/logger';
@@ -269,16 +269,10 @@ class TaskService {
     const task = await this.findById(taskId);
     if (!task) throw new Error('Task not found.');
 
-    const updateData: Record<string, unknown> = {
+    await tasksCollection().doc(taskId).update({
       cancelledReason: reason,
       updatedAt: toTimestamp(new Date()),
-    };
-
-    if (reason === 'deleted' || reason === 'deleted_later') {
-      updateData.status = transition(task.status, TaskStatus.ARCHIVED);
-    }
-
-    await tasksCollection().doc(taskId).update(updateData);
+    });
 
     const logReason = reason === null ? 'cleared' : reason;
     logger.info('Task cancelledReason updated', { taskId, reason: logReason });
@@ -290,11 +284,7 @@ class TaskService {
       `Cancelled reason override: ${task.cancelledReason || 'null'} → ${logReason}`,
     );
 
-    const updatedTask = reason === 'deleted' || reason === 'deleted_later'
-      ? { ...task, cancelledReason: reason, status: TaskStatus.ARCHIVED as TaskStatus, updatedAt: new Date() }
-      : { ...task, cancelledReason: reason, updatedAt: new Date() };
-
-    return updatedTask;
+    return { ...task, cancelledReason: reason, updatedAt: new Date() };
   }
 
   /**
@@ -391,6 +381,9 @@ class TaskService {
    */
   async archiveOld(thresholdDate: Date): Promise<number> {
     const archiveStatuses = [TaskStatus.COMPLETED, TaskStatus.CANCELLED];
+    const paidTaskIds = new Set(
+      (await payoutItemsCollection().get()).docs.map((d) => d.data().taskId as string),
+    );
     let archivedCount = 0;
 
     for (const status of archiveStatuses) {
@@ -400,7 +393,11 @@ class TaskService {
 
       for (const doc of snapshot.docs) {
         const task = this.docToTask(doc);
-        if (task.updatedAt < thresholdDate && canTransition(task.status, TaskStatus.ARCHIVED)) {
+        if (
+          task.updatedAt < thresholdDate
+          && canTransition(task.status, TaskStatus.ARCHIVED)
+          && paidTaskIds.has(task.id)
+        ) {
           await doc.ref.update({
             status: TaskStatus.ARCHIVED,
             updatedAt: toTimestamp(new Date()),
@@ -422,6 +419,10 @@ class TaskService {
    * Designed to run weekly (every Sunday).
    */
   async archiveAllCompleted(): Promise<number> {
+    const paidTaskIds = new Set(
+      (await payoutItemsCollection().get()).docs.map((d) => d.data().taskId as string),
+    );
+
     const snapshot = await tasksCollection()
       .where('status', '==', TaskStatus.COMPLETED)
       .get();
@@ -429,7 +430,7 @@ class TaskService {
     let archivedCount = 0;
     for (const doc of snapshot.docs) {
       const task = this.docToTask(doc);
-      if (canTransition(task.status, TaskStatus.ARCHIVED)) {
+      if (canTransition(task.status, TaskStatus.ARCHIVED) && paidTaskIds.has(task.id)) {
         await doc.ref.update({
           status: TaskStatus.ARCHIVED,
           updatedAt: toTimestamp(new Date()),
@@ -443,6 +444,38 @@ class TaskService {
     }
 
     return archivedCount;
+  }
+
+  /**
+   * Restore ARCHIVED tasks that have NOT been paid back to COMPLETED status.
+   * Ensures unpaid tasks remain visible in payout views.
+   */
+  async restoreUnpaidArchivedTasks(): Promise<number> {
+    const paidTaskIds = new Set(
+      (await payoutItemsCollection().get()).docs.map((d) => d.data().taskId as string),
+    );
+
+    const snapshot = await tasksCollection()
+      .where('status', '==', TaskStatus.ARCHIVED)
+      .get();
+
+    let restoredCount = 0;
+    for (const doc of snapshot.docs) {
+      const task = this.docToTask(doc);
+      if (!paidTaskIds.has(task.id)) {
+        await doc.ref.update({
+          status: TaskStatus.COMPLETED,
+          updatedAt: toTimestamp(new Date()),
+        });
+        restoredCount++;
+      }
+    }
+
+    if (restoredCount > 0) {
+      logger.info(`Restored ${restoredCount} unpaid archived tasks to COMPLETED`);
+    }
+
+    return restoredCount;
   }
 
   /**

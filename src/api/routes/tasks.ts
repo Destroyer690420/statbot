@@ -98,6 +98,20 @@ router.post('/', validateBody(createTaskSchema), async (req: Request, res: Respo
 });
 
 /**
+ * POST /api/v1/tasks/restore-unpaid-archived
+ * Restore all ARCHIVED tasks that have NOT been paid back to COMPLETED.
+ */
+router.post('/restore-unpaid-archived', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const count = await taskService.restoreUnpaidArchivedTasks();
+    res.json({ success: true, data: { restored: count } });
+  } catch (error) {
+    logger.error('POST /tasks/restore-unpaid-archived failed', { error });
+    res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
+/**
  * PATCH /api/v1/tasks/:id
  * Update a task (status, notes).
  */

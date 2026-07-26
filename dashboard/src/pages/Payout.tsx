@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   X,
   UserPlus,
+  RefreshCw,
 } from 'lucide-react';
 import {
   getPayoutSummary,
@@ -33,6 +34,7 @@ import {
   payInviter,
   payAllCommissions,
   downloadCommissionCsv,
+  restoreUnpaidArchived,
 } from '../api/client';
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -146,6 +148,14 @@ export function Payout() {
     },
   });
 
+  const restoreMutation = useMutation({
+    mutationFn: restoreUnpaidArchived,
+    onSuccess: () => {
+      invalidatePayoutQueries();
+      queryClient.invalidateQueries({ queryKey: ['task-summary'] });
+    },
+  });
+
   function invalidatePayoutQueries() {
     queryClient.invalidateQueries({ queryKey: ['payout-summary'] });
     queryClient.invalidateQueries({ queryKey: ['payout-eligible'] });
@@ -252,12 +262,26 @@ export function Payout() {
         </div>
       <div className="flex items-center gap-2">
           <button
+            onClick={() => restoreMutation.mutate()}
+            disabled={restoreMutation.isPending}
+            className={`btn-secondary text-sm flex items-center gap-2 py-2 px-4 ${restoreMutation.isPending ? 'opacity-50' : ''}`}
+          >
+            <RefreshCw className={`w-4 h-4 ${restoreMutation.isPending ? 'animate-spin' : ''}`} />
+            {restoreMutation.isPending ? 'Restoring...' : 'Restore Unpaid'}
+          </button>
+          <button
             onClick={() => activeTab === 'tasks' ? handleExportCsv() : downloadCommissionCsv(dateParams).catch(() => {})}
             className="btn-secondary text-sm flex items-center gap-2 py-2 px-4"
           >
             <Download className="w-4 h-4" />
             Export CSV
           </button>
+          {restoreMutation.isSuccess && (
+            <span className="text-green-400 text-xs">Restored {restoreMutation.data?.data?.restored} tasks</span>
+          )}
+          {restoreMutation.isError && (
+            <span className="text-red-400 text-xs">{(restoreMutation.error as Error).message}</span>
+          )}
         </div>
       </div>
 

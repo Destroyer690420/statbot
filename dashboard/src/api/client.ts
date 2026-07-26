@@ -277,6 +277,13 @@ export async function downloadCommissionCsv(params?: Record<string, string>): Pr
   URL.revokeObjectURL(url);
 }
 
+// ─── Restore ─────────────────────────────────────────────────
+
+export async function restoreUnpaidArchived() {
+  const { data } = await api.post('/tasks/restore-unpaid-archived');
+  return data;
+}
+
 // ─── Health ──────────────────────────────────────────────────
 
 export async function getHealth() {
