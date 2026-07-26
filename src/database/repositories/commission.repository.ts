@@ -12,6 +12,8 @@ export class CommissionRepository {
   async createBatch(data: {
     id: string;
     batchNumber: number;
+    weekStart: Date;
+    weekEnd: Date;
     totalInviters: number;
     totalAmount: number;
     paidAt: Date | null;
@@ -27,6 +29,17 @@ export class CommissionRepository {
     return getDb().commissionBatch.update({
       where: { id: batchId },
       data: totals,
+    });
+  }
+
+  async findBatchById(batchId: string) {
+    return getDb().commissionBatch.findUnique({ where: { id: batchId } });
+  }
+
+  async findBatchHistory(limit = 20) {
+    return getDb().commissionBatch.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
     });
   }
 

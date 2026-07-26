@@ -14,8 +14,10 @@ import { taskRepository, referralRepository, commissionRepository, settingsRepos
 import { getDb } from '../database/db';
 import { generateReferralId, generateBatchId, generateCommissionItemId } from '../utils/id-generator';
 import { auditLogService } from './audit.service';
-import { toTask, toReferral } from '../database/converters';
+import { toTask, toReferral, toCommissionBatch } from '../database/converters';
 import { logger } from '../utils/logger';
+
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 const DEFAULT_RATES: CommissionRates = {
   normalInviteBonus: 100,
@@ -334,7 +336,7 @@ class CommissionService {
     return items;
   }
 
-  async getSummary(weekStart?: Date, weekEnd?: Date): Promise<{
+  async getSummary(_weekStart?: Date, _weekEnd?: Date): Promise<{
     totalInviters: number;
     totalSuccessfulInvites: number;
     totalCommission: number;
@@ -344,30 +346,30 @@ class CommissionService {
   }> {
     const referrals = await this.getReferrals();
     const rates = await this.getCommissionRates();
-    const paidByInviter = await this.getPaidAmountsByInviter();
 
     const activeReferrals = referrals.filter((r) => r.status !== 'closed');
-    const uniqueInviters = new Set(activeReferrals.map((r) => r.inviterId));
+    const paidItems = await commissionRepository.findAllItems();
+    const alreadyPaidCommission = paidItems.reduce((sum, i) => sum + i.amount, 0);
+
+    const inviterSet = new Set<string>();
     let totalSuccessfulInvites = 0;
     let totalBonusAmount = 0;
     let totalPerTaskAmount = 0;
-    let alreadyPaidCommission = 0;
 
     for (const referral of activeReferrals) {
-      const status = await this.computeReferralStatus(referral, rates, weekStart, weekEnd);
-      if (status.isSuccessful) {
+      const payableItems = await this.getPayableItems(referral, rates);
+      if (payableItems.length > 0) {
+        inviterSet.add(referral.inviterId);
         totalSuccessfulInvites++;
-        totalBonusAmount += status.bonusAmount;
-        totalPerTaskAmount += status.perTaskAmount;
+        for (const item of payableItems) {
+          if (item.commissionKind === 'one_time') totalBonusAmount += item.amount;
+          else totalPerTaskAmount += item.amount;
+        }
       }
     }
 
-    for (const amount of paidByInviter.values()) {
-      alreadyPaidCommission += amount;
-    }
-
     return {
-      totalInviters: uniqueInviters.size,
+      totalInviters: inviterSet.size,
       totalSuccessfulInvites,
       totalCommission: totalBonusAmount + totalPerTaskAmount,
       totalBonusAmount,
@@ -376,16 +378,7 @@ class CommissionService {
     };
   }
 
-  private async getPaidAmountsByInviter(): Promise<Map<string, number>> {
-    const items = await commissionRepository.findAllItems();
-    const map = new Map<string, number>();
-    for (const item of items) {
-      map.set(item.inviterId, (map.get(item.inviterId) || 0) + item.amount);
-    }
-    return map;
-  }
-
-  async getBreakdown(weekStart?: Date, weekEnd?: Date): Promise<{
+  async getBreakdown(_weekStart?: Date, _weekEnd?: Date): Promise<{
     inviterId: string;
     inviterName: string;
     inviterType: InviterType;
@@ -396,7 +389,6 @@ class CommissionService {
   }[]> {
     const referrals = await this.getReferrals();
     const rates = await this.getCommissionRates();
-    const paidByReferral = await this.getPaidCommissionAmountsByReferral();
 
     const inviterMap = new Map<string, {
       inviterName: string;
@@ -426,41 +418,33 @@ class CommissionService {
     }[] = [];
 
     for (const [inviterId, data] of inviterMap) {
-      let successfulReferrals = 0;
       let totalCommission = 0;
-      let allPaid = true;
-      let anySuccessful = false;
+      let activeReferrals = 0;
 
       for (const ref of data.referrals) {
-        const status = await this.computeReferralStatus(ref, rates, weekStart, weekEnd);
-        if (status.isSuccessful) {
-          successfulReferrals++;
-          totalCommission += status.bonusAmount + status.perTaskAmount;
-          anySuccessful = true;
-
-          const paidKey = `${ref.id}_${inviterId}`;
-          const paidInfo = paidByReferral.get(paidKey);
-          if (!paidInfo?.paid) allPaid = false;
+        const payableItems = await this.getPayableItems(ref, rates);
+        if (payableItems.length > 0) {
+          activeReferrals++;
+          for (const item of payableItems) {
+            totalCommission += item.amount;
+          }
         }
       }
 
-      if (!anySuccessful) continue;
+      if (activeReferrals === 0) continue;
 
       result.push({
         inviterId,
         inviterName: data.inviterName,
         inviterType: data.inviterType,
         totalReferrals: data.referrals.length,
-        successfulReferrals,
+        successfulReferrals: activeReferrals,
         totalCommission,
-        status: allPaid ? 'Paid' : 'Ready',
+        status: 'Ready',
       });
     }
 
-    result.sort((a, b) => {
-      if (a.status === b.status) return b.totalCommission - a.totalCommission;
-      return a.status === 'Ready' ? -1 : 1;
-    });
+    result.sort((a, b) => b.totalCommission - a.totalCommission);
 
     return result;
   }
@@ -490,42 +474,44 @@ class CommissionService {
     if (refs.length === 0) return null;
 
     const rates = await this.getCommissionRates();
-    const paidByReferral = await this.getPaidCommissionAmountsByReferral();
 
     let totalBonus = 0;
     let totalPerTask = 0;
-    let allPaid = true;
-    let anySuccessful = false;
 
     const referralDetails = [];
     for (const ref of refs) {
+      const payableItems = await this.getPayableItems(ref, rates);
+      if (payableItems.length === 0) continue;
+
       const status = await this.computeReferralStatus(ref, rates, weekStart, weekEnd);
-      const paidKey = `${ref.id}_${inviterId}`;
-      const paidInfo = paidByReferral.get(paidKey);
-      const bonusPaid = !!paidInfo;
+
+      const bonusAmount = payableItems
+        .filter((i) => i.commissionKind === 'one_time')
+        .reduce((sum, i) => sum + i.amount, 0);
+      const perTaskAmount = payableItems
+        .filter((i) => i.commissionKind === 'per_task')
+        .reduce((sum, i) => sum + i.amount, 0);
 
       referralDetails.push({
         referralId: ref.id,
         inviteeName: ref.inviteeName,
         inviteeTasks: { total: status.taskCount, posts: status.posts, comments: status.comments },
-        bonusAmount: status.bonusAmount,
-        perTaskAmount: status.perTaskAmount,
-        isSuccessful: status.isSuccessful,
-        bonusPaid,
+        bonusAmount,
+        perTaskAmount,
+        isSuccessful: true,
+        bonusPaid: false,
       });
 
-      if (status.isSuccessful) {
-        anySuccessful = true;
-        totalBonus += status.bonusAmount;
-        totalPerTask += status.perTaskAmount;
-        if (!bonusPaid) allPaid = false;
-      }
+      totalBonus += bonusAmount;
+      totalPerTask += perTaskAmount;
     }
+
+    if (referralDetails.length === 0) return null;
 
     return {
       inviterName: refs[0].inviterName,
       inviterType: refs[0].inviterType,
-      status: anySuccessful ? (allPaid ? 'Paid' : 'Ready') : 'Ready',
+      status: 'Ready',
       referrals: referralDetails,
       totalBonus,
       totalPerTask,
@@ -533,14 +519,35 @@ class CommissionService {
     };
   }
 
+  private getCurrentPayoutWeek(): { weekStart: Date; weekEnd: Date } {
+    const now = new Date();
+    const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+
+    const year = istNow.getUTCFullYear();
+    const month = istNow.getUTCMonth();
+    const day = istNow.getUTCDate();
+    const dayOfWeek = istNow.getUTCDay();
+
+    const sundayIST = new Date(Date.UTC(year, month, day - dayOfWeek, 0, 0, 0, 0));
+    const saturdayIST = new Date(Date.UTC(year, month, day - dayOfWeek + 6, 23, 59, 59, 999));
+
+    return {
+      weekStart: new Date(sundayIST.getTime() - IST_OFFSET_MS),
+      weekEnd: new Date(saturdayIST.getTime() - IST_OFFSET_MS),
+    };
+  }
+
   private async getOrCreateCommissionBatch(): Promise<CommissionBatch> {
     const latest = await commissionRepository.findLatestBatch();
     const nextNumber = latest ? latest.batchNumber + 1 : 1;
+    const { weekStart, weekEnd } = this.getCurrentPayoutWeek();
 
     const now = new Date();
     const batch: CommissionBatch = {
       id: generateBatchId(),
       batchNumber: nextNumber,
+      weekStart,
+      weekEnd,
       totalInviters: 0,
       totalAmount: 0,
       paidAt: now,
@@ -550,6 +557,8 @@ class CommissionService {
     await commissionRepository.createBatch({
       id: batch.id,
       batchNumber: batch.batchNumber,
+      weekStart: batch.weekStart,
+      weekEnd: batch.weekEnd,
       totalInviters: batch.totalInviters,
       totalAmount: batch.totalAmount,
       paidAt: batch.paidAt,
@@ -822,6 +831,46 @@ class CommissionService {
       sourceTaskId: i.sourceTaskId, commissionKind: i.commissionKind as CommissionKind,
       amount: i.amount, createdAt: i.createdAt,
     }));
+  }
+
+  async getBatchHistory(limit = 20): Promise<CommissionBatch[]> {
+    const batches = await commissionRepository.findBatchHistory(limit);
+    return batches.map(toCommissionBatch);
+  }
+
+  async getBatchDetail(batchId: string): Promise<{
+    batch: CommissionBatch;
+    items: {
+      id: string;
+      inviterName: string;
+      inviterType: InviterType;
+      inviteeName: string;
+      bonusAmount: number;
+      perTaskAmount: number;
+      totalCommission: number;
+    }[];
+  } | null> {
+    const batch = await commissionRepository.findBatchById(batchId);
+    if (!batch) return null;
+
+    const items = await commissionRepository.findItemsByBatchId(batchId);
+    const referrals = await this.getReferrals();
+    const refMap = new Map(referrals.map((r) => [r.id, r]));
+
+    const enrichedItems = items.map((item) => {
+      const ref = refMap.get(item.referralId);
+      return {
+        id: item.id,
+        inviterName: ref?.inviterName || item.inviterId.slice(0, 8),
+        inviterType: (ref?.inviterType || 'normal') as InviterType,
+        inviteeName: ref?.inviteeName || item.invitedWorkerId.slice(0, 8),
+        bonusAmount: item.commissionKind === 'one_time' ? item.amount : 0,
+        perTaskAmount: item.commissionKind === 'per_task' ? item.amount : 0,
+        totalCommission: item.amount,
+      };
+    });
+
+    return { batch: toCommissionBatch(batch), items: enrichedItems };
   }
 }
 

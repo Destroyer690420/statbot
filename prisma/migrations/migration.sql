@@ -126,6 +126,8 @@ CREATE TABLE "Referral" (
 CREATE TABLE "CommissionBatch" (
     "id" TEXT NOT NULL,
     "batchNumber" INTEGER NOT NULL,
+    "weekStart" TIMESTAMP(3) NOT NULL DEFAULT '2026-01-01 00:00:00',
+    "weekEnd" TIMESTAMP(3) NOT NULL DEFAULT '2026-01-07 23:59:59',
     "totalInviters" INTEGER NOT NULL,
     "totalAmount" DOUBLE PRECISION NOT NULL,
     "paidAt" TIMESTAMP(3),
@@ -270,3 +272,7 @@ ALTER TABLE "CommissionItem" ADD CONSTRAINT "CommissionItem_referralId_fkey" FOR
 
 -- AddForeignKey
 ALTER TABLE "CommissionItem" ADD CONSTRAINT "CommissionItem_sourceTaskId_fkey" FOREIGN KEY ("sourceTaskId") REFERENCES "Task"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- Migration: add weekStart/weekEnd to CommissionBatch for existing DBs
+ALTER TABLE "CommissionBatch" ADD COLUMN IF NOT EXISTS "weekStart" TIMESTAMP(3) NOT NULL DEFAULT '2026-01-01 00:00:00';
+ALTER TABLE "CommissionBatch" ADD COLUMN IF NOT EXISTS "weekEnd" TIMESTAMP(3) NOT NULL DEFAULT '2026-01-07 23:59:59';

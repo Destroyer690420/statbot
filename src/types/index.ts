@@ -182,6 +182,8 @@ export interface CommissionItem {
 export interface CommissionBatch {
   id: string;
   batchNumber: number;
+  weekStart: Date;
+  weekEnd: Date;
   totalInviters: number;
   totalAmount: number;
   paidAt: Date | null;

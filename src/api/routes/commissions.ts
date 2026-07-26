@@ -258,4 +258,37 @@ router.get('/export/csv', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
+/**
+ * GET /api/v1/commissions/batches
+ * Commission batch history.
+ */
+router.get('/batches', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const batches = await commissionService.getBatchHistory(limit);
+    res.json({ success: true, data: batches });
+  } catch (error) {
+    logger.error('GET /commissions/batches failed', { error });
+    res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
+/**
+ * GET /api/v1/commissions/batches/:batchId
+ * Single batch detail with items.
+ */
+router.get('/batches/:batchId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const detail = await commissionService.getBatchDetail(String(req.params.batchId));
+    if (!detail) {
+      res.status(404).json({ success: false, message: 'Batch not found.' });
+      return;
+    }
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    logger.error('GET /commissions/batches/:batchId failed', { error });
+    res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
 export default router;

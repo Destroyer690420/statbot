@@ -199,6 +199,8 @@ model Referral {
 model CommissionBatch {
   id            String          @id
   batchNumber   Int
+  weekStart     DateTime
+  weekEnd       DateTime
   totalInviters Int
   totalAmount   Float
   paidAt        DateTime?

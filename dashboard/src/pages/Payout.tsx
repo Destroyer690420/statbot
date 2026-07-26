@@ -34,6 +34,8 @@ import {
   payInviter,
   payAllCommissions,
   downloadCommissionCsv,
+  getCommissionBatchHistory,
+  getCommissionBatchDetail,
   restoreUnpaidArchived,
 } from '../api/client';
 
@@ -55,6 +57,7 @@ export function Payout() {
   // ─── Expansion State ──────────────────────────────────────
   const [expandedWorker, setExpandedWorker] = useState<string | null>(null);
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
+  const [expandedCommissionBatch, setExpandedCommissionBatch] = useState<string | null>(null);
 
   // ─── Confirmation State ───────────────────────────────────
   const [confirmPayAll, setConfirmPayAll] = useState(false);
@@ -177,6 +180,12 @@ export function Payout() {
     enabled: activeTab === 'commissions' && (filterMode === 'all' || !!dateParams),
   });
 
+  const commissionHistoryQuery = useQuery({
+    queryKey: ['commission-batch-history'],
+    queryFn: () => getCommissionBatchHistory(),
+    enabled: activeTab === 'commissions',
+  });
+
   const inviterDetailQuery = useQuery({
     queryKey: ['inviter-detail', expandedInviter, dateParams],
     queryFn: () => getInviterDetail(expandedInviter!, dateParams),
@@ -205,6 +214,8 @@ export function Payout() {
   function invalidateCommissionQueries() {
     queryClient.invalidateQueries({ queryKey: ['commission-summary'] });
     queryClient.invalidateQueries({ queryKey: ['commission-breakdown'] });
+    queryClient.invalidateQueries({ queryKey: ['commission-batch-history'] });
+    queryClient.invalidateQueries({ queryKey: ['commission-batch-detail'] });
     queryClient.invalidateQueries({ queryKey: ['inviter-detail'] });
   }
 
@@ -649,6 +660,9 @@ export function Payout() {
         confirmPayAllCommissions={confirmPayAllCommissions}
         setConfirmPayAllCommissions={setConfirmPayAllCommissions}
         payAllCommissionsMutation={payAllCommissionsMutation}
+        commissionHistoryQuery={commissionHistoryQuery}
+        expandedCommissionBatch={expandedCommissionBatch}
+        setExpandedCommissionBatch={setExpandedCommissionBatch}
       />
     )}
     </div>
@@ -882,6 +896,9 @@ function CommissionsPanel({
   confirmPayAllCommissions,
   setConfirmPayAllCommissions,
   payAllCommissionsMutation,
+  commissionHistoryQuery,
+  expandedCommissionBatch,
+  setExpandedCommissionBatch,
 }: any) {
   return (
     <>
@@ -1005,9 +1022,8 @@ function CommissionsPanel({
                   <th className="text-left text-dark-400 font-medium py-3 px-2">Inviter</th>
                   <th className="text-center text-dark-400 font-medium py-3 px-2">Type</th>
                   <th className="text-center text-dark-400 font-medium py-3 px-2">Referrals</th>
-                  <th className="text-center text-dark-400 font-medium py-3 px-2">Successful</th>
+                  <th className="text-center text-dark-400 font-medium py-3 px-2">Active</th>
                   <th className="text-right text-dark-400 font-medium py-3 px-2">Commission (₹)</th>
-                  <th className="text-center text-dark-400 font-medium py-3 px-2">Status</th>
                   {isCurrentWeek && <th className="text-center text-dark-400 font-medium py-3 px-2">Actions</th>}
                 </tr>
               </thead>
@@ -1044,45 +1060,34 @@ function CommissionsPanel({
                     <td className="py-3 px-2 text-center text-white">{inv.totalReferrals}</td>
                     <td className="py-3 px-2 text-center text-white">{inv.successfulReferrals}</td>
                     <td className="py-3 px-2 text-right text-white font-semibold">₹{inv.totalCommission.toLocaleString('en-IN')}</td>
-                    <td className="py-3 px-2 text-center">
-                      <span className={`status-badge ${
-                        inv.status === 'Paid'
-                          ? 'bg-blue-500/10 text-blue-400'
-                          : inv.status === 'Ready'
-                          ? 'bg-green-500/10 text-green-400'
-                          : 'bg-dark-700/50 text-dark-400'
-                      }`}>
-                        {inv.status}
-                      </span>
-                    </td>
                     {isCurrentWeek && (
                       <td className="py-3 px-2 text-center">
-                        {inv.status === 'Ready' && (
-                          confirmPayInviter === inv.inviterId ? (
-                            <div className="flex items-center justify-center gap-2">
+                        {confirmPayInviter === inv.inviterId
+                          ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => payInviterMutation.mutate(inv.inviterId)}
+                                  disabled={payInviterMutation.isPending}
+                                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium py-1.5 px-3 rounded-lg transition-colors"
+                                >
+                                  {payInviterMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm'}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmPayInviter(null)}
+                                  className="text-dark-400 hover:text-white text-xs"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )
+                          : (
                               <button
-                                onClick={() => payInviterMutation.mutate(inv.inviterId)}
-                                disabled={payInviterMutation.isPending}
-                                className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium py-1.5 px-3 rounded-lg transition-colors"
+                                onClick={() => setConfirmPayInviter(inv.inviterId)}
+                                className="btn-primary text-xs py-1.5 px-3"
                               >
-                                {payInviterMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm'}
+                                Pay Worker
                               </button>
-                              <button
-                                onClick={() => setConfirmPayInviter(null)}
-                                className="text-dark-400 hover:text-white text-xs"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmPayInviter(inv.inviterId)}
-                              className="btn-primary text-xs py-1.5 px-3"
-                            >
-                              Pay Worker
-                            </button>
-                          )
-                        )}
+                            )}
                       </td>
                     )}
                   </tr>
@@ -1111,6 +1116,52 @@ function CommissionsPanel({
           )}
         </div>
       )}
+
+      {/* ─── Commission History ───────────────────────────────── */}
+      <div className="glass-card p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Commission History</h3>
+        {commissionHistoryQuery.isLoading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+          </div>
+        ) : (commissionHistoryQuery.data?.data ?? []).length === 0 ? (
+          <div className="text-center py-8">
+            <ScrollText className="w-10 h-10 text-dark-600 mx-auto mb-3" />
+            <p className="text-dark-400 text-sm">No commission batches yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {(commissionHistoryQuery.data?.data ?? []).map((batch: any) => (
+              <div key={batch.id} className="bg-dark-800/30 rounded-xl border border-dark-700/50 overflow-hidden">
+                <button
+                  onClick={() => setExpandedCommissionBatch(expandedCommissionBatch === batch.id ? null : batch.id)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-dark-800/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    {expandedCommissionBatch === batch.id ? (
+                      <ChevronDown className="w-4 h-4 text-dark-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-dark-400" />
+                    )}
+                    <span className="text-white font-medium">Batch #{batch.batchNumber}</span>
+                    <span className="text-dark-400 text-sm">{formatSimpleDate(batch.weekStart ? batch.weekStart.slice(0,10) : '')}</span>
+                    <span className="text-dark-500">—</span>
+                    <span className="text-dark-400 text-sm">{formatSimpleDate(batch.weekEnd ? batch.weekEnd.slice(0,10) : '')}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-dark-400 text-sm">{batch.totalInviters} inviters</span>
+                    <span className="text-white font-semibold">₹{(batch.totalAmount ?? 0).toLocaleString('en-IN')}</span>
+                  </div>
+                </button>
+
+                {expandedCommissionBatch === batch.id && (
+                  <CommissionBatchDetail batchId={batch.id} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -1202,6 +1253,78 @@ function InviterDetailView({ data }: { data: any }) {
                     {ref.isSuccessful ? (ref.bonusPaid ? 'Paid' : 'Ready') : 'Pending'}
                   </span>
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Commission Batch Detail Sub-component ──────────────────────
+
+function CommissionBatchDetail({ batchId }: { batchId: string }) {
+  const detailQuery = useQuery({
+    queryKey: ['commission-batch-detail', batchId],
+    queryFn: () => getCommissionBatchDetail(batchId),
+    enabled: true,
+  });
+
+  if (detailQuery.isLoading) {
+    return (
+      <div className="flex justify-center py-4">
+        <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
+      </div>
+    );
+  }
+
+  const result = detailQuery.data?.data;
+  if (!result) {
+    return <p className="text-dark-400 text-sm text-center py-4">Batch detail not available.</p>;
+  }
+
+  const { batch, items } = result;
+
+  const totalBonus = items.reduce((s: number, i: any) => s + (i.bonusAmount ?? 0), 0);
+  const totalPerTask = items.reduce((s: number, i: any) => s + (i.perTaskAmount ?? 0), 0);
+
+  return (
+    <div className="p-4 border-t border-dark-700/50">
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="bg-dark-800/50 rounded-lg p-3">
+          <p className="text-dark-400 text-xs font-medium mb-1">Inviters</p>
+          <p className="text-white font-semibold">{batch?.totalInviters ?? 0}</p>
+        </div>
+        <div className="bg-dark-800/50 rounded-lg p-3">
+          <p className="text-dark-400 text-xs font-medium mb-1">Bonus</p>
+          <p className="text-white font-semibold">₹{totalBonus.toLocaleString('en-IN')}</p>
+        </div>
+        <div className="bg-dark-800/50 rounded-lg p-3">
+          <p className="text-dark-400 text-xs font-medium mb-1">Per-Task</p>
+          <p className="text-white font-semibold">₹{totalPerTask.toLocaleString('en-IN')}</p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-dark-700/50">
+              <th className="text-left text-dark-400 font-medium py-2 px-2">Inviter</th>
+              <th className="text-center text-dark-400 font-medium py-2 px-2">Invitee</th>
+              <th className="text-right text-dark-400 font-medium py-2 px-2">Bonus (₹)</th>
+              <th className="text-right text-dark-400 font-medium py-2 px-2">Per-Task (₹)</th>
+              <th className="text-right text-dark-400 font-medium py-2 px-2">Total (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item: any) => (
+              <tr key={item.id} className="border-b border-dark-800/50">
+                <td className="py-2 px-2 text-white">{item.inviterName}</td>
+                <td className="py-2 px-2 text-center text-dark-300">{item.inviteeName}</td>
+                <td className="py-2 px-2 text-right text-white">{item.bonusAmount > 0 ? `₹${item.bonusAmount}` : '-'}</td>
+                <td className="py-2 px-2 text-right text-white">{item.perTaskAmount > 0 ? `₹${item.perTaskAmount}` : '-'}</td>
+                <td className="py-2 px-2 text-right text-white font-semibold">₹{item.totalCommission.toLocaleString('en-IN')}</td>
               </tr>
             ))}
           </tbody>

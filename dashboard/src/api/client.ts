@@ -258,6 +258,16 @@ export async function updateCommissionRates(body: {
   return data;
 }
 
+export async function getCommissionBatchHistory() {
+  const { data } = await api.get('/commissions/batches');
+  return data;
+}
+
+export async function getCommissionBatchDetail(batchId: string) {
+  const { data } = await api.get(`/commissions/batches/${encodeURIComponent(batchId)}`);
+  return data;
+}
+
 export async function downloadCommissionCsv(params?: Record<string, string>): Promise<void> {
   const { data, headers } = await api.get('/commissions/export/csv', {
     params,

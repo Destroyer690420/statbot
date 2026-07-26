@@ -133,14 +133,14 @@ export function toCommissionItem(c: PrismaCommissionItem): CommissionItem {
 }
 
 type PrismaCommissionBatch = {
-  id: string; batchNumber: number; totalInviters: number;
-  totalAmount: number; paidAt: Date | null; createdAt: Date;
+  id: string; batchNumber: number; weekStart: Date; weekEnd: Date;
+  totalInviters: number; totalAmount: number; paidAt: Date | null; createdAt: Date;
 };
 
 export function toCommissionBatch(c: PrismaCommissionBatch): CommissionBatch {
   return {
-    id: c.id, batchNumber: c.batchNumber, totalInviters: c.totalInviters,
-    totalAmount: c.totalAmount, paidAt: c.paidAt, createdAt: c.createdAt,
+    id: c.id, batchNumber: c.batchNumber, weekStart: c.weekStart, weekEnd: c.weekEnd,
+    totalInviters: c.totalInviters, totalAmount: c.totalAmount, paidAt: c.paidAt, createdAt: c.createdAt,
   };
 }
 
