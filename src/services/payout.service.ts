@@ -164,6 +164,7 @@ class PayoutService {
 
     const matchingTasks: Task[] = [];
     for (const task of allTasks) {
+      if (paidTaskIds.has(task.id)) continue;
       if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
 
       if (weekStart && weekEnd) {
@@ -187,7 +188,6 @@ class PayoutService {
       const posts = tasks.filter((t) => t.type === TaskType.POST).length;
       const comments = tasks.filter((t) => t.type === TaskType.COMMENT).length;
       const totalAmount = posts * rates.postRate + comments * rates.commentRate;
-      const allPaid = tasks.every((t) => paidTaskIds.has(t.id));
       const workerName = tasks[0]?.channelName || workerId.slice(0, 8);
 
       result.push({
@@ -196,17 +196,13 @@ class PayoutService {
         posts,
         comments,
         totalAmount,
-        status: allPaid ? 'Paid' : 'Ready',
+        status: 'Ready',
         tasks,
       });
     }
 
-    result.sort((a, b) => {
-      if (a.status === b.status) return b.totalAmount - a.totalAmount;
-      return a.status === 'Ready' ? -1 : 1;
-    });
-
-    return result.filter((w) => w.status !== 'Paid');
+    result.sort((a, b) => b.totalAmount - a.totalAmount);
+    return result;
   }
 
   async getWorkerDetail(workerId: string, weekStart?: Date, weekEnd?: Date): Promise<{
