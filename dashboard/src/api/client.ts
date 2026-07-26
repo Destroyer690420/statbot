@@ -301,13 +301,4 @@ export async function getHealth() {
   return data;
 }
 
-// ─── Owner Earnings ──────────────────────────────────────────
-
-export async function getOwnerEarnings(pin: string) {
-  const { data } = await api.get('/owner/earnings', {
-    headers: { 'X-Earnings-Code': pin },
-  });
-  return data;
-}
-
 export default api;

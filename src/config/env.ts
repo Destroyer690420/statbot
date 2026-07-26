@@ -32,9 +32,6 @@ const envSchema = z.object({
 
   // Dashboard
   DASHBOARD_URL: z.string().default('http://localhost:5173'),
-
-  // Owner earnings PIN
-  OWNER_PIN: z.string().default('7977'),
 });
 
 function loadEnv() {
