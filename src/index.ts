@@ -6,6 +6,7 @@ import { createBotClient, startBot } from './bot';
 import { createApiServer, startApiServer } from './api/server';
 import { logger } from './utils/logger';
 import { taskService } from './services/task.service';
+import { initializeDatabase } from './database/db';
 import { ARCHIVE_AFTER_DAYS, MAX_REMINDER_ATTEMPTS } from './config/constants';
 import { scheduleReminderJob, scheduleRetryJob } from './scheduler/jobs';
 import { Reminder, ReminderType, TaskStatus } from './types';
@@ -108,28 +109,32 @@ async function main(): Promise<void> {
 
   try {
     // 1. Initialize Firebase
-    logger.info('[1/5] Initializing Firebase...');
+    logger.info('[1/7] Initializing Firebase...');
     initializeFirebase();
 
-    // 2. Initialize Redis + BullMQ Queue
-    logger.info('[2/5] Initializing Redis & BullMQ...');
+    // 2. Initialize PostgreSQL via Prisma
+    logger.info('[2/7] Initializing PostgreSQL...');
+    initializeDatabase();
+
+    // 3. Initialize Redis + BullMQ Queue
+    logger.info('[3/7] Initializing Redis & BullMQ...');
     initializeQueue();
 
-    // 3. Create and start Discord bot
-    logger.info('[3/5] Starting Discord bot...');
+    // 4. Create and start Discord bot
+    logger.info('[4/7] Starting Discord bot...');
     discordClient = createBotClient();
     await startBot(discordClient);
 
-    // 4. Initialize BullMQ Worker (needs Discord client for sending messages)
-    logger.info('[4/6] Initializing BullMQ worker...');
+    // 5. Initialize BullMQ Worker (needs Discord client for sending messages)
+    logger.info('[5/7] Initializing BullMQ worker...');
     initializeWorker(discordClient);
 
-    // 5. Re-hydrate reminder jobs from Firestore (recover from Redis/bot restarts)
-    logger.info('[5/6] Re-hydrating reminder jobs from Firestore...');
+    // 6. Re-hydrate reminder jobs from Firestore (recover from Redis/bot restarts)
+    logger.info('[6/7] Re-hydrating reminder jobs from Firestore...');
     await rehydrateReminders();
 
-    // 6. Start REST API server
-    logger.info('[6/6] Starting REST API server...');
+    // 7. Start REST API server
+    logger.info('[7/7] Starting REST API server...');
     const apiApp = createApiServer();
     startApiServer(apiApp);
 
