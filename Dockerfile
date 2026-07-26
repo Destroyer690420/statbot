@@ -4,10 +4,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY tsconfig.json ./
+COPY src/ ./src/
 COPY prisma/ ./prisma/
 COPY prisma.config.ts ./
 RUN npx prisma generate
-COPY src/ ./src/
 RUN npm run build
 
 # Production stage
