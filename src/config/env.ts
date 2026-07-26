@@ -14,11 +14,6 @@ const envSchema = z.object({
   // Manager — comma-separated list of Discord user IDs with limited admin access
   MANAGER_USER_IDS: z.string().default(''),
 
-  // Firebase (legacy — no longer required after PostgreSQL migration)
-  FIREBASE_PROJECT_ID: z.string().default(''),
-  FIREBASE_CLIENT_EMAIL: z.string().default(''),
-  FIREBASE_PRIVATE_KEY: z.string().default(''),
-
   // Database
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
