@@ -8,8 +8,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      - DATABASE_URL=postgresql://rtm_admin:rtm_db@host.docker.internal:5432/rtm_db
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
