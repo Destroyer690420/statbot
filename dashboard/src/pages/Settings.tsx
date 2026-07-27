@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus } from 'lucide-react';
-import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates } from '../api/client';
+import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X } from 'lucide-react';
+import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin } from '../api/client';
 
 export function Settings() {
   const queryClient = useQueryClient();
@@ -51,6 +51,34 @@ export function Settings() {
   const [specialPerComment, setSpecialPerComment] = useState(10);
   const [specialPerPost, setSpecialPerPost] = useState(20);
   const [commRatesDirty, setCommRatesDirty] = useState(false);
+
+  // ─── Owner Panel ────────────────────────────────────────────
+
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
+  const [ownerAccess, setOwnerAccess] = useState(false);
+
+  const handlePinSubmit = async () => {
+    if (pinLoading) return;
+    setPinError('');
+    setPinLoading(true);
+    try {
+      const res = await verifyOwnerPin(pinInput);
+      if (res.success) {
+        setOwnerAccess(true);
+        setShowPinModal(false);
+        setPinInput('');
+      } else {
+        setPinError(res.message || 'Invalid PIN.');
+      }
+    } catch {
+      setPinError('Verification failed. Try again.');
+    } finally {
+      setPinLoading(false);
+    }
+  };
 
   const commRatesMutation = useMutation({
     mutationFn: (body: {
@@ -375,7 +403,73 @@ export function Settings() {
             <p className="mt-2 text-red-400 text-sm">❌ Failed to update commission rates: {(commRatesMutation.error as Error).message}</p>
           )}
         </div>
+
+        {/* Danger Zone */}
+        <div className="glass-card p-6 border-red-800/30">
+          <h3 className="text-lg font-semibold text-red-400 mb-4">Danger Zone</h3>
+          <p className="text-dark-400 text-sm mb-4">
+            Owner-only panel. Requires a 4-digit PIN to access.
+          </p>
+          <button
+            onClick={() => setShowPinModal(true)}
+            className="btn bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-700/50 rounded-xl px-5 py-2.5 flex items-center gap-2 transition-all"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete All Data
+          </button>
+        </div>
+
+        {/* Owner Access Placeholder */}
+        {ownerAccess && (
+          <div className="glass-card p-6 border-primary-800/30">
+            <h3 className="text-lg font-semibold text-primary-400 mb-4">Owner Panel</h3>
+            <p className="text-green-400 text-sm">Access granted ✓</p>
+            <p className="text-dark-400 text-sm mt-1">Panel content coming in the next step.</p>
+          </div>
+        )}
       </div>
+
+      {/* PIN Modal */}
+      {showPinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-dark-800 rounded-2xl p-8 w-full max-w-sm mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Enter PIN</h3>
+              <button
+                onClick={() => { setShowPinModal(false); setPinError(''); setPinInput(''); }}
+                className="text-dark-500 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onKeyDown={(e) => { if (e.key === 'Enter') handlePinSubmit(); }}
+              placeholder="****"
+              className="input-field w-full text-center text-2xl tracking-[0.5em] mb-4"
+              autoFocus
+            />
+            {pinError && (
+              <p className="text-red-400 text-sm text-center mb-4">{pinError}</p>
+            )}
+            <button
+              onClick={handlePinSubmit}
+              disabled={pinInput.length !== 4 || pinLoading}
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
+              {pinLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                'Verify'
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

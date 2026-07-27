@@ -301,4 +301,11 @@ export async function getHealth() {
   return data;
 }
 
+// ─── Owner Panel ────────────────────────────────────────────
+
+export async function verifyOwnerPin(pin: string) {
+  const { data } = await api.post('/owner/verify', { pin });
+  return data;
+}
+
 export default api;
