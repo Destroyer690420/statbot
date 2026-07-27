@@ -12,6 +12,7 @@ import { Activity } from './pages/Activity';
 import { Archives } from './pages/Archives';
 import { Settings } from './pages/Settings';
 import { Payout } from './pages/Payout';
+import { OwnerEarnings } from './pages/OwnerEarnings';
 import { NotFound } from './pages/NotFound';
 
 const queryClient = new QueryClient({
@@ -83,6 +84,14 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Settings />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/owner-earnings" element={
+              <ProtectedRoute>
+                <Layout>
+                  <OwnerEarnings />
                 </Layout>
               </ProtectedRoute>
             } />

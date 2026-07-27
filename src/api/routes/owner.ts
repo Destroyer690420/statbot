@@ -44,4 +44,18 @@ router.get('/daily-earnings', async (_req: Request, res: Response): Promise<void
   }
 });
 
+/**
+ * GET /api/v1/owner/weekly-earnings
+ * Calculate owner's weekly net earnings from Sunday-to-today in IST.
+ */
+router.get('/weekly-earnings', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await ownerEarningsService.getWeeklyEarnings();
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('GET /owner/weekly-earnings failed', { error });
+    res.status(500).json({ success: false, message: 'Failed to calculate weekly earnings.' });
+  }
+});
+
 export default router;

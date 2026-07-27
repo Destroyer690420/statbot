@@ -313,4 +313,9 @@ export async function getDailyEarnings() {
   return data;
 }
 
+export async function getWeeklyEarnings() {
+  const { data } = await api.get('/owner/weekly-earnings');
+  return data;
+}
+
 export default api;

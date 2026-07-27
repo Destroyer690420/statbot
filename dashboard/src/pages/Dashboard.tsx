@@ -48,8 +48,8 @@ export function Dashboard() {
   // Client-side computed stats from tasks
   const todayPosts = allTasks.filter((t) => t.type === 'POST' && isToday(t.createdAt)).length;
   const todayComments = allTasks.filter((t) => t.type === 'COMMENT' && isToday(t.createdAt)).length;
-  const todayPostsDeleted = allTasks.filter((t) => t.type === 'POST' && isDeleted(t) && (isToday(t.updatedAt) || isToday(t.createdAt))).length;
-  const todayCommentsDeleted = allTasks.filter((t) => t.type === 'COMMENT' && isDeleted(t) && (isToday(t.updatedAt) || isToday(t.createdAt))).length;
+  const todayPostsDeleted = allTasks.filter((t) => t.type === 'POST' && isDeleted(t) && isToday(t.createdAt)).length;
+  const todayCommentsDeleted = allTasks.filter((t) => t.type === 'COMMENT' && isDeleted(t) && isToday(t.createdAt)).length;
   const totalDeleted = allTasks.filter((t) => isDeleted(t)).length;
 
   const chartData = daily.map((d: { date: string; count: number }) => ({

@@ -61,7 +61,7 @@ class AnalyticsService {
 
       // Today's deleted tasks
       const todayDeleted = tasks.filter((t) =>
-        isTaskDeleted(t) && (dayjs(t.updatedAt).isSame(now, 'day') || dayjs(t.createdAt).isSame(now, 'day'))
+        isTaskDeleted(t) && dayjs(t.createdAt).isSame(now, 'day')
       ).length;
 
       // Total deleted tasks

@@ -6,55 +6,50 @@ import { toTask, toReferral } from '../database/converters';
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
+type EarningsSummary = {
+  totalTasks: number;
+  posts: number;
+  comments: number;
+  totalRevenue: number;
+  totalWorkerCost: number;
+  totalSpecialPerTaskComm: number;
+  totalNormalBonuses: number;
+  totalSpecialBonuses: number;
+  totalEarnings: number;
+};
+
+type TaskBreakdownItem = {
+  taskId: string;
+  workerId: string;
+  workerName: string | null;
+  taskType: string;
+  status: string;
+  revenue: number;
+  workerCost: number;
+  perTaskComm: number;
+  net: number;
+  inviterType: string | null;
+};
+
+type ReferralDeduction = {
+  referralId: string;
+  inviterId: string;
+  inviterName: string;
+  inviteeId: string;
+  inviteeName: string;
+  inviterType: string;
+  tasksDone: number;
+  deductionType: string;
+  amount: number;
+  alreadyPaid: boolean;
+};
+
 class OwnerEarningsService {
-  async getDailyEarnings(): Promise<{
-    date: string;
-    summary: {
-      totalTasks: number;
-      posts: number;
-      comments: number;
-      totalRevenue: number;
-      totalWorkerCost: number;
-      totalSpecialPerTaskComm: number;
-      totalNormalBonuses: number;
-      totalSpecialBonuses: number;
-      totalEarnings: number;
-    };
-    taskBreakdown: {
-      taskId: string;
-      workerId: string;
-      workerName: string | null;
-      taskType: string;
-      status: string;
-      revenue: number;
-      workerCost: number;
-      perTaskComm: number;
-      net: number;
-      inviterType: string | null;
-    }[];
-    referralDeductions: {
-      referralId: string;
-      inviterId: string;
-      inviterName: string;
-      inviteeId: string;
-      inviteeName: string;
-      inviterType: string;
-      tasksDone: number;
-      deductionType: string;
-      amount: number;
-      alreadyPaid: boolean;
-    }[];
+  private async computeEarnings(dateStartUTC: Date, dateEndUTC: Date): Promise<{
+    summary: EarningsSummary;
+    taskBreakdown: TaskBreakdownItem[];
+    referralDeductions: ReferralDeduction[];
   }> {
-    const nowUTC = new Date();
-    const istNow = new Date(nowUTC.getTime() + IST_OFFSET_MS);
-
-    const year = istNow.getUTCFullYear();
-    const month = istNow.getUTCMonth();
-    const day = istNow.getUTCDate();
-
-    const todayStartIST = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-    const todayStartUTC = new Date(todayStartIST.getTime() - IST_OFFSET_MS);
-
     const REVENUE_PER_POST = 250;
     const REVENUE_PER_COMMENT = 100;
     const WORKER_COST_POST = 60;
@@ -62,7 +57,6 @@ class OwnerEarningsService {
 
     const commRates = await commissionService.getCommissionRates();
 
-    // Get all non-closed referrals
     const allReferrals = await referralRepository.findAll();
     const activeReferrals = allReferrals.filter((r) => r.status !== 'closed');
 
@@ -72,13 +66,12 @@ class OwnerEarningsService {
       referralByInvitee.set(ref.inviteeId, ref);
     }
 
-    // Get terminal-state tasks
     const terminalStatuses: TaskStatus[] = [TaskStatus.COMPLETED, TaskStatus.ARCHIVED, TaskStatus.CANCELLED];
     const rawTasks = await taskRepository.findByStatusIn(terminalStatuses);
     const allTerminalTasks = rawTasks.map((t: any) => toTask(t));
 
-    const todayTasks = allTerminalTasks.filter((t) => {
-      if (t.updatedAt < todayStartUTC || t.updatedAt > nowUTC) return false;
+    const filteredTasks = allTerminalTasks.filter((t) => {
+      if (t.updatedAt < dateStartUTC || t.updatedAt > dateEndUTC) return false;
       if (t.status === TaskStatus.COMPLETED || t.status === TaskStatus.ARCHIVED) return true;
       if (t.status === TaskStatus.CANCELLED && (t.cancelledReason === 'deleted' || t.cancelledReason === 'deleted_later')) return true;
       return false;
@@ -91,23 +84,10 @@ class OwnerEarningsService {
     let postCount = 0;
     let commentCount = 0;
 
-    const taskBreakdown: {
-      taskId: string;
-      workerId: string;
-      workerName: string | null;
-      taskType: string;
-      status: string;
-      revenue: number;
-      workerCost: number;
-      perTaskComm: number;
-      net: number;
-      inviterType: string | null;
-    }[] = [];
-
-    // Track tasks per referral for bonus evaluation
+    const taskBreakdown: TaskBreakdownItem[] = [];
     const tasksByReferralId = new Map<string, number>();
 
-    for (const task of todayTasks) {
+    for (const task of filteredTasks) {
       const isPost = task.type === TaskType.POST;
       const revenue = isPost ? REVENUE_PER_POST : REVENUE_PER_COMMENT;
       const workerCost = isPost ? WORKER_COST_POST : WORKER_COST_COMMENT;
@@ -146,21 +126,9 @@ class OwnerEarningsService {
       }
     }
 
-    // One-time bonus deductions (only if not yet paid)
     let totalNormalBonuses = 0;
     let totalSpecialBonuses = 0;
-    const referralDeductions: {
-      referralId: string;
-      inviterId: string;
-      inviterName: string;
-      inviteeId: string;
-      inviteeName: string;
-      inviterType: string;
-      tasksDone: number;
-      deductionType: string;
-      amount: number;
-      alreadyPaid: boolean;
-    }[] = [];
+    const referralDeductions: ReferralDeduction[] = [];
 
     for (const raw of activeReferrals) {
       const ref = toReferral(raw as any);
@@ -236,12 +204,9 @@ class OwnerEarningsService {
       }
     }
 
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
     return {
-      date: dateStr,
       summary: {
-        totalTasks: todayTasks.length,
+        totalTasks: filteredTasks.length,
         posts: postCount,
         comments: commentCount,
         totalRevenue,
@@ -253,6 +218,63 @@ class OwnerEarningsService {
       },
       taskBreakdown,
       referralDeductions,
+    };
+  }
+
+  async getDailyEarnings(): Promise<{
+    date: string;
+    summary: EarningsSummary;
+    taskBreakdown: TaskBreakdownItem[];
+    referralDeductions: ReferralDeduction[];
+  }> {
+    const nowUTC = new Date();
+    const istNow = new Date(nowUTC.getTime() + IST_OFFSET_MS);
+
+    const year = istNow.getUTCFullYear();
+    const month = istNow.getUTCMonth();
+    const day = istNow.getUTCDate();
+
+    const todayStartIST = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    const todayStartUTC = new Date(todayStartIST.getTime() - IST_OFFSET_MS);
+
+    const result = await this.computeEarnings(todayStartUTC, nowUTC);
+
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    return { date: dateStr, ...result };
+  }
+
+  async getWeeklyEarnings(): Promise<{
+    weekStart: string;
+    weekEnd: string;
+    summary: EarningsSummary;
+    taskBreakdown: TaskBreakdownItem[];
+    referralDeductions: ReferralDeduction[];
+  }> {
+    const nowUTC = new Date();
+    const istNow = new Date(nowUTC.getTime() + IST_OFFSET_MS);
+
+    const year = istNow.getUTCFullYear();
+    const month = istNow.getUTCMonth();
+    const day = istNow.getUTCDate();
+    const dayOfWeek = istNow.getUTCDay();
+
+    const weekStartIST = new Date(Date.UTC(year, month, day - dayOfWeek, 0, 0, 0, 0));
+    const weekStartUTC = new Date(weekStartIST.getTime() - IST_OFFSET_MS);
+
+    const result = await this.computeEarnings(weekStartUTC, nowUTC);
+
+    const fmt = (d: Date) => {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+
+    return {
+      weekStart: fmt(weekStartIST),
+      weekEnd: fmt(istNow),
+      ...result,
     };
   }
 }

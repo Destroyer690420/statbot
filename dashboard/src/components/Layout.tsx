@@ -85,6 +85,7 @@ export function Layout({ children }: { children: ReactNode }) {
     if (pathname.startsWith('/activity')) return 'Activity';
     if (pathname.startsWith('/archives')) return 'Archives';
     if (pathname.startsWith('/payout')) return 'Payout';
+    if (pathname.startsWith('/owner-earnings')) return 'Owner Earnings';
     if (pathname.startsWith('/settings')) return 'Settings';
     return 'Task Manager';
   };
