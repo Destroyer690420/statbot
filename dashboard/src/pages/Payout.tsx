@@ -729,7 +729,7 @@ function WorkerDetail({ data }: { data: any }) {
               <tr className="border-b border-dark-700/50">
                 <th className="text-left text-dark-400 font-medium py-2 px-2">Task ID</th>
                 <th className="text-center text-dark-400 font-medium py-2 px-2">Type</th>
-                <th className="text-center text-dark-400 font-medium py-2 px-2">Created Date</th>
+                <th className="text-center text-dark-400 font-medium py-2 px-2">Created</th>
                 <th className="text-right text-dark-400 font-medium py-2 px-2">Amount</th>
               </tr>
             </thead>
@@ -745,7 +745,7 @@ function WorkerDetail({ data }: { data: any }) {
                     </span>
                   </td>
                   <td className="py-2 px-2 text-center text-dark-300 text-xs">
-                    {task.createdAt ? formatISODate(task.createdAt) : (task.completedAt ? formatISODate(task.completedAt) : '-')}
+                    {task.createdAt ? formatISODate(task.createdAt) : '-'}
                   </td>
                   <td className="py-2 px-2 text-right text-white">₹{task.amount}</td>
                 </tr>
