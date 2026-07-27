@@ -71,7 +71,7 @@ class OwnerEarningsService {
     const allTerminalTasks = rawTasks.map((t: any) => toTask(t));
 
     const filteredTasks = allTerminalTasks.filter((t) => {
-      if (t.updatedAt < dateStartUTC || t.updatedAt > dateEndUTC) return false;
+      if (t.createdAt < dateStartUTC || t.createdAt > dateEndUTC) return false;
       if (t.status === TaskStatus.COMPLETED || t.status === TaskStatus.ARCHIVED) return true;
       if (t.status === TaskStatus.CANCELLED && (t.cancelledReason === 'deleted' || t.cancelledReason === 'deleted_later')) return true;
       return false;

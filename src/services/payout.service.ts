@@ -215,7 +215,7 @@ class PayoutService {
     postRate: number;
     commentRate: number;
     status: string;
-    tasks: { id: string; type: TaskType; completedAt: string | null; amount: number; paid: boolean }[];
+    tasks: { id: string; type: TaskType; createdAt: string | null; completedAt: string | null; amount: number; paid: boolean }[];
   } | null> {
     const allTasks = await this.getCompletedOrArchivedTasks();
     const paidTaskIds = await this.getPaidTaskIds();
@@ -252,6 +252,7 @@ class PayoutService {
       enrichedTasks.push({
         id: task.id,
         type: task.type,
+        createdAt: task.createdAt ? (task.createdAt instanceof Date ? task.createdAt.toISOString() : new Date(task.createdAt).toISOString()) : null,
         completedAt: completedAt ? completedAt.toISOString() : null,
         amount,
         paid: paidTaskIds.has(task.id),
