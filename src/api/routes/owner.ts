@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
+import { ownerEarningsService } from '../../services/owner-earnings.service';
 
 const router = Router();
 
@@ -26,6 +27,20 @@ router.post('/verify', (req: Request, res: Response): void => {
   } catch (error) {
     logger.error('POST /owner/verify failed', { error });
     res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
+/**
+ * GET /api/v1/owner/daily-earnings
+ * Calculate owner's daily net earnings from today's completed/deleted tasks.
+ */
+router.get('/daily-earnings', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await ownerEarningsService.getDailyEarnings();
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('GET /owner/daily-earnings failed', { error });
+    res.status(500).json({ success: false, message: 'Failed to calculate daily earnings.' });
   }
 });
 

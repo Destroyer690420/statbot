@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X } from 'lucide-react';
-import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin } from '../api/client';
+import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X, RefreshCw } from 'lucide-react';
+import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin, getDailyEarnings } from '../api/client';
 
 export function Settings() {
   const queryClient = useQueryClient();
@@ -59,6 +59,13 @@ export function Settings() {
   const [pinError, setPinError] = useState('');
   const [pinLoading, setPinLoading] = useState(false);
   const [ownerAccess, setOwnerAccess] = useState(false);
+
+  const earningsQuery = useQuery({
+    queryKey: ['daily-earnings'],
+    queryFn: getDailyEarnings,
+    enabled: ownerAccess,
+    refetchOnWindowFocus: true,
+  });
 
   const handlePinSubmit = async () => {
     if (pinLoading) return;
@@ -419,12 +426,40 @@ export function Settings() {
           </button>
         </div>
 
-        {/* Owner Access Placeholder */}
+        {/* Owner Daily Earnings */}
         {ownerAccess && (
           <div className="glass-card p-6 border-primary-800/30">
-            <h3 className="text-lg font-semibold text-primary-400 mb-4">Owner Panel</h3>
-            <p className="text-green-400 text-sm">Access granted ✓</p>
-            <p className="text-dark-400 text-sm mt-1">Panel content coming in the next step.</p>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-primary-400">
+                Daily Earnings — <EarningsDate />
+              </h3>
+              <button
+                onClick={() => earningsQuery.refetch()}
+                disabled={earningsQuery.isRefetching}
+                className="text-dark-500 hover:text-white transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${earningsQuery.isRefetching ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {earningsQuery.isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+              </div>
+            ) : earningsQuery.isError ? (
+              <p className="text-red-400 text-sm">Failed to load daily earnings.</p>
+            ) : earningsQuery.data?.data ? (
+              <EarningsDisplay data={earningsQuery.data.data} />
+            ) : null}
+
+            {ownerAccess && (
+              <button
+                onClick={() => setOwnerAccess(false)}
+                className="mt-4 text-dark-500 text-xs hover:text-white transition-colors"
+              >
+                Lock panel
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -470,6 +505,83 @@ export function Settings() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function EarningsDate() {
+  const { data } = useQuery({ queryKey: ['daily-earnings'], queryFn: getDailyEarnings, enabled: false });
+  return <>{data?.data?.date || '—'}</>;
+}
+
+function EarningsDisplay({ data }: { data: any }) {
+  const s = data.summary;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="Tasks" value={s.totalTasks} sub={`${s.posts} posts, ${s.comments} comments`} />
+        <StatCard label="Revenue" value={`₹${s.totalRevenue}`} color="text-green-400" />
+        <StatCard label="Worker Cost" value={`-₹${s.totalWorkerCost}`} color="text-red-400" />
+        <StatCard label="Net Earnings" value={`₹${s.totalEarnings}`} color={s.totalEarnings >= 0 ? 'text-green-400' : 'text-red-400'} />
+      </div>
+
+      {(s.totalSpecialPerTaskComm > 0 || s.totalNormalBonuses > 0 || s.totalSpecialBonuses > 0) && (
+        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50 space-y-1.5">
+          <p className="text-dark-400 text-xs font-semibold uppercase tracking-wider">Deductions</p>
+          {s.totalSpecialPerTaskComm > 0 && (
+            <p className="text-sm text-dark-300 flex justify-between">
+              <span>Special inviter per-task commission</span>
+              <span className="text-red-400">-₹{s.totalSpecialPerTaskComm}</span>
+            </p>
+          )}
+          {s.totalNormalBonuses > 0 && (
+            <p className="text-sm text-dark-300 flex justify-between">
+              <span>Normal inviter one-time bonus{data.referralDeductions.filter((r: any) => r.amount > 0 && r.inviterType === 'normal').length > 1 ? 'es' : ''}</span>
+              <span className="text-red-400">-₹{s.totalNormalBonuses}</span>
+            </p>
+          )}
+          {s.totalSpecialBonuses > 0 && (
+            <p className="text-sm text-dark-300 flex justify-between">
+              <span>Special inviter one-time bonus{data.referralDeductions.filter((r: any) => r.amount > 0 && r.inviterType === 'special').length > 1 ? 'es' : ''}</span>
+              <span className="text-red-400">-₹{s.totalSpecialBonuses}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {data.referralDeductions?.length > 0 && (
+        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+          <p className="text-dark-400 text-xs font-semibold uppercase tracking-wider mb-2">Referral Activity</p>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {data.referralDeductions.map((r: any, i: number) => (
+              <p key={i} className="text-xs flex justify-between">
+                <span className="text-dark-400">
+                  {r.inviteeName || r.inviteeId.slice(0, 8)}
+                  <span className="text-dark-500"> via {r.inviterName || r.inviterId.slice(0, 8)}</span>
+                  <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    r.inviterType === 'special' ? 'bg-purple-900/40 text-purple-400' : 'bg-blue-900/40 text-blue-400'
+                  }`}>
+                    {r.inviterType}
+                  </span>
+                </span>
+                <span className={r.alreadyPaid ? 'text-dark-500' : 'text-red-400'}>
+                  {r.alreadyPaid ? 'Paid' : r.amount > 0 ? `-₹${r.amount}` : `${r.tasksDone} tasks`}
+                </span>
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
+  return (
+    <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
+      <p className="text-dark-400 text-xs font-medium mb-0.5">{label}</p>
+      <p className={`text-lg font-semibold font-mono ${color || 'text-white'}`}>{value}</p>
+      {sub && <p className="text-dark-500 text-[10px] mt-0.5">{sub}</p>}
     </div>
   );
 }

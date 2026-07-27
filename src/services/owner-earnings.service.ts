@@ -1,0 +1,260 @@
+import { TaskStatus, TaskType, Referral } from '../types';
+import { taskRepository } from '../database/repositories/task.repository';
+import { referralRepository } from '../database/repositories/referral.repository';
+import { commissionService } from './commission.service';
+import { toTask, toReferral } from '../database/converters';
+
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+class OwnerEarningsService {
+  async getDailyEarnings(): Promise<{
+    date: string;
+    summary: {
+      totalTasks: number;
+      posts: number;
+      comments: number;
+      totalRevenue: number;
+      totalWorkerCost: number;
+      totalSpecialPerTaskComm: number;
+      totalNormalBonuses: number;
+      totalSpecialBonuses: number;
+      totalEarnings: number;
+    };
+    taskBreakdown: {
+      taskId: string;
+      workerId: string;
+      workerName: string | null;
+      taskType: string;
+      status: string;
+      revenue: number;
+      workerCost: number;
+      perTaskComm: number;
+      net: number;
+      inviterType: string | null;
+    }[];
+    referralDeductions: {
+      referralId: string;
+      inviterId: string;
+      inviterName: string;
+      inviteeId: string;
+      inviteeName: string;
+      inviterType: string;
+      tasksDone: number;
+      deductionType: string;
+      amount: number;
+      alreadyPaid: boolean;
+    }[];
+  }> {
+    const nowUTC = new Date();
+    const istNow = new Date(nowUTC.getTime() + IST_OFFSET_MS);
+
+    const year = istNow.getUTCFullYear();
+    const month = istNow.getUTCMonth();
+    const day = istNow.getUTCDate();
+
+    const todayStartIST = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    const todayStartUTC = new Date(todayStartIST.getTime() - IST_OFFSET_MS);
+
+    const REVENUE_PER_POST = 250;
+    const REVENUE_PER_COMMENT = 100;
+    const WORKER_COST_POST = 60;
+    const WORKER_COST_COMMENT = 30;
+
+    const commRates = await commissionService.getCommissionRates();
+
+    // Get all non-closed referrals
+    const allReferrals = await referralRepository.findAll();
+    const activeReferrals = allReferrals.filter((r) => r.status !== 'closed');
+
+    const referralByInvitee = new Map<string, Referral>();
+    for (const raw of activeReferrals) {
+      const ref = toReferral(raw as any);
+      referralByInvitee.set(ref.inviteeId, ref);
+    }
+
+    // Get terminal-state tasks
+    const terminalStatuses: TaskStatus[] = [TaskStatus.COMPLETED, TaskStatus.ARCHIVED, TaskStatus.CANCELLED];
+    const rawTasks = await taskRepository.findByStatusIn(terminalStatuses);
+    const allTerminalTasks = rawTasks.map((t: any) => toTask(t));
+
+    const todayTasks = allTerminalTasks.filter((t) => {
+      if (t.updatedAt < todayStartUTC || t.updatedAt > nowUTC) return false;
+      if (t.status === TaskStatus.COMPLETED || t.status === TaskStatus.ARCHIVED) return true;
+      if (t.status === TaskStatus.CANCELLED && (t.cancelledReason === 'deleted' || t.cancelledReason === 'deleted_later')) return true;
+      return false;
+    });
+
+    let totalTaskEarnings = 0;
+    let totalRevenue = 0;
+    let totalWorkerCost = 0;
+    let totalSpecialPerTaskComm = 0;
+    let postCount = 0;
+    let commentCount = 0;
+
+    const taskBreakdown: {
+      taskId: string;
+      workerId: string;
+      workerName: string | null;
+      taskType: string;
+      status: string;
+      revenue: number;
+      workerCost: number;
+      perTaskComm: number;
+      net: number;
+      inviterType: string | null;
+    }[] = [];
+
+    // Track tasks per referral for bonus evaluation
+    const tasksByReferralId = new Map<string, number>();
+
+    for (const task of todayTasks) {
+      const isPost = task.type === TaskType.POST;
+      const revenue = isPost ? REVENUE_PER_POST : REVENUE_PER_COMMENT;
+      const workerCost = isPost ? WORKER_COST_POST : WORKER_COST_COMMENT;
+      let perTaskComm = 0;
+
+      const ref = referralByInvitee.get(task.assignedUserId);
+      if (ref && ref.inviterType === 'special') {
+        perTaskComm = isPost ? commRates.specialPerPost : commRates.specialPerComment;
+        totalSpecialPerTaskComm += perTaskComm;
+      }
+
+      const taskNet = revenue - workerCost - perTaskComm;
+      totalTaskEarnings += taskNet;
+      totalRevenue += revenue;
+      totalWorkerCost += workerCost;
+
+      if (isPost) postCount++;
+      else commentCount++;
+
+      taskBreakdown.push({
+        taskId: task.id,
+        workerId: task.assignedUserId,
+        workerName: task.assignedUserName,
+        taskType: task.type,
+        status: task.status,
+        revenue,
+        workerCost,
+        perTaskComm,
+        net: taskNet,
+        inviterType: ref?.inviterType || null,
+      });
+
+      if (ref) {
+        const current = tasksByReferralId.get(ref.id) || 0;
+        tasksByReferralId.set(ref.id, current + 1);
+      }
+    }
+
+    // One-time bonus deductions (only if not yet paid)
+    let totalNormalBonuses = 0;
+    let totalSpecialBonuses = 0;
+    const referralDeductions: {
+      referralId: string;
+      inviterId: string;
+      inviterName: string;
+      inviteeId: string;
+      inviteeName: string;
+      inviterType: string;
+      tasksDone: number;
+      deductionType: string;
+      amount: number;
+      alreadyPaid: boolean;
+    }[] = [];
+
+    for (const raw of activeReferrals) {
+      const ref = toReferral(raw as any);
+      const inviteeTaskCount = tasksByReferralId.get(ref.id) || 0;
+      if (inviteeTaskCount === 0) continue;
+
+      const threshold = ref.inviterType === 'special'
+        ? commRates.specialInviteTaskThreshold
+        : commRates.normalInviteTaskThreshold;
+
+      if (inviteeTaskCount < threshold) {
+        referralDeductions.push({
+          referralId: ref.id,
+          inviterId: ref.inviterId,
+          inviterName: ref.inviterName,
+          inviteeId: ref.inviteeId,
+          inviteeName: ref.inviteeName,
+          inviterType: ref.inviterType,
+          tasksDone: inviteeTaskCount,
+          deductionType: 'none',
+          amount: 0,
+          alreadyPaid: false,
+        });
+        continue;
+      }
+
+      if (ref.oneTimeCommissionPaid) {
+        referralDeductions.push({
+          referralId: ref.id,
+          inviterId: ref.inviterId,
+          inviterName: ref.inviterName,
+          inviteeId: ref.inviteeId,
+          inviteeName: ref.inviteeName,
+          inviterType: ref.inviterType,
+          tasksDone: inviteeTaskCount,
+          deductionType: 'none',
+          amount: 0,
+          alreadyPaid: true,
+        });
+        continue;
+      }
+
+      if (ref.inviterType === 'normal') {
+        totalNormalBonuses += commRates.normalInviteBonus;
+        totalTaskEarnings -= commRates.normalInviteBonus;
+        referralDeductions.push({
+          referralId: ref.id,
+          inviterId: ref.inviterId,
+          inviterName: ref.inviterName,
+          inviteeId: ref.inviteeId,
+          inviteeName: ref.inviteeName,
+          inviterType: 'normal',
+          tasksDone: inviteeTaskCount,
+          deductionType: 'one_time_bonus',
+          amount: commRates.normalInviteBonus,
+          alreadyPaid: false,
+        });
+      } else if (ref.inviterType === 'special') {
+        totalSpecialBonuses += commRates.specialInviteBonus;
+        totalTaskEarnings -= commRates.specialInviteBonus;
+        referralDeductions.push({
+          referralId: ref.id,
+          inviterId: ref.inviterId,
+          inviterName: ref.inviterName,
+          inviteeId: ref.inviteeId,
+          inviteeName: ref.inviteeName,
+          inviterType: 'special',
+          tasksDone: inviteeTaskCount,
+          deductionType: 'one_time_bonus',
+          amount: commRates.specialInviteBonus,
+          alreadyPaid: false,
+        });
+      }
+    }
+
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    return {
+      date: dateStr,
+      summary: {
+        totalTasks: todayTasks.length,
+        posts: postCount,
+        comments: commentCount,
+        totalRevenue,
+        totalWorkerCost,
+        totalSpecialPerTaskComm,
+        totalNormalBonuses,
+        totalSpecialBonuses,
+        totalEarnings: totalTaskEarnings,
+      },
+      taskBreakdown,
+      referralDeductions,
+    };
+  }
+}
+
+export const ownerEarningsService = new OwnerEarningsService();

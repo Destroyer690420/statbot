@@ -308,4 +308,9 @@ export async function verifyOwnerPin(pin: string) {
   return data;
 }
 
+export async function getDailyEarnings() {
+  const { data } = await api.get('/owner/daily-earnings');
+  return data;
+}
+
 export default api;
