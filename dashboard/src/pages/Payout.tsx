@@ -50,7 +50,7 @@ export function Payout() {
   const queryClient = useQueryClient();
 
   // ─── Filter State ─────────────────────────────────────────
-  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [filterMode, setFilterMode] = useState<FilterMode>('previous');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
@@ -105,7 +105,7 @@ export function Payout() {
     return undefined;
   }, [filterMode, customStart, customEnd, weekQuery.data]);
 
-  const isCurrentWeek = filterMode === 'all' || filterMode === 'current';
+  const isCurrentWeek = filterMode === 'all' || filterMode === 'current' || filterMode === 'previous' || (filterMode === 'custom' && !!customStart && !!customEnd);
 
   // ─── Data Queries ─────────────────────────────────────────
 
@@ -135,7 +135,7 @@ export function Payout() {
   // ─── Mutations ────────────────────────────────────────────
 
   const payAllMutation = useMutation({
-    mutationFn: payAll,
+    mutationFn: () => payAll(dateParams),
     onSuccess: () => {
       setConfirmPayAll(false);
       invalidatePayoutQueries();
@@ -143,7 +143,7 @@ export function Payout() {
   });
 
   const payWorkerMutation = useMutation({
-    mutationFn: (workerId: string) => payWorker(workerId),
+    mutationFn: (workerId: string) => payWorker(workerId, dateParams),
     onSuccess: () => {
       setConfirmPayWorker(null);
       setExpandedWorker(null);
@@ -238,9 +238,13 @@ export function Payout() {
   const readyInviters = commissionInviters.filter((i: any) => i.status === 'Ready');
 
   const weekLabel = useMemo(() => {
+    if (filterMode === 'previous' && weekData?.previous?.weekLabel) {
+      return `To Pay This Week (${weekData.previous.weekLabel})`;
+    }
+    if (filterMode === 'current' && weekData?.current?.weekLabel) {
+      return `Current Active Cycle (${weekData.current.weekLabel})`;
+    }
     if (filterMode === 'all') return 'All Unpaid Tasks';
-    if (filterMode === 'current' && weekData?.current?.weekLabel) return weekData.current.weekLabel;
-    if (filterMode === 'previous' && weekData?.previous?.weekLabel) return weekData.previous.weekLabel;
     if (filterMode === 'custom' && customStart && customEnd) {
       return `${formatSimpleDate(customStart)} — ${formatSimpleDate(customEnd)}`;
     }
@@ -326,6 +330,26 @@ export function Payout() {
       <div className="glass-card p-4">
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={() => { setFilterMode('previous'); setExpandedWorker(null); }}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
+              filterMode === 'previous'
+                ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30 shadow-md shadow-primary-500/10'
+                : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:border-dark-500'
+            }`}
+          >
+            To Pay This Week (Previous Cycle)
+          </button>
+          <button
+            onClick={() => { setFilterMode('current'); setExpandedWorker(null); }}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
+              filterMode === 'current'
+                ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30 shadow-md shadow-primary-500/10'
+                : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:border-dark-500'
+            }`}
+          >
+            Current Worker Breakdown (New Cycle)
+          </button>
+          <button
             onClick={() => { setFilterMode('all'); setExpandedWorker(null); }}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
               filterMode === 'all'
@@ -333,27 +357,7 @@ export function Payout() {
                 : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:border-dark-500'
             }`}
           >
-            All
-          </button>
-          <button
-            onClick={() => { setFilterMode('current'); setExpandedWorker(null); }}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-              filterMode === 'current'
-                ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
-                : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:border-dark-500'
-            }`}
-          >
-            Current Week
-          </button>
-          <button
-            onClick={() => { setFilterMode('previous'); setExpandedWorker(null); }}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-              filterMode === 'previous'
-                ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
-                : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:border-dark-500'
-            }`}
-          >
-            Previous Week
+            All Unpaid Tasks
           </button>
           <button
             onClick={() => { setFilterMode('custom'); setExpandedWorker(null); }}
@@ -363,7 +367,7 @@ export function Payout() {
                 : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:border-dark-500'
             }`}
           >
-            Custom
+            Custom Range
           </button>
 
           {filterMode === 'custom' && (

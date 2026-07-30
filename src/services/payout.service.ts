@@ -273,10 +273,10 @@ class PayoutService {
     };
   }
 
-  async getOrCreateCurrentBatch(createdBy: string): Promise<PayoutBatch> {
-    const { weekStart, weekEnd } = this.getCurrentPayoutWeek();
+  async getOrCreateCurrentBatch(createdBy: string, weekStart?: Date, weekEnd?: Date): Promise<PayoutBatch> {
+    const range = (weekStart && weekEnd) ? { weekStart, weekEnd } : this.getCurrentPayoutWeek();
 
-    const existing = await payoutRepository.findBatchByWeek(weekStart, weekEnd);
+    const existing = await payoutRepository.findBatchByWeek(range.weekStart, range.weekEnd);
     if (existing) return toPayoutBatch(existing);
 
     const latest = await payoutRepository.findLatestBatch();
@@ -286,8 +286,8 @@ class PayoutService {
     const batch: PayoutBatch = {
       id: generateBatchId(),
       batchNumber: nextNumber,
-      weekStart,
-      weekEnd,
+      weekStart: range.weekStart,
+      weekEnd: range.weekEnd,
       totalWorkers: 0,
       totalTasks: 0,
       totalPosts: 0,
@@ -319,8 +319,8 @@ class PayoutService {
     return batch;
   }
 
-  async payWorker(workerId: string, createdBy: string): Promise<{ batch: PayoutBatch; items: PayoutItem[] }> {
-    const eligible = await this.findEligibleTasks();
+  async payWorker(workerId: string, createdBy: string, weekStart?: Date, weekEnd?: Date): Promise<{ batch: PayoutBatch; items: PayoutItem[] }> {
+    const eligible = await this.findEligibleTasks(weekStart, weekEnd);
     const workerTasks = eligible.filter((t) => t.assignedUserId === workerId);
 
     if (workerTasks.length === 0) {
@@ -328,7 +328,7 @@ class PayoutService {
     }
 
     const rates = await settingsService.getPayoutRates();
-    const batch = await this.getOrCreateCurrentBatch(createdBy);
+    const batch = await this.getOrCreateCurrentBatch(createdBy, weekStart, weekEnd);
     const items: PayoutItem[] = [];
     const posts = workerTasks.filter((t) => t.type === TaskType.POST).length;
     const comments = workerTasks.filter((t) => t.type === TaskType.COMMENT).length;
@@ -407,14 +407,14 @@ class PayoutService {
     return { batch, items };
   }
 
-  async payAll(createdBy: string): Promise<{ batch: PayoutBatch; items: PayoutItem[] }> {
-    const eligible = await this.findEligibleTasks();
+  async payAll(createdBy: string, weekStart?: Date, weekEnd?: Date): Promise<{ batch: PayoutBatch; items: PayoutItem[] }> {
+    const eligible = await this.findEligibleTasks(weekStart, weekEnd);
     if (eligible.length === 0) {
       throw new Error('No eligible tasks for payout.');
     }
 
     const rates = await settingsService.getPayoutRates();
-    const { weekStart, weekEnd } = this.getCurrentPayoutWeek();
+    const batchRange = (weekStart && weekEnd) ? { weekStart, weekEnd } : this.getCurrentPayoutWeek();
 
     const latest = await payoutRepository.findLatestBatch();
     const nextNumber = latest ? latest.batchNumber + 1 : 1;
@@ -439,8 +439,8 @@ class PayoutService {
         data: {
           id: batchId,
           batchNumber: nextNumber,
-          weekStart,
-          weekEnd,
+          weekStart: batchRange.weekStart,
+          weekEnd: batchRange.weekEnd,
           totalWorkers: uniqueWorkers.size,
           totalTasks: eligible.length,
           totalPosts: posts,
@@ -537,7 +537,7 @@ class PayoutService {
       workers: uniqueWorkers.size,
     });
 
-    return { batch: updatedBatch ? toPayoutBatch(updatedBatch) : { id: batchId, batchNumber: nextNumber, weekStart, weekEnd, totalWorkers: uniqueWorkers.size, totalTasks: items.length, totalPosts: posts, totalComments: comments, totalAmount, paidAt: now, createdBy, createdAt: now }, items };
+    return { batch: updatedBatch ? toPayoutBatch(updatedBatch) : { id: batchId, batchNumber: nextNumber, weekStart: batchRange.weekStart, weekEnd: batchRange.weekEnd, totalWorkers: uniqueWorkers.size, totalTasks: items.length, totalPosts: posts, totalComments: comments, totalAmount, paidAt: now, createdBy, createdAt: now }, items };
   }
 
   async getBatchHistory(limit = 20): Promise<PayoutBatch[]> {

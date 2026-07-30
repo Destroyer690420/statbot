@@ -142,13 +142,13 @@ export async function getWorkerDetail(workerId: string, params?: Record<string, 
   return data;
 }
 
-export async function payWorker(workerId: string) {
-  const { data } = await api.post(`/payouts/pay-worker/${encodeURIComponent(workerId)}`);
+export async function payWorker(workerId: string, params?: Record<string, string>) {
+  const { data } = await api.post(`/payouts/pay-worker/${encodeURIComponent(workerId)}`, params);
   return data;
 }
 
-export async function payAll() {
-  const { data } = await api.post('/payouts/pay-all');
+export async function payAll(params?: Record<string, string>) {
+  const { data } = await api.post('/payouts/pay-all', params);
   return data;
 }
 

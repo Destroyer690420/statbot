@@ -20,8 +20,8 @@ function requireDashboardAdmin(req: Request, res: Response): boolean {
 // ─── Helpers ──────────────────────────────────────────────────
 
 function parseWeekParams(req: Request): { weekStart?: Date; weekEnd?: Date } {
-  const ws = req.query.weekStart as string | undefined;
-  const we = req.query.weekEnd as string | undefined;
+  const ws = (req.query.weekStart || req.body?.weekStart) as string | undefined;
+  const we = (req.query.weekEnd || req.body?.weekEnd) as string | undefined;
   if (ws && we) {
     const weekStart = new Date(ws);
     const weekEnd = new Date(we);
@@ -108,14 +108,15 @@ router.get('/workers/:workerId', async (req: Request, res: Response): Promise<vo
 
 /**
  * POST /api/v1/payouts/pay-worker/:workerId
- * Pay a single worker's eligible tasks.
+ * Pay a single worker's eligible tasks. Accepts optional weekStart/weekEnd.
  */
 router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
 
   try {
     const userId = (req as AuthRequest).userId || 'api';
-    const result = await payoutService.payWorker(String(req.params.workerId), userId);
+    const { weekStart, weekEnd } = parseWeekParams(req);
+    const result = await payoutService.payWorker(String(req.params.workerId), userId, weekStart, weekEnd);
     res.json({ success: true, data: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error.';
@@ -125,14 +126,15 @@ router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promis
 
 /**
  * POST /api/v1/payouts/pay-all
- * Pay all eligible workers.
+ * Pay all eligible workers. Accepts optional weekStart/weekEnd.
  */
 router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
 
   try {
     const userId = (req as AuthRequest).userId || 'api';
-    const result = await payoutService.payAll(userId);
+    const { weekStart, weekEnd } = parseWeekParams(req);
+    const result = await payoutService.payAll(userId, weekStart, weekEnd);
     res.json({ success: true, data: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error.';
