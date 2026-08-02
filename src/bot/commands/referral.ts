@@ -9,6 +9,28 @@ const SPECIAL_INVITER_IDS = [
   '1506900129792135211',
 ];
 
+async function resolveTicketName(
+  interaction: ChatInputCommandInteraction,
+  raw: string,
+): Promise<string> {
+  const trimmed = raw.trim().replace(/^#/, '');
+
+  const idMatch = trimmed.match(/^<#?(\d+)>$/);
+  if (idMatch) {
+    const channelId = idMatch[1];
+    try {
+      const channel = await interaction.guild?.channels.fetch(channelId);
+      if (channel && 'name' in channel) {
+        return channel.name;
+      }
+    } catch {
+      // Channel not resolvable; fall through to raw.
+    }
+  }
+
+  return trimmed;
+}
+
 export const data = new SlashCommandBuilder()
   .setName('referral')
   .setDescription('Manage referral links')
@@ -38,7 +60,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (subcommand === 'add') {
     const inviter = interaction.options.getUser('inviter', true);
     const invitee = interaction.options.getUser('invitee', true);
-    const ticket = interaction.options.getString('ticket', true);
     const type = SPECIAL_INVITER_IDS.includes(inviter.id) ? 'special' : 'normal';
 
     if (inviter.id === invitee.id) {
@@ -49,6 +70,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.deferReply({ ephemeral: true });
 
     try {
+      const ticket = await resolveTicketName(interaction, interaction.options.getString('ticket', true));
+
       const referral = await commissionService.createReferral(
         {
           inviterId: inviter.id,

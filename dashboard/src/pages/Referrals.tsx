@@ -1,9 +1,18 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getReferrals } from '../api/client';
+import { getReferrals, getTickets } from '../api/client';
 import { Search, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const PAGE_SIZE = 15;
+
+function getTicketChannelId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  const mention = trimmed.match(/^<#?(\d+)>$/);
+  if (mention) return mention[1];
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  return null;
+}
 
 export function Referrals() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,6 +23,30 @@ export function Referrals() {
     queryKey: ['referrals', statusFilter],
     queryFn: getReferrals,
   });
+
+  const ticketsQuery = useQuery({
+    queryKey: ['tickets'],
+    queryFn: getTickets,
+  });
+
+  const ticketNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of (ticketsQuery.data?.data || []) as any[]) {
+      if (t?.channelId && t?.channelName) map.set(String(t.channelId), String(t.channelName));
+    }
+    return map;
+  }, [ticketsQuery.data]);
+
+  const resolveTicket = (raw: string | null | undefined): string => {
+    const channelId = getTicketChannelId(raw);
+    if (channelId) {
+      const name = ticketNameMap.get(channelId);
+      if (name) return `#${name}`;
+      return `#${channelId}`;
+    }
+    const trimmed = (raw || '').trim().replace(/^#?/, '');
+    return trimmed ? `#${trimmed}` : '—';
+  };
 
   const referrals = (data?.data || []) as any[];
 
@@ -136,13 +169,9 @@ export function Referrals() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {r.ticketId ? (
-                        <span className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50">
-                          #{r.ticketId}
-                        </span>
-                      ) : (
-                        <span className="text-dark-500 text-sm italic">—</span>
-                      )}
+                      <span className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50">
+                        {resolveTicket(r.ticketId)}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`status-badge border ${
@@ -204,7 +233,7 @@ export function Referrals() {
                 <div>
                   <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Ticket</p>
                   <p className="text-dark-200 text-xs font-mono font-medium truncate">
-                    {r.ticketId ? `#${r.ticketId}` : '—'}
+                    {resolveTicket(r.ticketId)}
                   </p>
                 </div>
                 <div>
