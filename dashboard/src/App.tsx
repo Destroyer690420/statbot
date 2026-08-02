@@ -12,6 +12,7 @@ import { Activity } from './pages/Activity';
 import { Archives } from './pages/Archives';
 import { Settings } from './pages/Settings';
 import { Payout } from './pages/Payout';
+import { Referrals } from './pages/Referrals';
 import { OwnerEarnings } from './pages/OwnerEarnings';
 import { NotFound } from './pages/NotFound';
 
@@ -100,6 +101,14 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Payout />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/referrals" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Referrals />
                 </Layout>
               </ProtectedRoute>
             } />
