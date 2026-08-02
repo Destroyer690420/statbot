@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { Task, Reminder, TaskStats, ReminderType } from '../../types';
+import { displayTaskId } from '../../utils/task-display';
 import { COLORS } from '../../config/constants';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -14,13 +15,13 @@ export function taskCreatedEmbed(task: Task, reminderCount: number): EmbedBuilde
     .setTitle('✅ Task Created')
     .setColor(COLORS.SUCCESS)
     .addFields(
-      { name: 'Task ID', value: `\`${task.id}\``, inline: true },
+      { name: 'Task ID', value: `\`${displayTaskId(task.id, task.type, task.externalTaskId)}\``, inline: true },
       { name: 'Type', value: task.type, inline: true },
       { name: 'Status', value: task.status, inline: true },
       { name: 'Assigned', value: `<@${task.assignedUserId}>`, inline: true },
       { name: 'Ticket', value: `<#${task.channelId}>`, inline: true },
       { name: 'Reminders', value: `${reminderCount}`, inline: true },
-      { name: 'Reddit URL', value: task.redditUrl },
+      { name: 'Reddit URL', value: task.redditUrl || 'Awaiting submission' },
     )
     .setTimestamp()
     .setFooter({ text: 'Reddit Task Manager' });
@@ -37,7 +38,7 @@ export function taskStatusEmbed(task: Task, reminders: Reminder[]): EmbedBuilder
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(`📋 Task Status — ${task.id}`)
+    .setTitle(`📋 Task Status — ${displayTaskId(task.id, task.type, task.externalTaskId)}`)
     .setColor(getStatusColor(task.status))
     .addFields(
       { name: 'Status', value: statusDisplay, inline: true },
@@ -45,7 +46,7 @@ export function taskStatusEmbed(task: Task, reminders: Reminder[]): EmbedBuilder
       { name: 'Assigned', value: `<@${task.assignedUserId}>`, inline: true },
       { name: 'Ticket', value: `<#${task.channelId}>`, inline: true },
       { name: 'Created', value: dayjs(task.createdAt).format('MMM D, YYYY h:mm A'), inline: true },
-      { name: 'Reddit', value: task.redditUrl },
+      { name: 'Reddit', value: task.redditUrl || 'Awaiting submission' },
     );
 
   if (task.notes) {
@@ -102,7 +103,7 @@ export function taskListEmbed(
     if (task.status === 'CANCELLED' && task.cancelledReason) {
       extra = task.cancelledReason === 'deleted' ? ' • 🗑️ Deleted' : ' • 🗑️ Deleted Later';
     }
-    return `${statusIcon} \`${task.id}\` • **${task.type}** • <@${task.assignedUserId}> • ${ago}${extra}`;
+    return `${statusIcon} \`${displayTaskId(task.id, task.type, task.externalTaskId)}\` • **${task.type}** • <@${task.assignedUserId}> • ${ago}${extra}`;
   });
 
   embed.setDescription(lines.join('\n'));

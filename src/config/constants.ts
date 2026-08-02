@@ -32,6 +32,9 @@ export const SUPPORTED_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as cons
 /** BullMQ queue name */
 export const QUEUE_NAME = 'reminder-queue';
 
+/** Source identifier for tasks delivered from the GoPartTime extension */
+export const GOPARTTIME_SOURCE = 'goparttime';
+
 /** Task ID validation pattern (alphanumeric, spaces, hash, hyphens, underscores, 1-32 chars) */
 export const TASK_ID_PATTERN = /^[A-Za-z0-9 _#-]{1,32}$/;
 

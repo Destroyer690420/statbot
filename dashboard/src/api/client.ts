@@ -55,8 +55,13 @@ export async function updateTask(id: string, body: Record<string, unknown>) {
   return data;
 }
 
-export async function reviewTask(id: string, body: { decision: 'approved' | 'rejected'; note?: string }) {
-  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/review`, body);
+export async function doneTask(id: string) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/done`);
+  return data;
+}
+
+export async function reassignTask(id: string, ticket: string) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/reassign`, { ticket });
   return data;
 }
 

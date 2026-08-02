@@ -38,6 +38,7 @@ import {
   getCommissionBatchDetail,
   restoreUnpaidArchived,
 } from '../api/client';
+import { displayTaskId } from '../utils/taskDisplay';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -741,7 +742,7 @@ function WorkerDetail({ data }: { data: any }) {
               {data.tasks.map((task: any) => (
                 <tr key={task.id} className="border-b border-dark-800/50">
                   <td className="py-2 px-2">
-                    <span className="font-mono text-xs text-white">{task.id}</span>
+                    <span className="font-mono text-xs text-white">{displayTaskId(task.id, task.type, task.externalTaskId)}</span>
                   </td>
                   <td className="py-2 px-2 text-center">
                     <span className={`status-badge ${task.type === 'POST' ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'}`}>
@@ -866,7 +867,7 @@ function BatchDetail({ batchId }: { batchId: string }) {
           <tbody>
             {(items ?? []).map((item: any) => (
               <tr key={item.id} className="border-b border-dark-800/30">
-                <td className="py-1.5 px-2 text-white font-mono">{item.taskId}</td>
+                  <td className="py-1.5 px-2 text-white font-mono">{displayTaskId(item.taskId, item.taskType, item.externalTaskId)}</td>
                 <td className="py-1.5 px-2 text-center text-dark-300">{(workerNames || {})[item.workerId] || item.workerId?.slice(0, 8)}</td>
                 <td className="py-1.5 px-2 text-center">
                   <span className={`px-2 py-0.5 rounded-full ${item.taskType === 'POST' ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'}`}>

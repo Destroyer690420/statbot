@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getAuditLogs } from '../api/client';
+import { displayTaskId } from '../utils/taskDisplay';
 import {
   Loader2,
   PlusCircle,
@@ -133,7 +134,7 @@ export function Activity() {
                             to={`/tasks/${encodeURIComponent(log.taskId)}`}
                             className="font-mono text-sm text-primary-400 hover:text-primary-300 transition-colors"
                           >
-                            {log.taskId}
+                            {displayTaskId(log.taskId, log.taskType, log.externalTaskId)}
                           </Link>
                         ) : (
                           <span className="text-dark-500 text-sm">—</span>

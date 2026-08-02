@@ -33,6 +33,9 @@ const envSchema = z.object({
   // Dashboard
   DASHBOARD_URL: z.string().default('http://localhost:5173'),
 
+  // GoPartTime extension shared secret (sent as Bearer token)
+  GOPARTTIME_API_KEY: z.string().optional().default(''),
+
   // Owner panel PIN
   OWNER_PIN: z.string().default('7977'),
 });

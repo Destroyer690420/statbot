@@ -3,6 +3,7 @@ import { taskService } from '../../services/task.service';
 import { reminderService } from '../../services/reminder.service';
 import { isAdmin, getPermissionDeniedMessage } from '../../utils/permissions';
 import { errorEmbed } from '../embeds';
+import { displayTaskId } from '../../utils/task-display';
 import { COLORS } from '../../config/constants';
 import { logger } from '../../utils/logger';
 import dayjs from 'dayjs';
@@ -56,7 +57,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     enriched.sort((a, b) => b.overdueMs - a.overdueMs);
 
     const lines = enriched.slice(0, 20).map((e) =>
-      `🔴 \`${e.task.id}\` • <@${e.task.assignedUserId}> • <#${e.task.channelId}>\n` +
+      `🔴 \`${displayTaskId(e.task.id, e.task.type, e.task.externalTaskId)}\` • <@${e.task.assignedUserId}> • <#${e.task.channelId}>\n` +
       `   Overdue: **${e.overdueLabel}** • Reminder: **${e.reminderType}**`
     );
 

@@ -121,7 +121,7 @@ async function main(): Promise<void> {
 
     // 6. Start REST API server
     logger.info('[6/6] Starting REST API server...');
-    const apiApp = createApiServer();
+    const apiApp = createApiServer(discordClient);
     startApiServer(apiApp);
 
     logger.info('═══════════════════════════════════════════');

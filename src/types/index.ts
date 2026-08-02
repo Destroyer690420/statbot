@@ -8,6 +8,7 @@ export enum TaskType {
 // ─── Task Status (State Machine) ─────────────────────────────
 
 export enum TaskStatus {
+  ACCEPTED = 'ACCEPTED',
   PENDING = 'PENDING',
   REMINDER_20_SENT = 'REMINDER_20_SENT',
   INSIGHT_20_RECEIVED = 'INSIGHT_20_RECEIVED',
@@ -81,7 +82,7 @@ export interface TaskImage {
   url: string;
 }
 
-export type DeliveryMessageKind = 'metadata' | 'content' | 'images';
+export type DeliveryMessageKind = 'metadata' | 'content' | 'images' | 'instruction';
 
 export interface DeliveryMessage {
   kind: DeliveryMessageKind;
@@ -140,6 +141,7 @@ export enum AuditAction {
   TASK_ASSIGNED = 'TASK_ASSIGNED',
   URL_SUBMITTED = 'URL_SUBMITTED',
   TASK_REVIEWED = 'TASK_REVIEWED',
+  TASK_ACCEPTED = 'TASK_ACCEPTED',
   ASSIGNMENT_RETRIED = 'ASSIGNMENT_RETRIED',
 }
 
@@ -150,6 +152,9 @@ export interface AuditLog {
   userId: string | null;
   details: string | null;
   createdAt: Date;
+  /** Enriched from the referenced task for user-facing display (null when task is gone). */
+  externalTaskId?: string | null;
+  taskType?: TaskType | null;
 }
 
 // ─── Payout Batch ────────────────────────────────────────────

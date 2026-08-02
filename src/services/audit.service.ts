@@ -1,5 +1,5 @@
-import { AuditAction, AuditLog } from '../types';
-import { auditRepository } from '../database/repositories';
+import { AuditAction, AuditLog, TaskType } from '../types';
+import { auditRepository, taskRepository } from '../database/repositories';
 import { generateLogId } from '../utils/id-generator';
 import { logger } from '../utils/logger';
 import { toAuditLog } from '../database/converters';
@@ -38,12 +38,33 @@ class AuditLogService {
 
   async getByTaskId(taskId: string, limit = 20): Promise<AuditLog[]> {
     const logs = await auditRepository.findByTaskId(taskId, limit);
-    return logs.map(toAuditLog);
+    return this.enrich(logs.map(toAuditLog));
   }
 
   async getRecent(limit = 50): Promise<AuditLog[]> {
     const logs = await auditRepository.findRecent(limit);
-    return logs.map(toAuditLog);
+    return this.enrich(logs.map(toAuditLog));
+  }
+
+  /**
+   * Attaches the referenced task's external ID and type so user-facing
+   * consumers can render a display ID instead of the internal one.
+   */
+  private async enrich(logs: AuditLog[]): Promise<AuditLog[]> {
+    const enriched: AuditLog[] = [];
+    for (const log of logs) {
+      let externalTaskId: string | null = null;
+      let taskType: TaskType | null = null;
+      if (log.taskId) {
+        const task = await taskRepository.findById(log.taskId);
+        if (task) {
+          externalTaskId = task.externalTaskId;
+          taskType = task.type as TaskType;
+        }
+      }
+      enriched.push({ ...log, externalTaskId, taskType });
+    }
+    return enriched;
   }
 }
 

@@ -54,6 +54,27 @@ class TaskService {
       createdById: input.createdById,
       notes: input.notes || null,
       cancelledReason: null,
+      source: null,
+      externalTaskId: null,
+      sourceUrl: null,
+      subreddit: null,
+      subredditUrl: null,
+      flair: null,
+      title: null,
+      postLink: null,
+      contentHtml: null,
+      formattedContent: null,
+      payment: null,
+      deadline: null,
+      taskImages: null,
+      deliveryMessages: null,
+      assignmentStatus: null,
+      assignmentError: null,
+      submittedRedditUrl: null,
+      submittedAt: null,
+      submittedBy: null,
+      reviewedAt: null,
+      reviewedBy: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -98,7 +119,12 @@ class TaskService {
     }
 
     const where: any = {};
-    if (filters.status) where.status = filters.status;
+    if (filters.status) {
+      where.status = filters.status;
+    } else {
+      // Accepted (queued) tasks are not part of the active task list.
+      where.status = { notIn: [TaskStatus.ACCEPTED] };
+    }
     if (filters.type) where.type = filters.type;
     if (filters.assignedUserId) where.assignedUserId = filters.assignedUserId;
     if (filters.channelId) where.channelId = filters.channelId;
@@ -110,7 +136,7 @@ class TaskService {
 
     if (filters.redditUrl) {
       const search = filters.redditUrl.toLowerCase();
-      result = result.filter((t) => t.redditUrl.toLowerCase().includes(search));
+      result = result.filter((t) => (t.redditUrl || '').toLowerCase().includes(search));
     }
 
     if (filters.dateFrom) {

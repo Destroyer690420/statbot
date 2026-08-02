@@ -6,6 +6,7 @@ import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
+import { AcceptedTasks } from './pages/AcceptedTasks';
 import { TaskDetails } from './pages/TaskDetails';
 import { Analytics } from './pages/Analytics';
 import { Activity } from './pages/Activity';
@@ -45,6 +46,14 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Tasks />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/accepted" element={
+              <ProtectedRoute>
+                <Layout>
+                  <AcceptedTasks />
                 </Layout>
               </ProtectedRoute>
             } />

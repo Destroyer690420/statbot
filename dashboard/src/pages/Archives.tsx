@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getTasks, downloadCsv } from '../api/client';
+import { displayTaskId } from '../utils/taskDisplay';
 import { Search, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download } from 'lucide-react';
 
 const PAGE_SIZE = 15;
@@ -18,6 +19,7 @@ export function Archives() {
   const tasks = tasksData?.data || [];
 
   const filteredTasks = tasks.filter((task: any) =>
+    displayTaskId(task.id, task.type, task.externalTaskId).toLowerCase().includes(searchTerm.toLowerCase()) ||
     task.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     task.redditUrl.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (task.channelId && task.channelId.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -84,7 +86,7 @@ export function Archives() {
                   <tr key={task.id} className="hover:bg-dark-800/30 transition-colors">
                     <td className="px-6 py-4 font-mono text-sm font-medium text-dark-100">
                       <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="hover:text-primary-400 transition-colors">
-                        {task.id}
+                        {displayTaskId(task.id, task.type, task.externalTaskId)}
                       </Link>
                     </td>
                     <td className="px-6 py-4">

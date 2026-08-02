@@ -9,7 +9,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('View the status of a task')
   .addStringOption((opt) =>
     opt.setName('task_id')
-      .setDescription('The Task ID (e.g. TSK-XXXXXXXX)')
+      .setDescription('The Task ID (e.g. Comment #589482)')
       .setRequired(true),
   );
 

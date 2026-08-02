@@ -1,6 +1,6 @@
 import { ReactNode, useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ListTodo, BarChart3, History, Archive, Settings, Wallet, LogOut, Menu, Download, UserPlus } from 'lucide-react';
+import { LayoutDashboard, ListTodo, Inbox, BarChart3, History, Archive, Settings, Wallet, LogOut, Menu, Download, UserPlus } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -70,6 +70,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { name: 'Accepted', path: '/accepted', icon: Inbox },
     { name: 'Tasks', path: '/tasks', icon: ListTodo },
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },
     { name: 'Activity', path: '/activity', icon: History },
@@ -82,6 +83,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const getPageTitle = (pathname: string) => {
     if (pathname === '/') return 'Dashboard';
     if (pathname.startsWith('/tasks')) return 'Tasks';
+    if (pathname.startsWith('/accepted')) return 'Accepted Tasks';
     if (pathname.startsWith('/analytics')) return 'Analytics';
     if (pathname.startsWith('/activity')) return 'Activity';
     if (pathname.startsWith('/archives')) return 'Archives';

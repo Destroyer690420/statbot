@@ -276,3 +276,63 @@ ALTER TABLE "CommissionItem" ADD CONSTRAINT "CommissionItem_sourceTaskId_fkey" F
 -- Migration: add weekStart/weekEnd to CommissionBatch for existing DBs
 ALTER TABLE "CommissionBatch" ADD COLUMN IF NOT EXISTS "weekStart" TIMESTAMP(3) NOT NULL DEFAULT '2026-01-01 00:00:00';
 ALTER TABLE "CommissionBatch" ADD COLUMN IF NOT EXISTS "weekEnd" TIMESTAMP(3) NOT NULL DEFAULT '2026-01-07 23:59:59';
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: GoPartTime → Discord task delivery
+-- ──────────────────────────────────────────────────────────────
+-- Task.redditUrl becomes nullable: GoPartTime tasks are assigned
+-- before any Reddit URL exists (URL is submitted by the worker
+-- and bound at review time).
+ALTER TABLE "Task" ALTER COLUMN "redditUrl" DROP NOT NULL;
+
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "source" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "externalTaskId" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "sourceUrl" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "subreddit" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "subredditUrl" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "flair" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "title" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "postLink" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "contentHtml" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "formattedContent" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "payment" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "deadline" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "taskImages" JSONB;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "deliveryMessages" JSONB;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "assignmentStatus" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "assignmentError" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "submittedRedditUrl" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "submittedAt" TIMESTAMP(3);
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "submittedBy" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMP(3);
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "reviewedBy" TEXT;
+
+-- GoPartTime Task ID is the primary external identifier (duplicate prevention)
+CREATE UNIQUE INDEX IF NOT EXISTS "Task_source_externalTaskId_key" ON "Task"("source", "externalTaskId");
+
+-- Audit log actions for the GoPartTime flow
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TASK_ASSIGNED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'URL_SUBMITTED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TASK_REVIEWED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ASSIGNMENT_RETRIED';
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Accepted Tasks queue (pre-activation gate)
+-- ──────────────────────────────────────────────────────────────
+-- New lifecycle status: tasks arrive ACCEPTED (delivered to the ticket)
+-- and only move to PENDING when the manager marks them Done.
+ALTER TYPE "TaskStatus" ADD VALUE IF NOT EXISTS 'ACCEPTED';
+
+-- Audit action for the "Done" (accept into workflow) step
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TASK_ACCEPTED';
+
+-- Backfill: tasks previously delivered keep an ACCEPTED status so they
+-- land on the new Accepted Tasks page instead of the active tasks page.
+UPDATE "Task" SET "status" = 'ACCEPTED'
+WHERE "source" = 'goparttime' AND "status" = 'PENDING';
+
+-- Accepted tasks have no reminders until the manager marks them Done;
+-- drop the reminders that were scheduled at assign time for those tasks.
+DELETE FROM "Reminder" WHERE "taskId" IN (
+  SELECT "id" FROM "Task" WHERE "source" = 'goparttime' AND "status" = 'ACCEPTED'
+);

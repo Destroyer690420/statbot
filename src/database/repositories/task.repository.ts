@@ -58,6 +58,20 @@ export class TaskRepository {
     });
   }
 
+  async findByDeliveryMessageId(channelId: string, messageId: string) {
+    const tasks = await getDb().task.findMany({
+      where: {
+        channelId,
+        status: { notIn: ['ARCHIVED' as any, 'CANCELLED' as any] },
+      },
+    });
+    return (
+      tasks.find((t) =>
+        ((t.deliveryMessages as any[]) || []).some((m) => m && m.messageId === messageId),
+      ) || null
+    );
+  }
+
   async findAll(guildId?: string) {
     return getDb().task.findMany({
       where: guildId ? { guildId } : {},
@@ -88,9 +102,93 @@ export class TaskRepository {
     });
   }
 
+  async findBySourceExternal(source: string, externalTaskId: string) {
+    return getDb().task.findFirst({
+      where: { source, externalTaskId },
+    });
+  }
+
+  async findBySubmittedRedditUrl(url: string) {
+    return getDb().task.findFirst({
+      where: { submittedRedditUrl: url },
+    });
+  }
+
+  async findAwaitingSubmission(channelId: string, assignedUserId: string) {
+    return getDb().task.findFirst({
+      where: {
+        source: 'goparttime',
+        channelId,
+        assignedUserId,
+        status: { in: ['PENDING' as any, 'ACCEPTED' as any] },
+        submittedRedditUrl: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findAnyGoparttimeInChannel(channelId: string) {
+    return getDb().task.findFirst({
+      where: {
+        source: 'goparttime',
+        channelId,
+        status: { notIn: ['ARCHIVED' as any, 'CANCELLED' as any] },
+      },
+    });
+  }
+
+  async findAwaitingSubmissionInChannel(channelId: string) {
+    return getDb().task.findFirst({
+      where: {
+        source: 'goparttime',
+        channelId,
+        status: { in: ['PENDING' as any, 'ACCEPTED' as any] },
+        submittedRedditUrl: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async updateAssignment(taskId: string, data: { assignmentStatus?: string; assignmentError?: string | null }) {
+    return getDb().task.update({
+      where: { id: taskId },
+      data: { ...data, updatedAt: new Date() },
+    });
+  }
+
+  async updateDeliveryMessages(taskId: string, deliveryMessages: any[]) {
+    return getDb().task.update({
+      where: { id: taskId },
+      data: { deliveryMessages: deliveryMessages as any, updatedAt: new Date() },
+    });
+  }
+
+  async markSubmitted(taskId: string, submittedRedditUrl: string, submittedBy: string) {
+    return getDb().task.update({
+      where: { id: taskId },
+      data: {
+        submittedRedditUrl,
+        submittedBy,
+        submittedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  async markReviewed(taskId: string, reviewedBy: string) {
+    return getDb().task.update({
+      where: { id: taskId },
+      data: {
+        reviewedAt: new Date(),
+        reviewedBy,
+        updatedAt: new Date(),
+      },
+    });
+  }
+
   async create(data: {
     id: string;
-    redditUrl: string;
+    redditUrl: string | null;
     type: string;
     status: string;
     guildId: string;
@@ -101,6 +199,27 @@ export class TaskRepository {
     createdById: string;
     notes: string | null;
     cancelledReason: string | null;
+    source?: string | null;
+    externalTaskId?: string | null;
+    sourceUrl?: string | null;
+    subreddit?: string | null;
+    subredditUrl?: string | null;
+    flair?: string | null;
+    title?: string | null;
+    postLink?: string | null;
+    contentHtml?: string | null;
+    formattedContent?: string | null;
+    payment?: string | null;
+    deadline?: string | null;
+    taskImages?: any[] | null;
+    deliveryMessages?: any[] | null;
+    assignmentStatus?: string | null;
+    assignmentError?: string | null;
+    submittedRedditUrl?: string | null;
+    submittedAt?: Date | null;
+    submittedBy?: string | null;
+    reviewedAt?: Date | null;
+    reviewedBy?: string | null;
     createdAt: Date;
     updatedAt: Date;
   }) {

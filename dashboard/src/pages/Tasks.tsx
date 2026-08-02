@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getTasks, deleteTask, updateTask, downloadCsv, getTask } from '../api/client';
+import { displayTaskId } from '../utils/taskDisplay';
+import { CopyButton } from '../components/CopyButton';
 import { Search, Filter, Trash2, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download, ImageDown } from 'lucide-react';
 
 const PAGE_SIZE = 15;
@@ -60,8 +62,9 @@ export function Tasks() {
   const tasks = tasksData?.data || [];
   
   const filteredTasks = tasks.filter((task: any) => 
+    displayTaskId(task.id, task.type, task.externalTaskId).toLowerCase().includes(searchTerm.toLowerCase()) || 
     task.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    task.redditUrl.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (task.redditUrl || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (task.channelId && task.channelId.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (task.channelName && task.channelName.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -172,7 +175,7 @@ export function Tasks() {
                   <tr key={task.id} className={getRowClass(task.cancelledReason)}>
                     <td className="px-6 py-4 font-mono text-sm font-medium text-dark-100">
                       <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="hover:text-primary-400 transition-colors">
-                        {task.id}
+                        {displayTaskId(task.id, task.type, task.externalTaskId)}
                       </Link>
                     </td>
                     <td className="px-6 py-4">
@@ -197,15 +200,19 @@ export function Tasks() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <a 
-                        href={task.redditUrl} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="text-primary-400 hover:text-primary-300 flex items-center group max-w-[200px] truncate"
-                      >
-                        <span className="truncate">{task.redditUrl}</span>
-                        <ExternalLink className="w-3.5 h-3.5 ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                      </a>
+                      {task.redditUrl ? (
+                        <a 
+                          href={task.redditUrl} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="text-primary-400 hover:text-primary-300 flex items-center group"
+                        >
+                          <span className="underline underline-offset-2 decoration-primary-400/40 group-hover:decoration-primary-300/70">link</span>
+                          <ExternalLink className="w-3.5 h-3.5 ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-dark-500 text-sm italic">External</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-dark-300">
                       {new Date(task.createdAt).toLocaleDateString()}
@@ -224,6 +231,9 @@ export function Tasks() {
                         >
                           <ImageDown className="w-4 h-4" />
                         </button>
+                        {task.submittedRedditUrl && (
+                          <CopyButton value={task.submittedRedditUrl} title="Copy submitted link" />
+                        )}
                         <Link
                           to={`/tasks/${encodeURIComponent(task.id)}`}
                           className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
@@ -277,7 +287,7 @@ export function Tasks() {
                     to={`/tasks/${encodeURIComponent(task.id)}`}
                     className="min-w-0"
                   >
-                    <span className="text-primary-400 font-bold font-mono text-base truncate">{task.id}</span>
+                    <span className="text-primary-400 font-bold font-mono text-base truncate">{displayTaskId(task.id, task.type, task.externalTaskId)}</span>
                   </Link>
                   <span className={`status-badge border text-[10px] ${getStatusColor(task.status, task.cancelledReason)}`}>
                     {task.status.replace(/_/g, ' ')}
@@ -288,7 +298,7 @@ export function Tasks() {
                 <div className="grid grid-cols-3 gap-1 px-4 py-2 border-t border-dark-700/30">
                   <div>
                     <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Task ID</p>
-                    <p className="text-dark-200 text-xs font-mono font-medium truncate">{task.id.replace(/^(POST|COMMENT)\s*#?/i, '')}</p>
+                    <p className="text-dark-200 text-xs font-mono font-medium truncate">{displayTaskId(task.id, task.type, task.externalTaskId).replace(/^(POST|COMMENT)\s*#?/i, '')}</p>
                   </div>
                   <div>
                     <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Created</p>
@@ -306,15 +316,19 @@ export function Tasks() {
 
                 {/* Reddit URL */}
                 <div className="px-4 py-2">
-                  <a
-                    href={task.redditUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary-400 text-xs flex items-center gap-1 truncate"
-                  >
-                    <ExternalLink className="w-3 h-3 shrink-0" />
-                    <span className="truncate">{task.redditUrl}</span>
-                  </a>
+                  {task.redditUrl ? (
+                    <a
+                      href={task.redditUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary-400 text-xs flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                      <span className="underline underline-offset-2 decoration-primary-400/40">link</span>
+                    </a>
+                  ) : (
+                    <span className="text-dark-500 text-xs italic">External task</span>
+                  )}
                 </div>
 
                 {/* Card Footer — Actions */}
@@ -342,6 +356,9 @@ export function Tasks() {
                     >
                       <ImageDown className="w-4 h-4" />
                     </button>
+                    {task.submittedRedditUrl && (
+                      <CopyButton value={task.submittedRedditUrl} title="Copy submitted link" className="p-1.5" />
+                    )}
                     <Link
                       to={`/tasks/${encodeURIComponent(task.id)}`}
                       className="p-1.5 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"

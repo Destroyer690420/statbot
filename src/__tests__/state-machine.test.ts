@@ -18,6 +18,26 @@ describe('canTransition', () => {
     expect(canTransition(TaskStatus.PENDING, TaskStatus.CANCELLED)).toBe(true);
   });
 
+  it('allows ACCEPTED → PENDING (task accepted into the workflow)', () => {
+    expect(canTransition(TaskStatus.ACCEPTED, TaskStatus.PENDING)).toBe(true);
+  });
+
+  it('allows ACCEPTED → CANCELLED', () => {
+    expect(canTransition(TaskStatus.ACCEPTED, TaskStatus.CANCELLED)).toBe(true);
+  });
+
+  it('allows ACCEPTED → ARCHIVED', () => {
+    expect(canTransition(TaskStatus.ACCEPTED, TaskStatus.ARCHIVED)).toBe(true);
+  });
+
+  it('blocks ACCEPTED → REMINDER_20_SENT (reminders only start after acceptance)', () => {
+    expect(canTransition(TaskStatus.ACCEPTED, TaskStatus.REMINDER_20_SENT)).toBe(false);
+  });
+
+  it('blocks PENDING → ACCEPTED (acceptance is one-way)', () => {
+    expect(canTransition(TaskStatus.PENDING, TaskStatus.ACCEPTED)).toBe(false);
+  });
+
   it('blocks PENDING → COMPLETED', () => {
     expect(canTransition(TaskStatus.PENDING, TaskStatus.COMPLETED)).toBe(false);
   });
@@ -39,6 +59,14 @@ describe('transition', () => {
 
   it('throws on invalid transition', () => {
     expect(() => transition(TaskStatus.PENDING, TaskStatus.COMPLETED)).toThrow('Invalid state transition');
+  });
+
+  it('returns PENDING from ACCEPTED on valid transition', () => {
+    expect(transition(TaskStatus.ACCEPTED, TaskStatus.PENDING)).toBe(TaskStatus.PENDING);
+  });
+
+  it('throws ACCEPTED → REMINDER_20_SENT', () => {
+    expect(() => transition(TaskStatus.ACCEPTED, TaskStatus.REMINDER_20_SENT)).toThrow('Invalid state transition');
   });
 });
 

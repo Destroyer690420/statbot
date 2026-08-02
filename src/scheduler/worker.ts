@@ -94,7 +94,7 @@ export function initializeWorker(discordClient: Client): Worker {
           return;
         }
 
-        const embed = buildReminderEmbed(type, task.redditUrl, task.type, task.id, isRetry, retryCount);
+        const embed = buildReminderEmbed(type, task.redditUrl || 'Awaiting submission', task.type, task.id, isRetry, retryCount);
 
         const sentMessage = await channel.send({
           content: `<@${task.assignedUserId}>`,

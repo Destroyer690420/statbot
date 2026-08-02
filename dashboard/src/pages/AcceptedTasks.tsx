@@ -1,0 +1,317 @@
+import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { getTasks, doneTask, reassignTask, deleteTask, getTickets } from '../api/client';
+import { displayTaskId } from '../utils/taskDisplay';
+import { CopyButton } from '../components/CopyButton';
+import { Loader2, CheckCircle2, Repeat, Trash2, Eye, ExternalLink } from 'lucide-react';
+
+const PAGE_SIZE = 15;
+
+export function AcceptedTasks() {
+  const [ticketFor, setTicketFor] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+
+  const { data: tasksData, isLoading, refetch } = useQuery({
+    queryKey: ['tasks', 'ACCEPTED'],
+    queryFn: () => getTasks({ status: 'ACCEPTED' }),
+  });
+
+  const ticketsQuery = useQuery({
+    queryKey: ['tickets'],
+    queryFn: getTickets,
+    enabled: ticketFor !== null,
+  });
+
+  const doneMutation = useMutation({
+    mutationFn: (id: string) => doneTask(id),
+    onSuccess: () => refetch(),
+  });
+
+  const reassignMutation = useMutation({
+    mutationFn: ({ id, ticket }: { id: string; ticket: string }) => reassignTask(id, ticket),
+    onSuccess: () => {
+      refetch();
+      setTicketFor(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteTask(id),
+    onSuccess: () => refetch(),
+  });
+
+  const tasks = tasksData?.data || [];
+  const totalPages = Math.max(1, Math.ceil(tasks.length / PAGE_SIZE));
+  const paginatedTasks = tasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const tickets = ticketsQuery.data?.data || [];
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this task? This cannot be undone.')) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-dark-100">Accepted Tasks</h2>
+          <p className="text-sm text-dark-400 mt-1">
+            External tasks awaiting activation. Mark tasks as <span className="text-primary-400">Done</span> to move them
+            to the active task list, or reassign them to another ticket.
+          </p>
+        </div>
+        <span className="status-badge border bg-violet-500/10 text-violet-400 border-violet-500/20 px-3 py-1">
+          {tasks.length} queued
+        </span>
+      </div>
+
+      <div className="glass-card overflow-hidden hidden md:block">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-dark-700/50 bg-dark-800/50">
+                <th className="px-6 py-4 font-semibold text-dark-200">Task ID</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Type</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Ticket</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Submission</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Created</th>
+                <th className="px-6 py-4 font-semibold text-dark-200 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-dark-700/50">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center">
+                    <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
+                  </td>
+                </tr>
+              ) : paginatedTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-dark-400">
+                    No tasks awaiting activation.
+                  </td>
+                </tr>
+              ) : (
+                paginatedTasks.map((task: any) => (
+                  <tr key={task.id} className="hover:bg-dark-800/30 transition-colors">
+                    <td className="px-6 py-4 font-mono text-sm font-medium text-dark-100">
+                      <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="hover:text-primary-400 transition-colors">
+                        {displayTaskId(task.id, task.type, task.externalTaskId)}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-dark-200">
+                      {task.externalTaskId ? `${task.type.replace('_', ' ')} · ${task.externalTaskId}` : task.type.replace('_', ' ')}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50">
+                        {task.channelName ? `#${task.channelName}` : task.channelId}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {task.submittedRedditUrl ? (
+                        <a
+                          href={task.submittedRedditUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary-400 hover:text-primary-300 flex items-center max-w-[220px] truncate"
+                        >
+                          <span className="truncate">{task.submittedRedditUrl}</span>
+                          <ExternalLink className="w-3.5 h-3.5 ml-1.5 flex-shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-dark-500 text-sm italic">Waiting</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-dark-300">
+                      {new Date(task.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-1">
+                        {ticketFor === task.id ? (
+                          <div className="flex items-center gap-1">
+                            <select
+                              className="bg-dark-800 border border-dark-600 rounded-lg px-2 py-1 text-xs text-dark-200 cursor-pointer appearance-none min-w-[140px]"
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  reassignMutation.mutate({ id: task.id, ticket: e.target.value });
+                                } else {
+                                  setTicketFor(null);
+                                }
+                              }}
+                              onBlur={() => setTicketFor(null)}
+                              autoFocus
+                            >
+                              <option value="">Select ticket...</option>
+                              {tickets.map((t: any) => (
+                                <option key={t.channelId} value={t.channelId}>
+                                  #{t.channelName || t.channelId} {t.taskStatus === 'awaiting-submission' ? '(busy)' : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setTicketFor(task.id)}
+                            className="p-2 text-dark-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
+                            title="Reassign"
+                          >
+                            <Repeat className="w-4 h-4" />
+                          </button>
+                        )}
+                        {task.submittedRedditUrl && (
+                          <CopyButton value={task.submittedRedditUrl} title="Copy submitted link" />
+                        )}
+                        <button
+                          onClick={() => doneMutation.mutate(task.id)}
+                          disabled={doneMutation.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors disabled:opacity-40 disabled:cursor-wait"
+                          title="Mark done and move to active queue"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Done
+                        </button>
+                        <Link
+                          to={`/tasks/${encodeURIComponent(task.id)}`}
+                          className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(task.id)}
+                          className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                          title="Delete Task"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Mobile Card Layout */}
+      <div className="md:hidden space-y-4">
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          </div>
+        ) : paginatedTasks.length === 0 ? (
+          <div className="glass-card p-8 text-center text-dark-400">
+            No tasks waiting activation.
+          </div>
+        ) : (
+          paginatedTasks.map((task: any) => (
+            <div key={task.id} className="glass-card border border-dark-700/50 overflow-hidden">
+              <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="min-w-0">
+                  <span className="text-primary-400 font-bold font-mono text-base truncate">{displayTaskId(task.id, task.type, task.externalTaskId)}</span>
+                </Link>
+                <span className="status-badge border bg-violet-500/10 text-violet-400 border-violet-500/20 text-[10px]">
+                  ACCEPTED
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1 px-4 py-2 border-t border-dark-700/30">
+                <div>
+                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Ticket</p>
+                  <p className="text-dark-200 text-xs font-mono font-medium truncate">
+                    {task.channelName ? `#${task.channelName}` : task.channelId}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Created</p>
+                  <p className="text-dark-200 text-xs font-medium">
+                    {new Date(task.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+              <div className="px-4 py-2">
+                {task.submittedRedditUrl ? (
+                  <a
+                    href={task.submittedRedditUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary-400 text-xs flex items-center gap-1 truncate"
+                  >
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{task.submittedRedditUrl}</span>
+                  </a>
+                ) : (
+                  <span className="text-dark-500 text-xs italic">Awaiting submission</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between px-4 py-3 border-t border-dark-700/30 bg-dark-800/30">
+                <button
+                  onClick={() => doneMutation.mutate(task.id)}
+                  disabled={doneMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors disabled:opacity-40"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Done
+                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setTicketFor(task.id)}
+                    className="p-1.5 text-dark-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
+                    title="Reassign"
+                  >
+                    <Repeat className="w-4 h-4" />
+                  </button>
+                  {task.submittedRedditUrl && (
+                    <CopyButton value={task.submittedRedditUrl} title="Copy submitted link" className="p-1.5" />
+                  )}
+                  <Link
+                    to={`/tasks/${encodeURIComponent(task.id)}`}
+                    className="p-1.5 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
+                    title="View Details"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Link>
+                  <button
+                    onClick={() => handleDelete(task.id)}
+                    className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                    title="Delete Task"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-dark-400 text-sm">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, tasks.length)} of {tasks.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-dark-300 font-medium">Page {page} of {totalPages}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

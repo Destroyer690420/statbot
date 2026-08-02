@@ -13,6 +13,7 @@ enum TaskType {
 }
 
 enum TaskStatus {
+  ACCEPTED
   PENDING
   REMINDER_20_SENT
   INSIGHT_20_RECEIVED
@@ -49,6 +50,11 @@ enum AuditAction {
   REFERRAL_REMOVED
   COMMISSION_PAID
   COMMISSION_BATCH_CREATED
+  TASK_ASSIGNED
+  URL_SUBMITTED
+  TASK_REVIEWED
+  TASK_ACCEPTED
+  ASSIGNMENT_RETRIED
 }
 
 enum ReferralStatus {
@@ -70,7 +76,7 @@ enum CommissionKind {
 
 model Task {
   id               String   @id
-  redditUrl        String
+  redditUrl        String?
   type             TaskType
   status           TaskStatus
   guildId          String
@@ -81,6 +87,30 @@ model Task {
   createdById      String
   notes            String?
   cancelledReason  String?
+
+  // GoPartTime → Discord delivery fields
+  source           String?
+  externalTaskId   String?
+  sourceUrl        String?
+  subreddit        String?
+  subredditUrl     String?
+  flair            String?
+  title            String?
+  postLink         String?
+  contentHtml      String?
+  formattedContent String?
+  payment          String?
+  deadline         String?
+  taskImages       Json?
+  deliveryMessages Json?
+  assignmentStatus String?
+  assignmentError  String?
+  submittedRedditUrl String?
+  submittedAt      DateTime?
+  submittedBy      String?
+  reviewedAt       DateTime?
+  reviewedBy       String?
+
   createdAt        DateTime
   updatedAt        DateTime
 
@@ -97,6 +127,7 @@ model Task {
   @@index([channelName, status])
   @@index([assignedUserId, status])
   @@index([createdAt])
+  @@unique([source, externalTaskId])
 }
 
 model Reminder {

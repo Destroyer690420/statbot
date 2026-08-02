@@ -1,3 +1,4 @@
+import type { Prisma } from '../generated/prisma/client';
 import {
   Task, TaskStatus, TaskType,
   Reminder, ReminderType,
@@ -10,10 +11,20 @@ import {
 } from '../types';
 
 type PrismaTask = {
-  id: string; redditUrl: string; type: string; status: string;
+  id: string; redditUrl: string | null; type: string; status: string;
   guildId: string; channelId: string; channelName: string | null;
   assignedUserId: string; assignedUserName: string | null; createdById: string;
   notes: string | null; cancelledReason: string | null;
+  source: string | null; externalTaskId: string | null; sourceUrl: string | null;
+  subreddit: string | null; subredditUrl: string | null; flair: string | null;
+  title: string | null; postLink: string | null;
+  contentHtml: string | null; formattedContent: string | null;
+  payment: string | null; deadline: string | null;
+  taskImages: Prisma.JsonValue; deliveryMessages: Prisma.JsonValue;
+  assignmentStatus: string | null; assignmentError: string | null;
+  submittedRedditUrl: string | null;
+  submittedAt: Date | null; submittedBy: string | null;
+  reviewedAt: Date | null; reviewedBy: string | null;
   createdAt: Date; updatedAt: Date;
 };
 
@@ -25,6 +36,18 @@ export function toTask(t: PrismaTask): Task {
     assignedUserId: t.assignedUserId, assignedUserName: t.assignedUserName,
     createdById: t.createdById,
     notes: t.notes, cancelledReason: t.cancelledReason,
+    source: t.source, externalTaskId: t.externalTaskId, sourceUrl: t.sourceUrl,
+    subreddit: t.subreddit, subredditUrl: t.subredditUrl, flair: t.flair,
+    title: t.title, postLink: t.postLink,
+    contentHtml: t.contentHtml, formattedContent: t.formattedContent,
+    payment: t.payment, deadline: t.deadline,
+    taskImages: (t.taskImages || null) as Task['taskImages'],
+    deliveryMessages: (t.deliveryMessages || null) as Task['deliveryMessages'],
+    assignmentStatus: (t.assignmentStatus || null) as Task['assignmentStatus'],
+    assignmentError: t.assignmentError,
+    submittedRedditUrl: t.submittedRedditUrl,
+    submittedAt: t.submittedAt, submittedBy: t.submittedBy,
+    reviewedAt: t.reviewedAt, reviewedBy: t.reviewedBy,
     createdAt: t.createdAt, updatedAt: t.updatedAt,
   };
 }

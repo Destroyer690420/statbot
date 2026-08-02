@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { Client } from 'discord.js';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -9,6 +10,8 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 // Routes
 import authRoutes from './routes/auth';
 import taskRoutes from './routes/tasks';
+import createDiscordRoutes from './routes/discord';
+import createGoPartTimeRoutes from './routes/goparttime';
 import reminderRoutes from './routes/reminders';
 import statsRoutes from './routes/stats';
 import healthRoutes from './routes/health';
@@ -23,7 +26,7 @@ import ownerRoutes from './routes/owner';
 /**
  * Create and configure the Express API server.
  */
-export function createApiServer(): express.Application {
+export function createApiServer(discordClient: Client): express.Application {
   const app = express();
   app.set('trust proxy', 1);
 
@@ -60,7 +63,9 @@ export function createApiServer(): express.Application {
   // ─── Routes ────────────────────────────────────────────────
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/health', healthRoutes);
-  app.use('/api/v1/tasks', taskRoutes);
+  app.use('/api/v1/tasks', taskRoutes(discordClient));
+  app.use('/api/v1/discord', createDiscordRoutes(discordClient));
+  app.use('/api/v1/goparttime', createGoPartTimeRoutes(discordClient));
   app.use('/api/v1/stats', statsRoutes);
   app.use('/api/v1/export', exportRoutes);
   app.use('/api/v1/audit-logs', auditRoutes);

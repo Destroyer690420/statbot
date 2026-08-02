@@ -5,6 +5,11 @@ import { TaskStatus, TaskType } from '../types';
  * Key = current state, Value = array of allowed next states.
  */
 const TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+  [TaskStatus.ACCEPTED]: [
+    TaskStatus.PENDING,
+    TaskStatus.CANCELLED,
+    TaskStatus.ARCHIVED,
+  ],
   [TaskStatus.PENDING]: [
     TaskStatus.REMINDER_20_SENT,
     TaskStatus.CANCELLED,

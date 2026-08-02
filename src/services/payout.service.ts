@@ -215,7 +215,7 @@ class PayoutService {
     postRate: number;
     commentRate: number;
     status: string;
-    tasks: { id: string; type: TaskType; createdAt: string | null; completedAt: string | null; amount: number; paid: boolean }[];
+    tasks: { id: string; type: TaskType; externalTaskId: string | null; createdAt: string | null; completedAt: string | null; amount: number; paid: boolean }[];
   } | null> {
     const allTasks = await this.getCompletedOrArchivedTasks();
     const paidTaskIds = await this.getPaidTaskIds();
@@ -252,6 +252,7 @@ class PayoutService {
       enrichedTasks.push({
         id: task.id,
         type: task.type,
+        externalTaskId: task.externalTaskId,
         createdAt: task.createdAt ? (task.createdAt instanceof Date ? task.createdAt.toISOString() : new Date(task.createdAt).toISOString()) : null,
         completedAt: completedAt ? completedAt.toISOString() : null,
         amount,
@@ -547,7 +548,7 @@ class PayoutService {
 
   async getBatchDetail(batchId: string): Promise<{
     batch: PayoutBatch;
-    items: PayoutItem[];
+    items: (PayoutItem & { externalTaskId: string | null })[];
     workerNames: Record<string, string>;
   } | null> {
     const batch = await payoutRepository.findBatchById(batchId);
@@ -566,7 +567,16 @@ class PayoutService {
       }
     }
 
-    return { batch: toPayoutBatch(batch), items: items.map(toPayoutItem), workerNames };
+    const enrichedItems = [];
+    for (const item of items) {
+      const taskDoc = await taskRepository.findById(item.taskId);
+      enrichedItems.push({
+        ...toPayoutItem(item),
+        externalTaskId: taskDoc?.externalTaskId ?? null,
+      });
+    }
+
+    return { batch: toPayoutBatch(batch), items: enrichedItems, workerNames };
   }
 
   async getBatchTaskIds(batchId: string): Promise<string[]> {

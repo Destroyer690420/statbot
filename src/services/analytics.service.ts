@@ -14,7 +14,7 @@ class AnalyticsService {
 
       const total = tasks.length;
       const pending = tasks.filter((t) =>
-        ![TaskStatus.COMPLETED, TaskStatus.ARCHIVED, TaskStatus.CANCELLED].includes(t.status)
+        ![TaskStatus.COMPLETED, TaskStatus.ARCHIVED, TaskStatus.CANCELLED, TaskStatus.ACCEPTED].includes(t.status)
       ).length;
       const completed = tasks.filter((t) =>
         [TaskStatus.COMPLETED, TaskStatus.ARCHIVED].includes(t.status)

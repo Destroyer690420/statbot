@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { taskService } from '../../services/task.service';
 import { TaskStatus, TaskType, TaskFilters } from '../../types';
+import { displayTaskId } from '../../utils/task-display';
 import { authMiddleware } from '../middleware/auth';
 import { logger } from '../../utils/logger';
 
@@ -21,7 +22,7 @@ function tasksToCSV(tasks: any[]): string {
   const headers = ['ID', 'Type', 'Status', 'Reddit URL', 'Assigned User', 'Ticket', 'Notes', 'Created At', 'Updated At'];
   const rows = tasks.map((t) =>
     [
-      escapeCSV(t.id),
+      escapeCSV(displayTaskId(t.id, t.type, t.externalTaskId)),
       escapeCSV(t.type),
       escapeCSV(t.status),
       escapeCSV(t.redditUrl),
@@ -45,6 +46,7 @@ router.get('/csv', async (req: Request, res: Response): Promise<void> => {
 
     let filtered = tasks;
     if (filters.status) filtered = filtered.filter((t) => t.status === filters.status);
+    else filtered = filtered.filter((t) => t.status !== TaskStatus.ACCEPTED);
     if (filters.type) filtered = filtered.filter((t) => t.type === filters.type);
 
     const csv = tasksToCSV(filtered);
