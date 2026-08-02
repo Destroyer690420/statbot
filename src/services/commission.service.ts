@@ -196,6 +196,41 @@ class CommissionService {
     return referral;
   }
 
+  async updateReferral(
+    referralId: string,
+    data: { inviterName?: string; inviteeName?: string; ticketId?: string | null },
+    updatedBy: string,
+  ): Promise<Referral> {
+    const ref = await referralRepository.findById(referralId);
+    if (!ref) throw new Error('Referral not found.');
+
+    const updateData: {
+      inviterName?: string;
+      inviteeName?: string;
+      ticketId?: string | null;
+      updatedAt: Date;
+    } = { updatedAt: new Date() };
+
+    if (data.inviterName !== undefined) updateData.inviterName = data.inviterName;
+    if (data.inviteeName !== undefined) updateData.inviteeName = data.inviteeName;
+    if (data.ticketId !== undefined) updateData.ticketId = data.ticketId;
+
+    await referralRepository.update(referralId, updateData);
+
+    const updated = await referralRepository.findById(referralId);
+    if (!updated) throw new Error('Referral not found after update.');
+
+    await auditLogService.log(
+      AuditAction.REFERRAL_UPDATED,
+      null,
+      updatedBy,
+      `Referral ${referralId} updated — ${updateData.inviterName ?? ''} → ${updateData.inviteeName ?? ''}`,
+    );
+
+    logger.info('Referral updated', { referralId });
+    return toReferral(updated);
+  }
+
   async deleteReferral(referralId: string, deletedBy: string): Promise<void> {
     const ref = await referralRepository.findById(referralId);
     if (!ref) throw new Error('Referral not found.');

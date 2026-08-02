@@ -55,6 +55,26 @@ export async function updateTask(id: string, body: Record<string, unknown>) {
   return data;
 }
 
+export async function reviewTask(id: string, body: { decision: 'approved' | 'rejected'; note?: string }) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/review`, body);
+  return data;
+}
+
+export async function retryAssignment(id: string) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/retry-assignment`);
+  return data;
+}
+
+export async function submitTaskUrl(id: string, redditUrl: string) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/submit-url`, { redditUrl });
+  return data;
+}
+
+export async function getTickets() {
+  const { data } = await api.get('/discord/tickets');
+  return data;
+}
+
 export async function getReminders(taskId: string) {
   const { data } = await api.get(`/tasks/${encodeURIComponent(taskId)}/reminders`);
   return data;
@@ -228,6 +248,11 @@ export async function createReferral(body: {
 
 export async function deleteReferral(referralId: string) {
   const { data } = await api.delete(`/commissions/referrals/${encodeURIComponent(referralId)}`);
+  return data;
+}
+
+export async function updateReferral(referralId: string, body: { inviterName?: string; inviteeName?: string; ticketId?: string | null }) {
+  const { data } = await api.patch(`/commissions/referrals/${encodeURIComponent(referralId)}`, body);
   return data;
 }
 

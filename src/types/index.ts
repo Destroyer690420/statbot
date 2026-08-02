@@ -30,7 +30,7 @@ export enum ReminderType {
 
 export interface Task {
   id: string;
-  redditUrl: string;
+  redditUrl: string | null;
   type: TaskType;
   status: TaskStatus;
 
@@ -45,8 +45,49 @@ export interface Task {
   notes: string | null;
   cancelledReason: string | null;
 
+  // ─── GoPartTime → Discord delivery fields ──────────────────
+  source: string | null;
+  externalTaskId: string | null;
+  sourceUrl: string | null;
+  subreddit: string | null;
+  subredditUrl: string | null;
+  flair: string | null;
+  title: string | null;
+  postLink: string | null;
+  contentHtml: string | null;
+  formattedContent: string | null;
+  payment: string | null;
+  deadline: string | null;
+  taskImages: TaskImage[] | null;
+  deliveryMessages: DeliveryMessage[] | null;
+  assignmentStatus: AssignmentStatus | null;
+  assignmentError: string | null;
+  submittedRedditUrl: string | null;
+  submittedAt: Date | null;
+  submittedBy: string | null;
+  reviewedAt: Date | null;
+  reviewedBy: string | null;
+
   createdAt: Date;
   updatedAt: Date;
+}
+
+// ─── GoPartTime / Delivery Types ─────────────────────────────
+
+export type AssignmentStatus = 'PENDING' | 'SENT' | 'FAILED';
+
+export interface TaskImage {
+  order: number;
+  url: string;
+}
+
+export type DeliveryMessageKind = 'metadata' | 'content' | 'images';
+
+export interface DeliveryMessage {
+  kind: DeliveryMessageKind;
+  order: number;
+  messageId: string;
+  createdAt: string;
 }
 
 // ─── Reminder Interface ──────────────────────────────────────
@@ -92,9 +133,14 @@ export enum AuditAction {
   PAYOUT_BATCH_CREATED = 'PAYOUT_BATCH_CREATED',
   PAYOUT_ITEM_CREATED = 'PAYOUT_ITEM_CREATED',
   REFERRAL_ADDED = 'REFERRAL_ADDED',
+  REFERRAL_UPDATED = 'REFERRAL_UPDATED',
   REFERRAL_REMOVED = 'REFERRAL_REMOVED',
   COMMISSION_PAID = 'COMMISSION_PAID',
   COMMISSION_BATCH_CREATED = 'COMMISSION_BATCH_CREATED',
+  TASK_ASSIGNED = 'TASK_ASSIGNED',
+  URL_SUBMITTED = 'URL_SUBMITTED',
+  TASK_REVIEWED = 'TASK_REVIEWED',
+  ASSIGNMENT_RETRIED = 'ASSIGNMENT_RETRIED',
 }
 
 export interface AuditLog {

@@ -50,6 +50,12 @@ const createReferralSchema = z.object({
   inviterType: z.enum(['normal', 'special']),
 });
 
+const updateReferralSchema = z.object({
+  inviterName: z.string().min(1).optional(),
+  inviteeName: z.string().min(1).optional(),
+  ticketId: z.string().nullable().optional(),
+});
+
 const updateRatesSchema = z.object({
   normalInviteBonus: z.number().min(0).max(10000),
   normalInviteTaskThreshold: z.number().min(1).max(100),
@@ -156,10 +162,7 @@ router.get('/referrals', async (_req: Request, res: Response): Promise<void> => 
  * POST /api/v1/commissions/referrals
  */
 router.post('/referrals', validateBody(createReferralSchema), async (req: Request, res: Response): Promise<void> => {
-  if (!isAdmin((req as AuthRequest).userId || '')) {
-    res.status(403).json({ success: false, message: 'Admin access required.' });
-    return;
-  }
+  if (!requireDashboardAdmin(req, res)) return;
 
   try {
     const userId = (req as AuthRequest).userId || 'api';
@@ -172,13 +175,26 @@ router.post('/referrals', validateBody(createReferralSchema), async (req: Reques
 });
 
 /**
+ * PATCH /api/v1/commissions/referrals/:referralId
+ */
+router.patch('/referrals/:referralId', validateBody(updateReferralSchema), async (req: Request, res: Response): Promise<void> => {
+  if (!requireDashboardAdmin(req, res)) return;
+
+  try {
+    const userId = (req as AuthRequest).userId || 'api';
+    const referral = await commissionService.updateReferral(String(req.params.referralId), req.body, userId);
+    res.json({ success: true, data: referral });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error.';
+    res.status(400).json({ success: false, message });
+  }
+});
+
+/**
  * DELETE /api/v1/commissions/referrals/:referralId
  */
 router.delete('/referrals/:referralId', async (req: Request, res: Response): Promise<void> => {
-  if (!isAdmin((req as AuthRequest).userId || '')) {
-    res.status(403).json({ success: false, message: 'Admin access required.' });
-    return;
-  }
+  if (!requireDashboardAdmin(req, res)) return;
 
   try {
     const userId = (req as AuthRequest).userId || 'api';

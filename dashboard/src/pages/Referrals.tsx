@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getReferrals, getTickets } from '../api/client';
-import { Search, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getReferrals, getTickets, deleteReferral, updateReferral } from '../api/client';
+import { Search, Loader2, ChevronLeft, ChevronRight, Pencil, Trash2, X, Save } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
@@ -15,12 +15,18 @@ function getTicketChannelId(raw: string | null | undefined): string | null {
 }
 
 export function Referrals() {
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['referrals', statusFilter],
+  const [editingRef, setEditingRef] = useState<any | null>(null);
+  const [formInviter, setFormInviter] = useState('');
+  const [formInvitee, setFormInvitee] = useState('');
+  const [formTicket, setFormTicket] = useState('');
+  const [formError, setFormError] = useState('');
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['referrals'],
     queryFn: getReferrals,
   });
 
@@ -44,8 +50,16 @@ export function Referrals() {
       if (name) return `#${name}`;
       return `#${channelId}`;
     }
-    const trimmed = (raw || '').trim().replace(/^#?/, '');
+    const trimmed = (raw || '').trim().replace(/^#/, '');
     return trimmed ? `#${trimmed}` : '—';
+  };
+
+  const resolveTicketValue = (raw: string | null | undefined): string => {
+    const channelId = getTicketChannelId(raw);
+    if (channelId) {
+      return ticketNameMap.get(channelId) || channelId;
+    }
+    return (raw || '').trim().replace(/^#/, '');
   };
 
   const referrals = (data?.data || []) as any[];
@@ -53,7 +67,6 @@ export function Referrals() {
   const filteredReferrals = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return referrals.filter((r: any) => {
-      if (statusFilter && r.status !== statusFilter) return false;
       if (!term) return true;
       return (
         (r.inviterName || '').toLowerCase().includes(term) ||
@@ -63,58 +76,85 @@ export function Referrals() {
         (r.ticketId || '').toLowerCase().includes(term)
       );
     });
-  }, [referrals, searchTerm, statusFilter]);
+  }, [referrals, searchTerm]);
 
   const totalPages = Math.max(1, Math.ceil(filteredReferrals.length / PAGE_SIZE));
   const paginated = filteredReferrals.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
-      case 'qualified': return 'bg-green-500/10 text-green-400 border-green-500/20';
-      case 'active_per_task': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-      case 'closed': return 'bg-red-500/10 text-red-400 border-red-500/20';
-      default: return 'bg-dark-500/10 text-dark-400 border-dark-500/20';
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteReferral(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['referrals'] });
+      refetch();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { inviterName: string; inviteeName: string; ticketId: string | null } }) =>
+      updateReferral(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['referrals'] });
+      refetch();
+      setEditingRef(null);
+    },
+    onError: (error: Error) => {
+      setFormError(error.message || 'Failed to update referral.');
+    },
+  });
+
+  const openEdit = (r: any) => {
+    setEditingRef(r);
+    setFormInviter(r.inviterName || '');
+    setFormInvitee(r.inviteeName || '');
+    setFormTicket(resolveTicketValue(r.ticketId));
+    setFormError('');
+  };
+
+  const handleDelete = (r: any) => {
+    if (confirm(`Delete referral for ${r.inviteeName || r.inviteeId}? This cannot be undone.`)) {
+      deleteMutation.mutate(r.id);
     }
   };
 
-  const formatStatus = (status: string) => status.replace(/_/g, ' ');
+  const handleSave = () => {
+    if (!formInviter.trim() || !formInvitee.trim()) {
+      setFormError('Inviter and invitee names are required.');
+      return;
+    }
+    setFormError('');
+    updateMutation.mutate({
+      id: editingRef.id,
+      body: {
+        inviterName: formInviter.trim(),
+        inviteeName: formInvitee.trim(),
+        ticketId: formTicket.trim() || null,
+      },
+    });
+  };
+
+  const ticketOptions = useMemo(() => {
+    const live = new Set<string>();
+    for (const t of (ticketsQuery.data?.data || []) as any[]) {
+      if (t?.channelName) live.add(String(t.channelName));
+    }
+    const current = formTicket.trim();
+    return {
+      hasCurrent: !current || live.has(current),
+      options: Array.from(live).sort(),
+    };
+  }, [ticketsQuery.data, formTicket]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center gap-2 w-full">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-dark-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search inviter, invitee, or ticket..."
-            className="w-full h-10 pl-10 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-xl text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
-            value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-          />
-        </div>
-
-        <div
-          className={`relative flex items-center justify-center w-10 h-10 rounded-xl border shrink-0 transition-all ${
-            statusFilter
-              ? 'bg-primary-500/20 border-primary-500/40 text-primary-400'
-              : 'bg-dark-800/80 border-dark-700/80 text-dark-300 hover:border-dark-600 hover:text-white'
-          }`}
-          title={statusFilter ? `Filter: ${formatStatus(statusFilter)}` : 'Filter by status'}
-        >
-          <span className="text-xs font-bold">S</span>
-          <select
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          >
-            <option value="" className="bg-dark-900 text-white">All Statuses</option>
-            <option value="pending" className="bg-dark-900 text-white">Pending</option>
-            <option value="qualified" className="bg-dark-900 text-white">Qualified</option>
-            <option value="active_per_task" className="bg-dark-900 text-white">Active Per Task</option>
-            <option value="closed" className="bg-dark-900 text-white">Closed</option>
-          </select>
-        </div>
+      <div className="relative flex-1">
+        <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-dark-400 pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Search inviter, invitee, or ticket..."
+          className="w-full h-10 pl-10 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-xl text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
+          value={searchTerm}
+          onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+        />
       </div>
 
       <div className="glass-card overflow-hidden hidden md:block">
@@ -125,21 +165,20 @@ export function Referrals() {
                 <th className="px-6 py-4 font-semibold text-dark-200">Inviter</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Invitee</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Ticket</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Type</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Status</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Invited On</th>
+                <th className="px-6 py-4 font-semibold text-dark-200 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dark-700/50">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
+                  <td colSpan={5} className="px-6 py-12 text-center">
                     <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-dark-400">
+                  <td colSpan={5} className="px-6 py-12 text-center text-dark-400">
                     No referrals found. Use the <code className="text-primary-400">/referral add</code> bot command to add referrals.
                   </td>
                 </tr>
@@ -173,22 +212,27 @@ export function Referrals() {
                         {resolveTicket(r.ticketId)}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`status-badge border ${
-                        r.inviterType === 'special'
-                          ? 'bg-purple-900/40 text-purple-400 border-purple-500/20'
-                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                      }`}>
-                        {r.inviterType}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`status-badge border ${getStatusColor(r.status)}`}>
-                        {formatStatus(r.status)}
-                      </span>
-                    </td>
                     <td className="px-6 py-4 text-sm text-dark-300">
                       {new Date(r.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEdit(r)}
+                          className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
+                          title="Edit referral"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(r)}
+                          disabled={deleteMutation.isPending && deleteMutation.variables === r.id}
+                          className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-40"
+                          title="Delete referral"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -220,9 +264,23 @@ export function Referrals() {
                     <p className="text-[11px] text-dark-400">invited</p>
                   </div>
                 </div>
-                <span className={`status-badge border ${getStatusColor(r.status)}`}>
-                  {formatStatus(r.status)}
-                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => openEdit(r)}
+                    className="p-1.5 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
+                    title="Edit referral"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(r)}
+                    disabled={deleteMutation.isPending && deleteMutation.variables === r.id}
+                    className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-40"
+                    title="Delete referral"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-1 px-4 py-2 border-t border-dark-700/30">
@@ -242,16 +300,6 @@ export function Referrals() {
                     {new Date(r.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 px-4 py-2 border-t border-dark-700/30">
-                <span className={`status-badge border ${
-                  r.inviterType === 'special'
-                    ? 'bg-purple-900/40 text-purple-300 border-purple-900/20'
-                    : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                }`}>
-                  {r.inviterType}
-                </span>
               </div>
             </div>
           ))
@@ -281,6 +329,84 @@ export function Referrals() {
             >
               <ChevronRight className="w-5 h-5" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {editingRef && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-dark-800 rounded-2xl p-8 w-full max-w-md mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Edit Referral</h3>
+              <button
+                onClick={() => setEditingRef(null)}
+                className="text-dark-500 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Inviter Name</label>
+                <input
+                  type="text"
+                  value={formInviter}
+                  onChange={(e) => setFormInviter(e.target.value)}
+                  placeholder="Inviter name"
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Invitee Name</label>
+                <input
+                  type="text"
+                  value={formInvitee}
+                  onChange={(e) => setFormInvitee(e.target.value)}
+                  placeholder="Invitee name"
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Ticket</label>
+                <select
+                  value={formTicket}
+                  onChange={(e) => setFormTicket(e.target.value)}
+                  className="input-field w-full bg-dark-900"
+                >
+                  {!ticketOptions.hasCurrent && formTicket && (
+                    <option value={formTicket} className="bg-dark-900 text-white">
+                      {formTicket.startsWith('#') ? formTicket : `#${formTicket}`} (current)
+                    </option>
+                  )}
+                  <option value="" className="bg-dark-900 text-white">No ticket</option>
+                  {ticketOptions.options.map((name) => (
+                    <option key={name} value={name} className="bg-dark-900 text-white">
+                      #{name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {formError && (
+                <p className="text-red-400 text-sm">{formError}</p>
+              )}
+
+              <button
+                onClick={handleSave}
+                disabled={updateMutation.isPending}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
+                {updateMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       )}
