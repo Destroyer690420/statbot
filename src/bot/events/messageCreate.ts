@@ -35,8 +35,9 @@ export async function handleMessageCreate(message: Message): Promise<void> {
  * URL. The instruction message is the last delivery record (kind
  * "instruction") of an ACCEPTED GoPartTime task, so the task is resolved from
  * the referenced message ID. Only the assigned worker can submit, the reply
- * must contain exactly one valid Reddit URL, and the task must be ACCEPTED
- * with a successful delivery.
+ * must contain exactly one valid Reddit URL, and the task must be ACCEPTED or
+ * PENDING with a successful delivery. A later submission replaces the
+ * previously submitted URL.
  */
 async function handleInstructionReply(message: Message): Promise<boolean> {
   const repliedToId = message.reference?.messageId;
@@ -49,7 +50,9 @@ async function handleInstructionReply(message: Message): Promise<boolean> {
   if (!task) return false;
 
   if (task.assignedUserId !== message.author.id) return true;
-  if (task.status !== TaskStatus.ACCEPTED || task.assignmentStatus !== 'SENT') return true;
+  if ((task.status !== TaskStatus.ACCEPTED && task.status !== TaskStatus.PENDING) || task.assignmentStatus !== 'SENT') {
+    return true;
+  }
 
   const urls = extractRedditUrls(message.content);
   if (urls.length !== 1) {

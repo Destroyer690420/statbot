@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getTask, getReminders, getAuditLogs, doneTask, retryAssignment, submitTaskUrl } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
-import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Download, Image, RotateCcw, Link2, Send } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Download, Image, RotateCcw, Link2, Send, Edit3 } from 'lucide-react';
 
 export function TaskDetails() {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +29,7 @@ export function TaskDetails() {
 
   const queryClient = useQueryClient();
   const [submitUrl, setSubmitUrl] = useState('');
+  const [replacing, setReplacing] = useState(false);
 
   const doneMutation = useMutation({
     mutationFn: () => doneTask(id!),
@@ -51,6 +52,7 @@ export function TaskDetails() {
     mutationFn: (url: string) => submitTaskUrl(id!, url),
     onSuccess: () => {
       setSubmitUrl('');
+      setReplacing(false);
       queryClient.invalidateQueries({ queryKey: ['task', id] });
       queryClient.invalidateQueries({ queryKey: ['audit-logs', id] });
     },
@@ -435,6 +437,56 @@ export function TaskDetails() {
                     <p className="text-xs text-dark-500">
                       Submitted by {task.submittedBy || 'unknown'} · {task.submittedAt ? new Date(task.submittedAt).toLocaleString() : ''}
                     </p>
+                    {replacing ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <Link2 className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-dark-400" />
+                            <input
+                              type="text"
+                              placeholder="https://www.reddit.com/..."
+                              className="w-full h-9 pl-9 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-lg text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
+                              value={submitUrl}
+                              onChange={(e) => setSubmitUrl(e.target.value)}
+                            />
+                          </div>
+                          <button
+                            onClick={() => submitUrl.trim() && submitMutation.mutate(submitUrl.trim())}
+                            disabled={submitMutation.isPending || !submitUrl.trim()}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-500/10 text-primary-400 border border-primary-500/30 hover:bg-primary-500/20 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {submitMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                            Replace
+                          </button>
+                          <button
+                            onClick={() => {
+                              setReplacing(false);
+                              setSubmitUrl('');
+                            }}
+                            disabled={submitMutation.isPending}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-dark-800 text-dark-300 border border-dark-700/80 hover:bg-dark-700/60 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        {submitMutation.isError && (
+                          <p className="text-xs text-red-400">
+                            {(submitMutation.error as Error)?.message || 'Could not replace the URL.'}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setSubmitUrl(task.submittedRedditUrl || '');
+                          setReplacing(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-800 text-dark-300 border border-dark-700/80 hover:bg-dark-700/60 text-xs font-semibold transition-colors"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        Replace
+                      </button>
+                    )}
                   </div>
                 ) : task.assignmentStatus === 'FAILED' ? (
                   <p className="text-xs text-dark-500">Delivery failed — fix the assignment before the worker can submit.</p>

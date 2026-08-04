@@ -16,7 +16,9 @@
  *
  * Comments use `post` and `comment` labels instead. Every returned message
  * is <= 2000 characters; long content is split into paragraph-aware chunks
- * (see chunkText).
+ * (see chunkText). The final submission instruction is returned as a
+ * structured InstructionMessage and sent as a Discord embed (see
+ * submissionInstructionEmbed) so it stands out from the plain-text content.
  */
 
 import { chunkText } from './discord-chunker';
@@ -37,8 +39,19 @@ export interface TaskMessagePlan {
   metadata: string[];
   /** Paragraph-aware content chunks (kind: content). */
   content: string[];
-  /** Final instruction message telling the worker how to submit (kind: instruction). */
-  instruction: string;
+  /** Final instruction telling the worker how to submit (kind: instruction). */
+  instruction: InstructionMessage;
+}
+
+/**
+ * Structured submission instruction rendered as a Discord embed so it stands
+ * out from the plain-text task content. `title`/`lines` are styled by the
+ * embed helper; `footer` restates how to submit.
+ */
+export interface InstructionMessage {
+  title: string;
+  lines: string[];
+  footer: string;
 }
 
 function buildMetadata(fields: TaskMessageFields): string[] {
@@ -90,8 +103,24 @@ export function buildTaskMessagePlan(fields: TaskMessageFields, content: string)
   };
 }
 
-export function buildInstructionMessage(fields: TaskMessageFields): string {
-  return fields.postLink
-    ? "That's it. first do any random comment related to post and then after 10 mins edit that random comment and paste the given comment and share the link of the comment by replying to this message"
-    : "That's it, post everything exactly as it is and share the link of the post by replying to this message within 10 minutes";
+export function buildInstructionMessage(fields: TaskMessageFields): InstructionMessage {
+  if (fields.postLink) {
+    return {
+      title: '📌 IMPORTANT — Reply with your comment link',
+      lines: [
+        '1️⃣ Post any random comment related to the post.',
+        '2️⃣ After 10 minutes, edit that random comment and paste the given comment.',
+        '3️⃣ Reply to THIS message with the link of your comment.',
+      ],
+      footer: 'Reply to this message with your link',
+    };
+  }
+  return {
+    title: '📌 IMPORTANT — Reply with your post link',
+    lines: [
+      'Post everything exactly as it is.',
+      'Then reply to THIS message with the link of your post within 10 minutes.',
+    ],
+    footer: 'Reply to this message with your link',
+  };
 }

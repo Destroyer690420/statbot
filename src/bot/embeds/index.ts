@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { Task, Reminder, TaskStats, ReminderType } from '../../types';
+import { InstructionMessage } from '../../utils/plain-task-message';
 import { displayTaskId } from '../../utils/task-display';
 import { COLORS } from '../../config/constants';
 import dayjs from 'dayjs';
@@ -229,6 +230,20 @@ export function helpEmbed(): EmbedBuilder {
 }
 
 // ─── Helper Functions ────────────────────────────────────────
+
+/**
+ * Build the submission instruction embed for GoPartTime tasks. Sent as the
+ * final delivery message (kind: instruction) so it stands out from the
+ * plain-text task content; the worker replies to it with the task link.
+ */
+export function submissionInstructionEmbed(instruction: InstructionMessage): EmbedBuilder {
+  return new EmbedBuilder()
+    .setTitle(instruction.title)
+    .setDescription(instruction.lines.join('\n'))
+    .setColor(COLORS.PENDING)
+    .setFooter({ text: instruction.footer })
+    .setTimestamp();
+}
 
 function getStatusColor(status: string): number {
   switch (status) {

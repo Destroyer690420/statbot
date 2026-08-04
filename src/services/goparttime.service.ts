@@ -10,7 +10,8 @@ import { isValidRedditUrl } from '../utils/validators';
 import { htmlToDiscord } from '../utils/html-to-discord';
 import { prepareImage } from '../utils/image-processor';
 import { goPartTimePayloadSchema, GoPartTimePayload } from '../utils/goparttime-payload';
-import { buildTaskMessagePlan, TaskMessageFields } from '../utils/plain-task-message';
+import { buildTaskMessagePlan, InstructionMessage, TaskMessageFields } from '../utils/plain-task-message';
+import { submissionInstructionEmbed } from '../bot/embeds';
 import { GOPARTTIME_SOURCE } from '../config/constants';
 import { buildGoPartTimeTaskId } from '../utils/task-display';
 import { Task, TaskType, TaskStatus, DeliveryMessage, AuditAction } from '../types';
@@ -105,7 +106,7 @@ class GoPartTimeService {
     logger.info('GoPartTime task created', { taskId: task.id, externalTaskId });
 
     try {
-      const delivery = await this.deliverToChannel(channel, parsed, formattedContent);
+      const delivery = await this.deliverToChannel(channel, parsed, formattedContent, member.id);
       await taskRepository.updateAssignment(task.id, { assignmentStatus: 'SENT' });
       await taskRepository.updateDeliveryMessages(task.id, delivery);
 
@@ -162,8 +163,10 @@ class GoPartTimeService {
   }
 
   /**
-   * Records the submitted Reddit URL for an assigned task. Only allowed once
-   * per task, and only for tasks that were successfully delivered.
+   * Records the submitted Reddit URL for an assigned task. The latest
+   * submission always wins: if the task already has a submitted URL, it is
+   * replaced (exchanged) with the new one. Only allowed for tasks that were
+   * successfully delivered.
    */
   async recordSubmission(taskId: string, submittedRedditUrl: string, submittedBy: string): Promise<Task> {
     const task = await this.requireGoPartTimeTask(taskId);
@@ -174,9 +177,6 @@ class GoPartTimeService {
           ? 'This task was not delivered successfully; use retry before submitting.'
           : 'This task is not assigned yet.',
       );
-    }
-    if (task.submittedRedditUrl) {
-      throw new Error('This task already has a submitted URL.');
     }
     if (task.status !== TaskStatus.PENDING && task.status !== TaskStatus.ACCEPTED) {
       throw new Error(`Submission is only allowed while the task is ACCEPTED or PENDING (current: ${task.status}).`);
@@ -192,8 +192,14 @@ class GoPartTimeService {
       throw new Error('This Reddit URL was already submitted for another task.');
     }
 
+    const previousUrl = task.submittedRedditUrl;
     await taskRepository.markSubmitted(task.id, url, submittedBy);
-    await auditLogService.log(AuditAction.URL_SUBMITTED, task.id, submittedBy, `URL submitted: ${url}`);
+    await auditLogService.log(
+      AuditAction.URL_SUBMITTED,
+      task.id,
+      submittedBy,
+      previousUrl && previousUrl !== url ? `URL replaced: ${previousUrl} -> ${url}` : `URL submitted: ${url}`,
+    );
 
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
@@ -368,7 +374,7 @@ deliveryMessages: null as any,
       }
       const instructionSent = existing.filter((m) => m.kind === 'instruction').length;
       if (instructionSent === 0 && plan.instruction) {
-        const message = await channel.send(plan.instruction);
+        const message = await channel.send(this.buildInstructionPayload(plan.instruction, task.assignedUserId));
         delivery.push({ kind: 'instruction', order: nextOrder++, messageId: message.id, createdAt });
       }
 
@@ -437,6 +443,7 @@ deliveryMessages: null as any,
     channel: TextChannel,
     payload: GoPartTimePayload,
     formattedContent: string,
+    workerId: string,
   ): Promise<DeliveryMessage[]> {
     const delivery: DeliveryMessage[] = [];
     const createdAt = new Date().toISOString();
@@ -459,7 +466,7 @@ deliveryMessages: null as any,
     }
 
     if (plan.instruction) {
-      const message = await channel.send(plan.instruction);
+      const message = await channel.send(this.buildInstructionPayload(plan.instruction, workerId));
       delivery.push({ kind: 'instruction', order: order++, messageId: message.id, createdAt });
     }
 
@@ -494,11 +501,23 @@ deliveryMessages: null as any,
     }
 
     if (plan.instruction) {
-      const message = await channel.send(plan.instruction);
+      const message = await channel.send(this.buildInstructionPayload(plan.instruction, task.assignedUserId));
       delivery.push({ kind: 'instruction', order: order++, messageId: message.id, createdAt });
     }
 
     return delivery;
+  }
+
+  /**
+   * Builds the send payload for the submission instruction: a Discord embed
+   * (so it stands out from the plain-text content) with an optional worker
+   * mention so the assigned worker gets a notification.
+   */
+  private buildInstructionPayload(instruction: InstructionMessage, workerId?: string | null) {
+    return {
+      content: workerId ? `<@${workerId}>` : undefined,
+      embeds: [submissionInstructionEmbed(instruction)],
+    };
   }
 
   /**

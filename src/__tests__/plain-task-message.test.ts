@@ -136,25 +136,39 @@ describe('buildTaskMessagePlan — content chunking', () => {
 });
 
 describe('buildInstructionMessage', () => {
-  it('uses the post instruction text for post tasks', () => {
+  it('uses the post instruction for post tasks', () => {
     const plan = buildTaskMessagePlan(POST_FIELDS, CONTENT);
-    expect(plan.instruction).toBe(
-      "That's it, post everything exactly as it is and share the link of the post by replying to this message within 10 minutes",
-    );
-    expect(buildInstructionMessage(POST_FIELDS)).toBe(plan.instruction);
+    const expected = {
+      title: '📌 IMPORTANT — Reply with your post link',
+      lines: [
+        'Post everything exactly as it is.',
+        'Then reply to THIS message with the link of your post within 10 minutes.',
+      ],
+      footer: 'Reply to this message with your link',
+    };
+    expect(plan.instruction).toEqual(expected);
+    expect(buildInstructionMessage(POST_FIELDS)).toEqual(plan.instruction);
   });
 
-  it('uses the comment instruction text for comment tasks', () => {
+  it('uses the comment instruction for comment tasks', () => {
     const fields = { postLink: 'https://www.reddit.com/r/testsub/comments/abc/' };
     const plan = buildTaskMessagePlan(fields, CONTENT);
-    expect(plan.instruction).toBe(
-      "That's it. first do any random comment related to post and then after 10 mins edit that random comment and paste the given comment and share the link of the comment by replying to this message",
-    );
-    expect(buildInstructionMessage(fields)).toBe(plan.instruction);
+    const expected = {
+      title: '📌 IMPORTANT — Reply with your comment link',
+      lines: [
+        '1️⃣ Post any random comment related to the post.',
+        '2️⃣ After 10 minutes, edit that random comment and paste the given comment.',
+        '3️⃣ Reply to THIS message with the link of your comment.',
+      ],
+      footer: 'Reply to this message with your link',
+    };
+    expect(plan.instruction).toEqual(expected);
+    expect(buildInstructionMessage(fields)).toEqual(plan.instruction);
   });
 
   it('includes the instruction even when there is no content', () => {
     const plan = buildTaskMessagePlan({ title: 'Just a title' }, '');
-    expect(plan.instruction.length).toBeGreaterThan(0);
+    expect(plan.instruction.title.length).toBeGreaterThan(0);
+    expect(plan.instruction.lines.length).toBeGreaterThan(0);
   });
 });

@@ -170,6 +170,7 @@ export class TaskRepository {
         submittedRedditUrl,
         submittedBy,
         submittedAt: new Date(),
+        redditUrl: submittedRedditUrl,
         updatedAt: new Date(),
       },
     });
