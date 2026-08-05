@@ -33,7 +33,14 @@ export function createApiServer(discordClient: Client): express.Application {
   // ─── Security Middleware ────────────────────────────────────
   app.use(helmet());
   app.use(cors({
-    origin: env.DASHBOARD_URL,
+    origin: [
+      env.DASHBOARD_URL,
+      // The GoPartTime send-task userscript calls the API from the task site.
+      // Plain fetch() (mobile/stock browsers) requires these origins; the
+      // Tampermonkey path uses GM_xmlhttpRequest and bypasses CORS entirely.
+      'https://goparttime.net',
+      'https://www.goparttime.net',
+    ],
     credentials: true,
   }));
 
