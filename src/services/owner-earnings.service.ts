@@ -1,4 +1,4 @@
-import { TaskStatus, TaskType, Referral } from '../types';
+import { Task, TaskStatus, TaskType, Referral } from '../types';
 import { taskRepository } from '../database/repositories/task.repository';
 import { referralRepository } from '../database/repositories/referral.repository';
 import { commissionService } from './commission.service';
@@ -45,7 +45,14 @@ type ReferralDeduction = {
 };
 
 class OwnerEarningsService {
-  private async computeEarnings(dateStartUTC: Date, dateEndUTC: Date): Promise<{
+  private isTaskDeleted(task: Task): boolean {
+    return (
+      task.cancelledReason === 'deleted' ||
+      task.cancelledReason === 'deleted_later'
+    );
+  }
+
+  private async calculateEarnings(tasks: Task[]): Promise<{
     summary: EarningsSummary;
     taskBreakdown: TaskBreakdownItem[];
     referralDeductions: ReferralDeduction[];
@@ -66,17 +73,6 @@ class OwnerEarningsService {
       referralByInvitee.set(ref.inviteeId, ref);
     }
 
-    const terminalStatuses: TaskStatus[] = [TaskStatus.COMPLETED, TaskStatus.ARCHIVED, TaskStatus.CANCELLED];
-    const rawTasks = await taskRepository.findByStatusIn(terminalStatuses);
-    const allTerminalTasks = rawTasks.map((t: any) => toTask(t));
-
-    const filteredTasks = allTerminalTasks.filter((t) => {
-      if (t.createdAt < dateStartUTC || t.createdAt > dateEndUTC) return false;
-      if (t.status === TaskStatus.COMPLETED || t.status === TaskStatus.ARCHIVED) return true;
-      if (t.status === TaskStatus.CANCELLED && (t.cancelledReason === 'deleted' || t.cancelledReason === 'deleted_later')) return true;
-      return false;
-    });
-
     let totalTaskEarnings = 0;
     let totalRevenue = 0;
     let totalWorkerCost = 0;
@@ -87,7 +83,7 @@ class OwnerEarningsService {
     const taskBreakdown: TaskBreakdownItem[] = [];
     const tasksByReferralId = new Map<string, number>();
 
-    for (const task of filteredTasks) {
+    for (const task of tasks) {
       const isPost = task.type === TaskType.POST;
       const revenue = isPost ? REVENUE_PER_POST : REVENUE_PER_COMMENT;
       const workerCost = isPost ? WORKER_COST_POST : WORKER_COST_COMMENT;
@@ -206,7 +202,7 @@ class OwnerEarningsService {
 
     return {
       summary: {
-        totalTasks: filteredTasks.length,
+        totalTasks: tasks.length,
         posts: postCount,
         comments: commentCount,
         totalRevenue,
@@ -219,6 +215,30 @@ class OwnerEarningsService {
       taskBreakdown,
       referralDeductions,
     };
+  }
+
+  private async computeEarnings(dateStartUTC: Date, dateEndUTC: Date): Promise<{
+    summary: EarningsSummary;
+    taskBreakdown: TaskBreakdownItem[];
+    referralDeductions: ReferralDeduction[];
+  }> {
+    const terminalStatuses: TaskStatus[] = [TaskStatus.COMPLETED, TaskStatus.ARCHIVED, TaskStatus.CANCELLED];
+    const rawTasks = await taskRepository.findByStatusIn(terminalStatuses);
+    const allTerminalTasks = rawTasks.map((t: any) => toTask(t));
+
+    const filteredTasks = allTerminalTasks.filter((t) => {
+      if (t.createdAt < dateStartUTC || t.createdAt > dateEndUTC) return false;
+      if (t.status === TaskStatus.COMPLETED || t.status === TaskStatus.ARCHIVED) return true;
+      if (this.isTaskDeleted(t)) return true;
+      return false;
+    });
+
+    return this.calculateEarnings(filteredTasks);
+  }
+
+  private async getDayTasks(dateStartUTC: Date, dateEndUTC: Date): Promise<Task[]> {
+    const rawTasks = await taskRepository.findByCreatedAt(dateStartUTC, dateEndUTC);
+    return rawTasks.map((t: any) => toTask(t)).filter((t) => !this.isTaskDeleted(t));
   }
 
   async getDailyEarnings(): Promise<{
@@ -234,14 +254,56 @@ class OwnerEarningsService {
     const month = istNow.getUTCMonth();
     const day = istNow.getUTCDate();
 
-    const todayStartIST = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-    const todayStartUTC = new Date(todayStartIST.getTime() - IST_OFFSET_MS);
+    const dayStartIST = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    const dayEndIST = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
-    const result = await this.computeEarnings(todayStartUTC, nowUTC);
+    const dayStartUTC = new Date(dayStartIST.getTime() - IST_OFFSET_MS);
+    const dayEndUTC = new Date(dayEndIST.getTime() - IST_OFFSET_MS);
+
+    const tasks = await this.getDayTasks(dayStartUTC, dayEndUTC);
+    const result = await this.calculateEarnings(tasks);
 
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     return { date: dateStr, ...result };
+  }
+
+  async getLastNDaysHistory(days: number): Promise<{ date: string; summary: EarningsSummary }[]> {
+    const nowUTC = new Date();
+    const istNow = new Date(nowUTC.getTime() + IST_OFFSET_MS);
+
+    const year = istNow.getUTCFullYear();
+    const month = istNow.getUTCMonth();
+    const day = istNow.getUTCDate();
+
+    const historyStartIST = new Date(Date.UTC(year, month, day - (days - 1), 0, 0, 0, 0));
+    const historyEndIST = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
+    const tasks = await this.getDayTasks(
+      new Date(historyStartIST.getTime() - IST_OFFSET_MS),
+      new Date(historyEndIST.getTime() - IST_OFFSET_MS),
+    );
+
+    const fmt = (d: Date) => {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+
+    const rows: { date: string; summary: EarningsSummary }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const dayStartIST = new Date(Date.UTC(year, month, day - i, 0, 0, 0, 0));
+      const dayEndIST = new Date(Date.UTC(year, month, day - i, 23, 59, 59, 999));
+      const dayStartUTC = new Date(dayStartIST.getTime() - IST_OFFSET_MS);
+      const dayEndUTC = new Date(dayEndIST.getTime() - IST_OFFSET_MS);
+
+      const dayTasks = tasks.filter((t) => t.createdAt >= dayStartUTC && t.createdAt <= dayEndUTC);
+      const result = await this.calculateEarnings(dayTasks);
+      rows.push({ date: fmt(dayStartIST), summary: result.summary });
+    }
+
+    return rows;
   }
 
   async getWeeklyEarnings(): Promise<{

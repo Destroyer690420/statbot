@@ -343,6 +343,11 @@ export async function getDailyEarnings() {
   return data;
 }
 
+export async function getDailyEarningsHistory(days = 7) {
+  const { data } = await api.get(`/owner/daily-earnings/history?days=${days}`);
+  return data;
+}
+
 export async function getWeeklyEarnings() {
   const { data } = await api.get('/owner/weekly-earnings');
   return data;

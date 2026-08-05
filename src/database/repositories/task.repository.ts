@@ -84,6 +84,12 @@ export class TaskRepository {
     });
   }
 
+  async findByCreatedAt(from: Date, to: Date) {
+    return getDb().task.findMany({
+      where: { createdAt: { gte: from, lte: to } },
+    });
+  }
+
   async findByWorkerId(workerId: string) {
     return getDb().task.findFirst({
       where: { assignedUserId: workerId },

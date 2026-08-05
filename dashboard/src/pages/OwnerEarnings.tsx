@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, RefreshCw, Lock, ChevronDown, ChevronUp } from 'lucide-react';
-import { getDailyEarnings, getWeeklyEarnings } from '../api/client';
+import { getDailyEarnings, getWeeklyEarnings, getDailyEarningsHistory } from '../api/client';
 import { useState } from 'react';
 
 export function OwnerEarnings() {
@@ -10,6 +10,7 @@ export function OwnerEarnings() {
   const [showReferralsDaily, setShowReferralsDaily] = useState(false);
   const [showDeductionsWeekly, setShowDeductionsWeekly] = useState(false);
   const [showReferralsWeekly, setShowReferralsWeekly] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const dailyQuery = useQuery({
     queryKey: ['daily-earnings'],
@@ -23,9 +24,16 @@ export function OwnerEarnings() {
     refetchOnWindowFocus: true,
   });
 
+  const historyQuery = useQuery({
+    queryKey: ['daily-earnings-history'],
+    queryFn: () => getDailyEarningsHistory(7),
+    refetchOnWindowFocus: true,
+  });
+
   const handleRefresh = () => {
     dailyQuery.refetch();
     weeklyQuery.refetch();
+    historyQuery.refetch();
   };
 
   return (
@@ -40,10 +48,10 @@ export function OwnerEarnings() {
         </button>
         <button
           onClick={handleRefresh}
-          disabled={dailyQuery.isRefetching || weeklyQuery.isRefetching}
+          disabled={dailyQuery.isRefetching || weeklyQuery.isRefetching || historyQuery.isRefetching}
           className="btn bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 rounded-xl px-4 py-2 flex items-center gap-2 transition-all text-sm"
         >
-          <RefreshCw className={`w-4 h-4 ${dailyQuery.isRefetching || weeklyQuery.isRefetching ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${dailyQuery.isRefetching || weeklyQuery.isRefetching || historyQuery.isRefetching ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
@@ -57,6 +65,31 @@ export function OwnerEarnings() {
         showReferrals={showReferralsDaily}
         setShowReferrals={setShowReferralsDaily}
       />
+
+      {/* Last 7 Days toggle */}
+      <div className="glass-card p-6 border-primary-800/30">
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className="flex items-center gap-1 text-primary-400 text-sm font-semibold hover:text-white transition-colors"
+        >
+          {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          Last 7 Days
+        </button>
+
+        {showHistory && (
+          <div className="mt-4">
+            {historyQuery.isLoading ? (
+              <div className="flex justify-center py-6">
+                <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+              </div>
+            ) : historyQuery.isError ? (
+              <p className="text-red-400 text-sm">Failed to load earnings history.</p>
+            ) : (
+              <HistoryTable rows={(historyQuery.data as any)?.data?.rows} />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Weekly Earnings */}
       <EarningsCard
@@ -191,6 +224,45 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
       <p className="text-dark-400 text-xs font-medium mb-0.5">{label}</p>
       <p className={`text-lg font-semibold font-mono ${color || 'text-white'}`}>{value}</p>
       {sub && <p className="text-dark-500 text-[10px] mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+function HistoryTable({ rows }: { rows: any[] }) {
+  if (!rows || rows.length === 0) {
+    return <p className="text-dark-400 text-sm">No earnings data for the last 7 days.</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-dark-400 text-xs font-semibold uppercase tracking-wider border-b border-dark-700/50">
+            <th className="text-left py-2 px-2">Date</th>
+            <th className="text-right py-2 px-2">Revenue</th>
+            <th className="text-right py-2 px-2">Worker Cost</th>
+            <th className="text-right py-2 px-2">Commission</th>
+            <th className="text-right py-2 px-2">Earning</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row: any) => {
+            const s = row?.summary;
+            const commission = (s?.totalSpecialPerTaskComm || 0) + (s?.totalNormalBonuses || 0) + (s?.totalSpecialBonuses || 0);
+            return (
+              <tr key={row.date} className="border-b border-dark-700/30 hover:bg-dark-800/40 transition-colors">
+                <td className="py-2 px-2 text-dark-300 font-mono">{row.date}</td>
+                <td className="py-2 px-2 text-right text-green-400 font-mono">₹{s?.totalRevenue ?? 0}</td>
+                <td className="py-2 px-2 text-right text-red-400 font-mono">-₹{s?.totalWorkerCost ?? 0}</td>
+                <td className="py-2 px-2 text-right text-red-400 font-mono">-₹{commission}</td>
+                <td className="py-2 px-2 text-right font-mono font-semibold text-white">
+                  ₹{s?.totalEarnings ?? 0}
+                </td>
+              </tr>
+            );
+          }).reverse()}
+        </tbody>
+      </table>
     </div>
   );
 }

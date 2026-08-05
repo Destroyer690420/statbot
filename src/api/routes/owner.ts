@@ -32,7 +32,7 @@ router.post('/verify', (req: Request, res: Response): void => {
 
 /**
  * GET /api/v1/owner/daily-earnings
- * Calculate owner's daily net earnings from today's completed/deleted tasks.
+ * Calculate owner's daily net earnings from today's added (non-deleted) tasks.
  */
 router.get('/daily-earnings', async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -41,6 +41,22 @@ router.get('/daily-earnings', async (_req: Request, res: Response): Promise<void
   } catch (error) {
     logger.error('GET /owner/daily-earnings failed', { error });
     res.status(500).json({ success: false, message: 'Failed to calculate daily earnings.' });
+  }
+});
+
+/**
+ * GET /api/v1/owner/daily-earnings/history?days=7
+ * Per-day earnings summaries for the last N days (default 7, clamped 1-30).
+ */
+router.get('/daily-earnings/history', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rawDays = parseInt(String(req.query.days ?? '7'), 10);
+    const days = Number.isFinite(rawDays) ? Math.min(Math.max(rawDays, 1), 30) : 7;
+    const rows = await ownerEarningsService.getLastNDaysHistory(days);
+    res.json({ success: true, data: { rows } });
+  } catch (error) {
+    logger.error('GET /owner/daily-earnings/history failed', { error });
+    res.status(500).json({ success: false, message: 'Failed to calculate earnings history.' });
   }
 });
 
