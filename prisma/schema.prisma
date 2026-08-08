@@ -69,6 +69,11 @@ enum InviterType {
   special
 }
 
+enum ReferralRole {
+  worker
+  recruiter
+}
+
 enum CommissionKind {
   one_time
   per_task
@@ -212,6 +217,8 @@ model Referral {
   inviteeId                String
   inviteeName              String
   inviterType              InviterType
+  role                     ReferralRole    @default(worker)
+  indirectSpecialInviterId String?
   status                   ReferralStatus
   oneTimeCommissionPaid    Boolean         @default(false)
   oneTimeCommissionPaidAt  DateTime?
@@ -260,6 +267,7 @@ model CommissionItem {
   @@index([batchId])
   @@index([referralId, inviterId, commissionKind])
   @@index([inviterId, sourceTaskId, commissionKind])
+  @@unique([commissionKind, inviterId, sourceTaskId])
 }
 
 model PayoutSettings {

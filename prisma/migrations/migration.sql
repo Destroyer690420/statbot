@@ -336,3 +336,34 @@ WHERE "source" = 'goparttime' AND "status" = 'PENDING';
 DELETE FROM "Reminder" WHERE "taskId" IN (
   SELECT "id" FROM "Task" WHERE "source" = 'goparttime' AND "status" = 'ACCEPTED'
 );
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Two-level referral (Special → Normal → Worker)
+-- ──────────────────────────────────────────────────────────────
+-- A referral is either a normal worker invitation or a "recruiter
+-- link" (Special inviter recruits a Normal inviter/recruiter).
+-- Recruiter links generate no commission of their own; they are the
+-- chain that gives the Special inviter indirect per-task commission
+-- (₹20/post, ₹10/comment) on the recruiter's invited workers, with
+-- no ₹50 one-time bonus for indirect workers.
+CREATE TYPE "ReferralRole" AS ENUM ('worker', 'recruiter');
+
+ALTER TABLE "Referral" ADD COLUMN IF NOT EXISTS "role" "ReferralRole" NOT NULL DEFAULT 'worker';
+ALTER TABLE "Referral" ADD COLUMN IF NOT EXISTS "indirectSpecialInviterId" TEXT;
+
+-- Hard idempotency guarantee for commissions: a beneficiary can be paid
+-- at most once per (commission kind, source task). One-time items keep
+-- a NULL sourceTaskId, which Postgres treats as distinct in unique
+-- indexes, so multiple one-time items across different referrals remain
+-- allowed. Deduplicate any legacy per-task duplicates before enforcing.
+DELETE FROM "CommissionItem"
+WHERE "sourceTaskId" IS NOT NULL
+  AND "id" NOT IN (
+    SELECT DISTINCT ON ("commissionKind", "inviterId", "sourceTaskId") "id"
+    FROM "CommissionItem"
+    WHERE "sourceTaskId" IS NOT NULL
+    ORDER BY "commissionKind", "inviterId", "sourceTaskId", "createdAt", "id"
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS "CommissionItem_commissionKind_inviterId_sourceTaskId_key"
+  ON "CommissionItem"("commissionKind", "inviterId", "sourceTaskId");

@@ -1238,7 +1238,14 @@ function InviterDetailView({ data }: { data: any }) {
             {(data.referrals ?? []).map((ref: any) => (
               <tr key={ref.referralId} className="border-b border-dark-800/50">
                 <td className="py-2 px-2">
-                  <span className="text-white text-sm font-medium">{ref.inviteeName}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white text-sm font-medium">{ref.inviteeName}</span>
+                    {ref.relationship === 'indirect' && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-400">
+                        Indirect
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-2 px-2 text-center text-white">{ref.inviteeTasks?.total ?? 0}</td>
                 <td className="py-2 px-2 text-center text-dark-300">{ref.inviteeTasks?.posts ?? 0}</td>
@@ -1319,6 +1326,7 @@ function CommissionBatchDetail({ batchId }: { batchId: string }) {
             <tr className="border-b border-dark-700/50">
               <th className="text-left text-dark-400 font-medium py-2 px-2">Inviter</th>
               <th className="text-center text-dark-400 font-medium py-2 px-2">Invitee</th>
+              <th className="text-center text-dark-400 font-medium py-2 px-2">Type</th>
               <th className="text-right text-dark-400 font-medium py-2 px-2">Bonus (₹)</th>
               <th className="text-right text-dark-400 font-medium py-2 px-2">Per-Task (₹)</th>
               <th className="text-right text-dark-400 font-medium py-2 px-2">Total (₹)</th>
@@ -1329,6 +1337,15 @@ function CommissionBatchDetail({ batchId }: { batchId: string }) {
               <tr key={item.id} className="border-b border-dark-800/50">
                 <td className="py-2 px-2 text-white">{item.inviterName}</td>
                 <td className="py-2 px-2 text-center text-dark-300">{item.inviteeName}</td>
+                <td className="py-2 px-2 text-center">
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    item.relationship === 'indirect'
+                      ? 'bg-purple-500/10 text-purple-400'
+                      : 'bg-dark-700/50 text-dark-300'
+                  }`}>
+                    {item.relationship === 'indirect' ? 'Indirect' : 'Direct'}
+                  </span>
+                </td>
                 <td className="py-2 px-2 text-right text-white">{item.bonusAmount > 0 ? `₹${item.bonusAmount}` : '-'}</td>
                 <td className="py-2 px-2 text-right text-white">{item.perTaskAmount > 0 ? `₹${item.perTaskAmount}` : '-'}</td>
                 <td className="py-2 px-2 text-right text-white font-semibold">₹{item.totalCommission.toLocaleString('en-IN')}</td>

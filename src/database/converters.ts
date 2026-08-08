@@ -4,7 +4,7 @@ import {
   Reminder, ReminderType,
   AuditLog, AuditAction,
   PayoutBatch, PayoutItem,
-  Referral, ReferralStatus, InviterType,
+  Referral, ReferralStatus, InviterType, ReferralRole,
   CommissionItem, CommissionKind,
   CommissionBatch,
   PayoutSettings, CommissionRates,
@@ -121,6 +121,7 @@ export function toPayoutItem(p: PrismaPayoutItem): PayoutItem {
 type PrismaReferral = {
   id: string; inviterId: string; inviterName: string;
   inviteeId: string; inviteeName: string; inviterType: string;
+  role: string; indirectSpecialInviterId: string | null;
   status: string; oneTimeCommissionPaid: boolean;
   oneTimeCommissionPaidAt: Date | null; perTaskCommissionActive: boolean;
   ticketId: string | null; createdAt: Date; updatedAt: Date;
@@ -131,6 +132,8 @@ export function toReferral(r: PrismaReferral): Referral {
     id: r.id, inviterId: r.inviterId, inviterName: r.inviterName,
     inviteeId: r.inviteeId, inviteeName: r.inviteeName,
     inviterType: r.inviterType as InviterType,
+    role: (r.role || 'worker') as ReferralRole,
+    indirectSpecialInviterId: r.indirectSpecialInviterId || null,
     status: r.status as ReferralStatus,
     oneTimeCommissionPaid: r.oneTimeCommissionPaid,
     oneTimeCommissionPaidAt: r.oneTimeCommissionPaidAt,

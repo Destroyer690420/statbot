@@ -200,6 +200,7 @@ export interface PayoutSettings {
 
 export type ReferralStatus = 'pending' | 'qualified' | 'active_per_task' | 'closed';
 export type InviterType = 'normal' | 'special';
+export type ReferralRole = 'worker' | 'recruiter';
 export type CommissionKind = 'one_time' | 'per_task';
 
 export interface Referral {
@@ -209,6 +210,8 @@ export interface Referral {
   inviteeId: string;
   inviteeName: string;
   inviterType: InviterType;
+  role: ReferralRole;
+  indirectSpecialInviterId: string | null;
   status: ReferralStatus;
   oneTimeCommissionPaid: boolean;
   oneTimeCommissionPaidAt: Date | null;
