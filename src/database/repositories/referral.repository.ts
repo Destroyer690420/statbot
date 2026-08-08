@@ -17,18 +17,6 @@ export class ReferralRepository {
     });
   }
 
-  async findByIndirectSpecialInviter(inviterId: string) {
-    return getDb().referral.findMany({
-      where: { indirectSpecialInviterId: inviterId },
-    });
-  }
-
-  async findRecruiterLinkByInviteeId(inviteeId: string) {
-    return getDb().referral.findFirst({
-      where: { inviteeId, inviterType: 'special', role: 'recruiter' },
-    });
-  }
-
   async findAll() {
     return getDb().referral.findMany({
       orderBy: { createdAt: 'desc' },
@@ -42,8 +30,6 @@ export class ReferralRepository {
     inviteeId: string;
     inviteeName: string;
     inviterType: string;
-    role: string;
-    indirectSpecialInviterId: string | null;
     status: string;
     oneTimeCommissionPaid: boolean;
     oneTimeCommissionPaidAt: Date | null;
@@ -59,8 +45,6 @@ export class ReferralRepository {
     inviterName?: string;
     inviteeName?: string;
     ticketId?: string | null;
-    role?: string;
-    indirectSpecialInviterId?: string | null;
     status?: string;
     oneTimeCommissionPaid?: boolean;
     oneTimeCommissionPaidAt?: Date | null;

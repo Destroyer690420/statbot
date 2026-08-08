@@ -90,16 +90,9 @@ class OwnerEarningsService {
       let perTaskComm = 0;
 
       const ref = referralByInvitee.get(task.assignedUserId);
-      if (ref && ref.role === 'worker') {
-        if (ref.inviterType === 'special') {
-          perTaskComm += isPost ? commRates.specialPerPost : commRates.specialPerComment;
-        }
-        if (ref.indirectSpecialInviterId) {
-          perTaskComm += isPost ? commRates.specialPerPost : commRates.specialPerComment;
-        }
-        if (perTaskComm > 0) {
-          totalSpecialPerTaskComm += perTaskComm;
-        }
+      if (ref && ref.inviterType === 'special') {
+        perTaskComm = isPost ? commRates.specialPerPost : commRates.specialPerComment;
+        totalSpecialPerTaskComm += perTaskComm;
       }
 
       const taskNet = revenue - workerCost - perTaskComm;
@@ -135,7 +128,6 @@ class OwnerEarningsService {
 
     for (const raw of activeReferrals) {
       const ref = toReferral(raw as any);
-      if (ref.role === 'recruiter') continue;
       const inviteeTaskCount = tasksByReferralId.get(ref.id) || 0;
       if (inviteeTaskCount === 0) continue;
 

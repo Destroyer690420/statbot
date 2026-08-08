@@ -46,16 +46,6 @@ export const data = new SlashCommandBuilder()
       )
       .addStringOption((opt) =>
         opt.setName('ticket').setDescription('Ticket channel name (e.g. ticket-0036)').setRequired(true),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('role')
-          .setDescription('Recruiter link (special inviter → normal recruiter) or worker invite (default: worker)')
-          .setRequired(false)
-          .addChoices(
-            { name: 'Worker', value: 'worker' },
-            { name: 'Recruiter (special inviter only)', value: 'recruiter' },
-          ),
       ),
   )
 
@@ -77,15 +67,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       return;
     }
 
-    const role = (interaction.options.getString('role') || 'worker') as 'worker' | 'recruiter';
-    if (role === 'recruiter' && type !== 'special') {
-      await interaction.reply({
-        embeds: [errorEmbed('Only special inviters can create recruiter links.')],
-        ephemeral: true,
-      });
-      return;
-    }
-
     await interaction.deferReply({ ephemeral: true });
 
     try {
@@ -99,7 +80,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           inviteeName: invitee.username,
           inviterType: type,
           ticketId: ticket,
-          role,
         },
         interaction.user.id,
       );
@@ -109,14 +89,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         `**Inviter:** <@${inviter.id}> (${type})`,
         `**Invitee:** <@${invitee.id}>`,
         `**Ticket:** \`${ticket}\``,
-        `**Role:** ${referral.role === 'recruiter' ? 'Recruiter link' : 'Worker invite'}`,
-      ];
-      if (referral.role === 'worker' && referral.indirectSpecialInviterId) {
-        description.push(`**Chain:** Indirect special inviter <@${referral.indirectSpecialInviterId}> — ₹20/post, ₹10/comment`);
-      }
-      description.push('');
+      ].join('\n');
 
-      await interaction.editReply({ embeds: [successEmbed(`Referral added.\n${description.join('\n')}`)] });
+      await interaction.editReply({ embeds: [successEmbed(`Referral added.\n${description}`)] });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error.';
       await interaction.editReply({ embeds: [errorEmbed(message)] });

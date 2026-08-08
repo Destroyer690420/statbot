@@ -246,7 +246,6 @@ export async function createReferral(body: {
   inviteeId: string;
   inviteeName: string;
   inviterType: 'normal' | 'special';
-  role?: 'worker' | 'recruiter';
 }) {
   const { data } = await api.post('/commissions/referrals', body);
   return data;
@@ -257,7 +256,7 @@ export async function deleteReferral(referralId: string) {
   return data;
 }
 
-export async function updateReferral(referralId: string, body: { inviterName?: string; inviteeName?: string; ticketId?: string | null; role?: 'worker' | 'recruiter' }) {
+export async function updateReferral(referralId: string, body: { inviterName?: string; inviteeName?: string; ticketId?: string | null }) {
   const { data } = await api.patch(`/commissions/referrals/${encodeURIComponent(referralId)}`, body);
   return data;
 }

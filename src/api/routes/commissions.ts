@@ -48,14 +48,12 @@ const createReferralSchema = z.object({
   inviteeId: z.string().min(1),
   inviteeName: z.string().min(1),
   inviterType: z.enum(['normal', 'special']),
-  role: z.enum(['worker', 'recruiter']).optional(),
 });
 
 const updateReferralSchema = z.object({
   inviterName: z.string().min(1).optional(),
   inviteeName: z.string().min(1).optional(),
   ticketId: z.string().nullable().optional(),
-  role: z.enum(['worker', 'recruiter']).optional(),
 });
 
 const updateRatesSchema = z.object({
@@ -249,7 +247,7 @@ router.get('/export/csv', async (req: Request, res: Response): Promise<void> => 
     const { weekStart, weekEnd } = parseWeekParams(req);
     const exportData = await commissionService.getCommissionExportData(batchId, weekStart, weekEnd);
 
-    const headers = ['Inviter Name', 'Inviter Type', 'Invitee Name', 'Bonus (₹)', 'Per-Task (₹)', 'Total Commission (₹)', 'Status', 'Relationship'];
+    const headers = ['Inviter Name', 'Inviter Type', 'Invitee Name', 'Bonus (₹)', 'Per-Task (₹)', 'Total Commission (₹)', 'Status'];
     const rows = exportData.rows.map((r) =>
       [
         escapeCSV(r.inviterName),
@@ -259,7 +257,6 @@ router.get('/export/csv', async (req: Request, res: Response): Promise<void> => 
         String(r.perTaskAmount),
         String(r.totalCommission),
         escapeCSV(r.status),
-        escapeCSV(r.relationship || 'direct'),
       ].join(','),
     );
 

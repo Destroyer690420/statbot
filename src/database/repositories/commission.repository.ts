@@ -71,12 +71,6 @@ export class CommissionRepository {
     });
   }
 
-  async findItemsByReferralId(referralId: string) {
-    return getDb().commissionItem.findMany({
-      where: { referralId },
-    });
-  }
-
   async findAllItems() {
     return getDb().commissionItem.findMany();
   }

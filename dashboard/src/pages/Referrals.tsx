@@ -64,16 +64,6 @@ export function Referrals() {
 
   const referrals = (data?.data || []) as any[];
 
-  const inviterNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of referrals) map.set(String(r.inviterId), String(r.inviterName || r.inviterId));
-    return map;
-  }, [referrals]);
-
-  const resolveIndirectName = (refId: string): string => {
-    return inviterNameMap.get(String(refId)) || String(refId);
-  };
-
   const filteredReferrals = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return referrals.filter((r: any) => {
@@ -174,7 +164,6 @@ export function Referrals() {
               <tr className="border-b border-dark-700/50 bg-dark-800/50">
                 <th className="px-6 py-4 font-semibold text-dark-200">Inviter</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Invitee</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Type</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Ticket</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Invited On</th>
                 <th className="px-6 py-4 font-semibold text-dark-200 text-right">Actions</th>
@@ -183,13 +172,13 @@ export function Referrals() {
             <tbody className="divide-y divide-dark-700/50">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
+                  <td colSpan={5} className="px-6 py-12 text-center">
                     <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-dark-400">
+                  <td colSpan={5} className="px-6 py-12 text-center text-dark-400">
                     No referrals found. Use the <code className="text-primary-400">/referral add</code> bot command to add referrals.
                   </td>
                 </tr>
@@ -216,23 +205,6 @@ export function Referrals() {
                           <p className="text-sm font-medium text-white truncate">{r.inviteeName}</p>
                           <p className="text-[11px] text-dark-500 font-mono truncate">{r.inviteeId}</p>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium w-fit ${
-                          r.role === 'recruiter'
-                            ? 'bg-amber-500/10 text-amber-400'
-                            : 'bg-blue-500/10 text-blue-400'
-                        }`}>
-                          {r.role === 'recruiter' ? 'Recruiter Link' : 'Worker'}
-                        </span>
-                        {r.indirectSpecialInviterId && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium w-fit bg-purple-500/10 text-purple-400"
-                                title={`Indirect special inviter: ${resolveIndirectName(r.indirectSpecialInviterId)}`}>
-                            Indirect: {resolveIndirectName(r.indirectSpecialInviterId)}
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -328,21 +300,6 @@ export function Referrals() {
                     {new Date(r.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2 px-4 py-2 border-t border-dark-700/30">
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                  r.role === 'recruiter'
-                    ? 'bg-amber-500/10 text-amber-400'
-                    : 'bg-blue-500/10 text-blue-400'
-                }`}>
-                  {r.role === 'recruiter' ? 'Recruiter Link' : 'Worker'}
-                </span>
-                {r.indirectSpecialInviterId && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-500/10 text-purple-400">
-                    Indirect: {resolveIndirectName(r.indirectSpecialInviterId)}
-                  </span>
-                )}
               </div>
             </div>
           ))

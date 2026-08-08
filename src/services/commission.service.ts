@@ -4,7 +4,6 @@ import {
   TaskType,
   Referral,
   InviterType,
-  ReferralRole,
   CommissionItem,
   CommissionKind,
   CommissionBatch,
@@ -17,27 +16,8 @@ import { generateReferralId, generateBatchId, generateCommissionItemId } from '.
 import { auditLogService } from './audit.service';
 import { toTask, toReferral, toCommissionBatch } from '../database/converters';
 import { logger } from '../utils/logger';
-import {
-  isTaskCommissionEligible,
-  getCommissionThreshold,
-  getOneTimeBonus,
-  getPerTaskRate,
-  isOneTimePayable,
-  isDirectPerTaskActive,
-  isRecruiterLink,
-  getIndirectChainCutoff,
-  isTaskAfterChainEstablished,
-} from './commission-rules';
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-
-type PayableItem = {
-  commissionKind: CommissionKind;
-  amount: number;
-  sourceTaskId: string | null;
-  /** Beneficiary inviter for this item — the direct inviter, or the indirect special inviter for chain items. */
-  inviterId: string;
-};
 
 const DEFAULT_RATES: CommissionRates = {
   normalInviteBonus: 100,
@@ -87,7 +67,7 @@ class CommissionService {
       const tasks = await taskRepository.findByAssignedUserIdAndStatus(userId, status);
       for (const t of tasks) {
         const task = toTask(t);
-        if (!isTaskCommissionEligible(task)) continue;
+        if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
         all.push(task);
       }
     }
@@ -113,7 +93,7 @@ class CommissionService {
       const tasks = await taskRepository.findByChannelNameAndStatus(channelName, status);
       for (const t of tasks) {
         const task = toTask(t);
-        if (!isTaskCommissionEligible(task)) continue;
+        if (task.cancelledReason !== null && task.cancelledReason !== undefined) continue;
         all.push(task);
       }
     }
@@ -154,43 +134,6 @@ class CommissionService {
     return task.updatedAt;
   }
 
-  /**
-   * The recruiter link that connects this worker's direct inviter to the
-   * special inviter above (inviterType=special, role=recruiter). Used for
-   * chain resolution and the no-retroactivity cutoff at payout time.
-   */
-  private async getRecruiterLinkFor(workerRef: Referral): Promise<Referral | null> {
-    if (!workerRef.indirectSpecialInviterId) return null;
-    const raw = await referralRepository.findRecruiterLinkByInviteeId(workerRef.inviterId);
-    if (!raw) return null;
-    const link = toReferral(raw);
-    return link.inviterId === workerRef.indirectSpecialInviterId ? link : null;
-  }
-
-  private async resolveIndirectChain(referral: Referral): Promise<void> {
-    if (referral.role !== 'worker') return;
-    const raw = await referralRepository.findRecruiterLinkByInviteeId(referral.inviterId);
-    if (!raw || raw.inviterType !== 'special') return;
-    if (referral.indirectSpecialInviterId === raw.inviterId) return;
-    await referralRepository.update(referral.id, {
-      indirectSpecialInviterId: raw.inviterId,
-      updatedAt: new Date(),
-    });
-  }
-
-  private async applyRecruiterChainToWorkers(recruiterId: string, specialInviterId: string): Promise<void> {
-    const rows = await referralRepository.findByInviterId(recruiterId);
-    for (const row of rows) {
-      const ref = toReferral(row);
-      if (ref.role !== 'worker' || ref.status === 'closed') continue;
-      if (ref.indirectSpecialInviterId) continue;
-      await referralRepository.update(ref.id, {
-        indirectSpecialInviterId: specialInviterId,
-        updatedAt: new Date(),
-      });
-    }
-  }
-
   async getReferrals(): Promise<Referral[]> {
     const referrals = await referralRepository.findAll();
     return referrals.map(toReferral);
@@ -203,16 +146,10 @@ class CommissionService {
     inviteeName: string;
     inviterType: InviterType;
     ticketId?: string;
-    role?: ReferralRole;
   }, createdBy: string): Promise<Referral> {
     const existing = await referralRepository.findByInviteeAndInviter(data.inviteeId, data.inviterId);
     if (existing) {
       throw new Error(`A referral already exists for invitee <@${data.inviteeId}>.`);
-    }
-
-    const role: ReferralRole = data.role || 'worker';
-    if (role === 'recruiter' && data.inviterType !== 'special') {
-      throw new Error('Only special inviters can create recruiter links.');
     }
 
     const now = new Date();
@@ -223,8 +160,6 @@ class CommissionService {
       inviteeId: data.inviteeId,
       inviteeName: data.inviteeName,
       inviterType: data.inviterType,
-      role,
-      indirectSpecialInviterId: null,
       status: 'pending',
       oneTimeCommissionPaid: false,
       oneTimeCommissionPaidAt: null,
@@ -241,8 +176,6 @@ class CommissionService {
       inviteeId: referral.inviteeId,
       inviteeName: referral.inviteeName,
       inviterType: referral.inviterType,
-      role: referral.role,
-      indirectSpecialInviterId: referral.indirectSpecialInviterId,
       status: referral.status,
       oneTimeCommissionPaid: referral.oneTimeCommissionPaid,
       oneTimeCommissionPaidAt: referral.oneTimeCommissionPaidAt,
@@ -252,40 +185,29 @@ class CommissionService {
       updatedAt: referral.updatedAt,
     });
 
-    if (role === 'worker') {
-      await this.resolveIndirectChain(referral);
-    } else {
-      await this.applyRecruiterChainToWorkers(referral.inviteeId, referral.inviterId);
-    }
-
-    const saved = await referralRepository.findById(referral.id);
-    if (!saved) throw new Error('Referral could not be saved.');
-
     await auditLogService.log(
       AuditAction.REFERRAL_ADDED,
       null,
       createdBy,
-      `Referral ${referral.id} — ${data.inviterName} → ${data.inviteeName} (${data.inviterType}/${role})`,
+      `Referral ${referral.id} — ${data.inviterName} → ${data.inviteeName} (${data.inviterType})`,
     );
 
-    logger.info('Referral created', { referralId: referral.id, role, indirectSpecialInviterId: saved.indirectSpecialInviterId });
-    return toReferral(saved);
+    logger.info('Referral created', { referralId: referral.id });
+    return referral;
   }
 
   async updateReferral(
     referralId: string,
-    data: { inviterName?: string; inviteeName?: string; ticketId?: string | null; role?: ReferralRole },
+    data: { inviterName?: string; inviteeName?: string; ticketId?: string | null },
     updatedBy: string,
   ): Promise<Referral> {
     const ref = await referralRepository.findById(referralId);
     if (!ref) throw new Error('Referral not found.');
 
-    const current = toReferral(ref);
     const updateData: {
       inviterName?: string;
       inviteeName?: string;
       ticketId?: string | null;
-      role?: ReferralRole;
       updatedAt: Date;
     } = { updatedAt: new Date() };
 
@@ -293,39 +215,20 @@ class CommissionService {
     if (data.inviteeName !== undefined) updateData.inviteeName = data.inviteeName;
     if (data.ticketId !== undefined) updateData.ticketId = data.ticketId;
 
-    if (data.role !== undefined && data.role !== current.role) {
-      if (data.role === 'recruiter' && current.inviterType !== 'special') {
-        throw new Error('Only special inviters can create recruiter links.');
-      }
-      const items = await commissionRepository.findItemsByReferralId(referralId);
-      if (items.length > 0) {
-        throw new Error('Cannot change referral role after commissions have been paid for this referral.');
-      }
-      updateData.role = data.role;
-    }
-
     await referralRepository.update(referralId, updateData);
 
     const updated = await referralRepository.findById(referralId);
     if (!updated) throw new Error('Referral not found after update.');
 
-    const updatedRef = toReferral(updated);
-    if (updateData.role === 'recruiter' && current.role !== 'recruiter') {
-      await this.applyRecruiterChainToWorkers(updatedRef.inviteeId, updatedRef.inviterId);
-    }
-    if (updateData.role === 'worker' && current.role !== 'worker') {
-      await this.resolveIndirectChain(updatedRef);
-    }
-
     await auditLogService.log(
       AuditAction.REFERRAL_UPDATED,
       null,
       updatedBy,
-      `Referral ${referralId} updated — ${updateData.inviterName ?? ''} → ${updateData.inviteeName ?? ''}${updateData.role ? ` (role: ${updateData.role})` : ''}`,
+      `Referral ${referralId} updated — ${updateData.inviterName ?? ''} → ${updateData.inviteeName ?? ''}`,
     );
 
     logger.info('Referral updated', { referralId });
-    return updatedRef;
+    return toReferral(updated);
   }
 
   async deleteReferral(referralId: string, deletedBy: string): Promise<void> {
@@ -357,7 +260,7 @@ class CommissionService {
     bonusAmount: number;
     perTaskAmount: number;
   }> {
-    if (ref.status === 'closed' || isRecruiterLink(ref)) {
+    if (ref.status === 'closed') {
       return { isSuccessful: false, taskCount: 0, posts: 0, comments: 0, bonusAmount: 0, perTaskAmount: 0 };
     }
 
@@ -366,14 +269,18 @@ class CommissionService {
     const comments = tasks.filter((t) => t.type === TaskType.COMMENT).length;
     const taskCount = tasks.length;
 
-    const threshold = getCommissionThreshold(ref.inviterType, rates);
+    const threshold = ref.inviterType === 'special'
+      ? rates.specialInviteTaskThreshold
+      : rates.normalInviteTaskThreshold;
 
     const thresholdMet = taskCount >= threshold;
     let bonusAmount = 0;
     let perTaskAmount = 0;
 
     if (thresholdMet && !ref.oneTimeCommissionPaid) {
-      bonusAmount = getOneTimeBonus(ref.inviterType, rates);
+      bonusAmount = ref.inviterType === 'special'
+        ? rates.specialInviteBonus
+        : rates.normalInviteBonus;
     }
 
     if (ref.perTaskCommissionActive || (thresholdMet && ref.inviterType === 'special')) {
@@ -421,57 +328,44 @@ class CommissionService {
     return map;
   }
 
-  async getPayableItems(ref: Referral, rates: CommissionRates): Promise<PayableItem[]> {
-    const items: PayableItem[] = [];
+  async getPayableItems(ref: Referral, rates: CommissionRates): Promise<{
+    commissionKind: CommissionKind;
+    amount: number;
+    sourceTaskId: string | null;
+  }[]> {
+    const items: { commissionKind: CommissionKind; amount: number; sourceTaskId: string | null }[] = [];
 
     if (ref.status === 'closed') return items;
-    if (isRecruiterLink(ref)) return items;
 
-    const threshold = getCommissionThreshold(ref.inviterType, rates);
-    const completedTasks = await this.getCompletedTasksForUser(ref.inviteeId);
-    const completedCount = completedTasks.length;
+    const threshold = ref.inviterType === 'special'
+      ? rates.specialInviteTaskThreshold
+      : rates.normalInviteTaskThreshold;
+
     const payableOneTime = !ref.oneTimeCommissionPaid;
-    const meetsThreshold = completedCount >= threshold;
-    const bonusAmount = getOneTimeBonus(ref.inviterType, rates);
+    const meetsThreshold = (await this.getCompletedTasksForUser(ref.inviteeId)).length >= threshold;
+    const perTaskActive = ref.perTaskCommissionActive ||
+      (ref.inviterType === 'special' && payableOneTime && meetsThreshold);
 
-    if (isOneTimePayable(payableOneTime, completedCount, threshold, bonusAmount)) {
-      const existing = await this.hasExistingOneTimeCommission(ref.id, ref.inviterId);
-      if (!existing) {
-        items.push({ commissionKind: 'one_time', amount: bonusAmount, sourceTaskId: null, inviterId: ref.inviterId });
-      }
-    }
-
-    if (isDirectPerTaskActive(ref.perTaskCommissionActive, ref.inviterType, payableOneTime, meetsThreshold)
-      && ref.inviterType === 'special') {
-      const tasks = await this.getTasksForReferral(ref);
-      for (const task of tasks) {
-        const amount = getPerTaskRate(task.type, rates);
-        if (amount > 0) {
-          const existing = await this.hasExistingPerTaskCommission(ref.inviterId, task.id);
-          if (!existing) {
-            items.push({ commissionKind: 'per_task', amount, sourceTaskId: task.id, inviterId: ref.inviterId });
-          }
+    if (payableOneTime && meetsThreshold) {
+      const bonusAmount = ref.inviterType === 'special'
+        ? rates.specialInviteBonus
+        : rates.normalInviteBonus;
+      if (bonusAmount > 0) {
+        const existing = await this.hasExistingOneTimeCommission(ref.id, ref.inviterId);
+        if (!existing) {
+          items.push({ commissionKind: 'one_time', amount: bonusAmount, sourceTaskId: null });
         }
       }
     }
 
-    if (ref.indirectSpecialInviterId) {
-      const link = await this.getRecruiterLinkFor(ref);
-      const cutoff = getIndirectChainCutoff(ref.createdAt, link?.createdAt ?? ref.createdAt);
+    if (perTaskActive && ref.inviterType === 'special') {
       const tasks = await this.getTasksForReferral(ref);
       for (const task of tasks) {
-        const completedAt = await this.getTaskCompletionTime(task.id);
-        if (!completedAt || !isTaskAfterChainEstablished(completedAt, cutoff)) continue;
-        const amount = getPerTaskRate(task.type, rates);
+        const amount = task.type === TaskType.POST ? rates.specialPerPost : rates.specialPerComment;
         if (amount > 0) {
-          const existing = await this.hasExistingPerTaskCommission(ref.indirectSpecialInviterId, task.id);
+          const existing = await this.hasExistingPerTaskCommission(ref.inviterId, task.id);
           if (!existing) {
-            items.push({
-              commissionKind: 'per_task',
-              amount,
-              sourceTaskId: task.id,
-              inviterId: ref.indirectSpecialInviterId,
-            });
+            items.push({ commissionKind: 'per_task', amount, sourceTaskId: task.id });
           }
         }
       }
@@ -502,12 +396,13 @@ class CommissionService {
 
     for (const referral of activeReferrals) {
       const payableItems = await this.getPayableItems(referral, rates);
-      if (payableItems.length === 0) continue;
-      totalSuccessfulInvites++;
-      for (const item of payableItems) {
-        inviterSet.add(item.inviterId);
-        if (item.commissionKind === 'one_time') totalBonusAmount += item.amount;
-        else totalPerTaskAmount += item.amount;
+      if (payableItems.length > 0) {
+        inviterSet.add(referral.inviterId);
+        totalSuccessfulInvites++;
+        for (const item of payableItems) {
+          if (item.commissionKind === 'one_time') totalBonusAmount += item.amount;
+          else totalPerTaskAmount += item.amount;
+        }
       }
     }
 
@@ -550,24 +445,6 @@ class CommissionService {
       inviterMap.set(ref.inviterId, existing);
     }
 
-    const totalByInviter = new Map<string, number>();
-    const successfulByInviter = new Map<string, number>();
-
-    for (const ref of referrals) {
-      if (ref.status === 'closed') continue;
-      const payableItems = await this.getPayableItems(ref, rates);
-      if (payableItems.length === 0) continue;
-
-      const directItems = payableItems.filter((i) => i.inviterId === ref.inviterId);
-      if (directItems.length > 0) {
-        successfulByInviter.set(ref.inviterId, (successfulByInviter.get(ref.inviterId) || 0) + 1);
-      }
-
-      for (const item of payableItems) {
-        totalByInviter.set(item.inviterId, (totalByInviter.get(item.inviterId) || 0) + item.amount);
-      }
-    }
-
     const result: {
       inviterId: string;
       inviterName: string;
@@ -579,13 +456,26 @@ class CommissionService {
     }[] = [];
 
     for (const [inviterId, data] of inviterMap) {
+      let totalCommission = 0;
+      let activeReferrals = 0;
+
+      for (const ref of data.referrals) {
+        const payableItems = await this.getPayableItems(ref, rates);
+        if (payableItems.length > 0) {
+          activeReferrals++;
+          for (const item of payableItems) {
+            totalCommission += item.amount;
+          }
+        }
+      }
+
       result.push({
         inviterId,
         inviterName: data.inviterName,
         inviterType: data.inviterType,
         totalReferrals: data.referrals.length,
-        successfulReferrals: successfulByInviter.get(inviterId) || 0,
-        totalCommission: totalByInviter.get(inviterId) || 0,
+        successfulReferrals: activeReferrals,
+        totalCommission,
         status: 'Ready',
       });
     }
@@ -607,46 +497,29 @@ class CommissionService {
       perTaskAmount: number;
       isSuccessful: boolean;
       bonusPaid: boolean;
-      relationship: 'direct' | 'indirect';
     }[];
     totalBonus: number;
     totalPerTask: number;
     totalCommission: number;
   } | null> {
-    const direct = await referralRepository.findByInviterId(inviterId);
-    const indirect = await referralRepository.findByIndirectSpecialInviter(inviterId);
+    const referrals = await referralRepository.findByInviterId(inviterId);
 
-    const allRaw = [...direct, ...indirect];
-    if (allRaw.length === 0) return null;
+    if (referrals.length === 0) return null;
 
-    const refs = allRaw.map(toReferral).filter((r) => r.status !== 'closed');
+    const refs = referrals.map(toReferral).filter((r) => r.status !== 'closed');
     if (refs.length === 0) return null;
-
-    const nameRow = refs.find((r) => r.inviterId === inviterId) || refs[0];
 
     const rates = await this.getCommissionRates();
 
     let totalBonus = 0;
     let totalPerTask = 0;
 
-    const referralDetails: {
-      referralId: string;
-      inviteeName: string;
-      inviteeTasks: { total: number; posts: number; comments: number };
-      bonusAmount: number;
-      perTaskAmount: number;
-      isSuccessful: boolean;
-      bonusPaid: boolean;
-      relationship: 'direct' | 'indirect';
-    }[] = [];
+    const referralDetails = [];
     for (const ref of refs) {
-      const payableItems = (await this.getPayableItems(ref, rates))
-        .filter((i) => i.inviterId === inviterId);
+      const payableItems = await this.getPayableItems(ref, rates);
       if (payableItems.length === 0) continue;
 
-      const tasks = await this.getCompletedTasksForUser(ref.inviteeId, weekStart, weekEnd);
-      const posts = tasks.filter((t) => t.type === TaskType.POST).length;
-      const comments = tasks.filter((t) => t.type === TaskType.COMMENT).length;
+      const status = await this.computeReferralStatus(ref, rates, weekStart, weekEnd);
 
       const bonusAmount = payableItems
         .filter((i) => i.commissionKind === 'one_time')
@@ -658,12 +531,11 @@ class CommissionService {
       referralDetails.push({
         referralId: ref.id,
         inviteeName: ref.inviteeName,
-        inviteeTasks: { total: tasks.length, posts, comments },
+        inviteeTasks: { total: status.taskCount, posts: status.posts, comments: status.comments },
         bonusAmount,
         perTaskAmount,
         isSuccessful: true,
         bonusPaid: false,
-        relationship: ref.inviterId === inviterId ? 'direct' : 'indirect',
       });
 
       totalBonus += bonusAmount;
@@ -673,8 +545,8 @@ class CommissionService {
     if (referralDetails.length === 0) return null;
 
     return {
-      inviterName: nameRow.inviterName,
-      inviterType: nameRow.inviterType,
+      inviterName: refs[0].inviterName,
+      inviterType: refs[0].inviterType,
       status: 'Ready',
       referrals: referralDetails,
       totalBonus,
@@ -733,28 +605,23 @@ class CommissionService {
   }
 
   async payInviter(inviterId: string, createdBy: string): Promise<{ batch: CommissionBatch; items: CommissionItem[] }> {
-    const direct = await referralRepository.findByInviterId(inviterId);
-    const indirect = await referralRepository.findByIndirectSpecialInviter(inviterId);
+    const referrals = await referralRepository.findByInviterId(inviterId);
 
-    const refs = [...direct, ...indirect]
-      .map(toReferral)
-      .filter((r) => r.status !== 'closed' && !isRecruiterLink(r));
+    if (referrals.length === 0) throw new Error('No referrals found for this inviter.');
 
-    const uniqueRefs = [...new Map(refs.map((r) => [r.id, r])).values()];
-    if (uniqueRefs.length === 0) throw new Error('No active referrals found for this inviter.');
+    const refs = referrals.map(toReferral).filter((r) => r.status !== 'closed');
+    if (refs.length === 0) throw new Error('No active referrals found for this inviter.');
 
     const rates = await this.getCommissionRates();
     const items: CommissionItem[] = [];
     const now = new Date();
     let totalAmount = 0;
 
-    for (const ref of uniqueRefs) {
-      const payableItems = (await this.getPayableItems(ref, rates))
-        .filter((pi) => pi.inviterId === inviterId);
+    for (const ref of refs) {
+      const payableItems = await this.getPayableItems(ref, rates);
       if (payableItems.length === 0) continue;
 
-      const hasOneTime = ref.inviterId === inviterId
-        && payableItems.some((pi) => pi.commissionKind === 'one_time');
+      const hasOneTime = payableItems.some((pi) => pi.commissionKind === 'one_time');
 
       for (const pi of payableItems) {
         items.push({
@@ -829,37 +696,27 @@ class CommissionService {
   }
 
   async payAll(createdBy: string): Promise<{ batch: CommissionBatch; items: CommissionItem[] }> {
-    const referrals = (await this.getReferrals())
-      .filter((r) => r.status !== 'closed' && !isRecruiterLink(r));
+    const referrals = (await this.getReferrals()).filter((r) => r.status !== 'closed');
     const rates = await this.getCommissionRates();
 
-    const uniqueBeneficiaries = new Set<string>();
-    for (const r of referrals) {
-      uniqueBeneficiaries.add(r.inviterId);
-      if (r.indirectSpecialInviterId) uniqueBeneficiaries.add(r.indirectSpecialInviterId);
-    }
-
+    const uniqueInviters = [...new Set(referrals.map((r) => r.inviterId))];
     const items: CommissionItem[] = [];
     const now = new Date();
     let totalAmount = 0;
     let invitersPaid = 0;
 
-    for (const inviterId of uniqueBeneficiaries) {
-      const inviterRefs = referrals.filter(
-        (r) => r.inviterId === inviterId || r.indirectSpecialInviterId === inviterId,
-      );
+    for (const inviterId of uniqueInviters) {
+      const inviterRefs = referrals.filter((r) => r.inviterId === inviterId);
       if (inviterRefs.length === 0) continue;
 
       let inviterAmount = 0;
       const inviterItems: CommissionItem[] = [];
 
       for (const ref of inviterRefs) {
-        const payableItems = (await this.getPayableItems(ref, rates))
-          .filter((pi) => pi.inviterId === inviterId);
+        const payableItems = await this.getPayableItems(ref, rates);
         if (payableItems.length === 0) continue;
 
-        const hasOneTime = ref.inviterId === inviterId
-          && payableItems.some((pi) => pi.commissionKind === 'one_time');
+        const hasOneTime = payableItems.some((pi) => pi.commissionKind === 'one_time');
 
         for (const pi of payableItems) {
           inviterItems.push({
@@ -955,32 +812,23 @@ class CommissionService {
       perTaskAmount: number;
       totalCommission: number;
       status: string;
-      relationship?: string;
     }[];
   }> {
     if (batchId) {
       const items = await commissionRepository.findItemsByBatchId(batchId);
       const referrals = await this.getReferrals();
       const refMap = new Map(referrals.map((r) => [r.id, r]));
-      const inviterInfo = new Map<string, { name: string; type: string }>();
-      for (const ref of referrals) {
-        if (!inviterInfo.has(ref.inviterId)) {
-          inviterInfo.set(ref.inviterId, { name: ref.inviterName, type: ref.inviterType });
-        }
-      }
 
       const rows = items.map((item) => {
         const ref = refMap.get(item.referralId);
-        const inviter = inviterInfo.get(item.inviterId);
         return {
-          inviterName: inviter?.name || item.inviterId.slice(0, 8),
-          inviterType: inviter?.type || ref?.inviterType || 'normal',
+          inviterName: ref?.inviterName || item.inviterId.slice(0, 8),
+          inviterType: ref?.inviterType || 'normal',
           inviteeName: ref?.inviteeName || item.invitedWorkerId.slice(0, 8),
           bonusAmount: item.commissionKind === 'one_time' ? item.amount : 0,
           perTaskAmount: item.commissionKind === 'per_task' ? item.amount : 0,
           totalCommission: item.amount,
           status: 'Paid',
-relationship: ref ? (ref.inviterId !== item.inviterId ? 'indirect' : 'direct') : 'direct',
         };
       });
 
@@ -1004,29 +852,6 @@ relationship: ref ? (ref.inviterId !== item.inviterId ? 'indirect' : 'direct') :
           perTaskAmount: status.isSuccessful ? status.perTaskAmount : 0,
           totalCommission: status.isSuccessful ? status.bonusAmount + status.perTaskAmount : 0,
           status: inv.status,
-          relationship: 'direct',
-        });
-      }
-
-      const indirectReferrals = referrals.filter(
-        (r) => r.indirectSpecialInviterId === inv.inviterId && r.status !== 'closed',
-      );
-      for (const ref of indirectReferrals) {
-        const payableItems = (await this.getPayableItems(ref, rates))
-          .filter((pi) => pi.inviterId === inv.inviterId);
-        if (payableItems.length === 0) continue;
-        const perTaskAmount = payableItems
-          .filter((i) => i.commissionKind === 'per_task')
-          .reduce((sum, i) => sum + i.amount, 0);
-        rows.push({
-          inviterName: inv.inviterName,
-          inviterType: inv.inviterType,
-          inviteeName: ref.inviteeName,
-          bonusAmount: 0,
-          perTaskAmount,
-          totalCommission: perTaskAmount,
-          status: inv.status,
-          relationship: 'indirect',
         });
       }
     }
@@ -1059,7 +884,6 @@ relationship: ref ? (ref.inviterId !== item.inviterId ? 'indirect' : 'direct') :
       bonusAmount: number;
       perTaskAmount: number;
       totalCommission: number;
-      relationship: 'direct' | 'indirect';
     }[];
   } | null> {
     const batch = await commissionRepository.findBatchById(batchId);
@@ -1068,34 +892,17 @@ relationship: ref ? (ref.inviterId !== item.inviterId ? 'indirect' : 'direct') :
     const items = await commissionRepository.findItemsByBatchId(batchId);
     const referrals = await this.getReferrals();
     const refMap = new Map(referrals.map((r) => [r.id, r]));
-    const inviterInfo = new Map<string, { name: string; type: InviterType }>();
-    for (const ref of referrals) {
-      if (!inviterInfo.has(ref.inviterId)) {
-        inviterInfo.set(ref.inviterId, { name: ref.inviterName, type: ref.inviterType });
-      }
-    }
 
-    const enrichedItems: {
-      id: string;
-      inviterName: string;
-      inviterType: InviterType;
-      inviteeName: string;
-      bonusAmount: number;
-      perTaskAmount: number;
-      totalCommission: number;
-      relationship: 'direct' | 'indirect';
-    }[] = items.map((item) => {
+    const enrichedItems = items.map((item) => {
       const ref = refMap.get(item.referralId);
-      const inviter = inviterInfo.get(item.inviterId);
       return {
         id: item.id,
-        inviterName: inviter?.name || item.inviterId.slice(0, 8),
-        inviterType: (inviter?.type || 'normal') as InviterType,
+        inviterName: ref?.inviterName || item.inviterId.slice(0, 8),
+        inviterType: (ref?.inviterType || 'normal') as InviterType,
         inviteeName: ref?.inviteeName || item.invitedWorkerId.slice(0, 8),
         bonusAmount: item.commissionKind === 'one_time' ? item.amount : 0,
         perTaskAmount: item.commissionKind === 'per_task' ? item.amount : 0,
         totalCommission: item.amount,
-        relationship: ref && ref.inviterId !== item.inviterId ? 'indirect' : 'direct',
       };
     });
 
