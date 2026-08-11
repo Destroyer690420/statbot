@@ -1,0 +1,279 @@
+# PROJECT_CONTEXT.md — Reddit Task Manager
+
+> **Persistent project memory.** Future OpenCode sessions MUST read this file first.
+> Repository: `reddit-task-manager` · Last verified: 2026-08-12 (git HEAD `ac441e2`, working tree has one uncommitted change: `dashboard/vite.config.ts` dev-proxy target `http:` → `https:`; untracked `query-tasks.ts`/`query-tasks.js`).
+
+---
+
+## 1. Project Overview
+
+A production system that runs a **Discord bot + REST API + React admin dashboard** to manage Reddit posting tasks:
+
+- Workers are assigned tasks (Reddit posts or comments) inside Discord **ticket channels**.
+- Tasks carry **insight (view-data) requirements**: workers must reply to bot reminders with screenshots of view data at **20 hours** (comments and posts' first check) and **70 hours** (posts' second check).
+- Tasks can be created manually by admins via slash commands or the dashboard, or ingested automatically from the **GoPartTime** job website via a Tampermonkey userscript.
+- Completed tasks earn money: **weekly payout batches** are computed for workers and **referral commissions** for inviters.
+- An **owner earnings** view estimates net daily/weekly profit (revenue − worker cost − commissions).
+- All scheduling is event-driven (BullMQ delayed jobs + in-process `setInterval` housekeeping). **There is no cron.**
+
+---
+
+## 2. Current Architecture (high level)
+
+```
+GoPartTime (goparttime.net)          Discord (ticket channels)
+   │ userscript (Tampermonkey)               ▲   ▲
+   │ POST /api/v1/goparttime/assign          │   │ messages/reminders/replies
+   ▼                                         │   │
+Docker: nginx (80/443, DuckDNS, TLS)  ───►  Express REST API (:3000, internal)
+   │ dashboard SPA (/api proxied)            │
+   ▼                                         ▼
+React dashboard (nginx)           PostgreSQL (Prisma 7, external host) + Redis 7 (BullMQ reminder-queue)
+```
+
+- **Backend** (`src/`): Express 4 REST API (`/api/v1`), discord.js 14 bot, BullMQ worker, services/repositories pattern with Prisma 7 (PostgreSQL via `@prisma/adapter-pg`).
+- **Frontend** (`dashboard/`): React 18 + Vite + Tailwind + Recharts SPA served by nginx; PWA-capable.
+- **Database**: PostgreSQL (single hand-maintained migration file), previously Firestore (fully cut over 2026-07-26, legacy config files remain).
+- **Scheduling**: Redis + BullMQ queue `reminder-queue`; delayed jobs for reminders; `setInterval` loops for auto-archive, insight-image cleanup (30h TTL), and reminder re-hydration.
+- **External integrations**: GoPartTime (userscript → API), Discord (bot), Reddit (submitted URLs validated, deletion tracking via manual override), sentry-style local logging (winston).
+
+---
+
+## 3. Technology Stack
+
+| Technology | Version | Purpose | Where |
+|---|---|---|---|
+| Node.js | >= 18 (container: 20-alpine) | Runtime | backend, dashboard build |
+| TypeScript | ^5.7.2 | Language | all code |
+| Express | ^4.21.1 | REST API | `src/api/` |
+| discord.js | ^14.16.3 | Discord bot | `src/bot/` |
+| Prisma | ^7.9.0 (client + CLI) | ORM | `prisma/`, `src/database/` |
+| PostgreSQL | (external, version UNKNOWN) | Database | database |
+| Redis | 7-alpine (container) | BullMQ broker | `docker-compose.yml` |
+| BullMQ | ^5.25.6 / ioredis ^5.4.1 | Delayed reminder jobs | `src/scheduler/` |
+| React / ReactDOM | ^18.3.1 | Dashboard UI | `dashboard/src/` |
+| Vite | ^6.0.3 | Dashboard bundler/dev server | `dashboard/` |
+| Tailwind CSS | ^3.4.16 | Styling | `dashboard/` |
+| TanStack React Query | ^5.62.0 | Data fetching | `dashboard/src/` |
+| Recharts | ^2.14.1 | Charts | `dashboard/` |
+| axios | ^1.7.9 | HTTP client | `dashboard/src/api/` |
+| helmet / cors / express-rate-limit | ^8 / ^2.8.5 / ^7.4.1 | Security middleware | `src/api/server.ts` |
+| jsonwebtoken | ^9.0.2 | Dashboard JWT auth | `src/api/routes/auth.ts` |
+| zod | ^3.24.1 | Validation | `src/utils/goparttime-payload.ts`, routes |
+| winston | ^3.17.0 | Logging | `src/utils/logger.ts` |
+| sharp | ^0.35.3 | Image compression for Discord delivery | `src/utils/image-processor.ts` |
+| node-html-parser | ^9.0.1 | GoPartTime HTML → markdown | `src/utils/html-to-discord.ts` |
+| nanoid | ^3.3.7 | ID generation | `src/utils/id-generator.ts` |
+| dayjs | ^1.11.13 | Date math | `src/services/analytics.service.ts` |
+| Jest + ts-jest | ^30 / ^29 | Tests | `src/__tests__/` |
+
+---
+
+## 4. Repository Structure
+
+```
+├── AGENTS.md                    # OpenCode session instructions (this file's sibling)
+├── src/                         # Backend (bot + API + services)
+│   ├── index.ts                 # Boot sequence (6 steps) + in-process housekeeping timers
+│   ├── api/                     # Express: server.ts, middleware/{auth,extensionAuth,errorHandler,validate}, routes/*.ts (14 files)
+│   ├── bot/                     # Discord: index.ts, deploy-commands.ts, commands/ (12), events/{interactionCreate,messageCreate}, embeds/
+│   ├── config/                  # env.ts (zod), constants.ts (all delays/thresholds)
+│   ├── database/                # db.ts (PrismaPg), converters.ts, repositories/ (7 repos)
+│   ├── scheduler/               # queue.ts, jobs.ts, worker.ts (BullMQ reminder engine)
+│   ├── services/                # task, state-machine, reminder, insight-storage, payout, commission, referral(→commission), owner-earnings, analytics, audit, settings, goparttime
+│   ├── __tests__/               # 7 jest test files
+│   └── utils/                   # validators, goparttime-payload, html-to-discord, plain-task-message, discord-chunker, image-processor, id-generator, logger, permissions, task-display, check-reddit (UNUSED)
+├── dashboard/                   # React SPA + Dockerfile (nginx) + nginx.conf + public/goparttime-send.user.js
+├── prisma/                      # schema.prisma + migrations/migration.sql (single hand-maintained file)
+├── scripts/                     # goparttime-send.user.js (source userscript), import-postgres.ts (one-time migration tool), page-before/after.html
+├── dist/                        # STALE prebuilt backend output (gitignored; do not trust)
+├── Dockerfile                   # Backend only (bot+API); dashboard has its own Dockerfile
+├── docker-compose.yml           # app + redis + dashboard(nginx 80/443, TLS via LetsEncrypt)
+├── ecosystem.config.js          # PM2 config (non-Docker path)
+├── prisma.config.ts             # Prisma 7 config (URL from DATABASE_URL)
+├── firebase.json / firestore.indexes.json  # LEGACY Firestore artifacts (inactive)
+├── plan.md, sending.md, goparttime_discord_dom_and_limits_spec.md, ANDROID_SETUP.md  # design/spec docs (root)
+└── .env.example                 # STALE in places (still lists FIREBASE_*, missing DATABASE_URL)
+```
+
+Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
+
+---
+
+## 5. Major Features (all implemented and verified)
+
+1. **Slash commands** (12): `/task /status /find /delete /pending /completed /overdue /stats /reschedule /send-now /help /referral add` — guild-scoped, permission-checked per command. See `docs/DISCORD_BOT.md`.
+2. **Reminder engine**: BullMQ delayed jobs; POST tasks 20h + 70h reminders, COMMENT tasks 20h only; 2 retries (+2h, +6h); max 3 sends then admin overdue alert; 30-min re-hydration from DB. See `docs/REMINDER_SYSTEM.md`.
+3. **Insight system**: workers reply to reminder messages with a screenshot (png/jpg/jpeg/webp); reply detection by stored `reminderMessageId`; insight images stored on disk under `<cwd>/uploads/insights/<taskId>/` with 30h TTL cleanup; served unauthenticated via `/api/v1/uploads/insights/...`. See `docs/INSIGHT_SYSTEM.md`.
+4. **Task state machine**: `ACCEPTED → PENDING → REMINDER_20_SENT → INSIGHT_20_RECEIVED → (REMINDER_70_SENT → INSIGHT_70_RECEIVED) → COMPLETED → ARCHIVED` + `CANCELLED`; see `docs/TASK_SYSTEM.md` (also `src/services/state-machine.ts`).
+5. **Deletion tracking**: admin sets `cancelledReason` = `deleted`/`deleted_later` via the dashboard dropdown (auto Reddit-deletion detection was removed — `check-reddit.ts` is now dead code).
+6. **Auto-archive**: daily sweep archives paid COMPLETED/CANCELLED older than 30 days; weekly Sunday archive moves all paid COMPLETED → ARCHIVED; unpaid archived tasks can be restored to COMPLETED (`POST /tasks/restore-unpaid-archived`).
+7. **GoPartTime integration**: Tampermonkey userscript extracts task details from goparttime.net, posts to `/api/v1/goparttime/assign` (Bearer `GOPARTTIME_API_KEY`), backend creates the task as `ACCEPTED`, auto-detects the single worker in the ticket channel, delivers formatted task content into Discord, worker replies with the Reddit URL, manager activates (`/done` → PENDING + reminders). Retry/reassign supported on failures. See `docs/GOPARTTIME.md` + `docs/BROWSER_EXTENSION.md`.
+8. **Payout system**: weekly (IST Sunday→Saturday) totals from `PayoutSettings` rates (defaults ₹30/comment, ₹60/post); workers paid per completed task; pay-worker/pay-all create `PayoutBatch` + `PayoutItem`, mark paid COMPLETED tasks ARCHIVED; CSV export; batch history. See `docs/PAYOUT_SYSTEM.md`.
+9. **Referral commissions**: `/referral add` (admins) records inviter→invitee links; normal inviters get a one-time ₹100 bonus after the invitee completes 2 tasks; special inviters (hardcoded list of 3 Discord IDs) get ₹50 one-time bonus after 1 task + ₹10/comment, ₹20/post per task (special-inviter per-task commission activates on threshold; referrer can pre-enable via the API PATCH). Commission batches/CSV/history in the dashboard. See `docs/REFERRAL_SYSTEM.md`.
+10. **Owner earnings**: daily/weekly net earnings (hardcoded revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30) minus per-task/one-time commissions; PIN (default `7977` via `OWNER_PIN`) gates navigation from Settings but the API endpoints are unauthenticated. See `docs/FRONTEND.md`.
+11. **Dashboard**: 13 routes — Dashboard, Tasks, TaskDetails, AcceptedTasks, Archives, PayoutLayout (`/payout/tasks` & `/payout/commissions`), Referrals, Analytics, Activity, Settings, OwnerEarnings, Login, NotFound. JWT auth via single dashboard account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`). See `docs/FRONTEND.md`.
+12. **Audit log**: `AuditLog` rows for task/payout/commission/referral/reminder/command events; Activity page consumes `/api/v1/audit-logs`.
+
+---
+
+## 6. Current System State
+
+| Area | State |
+|---|---|
+| Firestore → PostgreSQL cutover | **Complete** (2026-07-26). Legacy: `firebase.json`, `firestore.indexes.json`, stale `.env.example` block, one stale comment in `src/index.ts:156`, `formatFirestoreDate` helper in `dashboard/src/pages/Payout.tsx` |
+| Discord bot + commands | Implemented (12 commands, guild-scoped) |
+| Reminder/insight engine | Implemented (20h/70h, retries, overdue pings) |
+| Insight image storage | Implemented (local disk, 30h TTL); `deleteTaskDir()` helper unused |
+| GoPartTime integration | Implemented (userscript + backend + delivery + submission + activation + reassign/retry) |
+| Payout system | Implemented (weekly IST window, batches, CSV, restore-unpaid) |
+| Referral commissions | Implemented (normal/special, one-time + per-task, batches, CSV) |
+| Two-level referral (recruiter links) | **Reverted** (added 2026-08-09 `9348d2d`, reverted `ac441e2` same day) |
+| Auto Reddit-deletion detection | **Removed/deprecated** (manual `cancelledReason` override instead); `check-reddit.ts` is dead code |
+| Owner earnings | Implemented (daily, 7-day history, weekly) |
+| Dashboard theme picker | **Stub** (UI-only, does nothing) |
+| PWA | Implemented (manifest, sw.js network-first API fallback) |
+| `dist/` (root) | **Stale build** (gitignored, regenerated by Docker); do not use |
+| Generated Prisma client (`src/generated/prisma`) | **Stale locally** (missing `ACCEPTED` + 5 AuditAction enum values vs schema); regenerated at Docker build |
+| Cron | **None anywhere.** All timing is BullMQ delayed jobs + `setInterval` |
+
+---
+
+## 7. Important Data Flows
+
+### GoPartTime → task creation (see docs/GOPARTTIME.md)
+```
+goPartTime.net → userscript extracts {taskId,type,ticket,title,subreddit,flair,payment,deadline,contentHtml,images,postLink,sourceUrl}
+→ POST /api/v1/goparttime/assign (Bearer GOPARTTIME_API_KEY)
+→ zod validate → dedupe on (source, externalTaskId) → resolve ticket channel → one-task-per-ticket guard
+→ detect single non-admin worker in channel → create Task (status ACCEPTED, assignmentStatus PENDING)
+→ deliver metadata/content/images/instruction messages into the ticket → assignmentStatus SENT
+→ worker replies to instruction message with Reddit URL (exactly 1, validated)
+→ recordSubmission → manager clicks Done (POST /tasks/:id/done) → ACCEPTED→PENDING + reminders scheduled
+```
+
+### Task → reminder → completion → payout
+```
+Task created (PENDING) → reminders scheduled (BullMQ, dueAt = createdAt + 20h/70h)
+→ worker sends reminder embed to ticket; status advance → worker replies screenshot
+→ insight stored + reminder completed → status advance (Comment completes @ INSIGHT_20_RECEIVED, Post @ INSIGHT_70_RECEIVED)
+→ COMPLETED → weekly payout window (IST Sun–Sat) → dashboard Pay Worker / Pay All
+→ PayoutBatch + PayoutItem; paid COMPLETED tasks → ARCHIVED → weekly Sunday archive
+```
+
+### Owner earnings (see docs/FRONTEND.md + docs/REFERRAL_SYSTEM.md)
+```
+tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
+→ ₹250/post, ₹100/comment revenue − ₹60/₹30 worker cost − special per-task commissions − one-time bonuses (below threshold) → net
+```
+
+---
+
+## 8. Database (summary — details in docs/DATABASE.md)
+
+- PostgreSQL via Prisma 7 (`PrismaPg` driver adapter), `DATABASE_URL` env. Tables: `Task`, `Reminder`, `AuditLog`, `PayoutBatch`, `PayoutItem`, `Referral`, `CommissionBatch`, `CommissionItem`, `PayoutSettings`, `CommissionRates` (10 models, 7 enums).
+- FKs: Reminder→Task (cascade delete); AuditLog→Task (set null); PayoutItem→Batch/Task (restrict); CommissionItem→Batch/Referral/SourceTask (set-null for task).
+- Unique constraints: Task `(source, externalTaskId)` (GoPartTime dedupe). 26 indexes.
+- Migrations: **single hand-maintained, idempotent** `prisma/migrations/migration.sql` (338 lines), applied manually (NOT `prisma migrate deploy`). Keep SQL ↔ schema.prisma in sync and `IF NOT EXISTS`-safe.
+- Firestore: **inactive/legacy** — `firebase.json` + `firestore.indexes.json` remain but nothing in `src/` uses Firebase.
+
+---
+
+## 9. Deployment (summary — details in docs/DEPLOYMENT.md)
+
+- Docker Compose on a host at IP `161.118.164.85`, duckdns domain **statbot.duckdns.org** (TLS via LetsEncrypt, webroot ACME).
+- Services: `app` (backend, port 3000 internal), `redis` (7-alpine, maxmemory 128mb), `dashboard` (nginx, 80/443 public, proxies `/api/` → `app:3000`).
+- Hosting provider **UNKNOWN** (no references in repo; plan.md mentions "Ubuntu VPS" + PM2 as the original non-Docker option; no Oracle references exist despite prior assumptions).
+- PostgreSQL runs outside compose (`host.docker.internal` via `host-gateway`), credentials from server `.env`.
+- Backend build: `npm ci → npx prisma generate → npm run build` (Dockerfile). Dashboard: `tsc && vite build` → nginx.
+- PM2 alternative path: `ecosystem.config.js` (`dist/index.js`, NODE_ENV=production).
+
+---
+
+## 10. Known Issues (verified — details in docs/KNOWN_ISSUES.md)
+
+1. **Auth gap**: `/api/v1/owner/daily-earnings`, `/history`, `/weekly-earnings` are unauthenticated; PIN default `7977` hardcoded in `env.ts`.
+2. **`query-tasks.ts`/`query-tasks.js`** at repo root embed a real Postgres password (untracked debug scripts).
+3. **`ssh-key-2026-07-19.key`** (private SSH key) sits in the repo root (gitignored).
+4. **Stale generated Prisma client** locally (enum mismatches) — regenerate with `npx prisma generate`.
+5. **Stale root `dist/`** build (missing newer modules like `html-to-discord`), gitignored.
+6. **`.env.example` stale**: still lists removed `FIREBASE_*` vars, missing required `DATABASE_URL`.
+7. Payout week windows rely on **post-completion times derived from reminder `.completedAt`**, not stored completion times; edge cases exist (see docs/PAYOUT_SYSTEM.md).
+8. Dashboard: Theme picker stub; Activity page ignores `?taskId=`; `w-4.5` invalid Tailwind class; `tailwindcss-animate` classes inert; OwnerEarnings route JWT-only (PIN not enforced server-side per request).
+9. Rate limit (100 req/15 min/IP) applies to the whole `/api/` prefix including health/login.
+10. `insightStorageService.deleteTaskDir`, `check-reddit.ts` (`isPostDeleted`), `DELETED_DETECTION_THRESHOLD_MS`, `generateCommissionBatchId` — dead code.
+11. Duplicate userscript copies (`scripts/` and `dashboard/public/`) must stay in sync.
+12. `GET /api/v1/tasks` has a default `limit` of 1000 with no cap — the dashboard fetches everything and paginates client-side (scales poorly).
+
+---
+
+## 11. Pending Work (details in docs/ROADMAP.md)
+
+- No TODO/FIXME comments exist in `src/` or `dashboard/src/` (verified by grep).
+- `sending.md` Phase-23 acceptance checklists are all unchecked (spec, not tracker).
+- `plan.md` outlines future ideas (monitoring, notifications, backup, roles) with no implementation.
+- Obvious unfinished items: owner-earnings auth, theme picker, Activity filter param, one-task-per-ticket Post-70H follow-up handling for comments? (not implemented — `COMMENT` only has a 20h reminder).
+
+---
+
+## 12. Important Decisions (details in docs/DECISIONS.md)
+
+| Decision | Reason |
+|---|---|
+| PostgreSQL over Firestore (Prisma v7 + pg adapter) | Queries/aggregates/transactions, ownership, cost |
+| Single hand-maintained idempotent `migration.sql` | Simple, manual control; NOT `prisma migrate deploy` |
+| No cron; BullMQ delayed jobs + setInterval | Deadline-based reminders with restart recovery |
+| Reminder deadlines absolute from `createdAt` | Stable across retries/rehydration |
+| Guild-scoped commands + per-command permission checks | Simpler than central guard; interactive confirm for `/delete` |
+| Local disk for insight images with 30h TTL | Simple; served unauthenticated (accepted risk) |
+| Two-level referral added then reverted (same day 2026-08-09) | Reverted — risk/complexity (see DECISIONS.md) |
+| Single dashboard account (env username/password) + JWT | Small admin surface, no user table; owner PIN separate |
+| GoPartTime ingest status `ACCEPTED` + explicit activation | Review/dedup before entering the reminder pipeline |
+
+---
+
+## 13. Recent Changes
+
+- **2026-08-12**: Payments page UI redesign: split 1,382-line monolith into 17 modular components (`dashboard/src/pages/payout/`), sub-navigation routes (`/payout/tasks` & `/payout/commissions`), responsive mobile cards, inline accordion expansion, segmented-control date filter, collapsed-by-default history.
+- **2026-08-09**: Two-level referral implemented (`9348d2d`) then **reverted** (`ac441e2`).
+- **2026-08-05**: Owner earnings gained daily income from added non-deleted tasks + last-7-days table (`874ff60`); userscript updated and served from the dashboard; Android setup docs (`0af8cbf`).
+- **2026-08-04**: Plain task-message copy-link UX, embed updates, goparttime service fixes (`e267974`).
+- **2026-08-03**: GoPartTime extension integration + page-format task IDs + dashboard copy-link UX (`445e7cf`).
+- **2026-08-02**: Referrals dashboard page; edit/delete actions; ticket-name normalization, admin-guard fix (`ba2339e`, `a246eb8`, `b4f7842`).
+- **2026-07-27**: Owner earnings route + weekly endpoint; createdAt-based counts.
+- **2026-07-26**: Firestore → PostgreSQL cutover (Phase 4 repository pattern `1f01cc2`, Phase 5 cutover `702520a`, cleanup commits thereafter).
+- **2026-07-25**: Referral commission tracking (`1b36416`), `/referral add` ticket option (`8584385`).
+- **2026-07-24**: Payout system + CSV (`3792396`), week-boundary fix (`fa6d598`), PWA (`9287f61`).
+- **2026-07-23**: Insight screenshots saved + 30h cleanup (`dddd658`), deletion stats, mobile cards, navbar.
+- **2026-07-21**: Manual deletion override (auto-detection removed), Sunday archive, Archives page.
+- **2026-07-20**: Deletion detection (early/late), Activity Log page, timeline.
+- **2026-07-19**: Initial commit (Firestore-based).
+
+---
+
+## 14. Docs Index
+
+| Doc | Covers |
+|---|---|
+| `docs/ARCHITECTURE.md` | System components, communication flow, service boundaries |
+| `docs/DISCORD_BOT.md` | Bot, all 12 commands, events, embeds, workflows |
+| `docs/GOPARTTIME.md` | GoPartTime integration end-to-end |
+| `docs/BROWSER_EXTENSION.md` | The userscript (Tampermonkey) |
+| `docs/TASK_SYSTEM.md` | Task lifecycle, state machine, validation |
+| `docs/REMINDER_SYSTEM.md` | Reminder engine, scheduling, retries, re-hydration |
+| `docs/INSIGHT_SYSTEM.md` | Insight submission, screenshots, storage |
+| `docs/PAYOUT_SYSTEM.md` | Weekly payout computation, batches, edge cases |
+| `docs/REFERRAL_SYSTEM.md` | Inviters, commissions, batches |
+| `docs/DATABASE.md` | Schema, ER diagram, migrations, indexes |
+| `docs/API.md` | All 56 REST endpoints |
+| `docs/FRONTEND.md` | Dashboard pages, components, auth, PWA |
+| `docs/DEPLOYMENT.md` | Docker/nginx/DuckDNS/PM2 deployment |
+| `docs/ENVIRONMENT.md` | All env vars (names only) |
+| `docs/BACKGROUND_JOBS.md` | All timers/jobs/queues |
+| `docs/SECURITY.md` | Auth model, risks |
+| `docs/TESTING.md` | Test setup, coverage, regression checklist |
+| `docs/TROUBLESHOOTING.md` | Verified issues + solutions |
+| `docs/CHANGELOG.md` | Chronological change log (from git history) |
+| `docs/KNOWN_ISSUES.md` | Bugs, limitations, debt |
+| `docs/ROADMAP.md` | In-progress/planned/debt/ideas |
+| `docs/DECISIONS.md` | Architectural decision log |

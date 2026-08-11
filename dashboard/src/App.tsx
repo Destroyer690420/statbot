@@ -12,7 +12,9 @@ import { Analytics } from './pages/Analytics';
 import { Activity } from './pages/Activity';
 import { Archives } from './pages/Archives';
 import { Settings } from './pages/Settings';
-import { Payout } from './pages/Payout';
+import { PayoutLayout } from './pages/payout/PayoutLayout';
+import { TaskPayments } from './pages/payout/TaskPayments';
+import { Commissions } from './pages/payout/Commissions';
 import { Referrals } from './pages/Referrals';
 import { OwnerEarnings } from './pages/OwnerEarnings';
 import { NotFound } from './pages/NotFound';
@@ -109,10 +111,14 @@ export default function App() {
             <Route path="/payout" element={
               <ProtectedRoute>
                 <Layout>
-                  <Payout />
+                  <PayoutLayout />
                 </Layout>
               </ProtectedRoute>
-            } />
+            }>
+              <Route index element={<TaskPayments />} />
+              <Route path="tasks" element={<TaskPayments />} />
+              <Route path="commissions" element={<Commissions />} />
+            </Route>
 
             <Route path="/referrals" element={
               <ProtectedRoute>

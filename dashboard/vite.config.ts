@@ -13,7 +13,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_TARGET || 'http://161.118.164.85',
+        target: process.env.VITE_API_TARGET || 'https://161.118.164.85',
         changeOrigin: true,
         secure: false,
       },

@@ -1,0 +1,93 @@
+# CHANGELOG.md — Project Change Log
+
+> Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
+
+## 2026-08-12
+### Changed
+- Dashboard Payments page redesign: refactored 1,382-line `Payout.tsx` monolith into 17 modular components in `dashboard/src/pages/payout/`.
+- Introduced sub-navigation routing: `/payout/tasks` (Task Payments) and `/payout/commissions` (Commissions) under `PayoutLayout`.
+- UI/UX polish: compact segmented-control date filter (Previous/Current/All/Custom), color-accented summary cards, responsive mobile cards for breakdowns, inline accordion expansion for worker and inviter details, and collapsed-by-default history sections.
+
+## 2026-08-11
+- Documentation session: created `AGENTS.md` + full `docs/` system (this change log is the only record; no app code changed).
+
+## 2026-08-09
+### Added
+- Two-level referral feature (`9348d2d`): special inviter gets ₹20/post, ₹10/comment on the recruiter's workers via recruiter links (`ReferralRole` enum, `Referral.role`, `Referral.indirectSpecialInviterId`, new unique index).
+### Reverted
+- **`ac441e2`** — full revert of the two-level referral. Schema, migration, and code return to single-level referrals. **Current repo state contains no trace of it.**
+
+## 2026-08-05
+### Added
+- Owner earnings: daily income from added non-deleted tasks, last-7-days table (`874ff60`).
+- GoPartTime userscript updated and served from the dashboard; Android setup docs (`0af8cbf`).
+
+## 2026-08-04
+### Changed
+- GoPartTime: plain task-message copy-link UX, embed updates, goparttime service fixes (`e267974`).
+
+## 2026-08-03
+### Added
+- GoPartTime extension integration: page-format task IDs (`Post #<id>`/`Comment #<id>`), dashboard copy-link UX (`445e7cf`). Migration append: GoPartTime delivery columns, unique `(source, externalTaskId)`, `ACCEPTED` status, new audit actions, backfill of pending GoPartTime tasks to ACCEPTED.
+
+## 2026-08-02
+### Added
+- Dashboard Referrals page (`ba2339e`); ticket channel-name normalization, `#ticket-XXXX` resolution (`a246eb8`); edit + delete actions, removed status/type columns, fixed admin guard on referral routes (`b4f7842`).
+
+## 2026-07-27
+### Added
+- Owner earnings: PIN-protected Danger Zone (`d37daef`, `4d9122e`), full-page `/owner-earnings` route + weekly endpoint (`88d568e`, `c66842f`), daily earnings panel with commission-aware calculation (`e1f2fbe`).
+### Removed
+- Owner Earnings panel removed (`9dbee0f`) then re-added in revised form (see above; net effect: feature landed).
+### Fixed
+- Earnings use `createdAt` instead of `updatedAt`; payout worker detail shows created date (`6331318`, `72ef132`, `2e2f83e`).
+
+## 2026-07-26
+### Changed (Firestore → PostgreSQL cutover, Phase 4 + 5)
+- Phase 4: rewrite all services with repository pattern (`1f01cc2`); 1325 documents imported to PostgreSQL.
+- Phase 5: complete cutover (`702520a`) — Firebase runtime removed, health endpoint uses Prisma `SELECT 1`, re-hydration from Postgres.
+- Docker: `host.docker.internal` for PostgreSQL (`9a0f751`), server `.env` password (removed hardcoded DATABASE_URL override, `afb2954`), prisma generate order fix in Dockerfile (`dbf4e61`), `initializeDatabase()` in startup (`1df88de`).
+- Cleanup: Firebase env vars removed from `env.ts` (`57338de`); export-firestore.ts deleted (`67f15b5`).
+### Added
+- Archive tasks on pay and when cancelledReason is deleted/deleted_later (`717b4a1`); only archive paid tasks, restore unpaid archived to COMPLETED (`500340a`).
+- Payout/commission breakdown refinements: unpaid-only workers (`b7a4ace`, `2ed465b`), paid commissions filtered + batch history (`072aca9`), per-task commissions in initial payout for special inviters (`be9aa03`), all inviters incl. zero (`6889d46`).
+
+## 2026-07-25
+### Added
+- Referral commission tracking + payout dashboard tab (`1b36416`).
+- `/referral add` uses ticket option, auto-detects inviter type (`8584385`).
+
+## 2026-07-24
+### Added
+- Automated weekly payout management system + CSV exports (`3792396`); favicon + PWA app icon (`b524eff`); PWA (`9287f61`).
+### Fixed
+- Payout week-boundary calculation, admin check, cancelledReason filter (`fa6d598`); completedAt fallback to task.updatedAt (`5f3281e`).
+### Changed
+- Navbar redesign (`cda27aa`, `45f55a4`); dynamic navbar title, compact mobile toolbar (`aca51b4`).
+
+## 2026-07-23
+### Added
+- Insight screenshots saved to disk, served on dashboard, 30h auto-cleanup (`dddd658`); download buttons (`1dc1c23`); per-type + deletion stats (`0a1a73e`, `9f3f8cd`); mobile task cards + image downloader (`1c29e21`).
+### Changed
+- Auth removed from insight image upload route (`5415407`).
+
+## 2026-07-21
+### Changed
+- Manual deletion override dropdown replaces auto-detection; weekly Sunday archive; Archives page; 1000-task API limit (`148c75b`).
+
+## 2026-07-20
+### Added
+- Automatic Reddit deletion detection with early/late reason tracking (`442c84c`); Deleted/Deleted Later status in dashboard Tasks table (`e7472e3`); Activity Log page + audit trail + TaskDetails section (`1df3182`); reminder visual timeline in TaskDetails (`9b4e504`, `c1807e3`).
+### Changed
+- Mega commit (`d91f4b8`): dashboard column reorder, ticket channel name, encodeURIComponent on task IDs, axios CSV with JWT, API trust proxy, case-insensitive delete/status/find/reschedule, channelName+assignedUserName stored, nginx DNS resolver, REMINDER_DELAYS back to 20h/70h, compose cleanup.
+
+## 2026-07-19
+### Added
+- Initial commit (`ed82c7a`): Firestore-based Reddit Task Manager (Discord bot + REST API + dashboard scaffolding; `firebase.json`, `firestore.indexes.json`, `firebase-admin`).
+
+---
+
+## Note on History Completeness
+
+- No tags exist; dates are author dates (IST). Pre-2026-07-19 history does not exist.
+- Deployment history (when each release reached production) is **not recorded** in the repository — no deployment log exists. `docs/DEPLOYMENT.md` documents the current declared architecture; actual deploy dates are UNKNOWN.

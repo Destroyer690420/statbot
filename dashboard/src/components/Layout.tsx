@@ -87,7 +87,7 @@ export function Layout({ children }: { children: ReactNode }) {
     if (pathname.startsWith('/analytics')) return 'Analytics';
     if (pathname.startsWith('/activity')) return 'Activity';
     if (pathname.startsWith('/archives')) return 'Archives';
-    if (pathname.startsWith('/payout')) return 'Payout';
+    if (pathname.startsWith('/payout')) return 'Payments';
     if (pathname.startsWith('/referrals')) return 'Referrals';
     if (pathname.startsWith('/owner-earnings')) return 'Owner Earnings';
     if (pathname.startsWith('/settings')) return 'Settings';
