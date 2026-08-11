@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-12 (git HEAD `ac441e2`, working tree has one uncommitted change: `dashboard/vite.config.ts` dev-proxy target `http:` → `https:`; untracked `query-tasks.ts`/`query-tasks.js`).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-12 (git HEAD `1a70dbf`, working tree clean; same commit deployed to production `161.118.164.85` on 2026-08-12).
 
 ---
 
@@ -234,6 +234,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-08-12**: Deployed `1a70dbf` to production (`161.118.164.85`): code shipped as a git bundle (server repo `/home/ubuntu/rtm` cannot `git pull` — private GitHub repo, no host credentials), `docker compose up -d --build`, no DB migration needed (schema already matched), 12 slash commands re-deployed, health/dashboard/bot verified.
 - **2026-08-12**: Payments page UI redesign: split 1,382-line monolith into 17 modular components (`dashboard/src/pages/payout/`), sub-navigation routes (`/payout/tasks` & `/payout/commissions`), responsive mobile cards, inline accordion expansion, segmented-control date filter, collapsed-by-default history.
 - **2026-08-09**: Two-level referral implemented (`9348d2d`) then **reverted** (`ac441e2`).
 - **2026-08-05**: Owner earnings gained daily income from added non-deleted tasks + last-7-days table (`874ff60`); userscript updated and served from the dashboard; Android setup docs (`0af8cbf`).

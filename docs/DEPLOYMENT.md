@@ -1,12 +1,12 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. Deployment status last verified: UNKNOWN (nothing in the repo proves the last live deploy; compose + nginx files are the current declared architecture).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-12 — live deploy at git HEAD `1a70dbf`** (health OK, dashboard OK, Discord bot logged in; deployed via git bundle, see §5).
 
 ---
 
 ## 1. Overview
 
-Docker Compose on a Linux host at IP `161.118.164.85`, public domain **statbot.duckdns.org** (DuckDNS) with LetsEncrypt TLS. **Hosting provider: UNKNOWN** (no provider reference exists in the repo; `plan.md` mentions "Ubuntu VPS" + PM2 as the historical non-Docker path; **there are no Oracle Cloud references anywhere**).
+Docker Compose on a Linux host at IP `161.118.164.85`, public domain **statbot.duckdns.org** (DuckDNS) with LetsEncrypt TLS. **Hosting provider: Oracle Cloud** (ARM `aarch64`, hostname `rtm-bot`, Ubuntu 24.04 with Oracle kernel, verified via SSH 2026-08-12). SSH: user `ubuntu`, key-based (key pasted by the owner during deploys; also present in repo root as gitignored `ssh-key-2026-07-19.key`).
 
 ```mermaid
 flowchart LR
@@ -38,11 +38,23 @@ Network: single bridge `app-network`. **No healthchecks** anywhere (the app expo
 
 ## 4. Database Deployment
 
-- **PostgreSQL runs outside Compose** on the host (not provisioned by any compose service); backend reaches it via `host.docker.internal` (`extra_hosts` host-gateway). Version UNKNOWN.
-- Schema applied **manually** from `prisma/migrations/migration.sql` (idempotent; safe to re-run). No auto-migrate in any pipeline.
-- Backup/restore: **no mechanism in repo** (UNKNOWN how production backups work).
+- **PostgreSQL runs outside Compose** on the host (not provisioned by any compose service); backend reaches it via `host.docker.internal` (`extra_hosts` host-gateway). Version: **PostgreSQL 16.14** (verified via psql on the host). Host client `psql` 16.14 is installed; `DATABASE_URL` in `.env` points at `host.docker.internal` — when running psql directly on the host, substitute `localhost`.
+- Schema applied **manually** from `prisma/migrations/migration.sql` (idempotent; safe to re-run). No auto-migrate in any pipeline. Verify drift with: `psql "$(sed -n 's/^DATABASE_URL=//p' .env | tr -d '"' | sed 's/host.docker.internal/localhost/')" -tAc "SELECT ..."` (do not print the URL).
+- Backup/restore: **no mechanism in repo** (pre-deploy safety backups are taken manually as tarballs, e.g. `/home/ubuntu/rtm-backup-YYYYMMDD-HHMMSS.tar.gz`, excluding `node_modules/`, `dist/`, `.git`).
 
 ## 5. Build & Deploy Commands
+
+### Shipping code to the server (git bundle — no GitHub credentials on host)
+
+The host repo is `/home/ubuntu/rtm` (user `ubuntu`). It **cannot `git pull`**: the GitHub repo (`Destroyer690420/statbot`) is private and no credentials are installed on the host. Code ships from a dev machine as a git bundle:
+
+```
+git bundle create statbot-main.bundle origin/main
+scp statbot-main.bundle ubuntu@161.118.164.85:/home/ubuntu/
+ssh ubuntu@161.118.164.85 "cd /home/ubuntu/rtm && git fetch /home/ubuntu/statbot-main.bundle refs/remotes/origin/main:refs/remotes/origin/main && git reset --hard refs/remotes/origin/main"
+```
+
+Then build/restart as below. **Always back up the working tree first** (`tar -czf /home/ubuntu/rtm-backup-$(date +%Y%m%d-%H%M%S).tar.gz --exclude=rtm/node_modules --exclude=rtm/dist --exclude=rtm/.git -C /home/ubuntu rtm`). Verify `HEAD` after the reset. `.env`, `node_modules/`, `dist/` and server scratch files are untouched by this flow. After a verified deploy, delete the bundle from the host.
 
 ### Backend image
 ```
@@ -62,6 +74,14 @@ docker compose up -d dashboard
 ```
 docker compose up -d --build
 ```
+
+### Post-deploy verification
+- `docker compose ps` (all 3 services Up).
+- `curl -fsS https://statbot.duckdns.org/api/v1/health` → `"status":"healthy"` with database+redis connected.
+- Boot log walkthrough: `docker compose logs app` should show all 6 init steps ending with "All systems online!".
+- Dashboard root + `/goparttime-send.user.js` return 200.
+- Bot commands: `npm run deploy-commands` (idempotent; run after any `src/bot/commands/*` change).
+- DB drift check: compare `prisma/schema.prisma`/`migration.sql` against the live DB (migration is idempotent; re-run only if drift found).
 
 ### Local (non-Docker) development
 - Backend: `npm install && npx prisma generate && npm run build && npm start` (or `npm run dev`).
@@ -95,7 +115,7 @@ Volume `insight-uploads` mounted at `/app/uploads` — screenshots live there wi
 ## 11. Restart & Rollback
 
 - Restart: `docker compose restart app` (reminder jobs survive via re-hydration within 30 min; queue re-created at boot).
-- Rollback: `git checkout <commit>` on the host + rebuild images. **No blue/green or versioned image tags in repo.**
+- Rollback: re-bundle an older commit with the same bundle flow (§5) + rebuild images, or restore the pre-deploy working-tree tarball (`/home/ubuntu/rtm-backup-*.tar.gz`). **No blue/green or versioned image tags in repo.**
 
 ## 12. Known Deployment Gaps
 
@@ -104,3 +124,4 @@ Volume `insight-uploads` mounted at `/app/uploads` — screenshots live there wi
 3. `.env` must contain `DATABASE_URL` (missing from `.env.example`).
 4. `dist/` at repo root is stale; never use it for manual deploys (`npm run build` regenerates).
 5. DuckDNS domain + LetsEncrypt renewal relies on the ACME webroot mount (`/var/www/letsencrypt`) — renewal client config not in repo (UNKNOWN).
+6. **Server has no GitHub credentials** (private repo) — no `git pull`; every deploy ships via git bundle from a dev machine (see §5). A read-only deploy key or PAT on the host would remove this gap.
