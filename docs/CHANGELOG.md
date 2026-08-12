@@ -3,6 +3,12 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-08-12
+### Fixed
+- **Accepted-tasks regression** (caused earlier same day): the 11:00 deploy re-ran `prisma/migrations/migration.sql`, which still contained the one-time data backfill from the 2026-08-04 Accepted-Tasks cutover (`UPDATE Task SET status='ACCEPTED' ... WHERE status='PENDING'` + `DELETE FROM "Reminder"`). Re-running it reverted all 48 activated GoPartTime tasks to ACCEPTED and deleted their reminders. Fix: removed the backfill from `migration.sql` (local + server, DANGER comment added), added reusable `scripts/restore-accepted.ts`, restored all 48 tasks to PENDING with reminders recreated and scheduled (past-due jobs for deleted tasks are skipped by the worker). Verified: ACCEPTED=0, health OK. New rule: migration.sql is schema-only; data changes belong in versioned one-off scripts.
+### Deployed
+- Deployed `5797667` (two-level referral) to production `161.118.164.85` via git bundle: DB migration applied (`Referral.indirectSpecialInviterId` + index + `per_task_indirect` enum), `docker compose up -d --build`, 12 slash commands re-deployed; health/dashboard/bot/DB verified.
+### Rolled back
+- **Rolled back `5797667` to `1a70dbf`** on production the same day: code reset via git bundle, DB reverted (dropped `Referral.indirectSpecialInviterId` column+index; `CommissionKind` recreated without `per_task_indirect` — PG has no `DROP VALUE`, so the enum was recreated via rename → create → alter column → drop), images rebuilt, commands re-deployed. Trigger: reported unexpected Accepted-tasks after deploy; investigation found the 48 ACCEPTED tasks pre-dated the deploy (2026-08-04→08-12, all created before 11:00) — rollback done per request anyway.
 ### Added
 - Two-level referral system: auto-detects when a normal inviter was referred by a special inviter (`indirectSpecialInviterId`). Normal inviter gets ₹100 bonus after 2 tasks, while the upstream special inviter earns indirect per-task commissions (₹20/post, ₹10/comment) on the worker's completed tasks with no one-time bonus. Added `per_task_indirect` `CommissionKind`, DB migration, auto-chain detection, payment flow support, owner-earnings deductions, bot embed indirect label, and dashboard color-coded Indirect badge.
 ### Changed

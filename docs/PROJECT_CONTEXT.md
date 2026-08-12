@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-12 (git HEAD `1a70dbf`, working tree clean; same commit deployed to production `161.118.164.85` on 2026-08-12).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-12 (git HEAD `5797667`, working tree clean; production `161.118.164.85` rolled back to `1a70dbf` on 2026-08-12 — the `5797667` two-level-referral deploy was reverted pending investigation; DB schema rolled back too).
 
 ---
 
@@ -128,7 +128,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 | GoPartTime integration | Implemented (userscript + backend + delivery + submission + activation + reassign/retry) |
 | Payout system | Implemented (weekly IST window, batches, CSV, restore-unpaid) |
 | Referral commissions | Implemented (normal/special, one-time + per-task, batches, CSV) |
-| Two-level referral (indirect special commissions) | **Implemented** (2026-08-12: auto-chain detection, `indirectSpecialInviterId`, `per_task_indirect` commission kind, owner-earnings deduction, bot embed note, dashboard Indirect badge) |
+| Two-level referral (indirect special commissions) | **Reverted from production 2026-08-12** (code still in repo HEAD `5797667`; the deploy was rolled back to `1a70dbf` pending investigation of the Accepted-tasks question — see Recent Changes; DB schema fully reverted) |
 | Auto Reddit-deletion detection | **Removed/deprecated** (manual `cancelledReason` override instead); `check-reddit.ts` is dead code |
 | Owner earnings | Implemented (daily, 7-day history, weekly) |
 | Dashboard theme picker | **Stub** (UI-only, does nothing) |
@@ -174,7 +174,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 - PostgreSQL via Prisma 7 (`PrismaPg` driver adapter), `DATABASE_URL` env. Tables: `Task`, `Reminder`, `AuditLog`, `PayoutBatch`, `PayoutItem`, `Referral`, `CommissionBatch`, `CommissionItem`, `PayoutSettings`, `CommissionRates` (10 models, 7 enums).
 - FKs: Reminder→Task (cascade delete); AuditLog→Task (set null); PayoutItem→Batch/Task (restrict); CommissionItem→Batch/Referral/SourceTask (set-null for task).
 - Unique constraints: Task `(source, externalTaskId)` (GoPartTime dedupe). 26 indexes.
-- Migrations: **single hand-maintained, idempotent** `prisma/migrations/migration.sql` (338 lines), applied manually (NOT `prisma migrate deploy`). Keep SQL ↔ schema.prisma in sync and `IF NOT EXISTS`-safe.
+- Migrations: **single hand-maintained, idempotent** `prisma/migrations/migration.sql`, applied manually (NOT `prisma migrate deploy`). Keep SQL ↔ schema.prisma in sync and `IF NOT EXISTS`-safe. **Schema-only, no data statements** — a one-time data backfill (UPDATE/DELETE) that lived there was removed 2026-08-12 after a re-run corrupted 48 activated tasks (recovery tool: `scripts/restore-accepted.ts`; see DEPLOYMENT.md §4).
 - Firestore: **inactive/legacy** — `firebase.json` + `firestore.indexes.json` remain but nothing in `src/` uses Firebase.
 
 ---
@@ -234,6 +234,9 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-08-12**: **Fixed the Accepted-tasks regression** (root cause found & repaired): re-running `migration.sql` during the 11:00 deploy re-executed a one-time data backfill from the 2026-08-04 cutover (`UPDATE Task SET status='ACCEPTED' WHERE source='goparttime' AND status='PENDING'` + `DELETE FROM "Reminder"`), reverting all 48 activated GoPartTime tasks to ACCEPTED and deleting their reminders. Fix: removed the backfill from `migration.sql` (local + server, with DANGER comment), added reusable `scripts/restore-accepted.ts`, restored all 48 tasks → PENDING with reminders recreated/scheduled via the activation logic (deleted ones' jobs are skipped by the worker). Verified: ACCEPTED=0, reminders scheduled, health OK. **Rule going forward: migration.sql is schema-only; data changes go in versioned one-off scripts.**
+- **2026-08-12**: **Rolled back the `5797667` deploy to `1a70dbf`** on production (`161.118.164.85`): user reported unexpected tasks in the dashboard Accepted section after the deploy. Investigation showed the 48 ACCEPTED tasks predate the deploy (created 2026-08-04 → 2026-08-12, all before 11:00; the referral commit cannot create tasks) — the rollback was done anyway per request. Full rollback: git reset to `1a70dbf`, DB reverted (`Referral.indirectSpecialInviterId` column+index dropped; `CommissionKind` enum recreated without `per_task_indirect`; 122 `CommissionItem` rows untouched), images rebuilt, 12 commands re-deployed, health/dashboard/bot/DB verified. Safety backup of the reverted state: `/home/ubuntu/rtm-backup-20260812-rollback5797667.tar.gz`. Note: PG has no `ALTER TYPE ... DROP VALUE`; enum values are removed by recreate-the-type (rename → create → alter column → drop).
+- **2026-08-12**: Deployed `5797667` (two-level referral system) to production (`161.118.164.85`): shipped as a git bundle, working-tree backup taken (`rtm-backup-20260812-105700.tar.gz`), DB migration applied (idempotent `migration.sql`: `Referral.indirectSpecialInviterId` column + index + `per_task_indirect` enum), `docker compose up -d --build`, 12 slash commands re-deployed, health/dashboard/bot/DB verified. *(Superseded by the rollback above.)*
 - **2026-08-12**: Deployed `1a70dbf` to production (`161.118.164.85`): code shipped as a git bundle (server repo `/home/ubuntu/rtm` cannot `git pull` — private GitHub repo, no host credentials), `docker compose up -d --build`, no DB migration needed (schema already matched), 12 slash commands re-deployed, health/dashboard/bot verified.
 - **2026-08-12**: Payments page UI redesign: split 1,382-line monolith into 17 modular components (`dashboard/src/pages/payout/`), sub-navigation routes (`/payout/tasks` & `/payout/commissions`), responsive mobile cards, inline accordion expansion, segmented-control date filter, collapsed-by-default history.
 - **2026-08-09**: Two-level referral implemented (`9348d2d`) then **reverted** (`ac441e2`).

@@ -326,16 +326,15 @@ ALTER TYPE "TaskStatus" ADD VALUE IF NOT EXISTS 'ACCEPTED';
 -- Audit action for the "Done" (accept into workflow) step
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TASK_ACCEPTED';
 
--- Backfill: tasks previously delivered keep an ACCEPTED status so they
--- land on the new Accepted Tasks page instead of the active tasks page.
-UPDATE "Task" SET "status" = 'ACCEPTED'
-WHERE "source" = 'goparttime' AND "status" = 'PENDING';
-
--- Accepted tasks have no reminders until the manager marks them Done;
--- drop the reminders that were scheduled at assign time for those tasks.
-DELETE FROM "Reminder" WHERE "taskId" IN (
-  SELECT "id" FROM "Task" WHERE "source" = 'goparttime' AND "status" = 'ACCEPTED'
-);
+-- ⚠️ DANGER: a one-time data backfill used to live here (UPDATE Task SET
+-- status='ACCEPTED' WHERE source='goparttime' AND status='PENDING', plus a
+-- DELETE FROM "Reminder" for those tasks). It was applied once during the
+-- 2026-08-04 cutover and MUST NEVER be re-run: re-running it reverts every
+-- activated (PENDING) GoPartTime task back to ACCEPTED and wipes its
+-- reminders. It was removed on 2026-08-12 after a re-run during a deploy
+-- corrupted 48 tasks (restored via scripts/restore-accepted.ts). If the
+-- Accepted-Tasks gate ever needs re-derivation, do it with an explicit,
+-- versioned one-off script — never inside this idempotent migration file.
 
 -- ──────────────────────────────────────────────────────────────
 -- Migration: Two-level referral (indirect special inviter commissions)
