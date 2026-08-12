@@ -89,9 +89,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         `**Inviter:** <@${inviter.id}> (${type})`,
         `**Invitee:** <@${invitee.id}>`,
         `**Ticket:** \`${ticket}\``,
-      ].join('\n');
+      ];
+      if (referral.indirectSpecialInviterId) {
+        description.push(`**↳ Indirect link:** <@${referral.indirectSpecialInviterId}> earns per-task commission`);
+      }
 
-      await interaction.editReply({ embeds: [successEmbed(`Referral added.\n${description}`)] });
+      await interaction.editReply({ embeds: [successEmbed(`Referral added.\n${description.join('\n')}`)] });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error.';
       await interaction.editReply({ embeds: [errorEmbed(message)] });

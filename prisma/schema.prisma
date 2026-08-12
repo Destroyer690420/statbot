@@ -72,6 +72,7 @@ enum InviterType {
 enum CommissionKind {
   one_time
   per_task
+  per_task_indirect
 }
 
 model Task {
@@ -217,6 +218,7 @@ model Referral {
   oneTimeCommissionPaidAt  DateTime?
   perTaskCommissionActive  Boolean         @default(false)
   ticketId                 String?
+  indirectSpecialInviterId String?
   createdAt                DateTime
   updatedAt                DateTime
 
@@ -225,6 +227,7 @@ model Referral {
   @@index([inviterId])
   @@index([inviteeId, inviterId])
   @@index([createdAt])
+  @@index([indirectSpecialInviterId])
 }
 
 model CommissionBatch {

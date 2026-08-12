@@ -14,7 +14,7 @@
 | **Normal inviter** | Default type. One-time bonus ₹100 after the invitee completes **2** tasks (threshold configurable). |
 | **Special inviter** | One of the **hardcoded** Discord IDs in `src/bot/commands/referral.ts`: `582595416294555649`, `1202294567706316911`, `1506900129792135211`. One-time bonus ₹50 after **1** task + **per-task commissions** ₹20/post, ₹10/comment. |
 
-## 2. Rates (`CommissionRates` row, defaults)
+## 2. Rates (`CommissionRates` row, defaults) 
 
 | Field | Default | Bounds (API) |
 |---|---|---|

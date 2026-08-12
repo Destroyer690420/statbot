@@ -65,6 +65,16 @@ export class CommissionRepository {
     });
   }
 
+  async findIndirectPerTaskCommission(inviterId: string, sourceTaskId: string) {
+    return getDb().commissionItem.findFirst({
+      where: {
+        inviterId,
+        sourceTaskId,
+        commissionKind: 'per_task_indirect',
+      },
+    });
+  }
+
   async findItemsByBatchId(batchId: string) {
     return getDb().commissionItem.findMany({
       where: { batchId },

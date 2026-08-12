@@ -336,3 +336,10 @@ WHERE "source" = 'goparttime' AND "status" = 'PENDING';
 DELETE FROM "Reminder" WHERE "taskId" IN (
   SELECT "id" FROM "Task" WHERE "source" = 'goparttime' AND "status" = 'ACCEPTED'
 );
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Two-level referral (indirect special inviter commissions)
+-- ──────────────────────────────────────────────────────────────
+ALTER TABLE "Referral" ADD COLUMN IF NOT EXISTS "indirectSpecialInviterId" TEXT;
+CREATE INDEX IF NOT EXISTS "Referral_indirectSpecialInviterId_idx" ON "Referral"("indirectSpecialInviterId");
+ALTER TYPE "CommissionKind" ADD VALUE IF NOT EXISTS 'per_task_indirect';

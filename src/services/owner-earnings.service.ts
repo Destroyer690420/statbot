@@ -90,7 +90,7 @@ class OwnerEarningsService {
       let perTaskComm = 0;
 
       const ref = referralByInvitee.get(task.assignedUserId);
-      if (ref && ref.inviterType === 'special') {
+      if (ref && (ref.inviterType === 'special' || ref.indirectSpecialInviterId)) {
         perTaskComm = isPost ? commRates.specialPerPost : commRates.specialPerComment;
         totalSpecialPerTaskComm += perTaskComm;
       }

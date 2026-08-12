@@ -17,6 +17,18 @@ export class ReferralRepository {
     });
   }
 
+  async findByInviteeId(inviteeId: string) {
+    return getDb().referral.findMany({
+      where: { inviteeId },
+    });
+  }
+
+  async findByIndirectSpecialInviterId(specialInviterId: string) {
+    return getDb().referral.findMany({
+      where: { indirectSpecialInviterId: specialInviterId },
+    });
+  }
+
   async findAll() {
     return getDb().referral.findMany({
       orderBy: { createdAt: 'desc' },
@@ -35,6 +47,7 @@ export class ReferralRepository {
     oneTimeCommissionPaidAt: Date | null;
     perTaskCommissionActive: boolean;
     ticketId: string | null;
+    indirectSpecialInviterId: string | null;
     createdAt: Date;
     updatedAt: Date;
   }) {
@@ -63,3 +76,4 @@ export class ReferralRepository {
 }
 
 export const referralRepository = new ReferralRepository();
+

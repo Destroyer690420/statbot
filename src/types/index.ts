@@ -200,7 +200,7 @@ export interface PayoutSettings {
 
 export type ReferralStatus = 'pending' | 'qualified' | 'active_per_task' | 'closed';
 export type InviterType = 'normal' | 'special';
-export type CommissionKind = 'one_time' | 'per_task';
+export type CommissionKind = 'one_time' | 'per_task' | 'per_task_indirect';
 
 export interface Referral {
   id: string;
@@ -214,6 +214,7 @@ export interface Referral {
   oneTimeCommissionPaidAt: Date | null;
   perTaskCommissionActive: boolean;
   ticketId: string | null;
+  indirectSpecialInviterId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

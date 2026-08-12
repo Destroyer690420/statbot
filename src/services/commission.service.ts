@@ -152,6 +152,23 @@ class CommissionService {
       throw new Error(`A referral already exists for invitee <@${data.inviteeId}>.`);
     }
 
+    // Auto-detect two-level chain: if this normal inviter was invited by a special inviter
+    let indirectSpecialInviterId: string | null = null;
+    if (data.inviterType === 'normal') {
+      const parentReferrals = await referralRepository.findByInviteeId(data.inviterId);
+      const specialParent = parentReferrals.find(
+        (r) => (r as any).inviterType === 'special' && (r as any).status !== 'closed',
+      );
+      if (specialParent) {
+        indirectSpecialInviterId = (specialParent as any).inviterId;
+        logger.info('Indirect special inviter detected', {
+          normalInviter: data.inviterId,
+          specialInviter: indirectSpecialInviterId,
+          invitee: data.inviteeId,
+        });
+      }
+    }
+
     const now = new Date();
     const referral: Referral = {
       id: generateReferralId(),
@@ -165,6 +182,7 @@ class CommissionService {
       oneTimeCommissionPaidAt: null,
       perTaskCommissionActive: false,
       ticketId: data.ticketId || null,
+      indirectSpecialInviterId,
       createdAt: now,
       updatedAt: now,
     };
@@ -181,6 +199,7 @@ class CommissionService {
       oneTimeCommissionPaidAt: referral.oneTimeCommissionPaidAt,
       perTaskCommissionActive: referral.perTaskCommissionActive,
       ticketId: referral.ticketId,
+      indirectSpecialInviterId: referral.indirectSpecialInviterId,
       createdAt: referral.createdAt,
       updatedAt: referral.updatedAt,
     });
@@ -189,10 +208,10 @@ class CommissionService {
       AuditAction.REFERRAL_ADDED,
       null,
       createdBy,
-      `Referral ${referral.id} — ${data.inviterName} → ${data.inviteeName} (${data.inviterType})`,
+      `Referral ${referral.id} — ${data.inviterName} → ${data.inviteeName} (${data.inviterType})${indirectSpecialInviterId ? ` [indirect: ${indirectSpecialInviterId}]` : ''}`,
     );
 
-    logger.info('Referral created', { referralId: referral.id });
+    logger.info('Referral created', { referralId: referral.id, indirectSpecialInviterId });
     return referral;
   }
 
@@ -307,6 +326,11 @@ class CommissionService {
     return item !== null;
   }
 
+  async hasExistingIndirectPerTaskCommission(inviterId: string, sourceTaskId: string): Promise<boolean> {
+    const item = await commissionRepository.findIndirectPerTaskCommission(inviterId, sourceTaskId);
+    return item !== null;
+  }
+
   async getPaidCommissionAmountsByReferral(): Promise<Map<string, { total: number; bonus: number; perTask: number; paid: boolean }>> {
     const items = await commissionRepository.findAllItems();
     const map = new Map<string, { total: number; bonus: number; perTask: number; paid: boolean }>();
@@ -374,6 +398,50 @@ class CommissionService {
     return items;
   }
 
+  /**
+   * Compute indirect per-task commissions for a special inviter.
+   * For each referral where indirectSpecialInviterId === specialInviterId,
+   * the special inviter earns per-task commissions on the invitee's completed tasks.
+   * No one-time bonus. Threshold is the special invite threshold (default 1).
+   */
+  async getIndirectPayableItems(specialInviterId: string, rates: CommissionRates): Promise<{
+    commissionKind: CommissionKind;
+    amount: number;
+    sourceTaskId: string | null;
+    referralId: string;
+    invitedWorkerId: string;
+  }[]> {
+    const indirectRefs = await referralRepository.findByIndirectSpecialInviterId(specialInviterId);
+    const items: { commissionKind: CommissionKind; amount: number; sourceTaskId: string | null; referralId: string; invitedWorkerId: string }[] = [];
+
+    for (const raw of indirectRefs) {
+      const ref = toReferral(raw as any);
+      if (ref.status === 'closed') continue;
+
+      // Use special threshold (default 1) for indirect commissions
+      const tasks = await this.getTasksForReferral(ref);
+      if (tasks.length < rates.specialInviteTaskThreshold) continue;
+
+      for (const task of tasks) {
+        const amount = task.type === TaskType.POST ? rates.specialPerPost : rates.specialPerComment;
+        if (amount > 0) {
+          const existing = await this.hasExistingIndirectPerTaskCommission(specialInviterId, task.id);
+          if (!existing) {
+            items.push({
+              commissionKind: 'per_task_indirect',
+              amount,
+              sourceTaskId: task.id,
+              referralId: ref.id,
+              invitedWorkerId: ref.inviteeId,
+            });
+          }
+        }
+      }
+    }
+
+    return items;
+  }
+
   async getSummary(_weekStart?: Date, _weekEnd?: Date): Promise<{
     totalInviters: number;
     totalSuccessfulInvites: number;
@@ -402,6 +470,23 @@ class CommissionService {
         for (const item of payableItems) {
           if (item.commissionKind === 'one_time') totalBonusAmount += item.amount;
           else totalPerTaskAmount += item.amount;
+        }
+      }
+    }
+
+    // Include indirect commissions for special inviters
+    const specialInviterIds = new Set<string>();
+    for (const ref of activeReferrals) {
+      if (ref.indirectSpecialInviterId) {
+        specialInviterIds.add(ref.indirectSpecialInviterId);
+      }
+    }
+    for (const specialInviterId of specialInviterIds) {
+      const indirectItems = await this.getIndirectPayableItems(specialInviterId, rates);
+      if (indirectItems.length > 0) {
+        inviterSet.add(specialInviterId);
+        for (const item of indirectItems) {
+          totalPerTaskAmount += item.amount;
         }
       }
     }
@@ -466,6 +551,14 @@ class CommissionService {
           for (const item of payableItems) {
             totalCommission += item.amount;
           }
+        }
+      }
+
+      // Add indirect commissions for special inviters
+      if (data.inviterType === 'special') {
+        const indirectItems = await this.getIndirectPayableItems(inviterId, rates);
+        for (const item of indirectItems) {
+          totalCommission += item.amount;
         }
       }
 
@@ -540,6 +633,44 @@ class CommissionService {
 
       totalBonus += bonusAmount;
       totalPerTask += perTaskAmount;
+    }
+
+    // Include indirect commissions for special inviters
+    if (refs[0].inviterType === 'special') {
+      const indirectRefs = await referralRepository.findByIndirectSpecialInviterId(inviterId);
+      for (const raw of indirectRefs) {
+        const indRef = toReferral(raw as any);
+        if (indRef.status === 'closed') continue;
+
+        const tasks = await this.getTasksForReferral(indRef);
+        if (tasks.length < rates.specialInviteTaskThreshold) continue;
+
+        let indirectPerTask = 0;
+        for (const task of tasks) {
+          const amount = task.type === TaskType.POST ? rates.specialPerPost : rates.specialPerComment;
+          if (amount > 0) {
+            const existing = await this.hasExistingIndirectPerTaskCommission(inviterId, task.id);
+            if (!existing) {
+              indirectPerTask += amount;
+            }
+          }
+        }
+
+        if (indirectPerTask > 0) {
+          const posts = tasks.filter((t) => t.type === TaskType.POST).length;
+          const comments = tasks.filter((t) => t.type === TaskType.COMMENT).length;
+          referralDetails.push({
+            referralId: indRef.id,
+            inviteeName: `${indRef.inviteeName} (indirect)`,
+            inviteeTasks: { total: tasks.length, posts, comments },
+            bonusAmount: 0,
+            perTaskAmount: indirectPerTask,
+            isSuccessful: true,
+            bonusPaid: false,
+          });
+          totalPerTask += indirectPerTask;
+        }
+      }
     }
 
     if (referralDetails.length === 0) return null;
@@ -654,6 +785,25 @@ class CommissionService {
       }
     }
 
+    // Collect indirect commissions for special inviters
+    if (refs[0].inviterType === 'special') {
+      const indirectItems = await this.getIndirectPayableItems(inviterId, rates);
+      for (const pi of indirectItems) {
+        items.push({
+          id: generateCommissionItemId(),
+          batchId: '',
+          referralId: pi.referralId,
+          inviterId,
+          invitedWorkerId: pi.invitedWorkerId,
+          sourceTaskId: pi.sourceTaskId,
+          commissionKind: pi.commissionKind,
+          amount: pi.amount,
+          createdAt: now,
+        });
+        totalAmount += pi.amount;
+      }
+    }
+
     if (items.length === 0) {
       throw new Error('No unpaid commissions available for this inviter.');
     }
@@ -756,6 +906,39 @@ class CommissionService {
       }
     }
 
+    // Collect indirect commissions for special inviters
+    const specialInviterIdsWithIndirect = new Set<string>();
+    for (const ref of referrals) {
+      if (ref.indirectSpecialInviterId) {
+        specialInviterIdsWithIndirect.add(ref.indirectSpecialInviterId);
+      }
+    }
+    for (const specialInviterId of specialInviterIdsWithIndirect) {
+      const indirectItems = await this.getIndirectPayableItems(specialInviterId, rates);
+      if (indirectItems.length > 0) {
+        let indirectAmount = 0;
+        for (const pi of indirectItems) {
+          items.push({
+            id: generateCommissionItemId(),
+            batchId: '',
+            referralId: pi.referralId,
+            inviterId: specialInviterId,
+            invitedWorkerId: pi.invitedWorkerId,
+            sourceTaskId: pi.sourceTaskId,
+            commissionKind: pi.commissionKind,
+            amount: pi.amount,
+            createdAt: now,
+          });
+          indirectAmount += pi.amount;
+        }
+        totalAmount += indirectAmount;
+        // Only count as a new paid inviter if not already counted in direct payouts
+        if (!uniqueInviters.includes(specialInviterId) || !items.some((i) => i.inviterId === specialInviterId && i.commissionKind !== 'per_task_indirect')) {
+          invitersPaid++;
+        }
+      }
+    }
+
     if (items.length === 0) {
       throw new Error('No unpaid commissions available.');
     }
@@ -826,7 +1009,7 @@ class CommissionService {
           inviterType: ref?.inviterType || 'normal',
           inviteeName: ref?.inviteeName || item.invitedWorkerId.slice(0, 8),
           bonusAmount: item.commissionKind === 'one_time' ? item.amount : 0,
-          perTaskAmount: item.commissionKind === 'per_task' ? item.amount : 0,
+          perTaskAmount: (item.commissionKind === 'per_task' || item.commissionKind === 'per_task_indirect') ? item.amount : 0,
           totalCommission: item.amount,
           status: 'Paid',
         };
@@ -901,7 +1084,7 @@ class CommissionService {
         inviterType: (ref?.inviterType || 'normal') as InviterType,
         inviteeName: ref?.inviteeName || item.invitedWorkerId.slice(0, 8),
         bonusAmount: item.commissionKind === 'one_time' ? item.amount : 0,
-        perTaskAmount: item.commissionKind === 'per_task' ? item.amount : 0,
+        perTaskAmount: (item.commissionKind === 'per_task' || item.commissionKind === 'per_task_indirect') ? item.amount : 0,
         totalCommission: item.amount,
       };
     });

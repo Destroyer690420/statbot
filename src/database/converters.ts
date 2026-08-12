@@ -123,7 +123,8 @@ type PrismaReferral = {
   inviteeId: string; inviteeName: string; inviterType: string;
   status: string; oneTimeCommissionPaid: boolean;
   oneTimeCommissionPaidAt: Date | null; perTaskCommissionActive: boolean;
-  ticketId: string | null; createdAt: Date; updatedAt: Date;
+  ticketId: string | null; indirectSpecialInviterId: string | null;
+  createdAt: Date; updatedAt: Date;
 };
 
 export function toReferral(r: PrismaReferral): Referral {
@@ -135,9 +136,12 @@ export function toReferral(r: PrismaReferral): Referral {
     oneTimeCommissionPaid: r.oneTimeCommissionPaid,
     oneTimeCommissionPaidAt: r.oneTimeCommissionPaidAt,
     perTaskCommissionActive: r.perTaskCommissionActive,
-    ticketId: r.ticketId, createdAt: r.createdAt, updatedAt: r.updatedAt,
+    ticketId: r.ticketId,
+    indirectSpecialInviterId: r.indirectSpecialInviterId ?? null,
+    createdAt: r.createdAt, updatedAt: r.updatedAt,
   };
 }
+
 
 type PrismaCommissionItem = {
   id: string; batchId: string; referralId: string; inviterId: string;

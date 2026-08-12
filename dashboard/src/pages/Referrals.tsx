@@ -191,7 +191,14 @@ export function Referrals() {
                           {(r.inviterName || r.inviterId || '?').charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{r.inviterName}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium text-white truncate">{r.inviterName}</p>
+                            {r.indirectSpecialInviterId && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-md shrink-0" title={`Indirect special inviter: ${r.indirectSpecialInviterId}`}>
+                                Indirect
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-dark-500 font-mono truncate">{r.inviterId}</p>
                         </div>
                       </div>
@@ -260,7 +267,14 @@ export function Referrals() {
                     {(r.inviterName || r.inviterId || '').charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{r.inviterName}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-white text-sm font-medium truncate">{r.inviterName}</p>
+                      {r.indirectSpecialInviterId && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-md shrink-0">
+                          Indirect
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-dark-400">invited</p>
                   </div>
                 </div>

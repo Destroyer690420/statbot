@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-08-12
+### Added
+- Two-level referral system: auto-detects when a normal inviter was referred by a special inviter (`indirectSpecialInviterId`). Normal inviter gets ₹100 bonus after 2 tasks, while the upstream special inviter earns indirect per-task commissions (₹20/post, ₹10/comment) on the worker's completed tasks with no one-time bonus. Added `per_task_indirect` `CommissionKind`, DB migration, auto-chain detection, payment flow support, owner-earnings deductions, bot embed indirect label, and dashboard color-coded Indirect badge.
 ### Changed
 - Dashboard Payments page redesign: refactored 1,382-line `Payout.tsx` monolith into 17 modular components in `dashboard/src/pages/payout/`.
 - Introduced sub-navigation routing: `/payout/tasks` (Task Payments) and `/payout/commissions` (Commissions) under `PayoutLayout`.
