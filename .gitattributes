@@ -1,0 +1,4 @@
+# The GoPartTime userscript must stay byte-identical between the source copy
+# (scripts/) and the served copy (dashboard/public/) and match what git stores
+# (LF). Pin LF so Windows checkouts (core.autocrlf=true) don't introduce CRLF.
+*.user.js text eol=lf
