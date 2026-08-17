@@ -89,7 +89,7 @@
 
 | # | Limitation | Notes |
 |---|---|---|
-| 11 | Insight images unauthenticated + 30h TTL | Public URL for 30h then auto-deleted; viewers must act fast (`docs/INSIGHT_SYSTEM.md`) |
+| 11 | Insight images unauthenticated + 60h TTL | Public URL for 60h then auto-deleted; viewers must act fast (`docs/INSIGHT_SYSTEM.md`) |
 | 12 | `alreadyPaid` summary is all-time, not weekly | `payoutRepository.getTotalPaid()` global sum |
 | 13 | payWorker batches keep `paidAt = null` | Never filled later; payAll batches set it at creation |
 | 14 | No auto-payout for commissions or workers | Both are dashboard-manual |

@@ -44,12 +44,12 @@
 - **Consequences**: re-deploy needed after command edits; permission logic duplicated 12×; `/delete` uses interactive button confirmation.
 - **Status**: Current practice.
 
-## Decision 6: Local disk insight storage with 30h TTL, unauthenticated serving
+## Decision 6: Local disk insight storage with 60h TTL, unauthenticated serving
 
 - **Context**: Screenshots must be viewable in the dashboard; no object storage budget.
-- **Decision**: Save to `<cwd>/uploads/insights/<taskId>/<reminderId>.<ext>`; serve via `GET /uploads/insights/:taskId/:filename` (no auth, traversal-guarded); hourly cleanup deletes files older than 30h.
+- **Decision**: Save to `<cwd>/uploads/insights/<taskId>/<reminderId>.<ext>`; serve via `GET /uploads/insights/:taskId/:filename` (no auth, traversal-guarded); hourly cleanup deletes files older than 60h. (TTL raised from 30h → 60h on 2026-08-17: GoPartTime Submit View needs the 70h screenshots to stay downloadable while the manager submits view data.)
 - **Reason**: simple; TTL bounds storage and exposure.
-- **Consequences**: public URLs for ≤30h; images vanish before slow admins might view them; volume must be mounted in Docker.
+- **Consequences**: public URLs for ≤60h; images vanish before slow admins might view them; volume must be mounted in Docker.
 - **Status**: Current practice (`src/services/insight-storage.service.ts`).
 
 ## Decision 7: Two-level referral — added then reverted (same day)

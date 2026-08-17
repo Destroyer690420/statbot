@@ -274,7 +274,7 @@ Rows may be absent (fresh DB): services fall back to defaults. Converters return
 
 ## 9. Insight Images (not in DB)
 
-Stored on disk: `<cwd>/uploads/insights/<taskId>/<reminderId>.<ext>`; DB columns `Reminder.insightImageUrl/insightImageName/insightUploadedAt` point at them; 30h TTL cleanup deletes files (see `docs/INSIGHT_SYSTEM.md`).
+Stored on disk: `<cwd>/uploads/insights/<taskId>/<reminderId>.<ext>`; DB columns `Reminder.insightImageUrl/insightImageName/insightUploadedAt` point at them; 60h TTL cleanup deletes files (see `docs/INSIGHT_SYSTEM.md`).
 
 ---
 

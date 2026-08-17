@@ -29,7 +29,7 @@
 |---|---|---|---|---|
 | Auto-archive | 24 h | +1 h after boot | `taskService.archiveOld(now − 30d)` — COMPLETED/CANCELLED **paid** tasks → ARCHIVED | logged, continues |
 | Sunday archive | weekly (next UTC Sunday 00:00, self-rescheduling) | +1 h after boot | `taskService.archiveAllCompleted()` — all **paid** COMPLETED → ARCHIVED | logged, re-schedules |
-| Insight image cleanup | 60 min | immediately (interval) | `insightStorageService.cleanup()` — delete files >30h old, prune empty dirs | logged |
+| Insight image cleanup | 60 min | immediately (interval) | `insightStorageService.cleanup()` — delete files >60h old, prune empty dirs | logged |
 | Reminder re-hydration | 30 min | immediately (interval; also at boot step 5) | `rehydrateReminders()` — recreate missing primary/retry jobs from DB | logged |
 
 ## 4. Re-Hydration Details (`rehydrateReminders`)

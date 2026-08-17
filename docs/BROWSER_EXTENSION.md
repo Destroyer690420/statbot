@@ -100,4 +100,4 @@ Step 2 on a comment → 400 "Comments have only one view-data step (COMMENT_20H)
 - No "copy link" behavior in the userscript itself (copy-friendly Discord formatting is handled by the backend's message layout).
 - Depends on GoPartTime's DOM structure (Radix/Vaul dialogs, `div.prose`, named inputs) — fragile to site changes; hence the debug tool.
 - Single shared API key for all workers (no per-worker identity).
-- Submit View: works only after a card's Submit View/countdown button was clicked (tracking); comments currently render no Submit View button in the GoPartTime UI (step 1 assumed); screenshots expire after 30h; image must be visible/attached before clicking Submit — the script does not verify GoPartTime actually accepted it.
+- Submit View: works only after a card's Submit View/countdown button was clicked (tracking); comments currently render no Submit View button in the GoPartTime UI (step 1 assumed); screenshots expire after 60h; image must be visible/attached before clicking Submit — the script does not verify GoPartTime actually accepted it.

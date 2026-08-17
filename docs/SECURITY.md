@@ -35,7 +35,7 @@ Managers (`MANAGER_USER_IDS`) are used **only** by the bot, never the API.
 2. **Owner PIN**: default `'7977'` in `env.ts`; `/owner/verify` returns 200 even for wrong PIN (`{success:false}`) — client relies on `success`; the `/owner-earnings` dashboard route is JWT-only (any logged-in admin who knows the URL can open it; PIN is a soft gate).
 3. **JWT holder is trusted for "admin" only when username == DASHBOARD_USERNAME** — the token itself carries no roles; any future multi-user JWT would need role claims.
 4. **Rate limit** also throttles `/health` and `/auth/login` (operational nuance, not a vuln).
-5. Insight images are unauthenticated and TTL'd 30h (accepted design tradeoff).
+5. Insight images are unauthenticated and TTL'd 60h (accepted design tradeoff).
 6. Shared `GOPARTTIME_API_KEY` for all workers — no per-user identity on the extension channel.
 7. `dist/` and `src/generated/prisma` are regenerated at build — do not trust stale copies.
 8. No audit of failed logins beyond a warn log.
@@ -54,7 +54,7 @@ Managers (`MANAGER_USER_IDS`) are used **only** by the bot, never the API.
 
 ## 7. File Upload / Storage
 
-- Insight screenshots: downloaded from Discord CDN by the server (no client upload endpoint); written to `uploads/insights/<taskId>/`; served read-only with traversal checks; 30h TTL cleanup.
+- Insight screenshots: downloaded from Discord CDN by the server (no client upload endpoint); written to `uploads/insights/<taskId>/`; served read-only with traversal checks; 60h TTL cleanup.
 - No arbitrary file upload endpoints exist.
 
 ## 8. Database Security

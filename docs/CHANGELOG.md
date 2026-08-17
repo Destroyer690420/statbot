@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-08-17
+### Changed
+- **Insight screenshot TTL raised 30h → 60h** (`INSIGHT_TTL_MS` in `src/services/insight-storage.service.ts`): GoPartTime Submit View needs the 70h screenshots to stay downloadable while the manager submits view data. Cleanup semantics unchanged (mtime-based, hourly sweep, up to ~1h lag).
 ### Deployed
 - **Submit View manual-task fallback deployed** (`161.118.164.85`) at commit `60a62b8` (app-only rebuild, backup `rtm-backup-20260817-1655-pre-60a62b8.tar.gz`). Verified live for the reported task `POST #688318`: `?step=1` → `POST_20H`, `?step=2` → `POST_70H` (screenshot download 200/70.7 KB), no-step → `POST_20H`. (20h screenshot file itself had already expired via the 30h TTL — uploads from Aug 14 are gone; step-1 download 404s until a newer screenshot exists.)
 ### Fixed

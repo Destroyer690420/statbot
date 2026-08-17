@@ -149,5 +149,5 @@ Note: `TASK_REVIEWED`/`markReviewed` exist (model + repo) but no current flow ca
 7. The extension key is a single shared secret for all workers (`GOPARTTIME_API_KEY`).
 8. Two copies of the userscript exist (`scripts/` and `dashboard/public/`) and must be kept identical (they currently are, byte-for-byte).
 9. Submit View is **deliberately manual** at the end: no success detection, no confirm endpoint, no DB writes — the manager reads the count, clicks Submit, and verifies. The userscript's step-2 request for a comment task errors ("Comments have only one view-data step (COMMENT_20H).") and comments currently render no "Submit View" button in the GoPartTime UI (step 1 is assumed).
-10. Insight screenshots expire from disk after 30h (see `docs/INSIGHT_SYSTEM.md`); Submit View after expiry returns no image.
+10. Insight screenshots expire from disk after 60h (see `docs/INSIGHT_SYSTEM.md`); Submit View after expiry returns no image.
 11. **Manual-task fallback** (2026-08-17): the insight endpoint also resolves manually-created tasks (slash command / dashboard) whose id embeds the GoPartTime number (`POST #688318`, `Comment #688318`, case-insensitive) — it only matches tasks with no `source`, so GoPartTime-linked tasks always win. Manual ids in a different format can't be matched.

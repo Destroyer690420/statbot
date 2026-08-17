@@ -34,7 +34,7 @@ React dashboard (nginx)           PostgreSQL (Prisma 7, external host) + Redis 7
 - **Backend** (`src/`): Express 4 REST API (`/api/v1`), discord.js 14 bot, BullMQ worker, services/repositories pattern with Prisma 7 (PostgreSQL via `@prisma/adapter-pg`).
 - **Frontend** (`dashboard/`): React 18 + Vite + Tailwind + Recharts SPA served by nginx; PWA-capable.
 - **Database**: PostgreSQL (single hand-maintained migration file), previously Firestore (fully cut over 2026-07-26, legacy config files remain).
-- **Scheduling**: Redis + BullMQ queue `reminder-queue`; delayed jobs for reminders; `setInterval` loops for auto-archive, insight-image cleanup (30h TTL), and reminder re-hydration.
+- **Scheduling**: Redis + BullMQ queue `reminder-queue`; delayed jobs for reminders; `setInterval` loops for auto-archive, insight-image cleanup (60h TTL), and reminder re-hydration.
 - **External integrations**: GoPartTime (userscript → API), Discord (bot), Reddit (submitted URLs validated, deletion tracking via manual override), sentry-style local logging (winston).
 
 ---
@@ -104,7 +104,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 
 1. **Slash commands** (12): `/task /status /find /delete /pending /completed /overdue /stats /reschedule /send-now /help /referral add` — guild-scoped, permission-checked per command. See `docs/DISCORD_BOT.md`.
 2. **Reminder engine**: BullMQ delayed jobs; POST tasks 20h + 70h reminders, COMMENT tasks 20h only; 2 retries (+2h, +6h); max 3 sends then admin overdue alert; 30-min re-hydration from DB. See `docs/REMINDER_SYSTEM.md`.
-3. **Insight system**: workers reply to reminder messages with a screenshot (png/jpg/jpeg/webp); reply detection by stored `reminderMessageId`; insight images stored on disk under `<cwd>/uploads/insights/<taskId>/` with 30h TTL cleanup; served unauthenticated via `/api/v1/uploads/insights/...`. See `docs/INSIGHT_SYSTEM.md`.
+3. **Insight system**: workers reply to reminder messages with a screenshot (png/jpg/jpeg/webp); reply detection by stored `reminderMessageId`; insight images stored on disk under `<cwd>/uploads/insights/<taskId>/` with 60h TTL cleanup; served unauthenticated via `/api/v1/uploads/insights/...`. See `docs/INSIGHT_SYSTEM.md`.
 4. **Task state machine**: `ACCEPTED → PENDING → REMINDER_20_SENT → INSIGHT_20_RECEIVED → (REMINDER_70_SENT → INSIGHT_70_RECEIVED) → COMPLETED → ARCHIVED` + `CANCELLED`; see `docs/TASK_SYSTEM.md` (also `src/services/state-machine.ts`).
 5. **Deletion tracking**: admin sets `cancelledReason` = `deleted`/`deleted_later` via the dashboard dropdown (auto Reddit-deletion detection was removed — `check-reddit.ts` is now dead code).
 6. **Auto-archive**: daily sweep archives paid COMPLETED/CANCELLED older than 30 days; weekly Sunday archive moves all paid COMPLETED → ARCHIVED; unpaid archived tasks can be restored to COMPLETED (`POST /tasks/restore-unpaid-archived`).
@@ -124,7 +124,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 | Firestore → PostgreSQL cutover | **Complete** (2026-07-26). Legacy: `firebase.json`, `firestore.indexes.json`, stale `.env.example` block, one stale comment in `src/index.ts:156`, `formatFirestoreDate` helper in `dashboard/src/pages/Payout.tsx` |
 | Discord bot + commands | Implemented (12 commands, guild-scoped) |
 | Reminder/insight engine | Implemented (20h/70h, retries, overdue pings) |
-| Insight image storage | Implemented (local disk, 30h TTL); `deleteTaskDir()` helper unused |
+| Insight image storage | Implemented (local disk, 60h TTL); `deleteTaskDir()` helper unused |
 | GoPartTime integration | Implemented (userscript + backend + delivery + submission + activation + reassign/retry + Submit View screenshot automation — userscript v1.2.0 + `GET /goparttime/insight/:externalTaskId`, **deployed 2026-08-17 at `e0112f2`**) |
 | Payout system | Implemented (weekly IST window, batches, CSV, restore-unpaid) |
 | Referral commissions | Implemented (normal/special, one-time + per-task, batches, CSV) |
@@ -236,7 +236,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 | No cron; BullMQ delayed jobs + setInterval | Deadline-based reminders with restart recovery |
 | Reminder deadlines absolute from `createdAt` | Stable across retries/rehydration |
 | Guild-scoped commands + per-command permission checks | Simpler than central guard; interactive confirm for `/delete` |
-| Local disk for insight images with 30h TTL | Simple; served unauthenticated (accepted risk) |
+| Local disk for insight images with 60h TTL | Simple; served unauthenticated (accepted risk) |
 | Two-level referral added then reverted (same day 2026-08-09) | Reverted — risk/complexity (see DECISIONS.md) |
 | Single dashboard account (env username/password) + JWT | Small admin surface, no user table; owner PIN separate |
 | GoPartTime ingest status `ACCEPTED` + explicit activation | Review/dedup before entering the reminder pipeline |

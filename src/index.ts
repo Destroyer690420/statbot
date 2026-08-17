@@ -196,7 +196,7 @@ async function main(): Promise<void> {
     logger.info('Sunday archive scheduled (weekly, moves all COMPLETED → ARCHIVED)');
   }, 60 * 60 * 1000);
 
-  // ─── Insight Image Cleanup (30-hour TTL) ────────────────────
+  // ─── Insight Image Cleanup (60-hour TTL) ────────────────────
 
   const INSIGHT_CLEANUP_INTERVAL = 60 * 60 * 1000;
 

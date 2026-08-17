@@ -102,7 +102,7 @@ flowchart TB
 ### 3.2 Background/event-driven
 
 - **BullMQ**: `scheduleReminderJob()` adds delayed job `reminder-{id}` (delay = `dueAt − now`); retry jobs `retry-{id}-{n}` (+2h/+6h). Worker (concurrency 5) fetches task+reminder, sends the embed **through the shared Discord client**, marks sent/completed, advances the state machine. Failures rethrow → BullMQ retries (3 attempts, 5s exponential backoff).
-- **In-process timers** (see `docs/BACKGROUND_JOBS.md`): auto-archive (24h), Sunday archive (weekly), insight-image cleanup (60min, 30h TTL), reminder re-hydration (30min).
+- **In-process timers** (see `docs/BACKGROUND_JOBS.md`): auto-archive (24h), Sunday archive (weekly), insight-image cleanup (60min, 60h TTL), reminder re-hydration (30min).
 
 ### 3.3 Repo notes
 
@@ -136,7 +136,7 @@ flowchart TB
 | `analytics.service` | Stats (in-memory over `taskService.findAll`) | — |
 | `audit.service` | Audit rows (non-fatal by design) | — |
 | `settings.service` | Payout/commission rate rows | — |
-| `insight-storage.service` | Download+saves screenshots, 30h cleanup | — |
+| `insight-storage.service` | Download+saves screenshots, 60h cleanup | — |
 
 Cross-cutting helpers: `src/utils/permissions.ts` (admin/manager IDs), `src/utils/logger.ts` (winston; file transports only in non-production), `src/utils/id-generator.ts`.
 

@@ -105,7 +105,7 @@ docker compose up -d --build
 
 ## 9. Insight Image Storage
 
-Volume `insight-uploads` mounted at `/app/uploads` — screenshots live there with a 30h TTL cleanup (files deleted by the app; see `docs/INSIGHT_SYSTEM.md`).
+Volume `insight-uploads` mounted at `/app/uploads` — screenshots live there with a 60h TTL cleanup (files deleted by the app; see `docs/INSIGHT_SYSTEM.md`).
 
 ## 10. Logs
 

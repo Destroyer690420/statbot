@@ -74,7 +74,7 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 - [ ] Click card "Submit View" → "📊 Submit View" button attaches the 20h screenshot to the View dialog; count/Submit/verify stay manual
 - [ ] Disabled countdown button tracked → alert shows the countdown text; nothing fetched
 - [ ] No screenshot uploaded → "No screenshot uploaded yet for ..." alert
-- [ ] Screenshot expired (30h TTL) → download fails with a clear error
+- [ ] Screenshot expired (60h TTL) → download fails with a clear error
 
 ### Payout flow
 - [ ] Complete ≥1 task → `GET /payouts/summary` counts it, `pendingAmount` = posts×60 + comments×30 (or custom rates)

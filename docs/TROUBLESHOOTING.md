@@ -76,7 +76,7 @@
 - **Solution**: ensure `DATABASE_URL` host is `host.docker.internal` (or reachable), pg listening on 0.0.0.0, and credentials correct.
 
 ### Insight images 404 in dashboard
-- **Cause**: files cleaned after 30h TTL (mtime-based), or the uploads volume wasn't mounted on the new container, or image URL contains a stale taskId.
+- **Cause**: files cleaned after 60h TTL (mtime-based), or the uploads volume wasn't mounted on the new container, or image URL contains a stale taskId.
 - **Diagnosis**: check `/app/uploads/insights/<taskId>/` in the container.
 - **Solution**: none for expired files (by design); keep the `insight-uploads` volume.
 

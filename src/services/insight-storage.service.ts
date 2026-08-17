@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../utils/logger';
 
-const INSIGHT_TTL_MS = 30 * 60 * 60 * 1000;
+const INSIGHT_TTL_MS = 60 * 60 * 60 * 1000;
 const UPLOADS_DIR = path.resolve('uploads', 'insights');
 
 class InsightStorageService {

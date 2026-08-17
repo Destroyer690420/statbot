@@ -38,9 +38,9 @@ State transitions (see `docs/TASK_SYSTEM.md` for the diagram):
 - Returns the relative public URL `/api/v1/uploads/insights/<taskId>/<filename>` → stored in `Reminder.insightImageUrl` along with `insightImageName`, `insightUploadedAt` (`updateInsightImage`).
 - **Serving**: `GET /api/v1/uploads/insights/:taskId/:filename` — no auth; rejects `..`/`/` in params (400); 404 if missing.
 
-## 5. Cleanup (TTL 30h)
+## 5. Cleanup (TTL 60h)
 
-- `cleanup()`: deletes files with `mtime < now − 30h` (module constant `INSIGHT_TTL_MS = 30h`, hardcoded), then removes empty task dirs. Tolerates ENOENT.
+- `cleanup()`: deletes files with `mtime < now − 60h` (module constant `INSIGHT_TTL_MS = 60h`, hardcoded), then removes empty task dirs. Tolerates ENOENT.
 - Runner: `setInterval` every **60 minutes** in `src/index.ts` (`INSIGHT_CLEANUP_INTERVAL`). Deletion can lag up to ~1h past the TTL.
 - `deleteTaskDir(taskId)` exists but is **never called** anywhere (dead code).
 
@@ -67,5 +67,5 @@ State transitions (see `docs/TASK_SYSTEM.md` for the diagram):
 - Screenshot from a non-assigned user: silently ignored.
 - Reply-with-image whose reply target matches a **delivery message** (GoPartTime) instead: handled by the URL-submission handler; images there are ignored.
 - Multiple attachments: only the first attachment is saved.
-- Attachment lost from CDN within 30h: `save` throws → logged; reminder still completed.
-- 30h TTL means screenshots may vanish before an admin views them if a human is slow to open the dashboard (known limitation).
+- Attachment lost from CDN within 60h: `save` throws → logged; reminder still completed.
+- 60h TTL means screenshots may vanish before an admin views them if a human is slow to open the dashboard (known limitation).
