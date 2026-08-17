@@ -70,8 +70,11 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 - [ ] Reassign moves task to another ticket and re-delivers
 - [ ] One awaiting task per ticket enforced
 
-### Submit View flow (v1.2.0 — not yet deployed)
+### Submit View flow (v1.3.0)
 - [ ] Click card "Submit View" → "📊 Submit View" button attaches the 20h screenshot to the View dialog; count/Submit/verify stay manual
+- [ ] Screenshot preview panel appears on the left with the same screenshot (single Blob: preview + upload identical)
+- [ ] Preview: scrollable if large; `− Zoom`/`Zoom +` steps 0.25× between 0.5×–5×; `Open ↗` opens the blob URL full-size; ✕ closes and revokes the URL
+- [ ] Preview does not close the GoPartTime dialog (pointer-events/pointerdown protection) and auto-closes when the dialog is closed
 - [ ] Disabled countdown button tracked → alert shows the countdown text; nothing fetched
 - [ ] No screenshot uploaded → "No screenshot uploaded yet for ..." alert
 - [ ] Screenshot expired (60h TTL) → download fails with a clear error

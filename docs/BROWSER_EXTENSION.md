@@ -1,12 +1,12 @@
 # BROWSER_EXTENSION.md — GoPartTime Userscript
 
-> Verified against `scripts/goparttime-send.user.js` (identical to `dashboard/public/goparttime-send.user.js`, SHA-256 verified byte-for-byte) on 2026-08-17 (v1.2.0). Served publicly at `https://statbot.duckdns.org/goparttime-send.user.js`.
+> Verified against `scripts/goparttime-send.user.js` (identical to `dashboard/public/goparttime-send.user.js`, SHA-256 verified byte-for-byte) on 2026-08-17 (v1.3.0). Served publicly at `https://statbot.duckdns.org/goparttime-send.user.js`.
 
 ---
 
 ## 1. Identity
 
-Tampermonkey userscript **"Discord Task Sender"** (v1.2.0, author "Manager"), designed for desktop and mobile (Kiwi Browser / Edge Canary noted in the header and `ANDROID_SETUP.md`). Works as a plain bookmarklet/non-GM fallback too (localStorage + fetch). v1.2.0 adds the **Submit View** automation on top of v1.1.0's send flow.
+Tampermonkey userscript **"Discord Task Sender"** (v1.3.0, author "Manager"), designed for desktop and mobile (Kiwi Browser / Edge Canary noted in the header and `ANDROID_SETUP.md`). Works as a plain bookmarklet/non-GM fallback too (localStorage + fetch). v1.3.0 adds the **insight screenshot preview** to the v1.2.0 **Submit View** automation (which itself sits on top of v1.1.0's send flow).
 
 ## 2. Metadata & Permissions
 
@@ -21,6 +21,7 @@ Tampermonkey userscript **"Discord Task Sender"** (v1.2.0, author "Manager"), de
 
 - **Floating "Send Task" button** (`#gpt-send-task-button`): bottom-right, z-index 2147483647, Discord blue `#5865F2`; circle 56px with paper-plane icon on mobile (≤767px), pill on desktop. `pointerdown` handler with `stopPropagation()` so Radix/Vaul dialogs stay open while capturing.
 - **Floating "Submit View" button** (`#gpt-submit-view-button`, v1.2.0): green `#2FBF71`, stacked above Send Task (bottom 72px desktop / 80px mobile); circle with bar-chart icon on mobile, pill on desktop. `pointerdown` → `stopPropagation()` only; the click runs `submitViewFlow()`.
+- **Screenshot preview panel** (`#gpt-insight-preview`, v1.3.0): floating left-edge card (`left:16px`, `bottom:140px`, `width:min(92vw,380px)`, `max-height:70vh`) with header (step + reminder type + ✕ close), scrollable `<img>` on a dark background, and a footer with `− Zoom` / `Zoom +` (0.5×–5×, step 0.25, `transform: scale()` + center origin) and an `Open ↗` link to the full-size image. Same dialog protections as the buttons.
 - **Modal "Assign Task"** (`#gpt-modal`): ticket `<select id="gpt-ticket-select">`, status line `#gpt-status`, settings (gear) + debug (magnifier) buttons, Cancel, Send (disabled until a task is captured). Click-outside closes.
 - **Tampermonkey menu commands**: "Configure Sender..." and "Debug Task Detection".
 
@@ -43,9 +44,9 @@ Tampermonkey userscript **"Discord Task Sender"** (v1.2.0, author "Manager"), de
 - `POST {base}/assign` with the payload (see `docs/GOPARTTIME.md` §3).
 - Transport: `GM_xmlhttpRequest` (30s timeout) with plain `fetch` + `AbortController` (30s, `credentials:"omit"`) fallback for non-GM contexts (CORS allows goparttime.net origins).
 - Auth header: `Authorization: Bearer <apiKey>`.
-- v1.2.0 Submit View calls: `GET {base}/insight/{taskId}?step={1|2}` (see §5b) and downloads the returned `imageUrl` (same-origin backend, no auth needed).
+- v1.3.0 Submit View calls: `GET {base}/insight/{taskId}?step={1|2}` (see §5b) and downloads the returned `imageUrl` (same-origin backend, no auth needed).
 
-## 5b. Submit View Flow (v1.2.0)
+## 5b. Submit View Flow (v1.3.0)
 
 **Purpose**: attach the Statbot-stored insight screenshot to the GoPartTime "View" dialog so the manager can submit view data without hunting for the image. Submission stays manual (see §5c).
 
@@ -53,9 +54,10 @@ Tampermonkey userscript **"Discord Task Sender"** (v1.2.0, author "Manager"), de
 2. **Guard** — no tracked card → alert to click a card button first; the card's button disabled (countdown text) → alert showing its text; unconfigured key → settings prompt.
 3. **Fetch** — `GET /insight/{taskId}?step={step}` → `{ reminderId, reminderType, step, completed, imageUrl }`. No reminder → message; no `imageUrl` → "No screenshot uploaded yet for <type>.".
 4. **Download** — `fetchImageBlob()`: `GM_xmlhttpRequest` with `responseType:'blob'` (fallback `arraybuffer` → `new Blob`), plain `fetch` as non-GM fallback; URL absolutized via `new URL(imageUrl, apiBase + '/')` where apiBase strips `/api/v1/goparttime` from `settings.apiUrl`.
-5. **Dialog** — `ensureViewDialog(card)`: reuses an open dialog, else clicks the card's enabled Submit View button and polls ≤2s for `div[role="dialog"][data-slot="dialog-content"]` containing `input[name="exposure_count"]`.
-6. **Attach** — `attachImageToDialog()`: `DataTransfer` + `new File([blob], 'view-<taskId>-step-<step>.png')` assigned to the dialog's hidden `input[type="file"][accept="image/*"]`, then `input` + `change` events dispatched (same as the site's dropzone).
-7. **Handoff** — success alert: screenshot attached → read the view count, type it, click Submit, verify in GoPartTime.
+5. **Preview** — `openInsightPreview(blob, …)` (v1.3.0): `URL.createObjectURL` from the **same Blob** as the upload (no second download — critical rule); floating panel on the left edge shows the screenshot while the dialog is open; zoom ±0.25 steps (clamped 0.5–5×, reset to 1 on open), `Open ↗` opens the blob URL full-size in a new tab. The preview stays until the user clicks ✕ or the view dialog leaves the DOM (1s interval check on `findViewDialog()` — proxy for "submission done"; it never auto-closes mid-flow).
+6. **Dialog** — `ensureViewDialog(card)`: reuses an open dialog, else clicks the card's enabled Submit View button and polls ≤2s for `div[role="dialog"][data-slot="dialog-content"]` containing `input[name="exposure_count"]`.
+7. **Attach** — `attachImageToDialog()`: `DataTransfer` + `new File([blob], 'view-<taskId>-step-<step>.png')` assigned to the dialog's hidden `input[type="file"][accept="image/*"]`, then `input` + `change` events dispatched (same as the site's dropzone).
+8. **Handoff** — success alert: screenshot attached → read the view count **from the preview**, type it, click Submit, verify in GoPartTime.
 
 **Deliberate non-features**: the script never fills `input[name="exposure_count"]`, never clicks the dialog's Submit, and never reports success — success verification is the manager's job (GoPartTime UI), and reminder completion still happens only via the Discord reply flow.
 
@@ -100,4 +102,4 @@ Step 2 on a comment → 400 "Comments have only one view-data step (COMMENT_20H)
 - No "copy link" behavior in the userscript itself (copy-friendly Discord formatting is handled by the backend's message layout).
 - Depends on GoPartTime's DOM structure (Radix/Vaul dialogs, `div.prose`, named inputs) — fragile to site changes; hence the debug tool.
 - Single shared API key for all workers (no per-worker identity).
-- Submit View: works only after a card's Submit View/countdown button was clicked (tracking); comments currently render no Submit View button in the GoPartTime UI (step 1 assumed); screenshots expire after 60h; image must be visible/attached before clicking Submit — the script does not verify GoPartTime actually accepted it.
+- Submit View: works only after a card's Submit View/countdown button was clicked (tracking); comments currently render no Submit View button in the GoPartTime UI (step 1 assumed); screenshots expire after 60h; the preview lets the manager read the count but the script still does not verify GoPartTime actually accepted the attached file.

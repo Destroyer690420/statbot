@@ -32,7 +32,7 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
 8. Normal lifecycle continues (reminders/insights/payout) — same as manual tasks
 ```
 
-### View-data (insight) submission — Submit View automation (userscript v1.2.0, 2026-08-17)
+### View-data (insight) submission — Submit View automation (userscript v1.3.0, 2026-08-17)
 ```
 1. Manager opens the View dialog for a task on goparttime.net ("Submit view data" = step 1 / 20h insight,
    "Submit second view data" = step 2 / 70h insight, posts only)
@@ -106,7 +106,7 @@ Every guild's TextChannels; `taskStatus`: `awaiting-submission` (a task awaiting
 |---|---|---|
 | `GET /api/v1/goparttime/tickets` | extension key | ticket dropdown data |
 | `POST /api/v1/goparttime/assign` | extension key | assign + deliver |
-| `GET /api/v1/goparttime/insight/:externalTaskId` | extension key | **read-only**; the stored insight screenshot for a task's view-data step (`?step=1\|2`, default: resolve automatically); used by Submit View (v1.2.0) |
+| `GET /api/v1/goparttime/insight/:externalTaskId` | extension key | **read-only**; the stored insight screenshot for a task's view-data step (`?step=1\|2`, default: resolve automatically); used by Submit View (v1.3.0) |
 | `GET /api/v1/discord/tickets` | JWT + admin username | same list for dashboard |
 | `POST /api/v1/tasks/assign-from-goparttime` | JWT | dashboard twin (same service) |
 | `POST /api/v1/tasks/:id/submit-url` | JWT | dashboard URL submission |

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.2.0
+// @version      1.3.0
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,13 +18,16 @@
 // ==/UserScript==
 
 /**
- * v1.2.0 — Submit View automation. Adds a "📊 Submit View" button that fetches
- * the Statbot insight screenshot for the tracked task card's current view-data
- * step and attaches it to the GoPartTime view dialog's file input. View-count
- * entry and submission stay manual (read the count in the dialog, click
- * Submit, verify success in GoPartTime yourself). Feature-detected like
- * v1.1.0: runs under Tampermonkey (GM_* APIs) and as a plain bookmarklet /
- * non-GM context (fetch + localStorage).
+ * v1.3.0 — Submit View automation + screenshot preview. Adds a "📊 Submit View"
+ * button that fetches the Statbot insight screenshot for the tracked task
+ * card's current view-data step, shows it in a floating zoomable preview
+ * (same Blob that is attached to the file input — no second download), and
+ * attaches it to the GoPartTime view dialog's file input. View-count entry
+ * and submission stay manual (read the count from the preview, enter it,
+ * click Submit, verify success in GoPartTime yourself); the preview auto-
+ * closes when the view dialog closes. Feature-detected like v1.1.0: runs
+ * under Tampermonkey (GM_* APIs) and as a plain bookmarklet / non-GM context
+ * (fetch + localStorage).
  */
 (function () {
   'use strict';
@@ -318,6 +321,98 @@
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  // ─── Insight screenshot preview ─────────────────────────────
+
+  // Floating, zoomable preview of the screenshot, fed from the exact same Blob
+  // that is attached to the file input (URL.createObjectURL — no second
+  // download). Lives on the left edge so it never covers the view-data dialog
+  // where the count is entered. Stays open until the user closes it (✕) or the
+  // view dialog disappears (submission done). Same protections as the floating
+  // buttons: pointer-events re-enabled and pointerdown stopped so the site's
+  // Radix dialog stays open.
+  let previewEl = null;
+  let previewObjectUrl = null;
+  let previewZoom = 1;
+  let previewWatcher = null;
+
+  function openInsightPreview(blob, taskId, step, reminderType) {
+    closeInsightPreview();
+    previewObjectUrl = URL.createObjectURL(blob);
+    previewZoom = 1;
+
+    previewEl = document.createElement('div');
+    previewEl.id = 'gpt-insight-preview';
+    Object.assign(previewEl.style, {
+      position: 'fixed',
+      left: '16px',
+      bottom: '140px',
+      zIndex: '2147483647',
+      width: 'min(92vw, 380px)',
+      maxHeight: '70vh',
+      display: 'flex',
+      flexDirection: 'column',
+      background: '#fff',
+      borderRadius: '12px',
+      boxShadow: '0 8px 40px rgba(0,0,0,0.45)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      color: '#111',
+      overflow: 'hidden',
+    });
+    previewEl.style.setProperty('pointer-events', 'auto', 'important');
+    previewEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    previewEl.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #eee;background:#fafafa">
+        <strong style="font-size:13px">Insight Screenshot · step ${step} (${reminderType})</strong>
+        <button id="gpt-preview-close" title="Close preview" style="border:none;background:none;cursor:pointer;font-size:18px;line-height:1;color:#666;padding:2px 6px">✕</button>
+      </div>
+      <div id="gpt-preview-scroll" style="overflow:auto;flex:1;min-height:0;display:flex;align-items:flex-start;justify-content:center;padding:8px;background:#111">
+        <img id="gpt-preview-img" alt="Insight screenshot" style="max-width:100%;height:auto;border-radius:6px;transform-origin:center;transition:transform .15s ease;background:#fff"/>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid #eee;background:#fafafa">
+        <button id="gpt-preview-zoom-out" title="Zoom out" style="flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#333;font-size:14px;cursor:pointer">− Zoom</button>
+        <span id="gpt-preview-zoom-label" style="font-size:12px;color:#666;min-width:44px;text-align:center">100%</span>
+        <button id="gpt-preview-zoom-in" title="Zoom in" style="flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#333;font-size:14px;cursor:pointer">Zoom +</button>
+        <a id="gpt-preview-open" href="${previewObjectUrl}" target="_blank" rel="noopener" title="Open full size" style="flex:1;text-align:center;padding:6px 8px;border:1px solid #5865F2;border-radius:6px;background:#5865F2;color:#fff;font-size:14px;text-decoration:none;cursor:pointer">Open ↗</a>
+      </div>`;
+
+    document.body.appendChild(previewEl);
+    const img = previewEl.querySelector('#gpt-preview-img');
+    img.src = previewObjectUrl;
+    previewEl.querySelector('#gpt-preview-close').addEventListener('click', closeInsightPreview);
+    previewEl.querySelector('#gpt-preview-zoom-in').addEventListener('click', () => setPreviewZoom(previewZoom + 0.25));
+    previewEl.querySelector('#gpt-preview-zoom-out').addEventListener('click', () => setPreviewZoom(previewZoom - 0.25));
+
+    // Auto-close once the view-data dialog is gone (submission done).
+    previewWatcher = setInterval(() => {
+      if (!previewEl) return;
+      if (!findViewDialog()) closeInsightPreview();
+    }, 1000);
+  }
+
+  function setPreviewZoom(zoom) {
+    previewZoom = Math.min(5, Math.max(0.5, zoom));
+    const img = previewEl && previewEl.querySelector('#gpt-preview-img');
+    if (img) img.style.transform = 'scale(' + previewZoom + ')';
+    const label = previewEl && previewEl.querySelector('#gpt-preview-zoom-label');
+    if (label) label.textContent = Math.round(previewZoom * 100) + '%';
+  }
+
+  function closeInsightPreview() {
+    if (previewWatcher) {
+      clearInterval(previewWatcher);
+      previewWatcher = null;
+    }
+    if (previewEl) {
+      previewEl.remove();
+      previewEl = null;
+    }
+    if (previewObjectUrl) {
+      URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = null;
+    }
+  }
+
   async function submitViewFlow() {
     if (submitViewBusy) return;
     const settings = getSettings();
@@ -354,6 +449,7 @@
       const imageUrl = new URL(data.imageUrl, base + '/').toString();
       const blob = await fetchImageBlob(imageUrl);
       const fileName = 'view-' + taskId + '-step-' + step + '.png';
+      openInsightPreview(blob, taskId, step, data.reminderType);
 
       const dialog = await ensureViewDialog(card);
       if (!dialog) {
@@ -363,7 +459,7 @@
       attachImageToDialog(dialog, blob, fileName);
       alert(
         '✅ Screenshot attached for step ' + step + ' (' + data.reminderType + ').\n' +
-        'Now: read the view count in the dialog, enter it, click Submit, and verify success in GoPartTime.',
+        'Read the view count from the preview (left), enter it in the dialog, click Submit, and verify success in GoPartTime.',
       );
     } catch (err) {
       alert('⚠️ ' + (err && err.message ? err.message : 'Submit View failed.'));
