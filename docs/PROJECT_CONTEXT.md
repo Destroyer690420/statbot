@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — insight screenshot TTL raised to 60h and **DEPLOYED** (`161.118.164.85`, git HEAD `cba8a35`, app-only rebuild).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — userscript **v1.3.0 (insight screenshot preview) DEPLOYED** (`161.118.164.85`, git HEAD `138c317`, dashboard-only rebuild; served userscript SHA-256 byte-identical to local).
 
 ---
 
@@ -244,6 +244,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-08-17**: **DEPLOYED userscript v1.3.0 — insight screenshot preview** (`161.118.164.85`) at commit `138c317` (dashboard-only rebuild; backup `rtm-backup-20260817-1745-pre-138c317.tar.gz`; bundle cleaned). Verified: health healthy, all containers Up, served `/goparttime-send.user.js` reports `@version 1.3.0` and hashes `97A16E73…` (SHA-256) — byte-identical to both local copies. Follow-up commit `c277eb0` pins `*.user.js` to LF via `.gitattributes` (Windows `core.autocrlf` had been CRLF-converting local checkouts; git/sever always stored LF — no functional change, no redeploy). Manual test still pending on goparttime.net: preview panel, zoom, ✕, auto-close on dialog close.
 
 - **2026-08-17**: **DEPLOYED the insight screenshot TTL change (30h → 60h)** (`161.118.164.85`) at commit `cba8a35` (app-only rebuild; backup `rtm-backup-20260817-1720-pre-cba8a35.tar.gz`; bundle cleaned). Verified live: health healthy, compiled `INSIGHT_TTL_MS = 60` hours, existing 26.5h-old screenshot still retained. Rationale: GoPartTime Submit View needs the 70h screenshots downloadable while the manager submits view data.
 
