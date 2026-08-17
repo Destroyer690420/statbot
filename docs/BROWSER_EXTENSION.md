@@ -70,7 +70,7 @@ Tampermonkey userscript **"Discord Task Sender"** (v1.2.0, author "Manager"), de
 | `completed` | whether the insight was already submitted in Discord |
 | `imageUrl` | `Reminder.insightImageUrl` (screenshot URL) or null |
 
-Step 2 on a comment → 400 "Comments have only one view-data step (COMMENT_20H)."; invalid step → 400; unknown task → 404 "Task not found."; non-numeric id → 400.
+Step 2 on a comment → 400 "Comments have only one view-data step (COMMENT_20H)."; invalid step → 400; unknown task → 404 "Task not found."; non-numeric id → 400. Tasks created manually (not via the userscript) are found too — the backend falls back to ids like `POST #688318`/`Comment #688318` (both case conventions) when no GoPartTime-linked task exists.
 
 ## 6. User-Facing Error Mapping (`parseStatus`)
 

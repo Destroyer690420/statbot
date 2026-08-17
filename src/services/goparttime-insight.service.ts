@@ -6,6 +6,22 @@ export interface InsightResolution {
 }
 
 /**
+ * Candidate task IDs for manually-created tasks whose id embeds the
+ * GoPartTime number ("POST #688318", "Comment #688318", ...). Both case
+ * conventions are covered: uppercase (manual "/task" convention) first,
+ * then the lowercase GoPartTime format. Uppercase-first keeps the lookup
+ * deterministic when both variants somehow exist.
+ */
+export function buildManualTaskIdCandidates(externalTaskId: string): string[] {
+  return [
+    `POST #${externalTaskId}`,
+    `Comment #${externalTaskId}`,
+    `Post #${externalTaskId}`,
+    `COMMENT #${externalTaskId}`,
+  ];
+}
+
+/**
  * Resolves the Statbot reminder that corresponds to a GoPartTime view-data
  * step, mirroring the lifecycle order:
  *

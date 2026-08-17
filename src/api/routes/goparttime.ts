@@ -9,7 +9,7 @@ import { taskRepository } from '../../database/repositories';
 import { reminderService } from '../../services/reminder.service';
 import { toTask } from '../../database/converters';
 import { GOPARTTIME_SOURCE } from '../../config/constants';
-import { resolveInsightReminder } from '../../services/goparttime-insight.service';
+import { resolveInsightReminder, buildManualTaskIdCandidates } from '../../services/goparttime-insight.service';
 
 /**
  * Endpoints used by the GoPartTime browser extension. Authenticated with the
@@ -74,6 +74,8 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
    * GET /api/v1/goparttime/insight/:externalTaskId?step=1|2
    * Returns the stored Statbot insight screenshot for a GoPartTime task's
    * current view-data step (1 = 20h insight, 2 = 70h insight for posts).
+   * Resolves the task via its (source, externalTaskId) link, falling back to
+   * manually-created tasks whose id embeds the number ("POST #688318").
    * Read-only: never modifies reminders or tasks.
    */
   router.get('/insight/:externalTaskId', async (req: Request, res: Response): Promise<void> => {
@@ -93,7 +95,22 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
         }
       }
 
-      const taskDoc = await taskRepository.findBySourceExternal(GOPARTTIME_SOURCE, externalTaskId);
+      let taskDoc = await taskRepository.findBySourceExternal(GOPARTTIME_SOURCE, externalTaskId);
+
+      // Tasks are sometimes created manually (slash command / dashboard) with
+      // the GoPartTime number embedded in the id ("POST #688318"). Fall back
+      // to those when no GoPartTime-linked task exists — but only for manual
+      // tasks (no source), so a real GoPartTime task is never shadowed.
+      if (!taskDoc) {
+        for (const candidateId of buildManualTaskIdCandidates(externalTaskId)) {
+          const candidate = await taskRepository.findById(candidateId);
+          if (candidate && !candidate.source) {
+            taskDoc = candidate;
+            break;
+          }
+        }
+      }
+
       if (!taskDoc) {
         res.status(404).json({ success: false, message: 'Task not found.' });
         return;

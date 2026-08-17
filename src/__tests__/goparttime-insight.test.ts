@@ -1,5 +1,8 @@
 import { Reminder, ReminderType, TaskType } from '../types';
-import { resolveInsightReminder } from '../services/goparttime-insight.service';
+import {
+  resolveInsightReminder,
+  buildManualTaskIdCandidates,
+} from '../services/goparttime-insight.service';
 
 function makeReminder(overrides: Partial<Reminder> = {}): Reminder {
   return {
@@ -20,6 +23,23 @@ function makeReminder(overrides: Partial<Reminder> = {}): Reminder {
     ...overrides,
   };
 }
+
+describe('buildManualTaskIdCandidates', () => {
+  it('builds all four case variants for a numeric id', () => {
+    expect(buildManualTaskIdCandidates('688318')).toEqual([
+      'POST #688318',
+      'Comment #688318',
+      'Post #688318',
+      'COMMENT #688318',
+    ]);
+  });
+
+  it('still returns candidates for non-numeric input', () => {
+    const candidates = buildManualTaskIdCandidates('abc');
+    expect(candidates).toHaveLength(4);
+    expect(candidates[0]).toBe('POST #abc');
+  });
+});
 
 describe('resolveInsightReminder', () => {
   const post20 = makeReminder({
