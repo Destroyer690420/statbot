@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-17 — live deploy at git HEAD `e0112f2`** (GoPartTime Submit View automation: userscript v1.2.0 + `GET /goparttime/insight/:externalTaskId`; no DB migration; health/dashboard/userscript/bot verified, endpoint + screenshot download tested live against real tasks).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-17 — live deploy at git HEAD `60a62b8`** (Submit View manual-task fallback: insight endpoint now resolves manually-created tasks like `POST #688318`; app-only rebuild `60a62b8`, previous full deploy `e0112f2`; no DB migration; health + endpoint + screenshot download verified live).
 
 ---
 

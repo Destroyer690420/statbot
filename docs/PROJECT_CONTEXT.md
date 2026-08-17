@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — GoPartTime Submit View automation **DEPLOYED** to production (`161.118.164.85`) at git HEAD `e0112f2` (no DB migration; endpoint + screenshot download verified live).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — Submit View manual-task fallback **DEPLOYED** to production (`161.118.164.85`) at git HEAD `60a62b8` (app-only rebuild; endpoint verified live for manual task `POST #688318`).
 
 ---
 
@@ -244,6 +244,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-08-17**: **DEPLOYED the Submit View manual-task fallback** (`161.118.164.85`) at commit `60a62b8` (app-only: `docker compose build app && docker compose up -d app`; backup `rtm-backup-20260817-1655-pre-60a62b8.tar.gz`; bundle cleaned). Verified live: health healthy, boot log OK, `GET /insight/688318?step=1` → `POST_20H`, `?step=2` → `POST_70H` (image on disk, download 200/70.7 KB); no-step → `POST_20H`. Note: the 20h screenshot file itself was already removed by the 30h TTL (uploaded Aug 14) — step-1 download will 404 until a newer screenshot exists.
 
 - **2026-08-17**: **Submit View manual-task fallback fixed + deployed**: the insight endpoint now also resolves manually-created tasks whose id embeds the GoPartTime number (`POST #688318` etc., both case conventions) via `buildManualTaskIdCandidates` (src/services/goparttime-insight.service.ts) — manual tasks only (no `source`), so GoPartTime-linked tasks always win. Triggered by a live report: task `POST #688318` (manual, COMPLETED, both screenshots on disk) 404'd with "Task not found." Verified: 131/131 jest tests, typecheck, build; deployed via git bundle (backup `rtm-backup-20260817-...tar.gz`, `docker compose build app && up -d app`), live-checked `GET /insight/688318?step=2` → `POST_70H` + image download 200.
 

@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-08-17
+### Deployed
+- **Submit View manual-task fallback deployed** (`161.118.164.85`) at commit `60a62b8` (app-only rebuild, backup `rtm-backup-20260817-1655-pre-60a62b8.tar.gz`). Verified live for the reported task `POST #688318`: `?step=1` → `POST_20H`, `?step=2` → `POST_70H` (screenshot download 200/70.7 KB), no-step → `POST_20H`. (20h screenshot file itself had already expired via the 30h TTL — uploads from Aug 14 are gone; step-1 download 404s until a newer screenshot exists.)
 ### Fixed
 - **Submit View now resolves manually-created tasks**: the insight endpoint previously 404'd for tasks created via the slash command/dashboard (`POST #688318`, no `source`/`externalTaskId`) because it only matched `(source='goparttime', externalTaskId)`. Now falls back to `buildManualTaskIdCandidates` (`POST #` / `Comment #` / `Post #` / `COMMENT #` + number), accepting only source-less tasks so GoPartTime-linked ones always win. (Reported live: task `POST #688318` had both screenshots on disk but the script alerted "Task not found.")
 ### Deployed
