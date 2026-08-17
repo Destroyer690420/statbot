@@ -5,6 +5,11 @@ import { goPartTimePayloadSchema } from '../../utils/goparttime-payload';
 import { extensionAuth } from '../middleware/extensionAuth';
 import { validateBody } from '../middleware/validate';
 import { logger } from '../../utils/logger';
+import { taskRepository } from '../../database/repositories';
+import { reminderService } from '../../services/reminder.service';
+import { toTask } from '../../database/converters';
+import { GOPARTTIME_SOURCE } from '../../config/constants';
+import { resolveInsightReminder } from '../../services/goparttime-insight.service';
 
 /**
  * Endpoints used by the GoPartTime browser extension. Authenticated with the
@@ -64,6 +69,76 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
       }
     },
   );
+
+  /**
+   * GET /api/v1/goparttime/insight/:externalTaskId?step=1|2
+   * Returns the stored Statbot insight screenshot for a GoPartTime task's
+   * current view-data step (1 = 20h insight, 2 = 70h insight for posts).
+   * Read-only: never modifies reminders or tasks.
+   */
+  router.get('/insight/:externalTaskId', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const externalTaskId = String(req.params.externalTaskId);
+      if (!/^\d+$/.test(externalTaskId)) {
+        res.status(400).json({ success: false, message: 'Invalid task ID.' });
+        return;
+      }
+
+      let step: number | undefined;
+      if (req.query.step !== undefined) {
+        step = Number(req.query.step);
+        if (!Number.isInteger(step)) {
+          res.status(400).json({ success: false, message: 'Invalid step. Use 1 or 2.' });
+          return;
+        }
+      }
+
+      const taskDoc = await taskRepository.findBySourceExternal(GOPARTTIME_SOURCE, externalTaskId);
+      if (!taskDoc) {
+        res.status(404).json({ success: false, message: 'Task not found.' });
+        return;
+      }
+
+      const task = toTask(taskDoc);
+      const reminders = await reminderService.findByTaskId(task.id);
+      const { reminder, step: resolvedStep } = resolveInsightReminder(reminders, task.type, step);
+
+      if (!reminder) {
+        res.json({
+          success: true,
+          data: {
+            taskId: externalTaskId,
+            internalTaskId: task.id,
+            type: task.type,
+            reminderId: null,
+            reminderType: null,
+            step: resolvedStep,
+            completed: false,
+            imageUrl: null,
+            message: 'No insight data available for this task yet.',
+          },
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        data: {
+          taskId: externalTaskId,
+          internalTaskId: task.id,
+          type: task.type,
+          reminderId: reminder.id,
+          reminderType: reminder.type,
+          step: resolvedStep,
+          completed: reminder.completed,
+          imageUrl: reminder.insightImageUrl,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      res.status(400).json({ success: false, message });
+    }
+  });
 
   return router;
 }

@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-12 (git HEAD `5797667`, working tree clean; production `161.118.164.85` rolled back to `1a70dbf` on 2026-08-12 — the `5797667` two-level-referral deploy was reverted pending investigation; DB schema rolled back too).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-17 (GoPartTime Submit View automation — userscript v1.2.0 + read-only insight endpoint, NOT yet deployed).
 
 ---
 
@@ -80,8 +80,8 @@ React dashboard (nginx)           PostgreSQL (Prisma 7, external host) + Redis 7
 │   ├── config/                  # env.ts (zod), constants.ts (all delays/thresholds)
 │   ├── database/                # db.ts (PrismaPg), converters.ts, repositories/ (7 repos)
 │   ├── scheduler/               # queue.ts, jobs.ts, worker.ts (BullMQ reminder engine)
-│   ├── services/                # task, state-machine, reminder, insight-storage, payout, commission, referral(→commission), owner-earnings, analytics, audit, settings, goparttime
-│   ├── __tests__/               # 7 jest test files
+│   ├── services/                # task, state-machine, reminder, insight-storage, payout, commission, referral(→commission), owner-earnings, analytics, audit, settings, goparttime, goparttime-insight
+│   ├── __tests__/               # 8 jest test files
 │   └── utils/                   # validators, goparttime-payload, html-to-discord, plain-task-message, discord-chunker, image-processor, id-generator, logger, permissions, task-display, check-reddit (UNUSED)
 ├── dashboard/                   # React SPA + Dockerfile (nginx) + nginx.conf + public/goparttime-send.user.js
 ├── prisma/                      # schema.prisma + migrations/migration.sql (single hand-maintained file)
@@ -108,7 +108,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 4. **Task state machine**: `ACCEPTED → PENDING → REMINDER_20_SENT → INSIGHT_20_RECEIVED → (REMINDER_70_SENT → INSIGHT_70_RECEIVED) → COMPLETED → ARCHIVED` + `CANCELLED`; see `docs/TASK_SYSTEM.md` (also `src/services/state-machine.ts`).
 5. **Deletion tracking**: admin sets `cancelledReason` = `deleted`/`deleted_later` via the dashboard dropdown (auto Reddit-deletion detection was removed — `check-reddit.ts` is now dead code).
 6. **Auto-archive**: daily sweep archives paid COMPLETED/CANCELLED older than 30 days; weekly Sunday archive moves all paid COMPLETED → ARCHIVED; unpaid archived tasks can be restored to COMPLETED (`POST /tasks/restore-unpaid-archived`).
-7. **GoPartTime integration**: Tampermonkey userscript extracts task details from goparttime.net, posts to `/api/v1/goparttime/assign` (Bearer `GOPARTTIME_API_KEY`), backend creates the task as `ACCEPTED`, auto-detects the single worker in the ticket channel, delivers formatted task content into Discord, worker replies with the Reddit URL, manager activates (`/done` → PENDING + reminders). Retry/reassign supported on failures. See `docs/GOPARTTIME.md` + `docs/BROWSER_EXTENSION.md`.
+7. **GoPartTime integration**: Tampermonkey userscript extracts task details from goparttime.net, posts to `/api/v1/goparttime/assign` (Bearer `GOPARTTIME_API_KEY`), backend creates the task as `ACCEPTED`, auto-detects the single worker in the ticket channel, delivers formatted task content into Discord, worker replies with the Reddit URL, manager activates (`/done` → PENDING + reminders). Retry/reassign supported on failures. **Submit View automation (v1.2.0)**: the userscript's "📊 Submit View" floating button fetches the stored Statbot insight screenshot for the tracked task card's current view-data step via `GET /api/v1/goparttime/insight/:externalTaskId?step=1|2` (read-only) and attaches it to the GoPartTime view dialog's file input; view-count entry, clicking Submit, and success verification remain **manual** (no confirm endpoint — the Discord reply flow is still the only reminder-completion path). See `docs/GOPARTTIME.md` + `docs/BROWSER_EXTENSION.md`.
 8. **Payout system**: weekly (IST Sunday→Saturday) totals from `PayoutSettings` rates (defaults ₹30/comment, ₹60/post); workers paid per completed task; pay-worker/pay-all create `PayoutBatch` + `PayoutItem`, mark paid COMPLETED tasks ARCHIVED; CSV export; batch history. See `docs/PAYOUT_SYSTEM.md`.
 9. **Referral commissions**: `/referral add` (admins) records inviter→invitee links; normal inviters get a one-time ₹100 bonus after the invitee completes 2 tasks; special inviters (hardcoded list of 3 Discord IDs) get ₹50 one-time bonus after 1 task + ₹10/comment, ₹20/post per task. **Two-Level Referrals**: auto-detects when a normal inviter was referred by a special inviter (`indirectSpecialInviterId`), paying the normal inviter their standard bonus and paying the upstream special inviter per-task commissions (₹20/post, ₹10/comment) on the worker's tasks (no one-time bonus). Commission batches/CSV/history in the dashboard. See `docs/REFERRAL_SYSTEM.md`.
 10. **Owner earnings**: daily/weekly net earnings (hardcoded revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30) minus per-task/one-time commissions (including indirect special per-task commissions); PIN (default `7977` via `OWNER_PIN`) gates navigation from Settings but the API endpoints are unauthenticated. See `docs/FRONTEND.md`.
@@ -125,10 +125,10 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 | Discord bot + commands | Implemented (12 commands, guild-scoped) |
 | Reminder/insight engine | Implemented (20h/70h, retries, overdue pings) |
 | Insight image storage | Implemented (local disk, 30h TTL); `deleteTaskDir()` helper unused |
-| GoPartTime integration | Implemented (userscript + backend + delivery + submission + activation + reassign/retry) |
+| GoPartTime integration | Implemented (userscript + backend + delivery + submission + activation + reassign/retry + Submit View screenshot automation — userscript v1.2.0 + `GET /goparttime/insight/:externalTaskId`, **not yet deployed**) |
 | Payout system | Implemented (weekly IST window, batches, CSV, restore-unpaid) |
 | Referral commissions | Implemented (normal/special, one-time + per-task, batches, CSV) |
-| Two-level referral (indirect special commissions) | **Reverted from production 2026-08-12** (code still in repo HEAD `5797667`; the deploy was rolled back to `1a70dbf` pending investigation of the Accepted-tasks question — see Recent Changes; DB schema fully reverted) |
+| Two-level referral (indirect special commissions) | **Deployed to production 2026-08-13** (`a558f1d`): schema + code live; migration applied schema-only (no data statements); task statuses verified untouched (ACCEPTED=0) |
 | Auto Reddit-deletion detection | **Removed/deprecated** (manual `cancelledReason` override instead); `check-reddit.ts` is dead code |
 | Owner earnings | Implemented (daily, 7-day history, weekly) |
 | Dashboard theme picker | **Stub** (UI-only, does nothing) |
@@ -150,6 +150,16 @@ goPartTime.net → userscript extracts {taskId,type,ticket,title,subreddit,flair
 → deliver metadata/content/images/instruction messages into the ticket → assignmentStatus SENT
 → worker replies to instruction message with Reddit URL (exactly 1, validated)
 → recordSubmission → manager clicks Done (POST /tasks/:id/done) → ACCEPTED→PENDING + reminders scheduled
+```
+
+### GoPartTime view-data submission (Submit View, userscript v1.2.0; see docs/BROWSER_EXTENSION.md)
+```
+Manager opens a task's View dialog on goparttime.net (view data at 20h / second view data at 70h)
+→ click card "Submit View" button → userscript tracks {card, taskId, step} (disabled countdown button also tracked)
+→ click "📊 Submit View" floating button → GET /api/v1/goparttime/insight/:taskId?step=1|2 (read-only, extension key)
+→ backend: task lookup (source='goparttime', externalTaskId) → reminders → resolveInsightReminder (step1=20h, step2=70h)
+→ userscript downloads Reminder.insightImageUrl as Blob → opens/attaches via DataTransfer to the dialog file input
+→ manager reads the view count, types it, clicks Submit, verifies success manually (script never submits or confirms)
 ```
 
 ### Task → reminder → completion → payout
@@ -204,6 +214,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 10. `insightStorageService.deleteTaskDir`, `check-reddit.ts` (`isPostDeleted`), `DELETED_DETECTION_THRESHOLD_MS`, `generateCommissionBatchId` — dead code.
 11. Duplicate userscript copies (`scripts/` and `dashboard/public/`) must stay in sync.
 12. `GET /api/v1/tasks` has a default `limit` of 1000 with no cap — the dashboard fetches everything and paginates client-side (scales poorly).
+13. **`npm run lint` is broken repo-wide**: ESLint 9 (flat-config-only) finds no `eslint.config.js` — the repo has never shipped one (verified 2026-08-17). Fix = add a flat config; not yet done.
 
 ---
 
@@ -234,6 +245,9 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-08-17**: **GoPartTime Submit View automation implemented (NOT yet deployed)**: new `src/services/goparttime-insight.service.ts` (`resolveInsightReminder` — step 1 = 20h reminder, step 2 = 70h reminder for posts; no-step fallback: pending → has-image → earliest), read-only `GET /api/v1/goparttime/insight/:externalTaskId?step=1|2` behind the extension key, 10 new jest tests (`src/__tests__/goparttime-insight.test.ts`), and userscript **v1.2.0** (both copies, SHA-256 byte-identical): "📊 Submit View" floating button + card tracking (`Submit View` / `Available to submit view in …` buttons on `div[data-slot="card"]`), fetches the screenshot Blob (GM_xmlhttpRequest blob/arraybuffer, fetch fallback), opens the View dialog (`div[role="dialog"][data-slot="dialog-content"]` + `input[name="exposure_count"]`), attaches via `DataTransfer` to the hidden `input[type="file"][accept="image/*"]`. **Deliberately manual**: view-count entry, Submit click, and success verification are the manager's job — no confirm endpoint, no backend state changes, `messageCreate.ts` untouched. Verified: 129/129 jest tests, typecheck, backend + dashboard builds. Not deployed (deployment only on request).
+
+- **2026-08-13**: **Re-deployed the two-level referral to production** (`161.118.164.85`) at commit `a558f1d` (user committed the migration safety fix + `scripts/restore-accepted.ts` + docs into `a558f1d`). Safe procedure used: server tree backed up (`/home/ubuntu/rtm-backup-20260812-pre-redeploy-a558f1d.tar.gz`), git bundle shipped + `git reset --hard refs/remotes/origin/main`, **verified server `migration.sql` contains zero UPDATE/DELETE/INSERT statements** (backfill permanently removed), ran the schema-only migration (added `Referral.indirectSpecialInviterId` + index + `per_task_indirect` enum — all `IF NOT EXISTS`), snapshot-verified task statuses unchanged before/after (ACCEPTED=0, PENDING=93, reminders=510, 122 CommissionItem rows intact), `docker compose up -d --build`, 12 slash commands re-deployed, health/dashboard/userscript/bot verified, no errors in logs. Bundles cleaned up.
 - **2026-08-12**: **Fixed the Accepted-tasks regression** (root cause found & repaired): re-running `migration.sql` during the 11:00 deploy re-executed a one-time data backfill from the 2026-08-04 cutover (`UPDATE Task SET status='ACCEPTED' WHERE source='goparttime' AND status='PENDING'` + `DELETE FROM "Reminder"`), reverting all 48 activated GoPartTime tasks to ACCEPTED and deleting their reminders. Fix: removed the backfill from `migration.sql` (local + server, with DANGER comment), added reusable `scripts/restore-accepted.ts`, restored all 48 tasks → PENDING with reminders recreated/scheduled via the activation logic (deleted ones' jobs are skipped by the worker). Verified: ACCEPTED=0, reminders scheduled, health OK. **Rule going forward: migration.sql is schema-only; data changes go in versioned one-off scripts.**
 - **2026-08-12**: **Rolled back the `5797667` deploy to `1a70dbf`** on production (`161.118.164.85`): user reported unexpected tasks in the dashboard Accepted section after the deploy. Investigation showed the 48 ACCEPTED tasks predate the deploy (created 2026-08-04 → 2026-08-12, all before 11:00; the referral commit cannot create tasks) — the rollback was done anyway per request. Full rollback: git reset to `1a70dbf`, DB reverted (`Referral.indirectSpecialInviterId` column+index dropped; `CommissionKind` enum recreated without `per_task_indirect`; 122 `CommissionItem` rows untouched), images rebuilt, 12 commands re-deployed, health/dashboard/bot/DB verified. Safety backup of the reverted state: `/home/ubuntu/rtm-backup-20260812-rollback5797667.tar.gz`. Note: PG has no `ALTER TYPE ... DROP VALUE`; enum values are removed by recreate-the-type (rename → create → alter column → drop).
 - **2026-08-12**: Deployed `5797667` (two-level referral system) to production (`161.118.164.85`): shipped as a git bundle, working-tree backup taken (`rtm-backup-20260812-105700.tar.gz`), DB migration applied (idempotent `migration.sql`: `Referral.indirectSpecialInviterId` column + index + `per_task_indirect` enum), `docker compose up -d --build`, 12 slash commands re-deployed, health/dashboard/bot/DB verified. *(Superseded by the rollback above.)*

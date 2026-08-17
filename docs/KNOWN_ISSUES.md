@@ -4,6 +4,17 @@
 
 ---
 
+## Verified 2026-08-17
+
+### 0. `npm run lint` broken repo-wide (no ESLint config)
+- **Description**: ESLint 9.x requires a flat `eslint.config.js`; the repo has never shipped one (no `.eslintrc*`, no `eslint.config.*`). `npm run lint` fails immediately with "ESLint couldn't find an eslint.config.(js|mjs|cjs) file."
+- **Severity**: Medium (CI/dev annoyance; typecheck + tests still run).
+- **Status**: Open.
+- **Cause**: ESLint dependency bumped to ^9 without migrating config format.
+- **Next step**: add an `eslint.config.js` (flat config) matching the current lint script (`eslint src/ --ext .ts`).
+
+---
+
 ## Confirmed Bugs / Risks
 
 ### 1. Owner-earnings endpoints are unauthenticated

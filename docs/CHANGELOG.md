@@ -2,6 +2,16 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-08-17
+### Added (NOT yet deployed)
+- **GoPartTime Submit View automation**: userscript v1.2.0 ("📊 Submit View" floating button; tracks clicked card buttons `Submit View`/`Available to submit view in …`; fetches the stored Statbot insight screenshot and attaches it to the GoPartTime View dialog's file input via DataTransfer). Backend: read-only `GET /api/v1/goparttime/insight/:externalTaskId?step=1|2` (extension key) + `resolveInsightReminder` (`src/services/goparttime-insight.service.ts`: step 1 = 20h reminder, step 2 = 70h post reminder, no-step fallbacks) + 10 resolver tests. **Deliberately manual**: view-count entry, Submit click, and success verification stay with the manager — no confirm endpoint, no DB/state changes, `messageCreate.ts` untouched. Verified: 129/129 jest tests, typecheck, backend + dashboard builds; both userscript copies SHA-256 byte-identical.
+
+## 2026-08-13
+### Deployed
+- Re-deployed the two-level referral to production (`161.118.164.85`) at commit `a558f1d` (user commit: migration safety fix + `scripts/restore-accepted.ts` + docs). Safe procedure: backup (`rtm-backup-20260812-pre-redeploy-a558f1d.tar.gz`), git bundle + reset, verified `migration.sql` has zero data statements, applied schema-only migration (`indirectSpecialInviterId` column+index, `per_task_indirect` enum — all `IF NOT EXISTS`), snapshot-verified statuses unchanged (ACCEPTED=0, PENDING=93, 510 reminders), rebuilt images, re-deployed 12 slash commands, health/dashboard/userscript/bot OK, no log errors.
+### Fixed
+- `prisma/migrations/migration.sql` one-time backfill permanently removed and committed (`a558f1d`, with DANGER comment); the schema-only rule is now enforced in the repo itself, not just on the server.
+
 ## 2026-08-12
 ### Fixed
 - **Accepted-tasks regression** (caused earlier same day): the 11:00 deploy re-ran `prisma/migrations/migration.sql`, which still contained the one-time data backfill from the 2026-08-04 Accepted-Tasks cutover (`UPDATE Task SET status='ACCEPTED' ... WHERE status='PENDING'` + `DELETE FROM "Reminder"`). Re-running it reverted all 48 activated GoPartTime tasks to ACCEPTED and deleted their reminders. Fix: removed the backfill from `migration.sql` (local + server, DANGER comment added), added reusable `scripts/restore-accepted.ts`, restored all 48 tasks to PENDING with reminders recreated and scheduled (past-due jobs for deleted tasks are skipped by the worker). Verified: ACCEPTED=0, health OK. New rule: migration.sql is schema-only; data changes belong in versioned one-off scripts.

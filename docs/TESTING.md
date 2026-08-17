@@ -19,13 +19,14 @@
 
 Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<rootDir>/src`.
 
-## 2. Existing Tests (7 files)
+## 2. Existing Tests (8 files)
 
 | File | Covers |
 |---|---|
 | `state-machine.test.ts` | legal/illegal transitions; `getStatusAfterReminderSent`, `getStatusAfterInsightReceived`, `shouldComplete` (Comment @ 20h, Post @ 70h), terminal/cancellable |
 | `validators.test.ts` | Reddit URL pattern, notes length, image extensions, `sanitize`, snowflake |
 | `goparttime-payload.test.ts` | zod schema: post/comment payloads, coercion, rejections (missing title/postLink, non-sequential image orders, >20 images, whitespace content, missing ticket, non-digit taskId) |
+| `goparttime-insight.test.ts` | `resolveInsightReminder`: step 1 → 20h reminder, step 2 → 70h (post), step-2-on-comment throws, invalid step throws, no-reminder → null, no-step fallbacks (pending → has-image → earliest), empty list |
 | `image-processor.test.ts` | `prepareImage`: ≤10MB passthrough, >10MB WebP compression ≤~9.5MB, 404 throw, alpha preserved |
 | `discord-chunker.test.ts` | `chunkText`: paragraph→sentence→word→char splitting, formatting preservation, code fences, custom limits |
 | `plain-task-message.test.ts` | `buildTaskMessagePlan` metadata/content chunking; `buildInstructionMessage` post/comment variants |
@@ -68,6 +69,12 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 - [ ] Delivery failure → task FAILED → `retry-assignment` sends only missing tail
 - [ ] Reassign moves task to another ticket and re-delivers
 - [ ] One awaiting task per ticket enforced
+
+### Submit View flow (v1.2.0 — not yet deployed)
+- [ ] Click card "Submit View" → "📊 Submit View" button attaches the 20h screenshot to the View dialog; count/Submit/verify stay manual
+- [ ] Disabled countdown button tracked → alert shows the countdown text; nothing fetched
+- [ ] No screenshot uploaded → "No screenshot uploaded yet for ..." alert
+- [ ] Screenshot expired (30h TTL) → download fails with a clear error
 
 ### Payout flow
 - [ ] Complete ≥1 task → `GET /payouts/summary` counts it, `pendingAmount` = posts×60 + comments×30 (or custom rates)

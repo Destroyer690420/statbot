@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-12 — live deploy at git HEAD `1a70dbf`** (health OK, dashboard OK, Discord bot logged in; the `5797667` two-level-referral deploy was rolled back the same day — full code+DB revert, see §11).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-13 — live deploy at git HEAD `a558f1d`** (health OK, dashboard OK, Discord bot logged in; two-level referral re-deployed with the schema-only migration — backfill removed, task statuses verified untouched).
 
 ---
 

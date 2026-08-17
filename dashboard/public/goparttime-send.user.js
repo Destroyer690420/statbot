@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.1.0
-// @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile).
+// @version      1.2.0
+// @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
 // @match        *://www.goparttime.net/*
@@ -18,10 +18,13 @@
 // ==/UserScript==
 
 /**
- * v1.1.0 — mobile support. Everything is feature-detected, so the script runs
- * both under Tampermonkey (GM_* APIs, desktop + Kiwi Browser on Android) and
- * as a plain bookmarklet / non-GM context (fetch + localStorage). The PC flow
- * is unchanged: Tampermonkey + GM_xmlhttpRequest is still the primary path.
+ * v1.2.0 — Submit View automation. Adds a "📊 Submit View" button that fetches
+ * the Statbot insight screenshot for the tracked task card's current view-data
+ * step and attaches it to the GoPartTime view dialog's file input. View-count
+ * entry and submission stay manual (read the count in the dialog, click
+ * Submit, verify success in GoPartTime yourself). Feature-detected like
+ * v1.1.0: runs under Tampermonkey (GM_* APIs) and as a plain bookmarklet /
+ * non-GM context (fetch + localStorage).
  */
 (function () {
   'use strict';
@@ -140,6 +143,235 @@
   });
   button.addEventListener('click', openModal);
   document.body.appendChild(button);
+
+  // ─── Submit View automation ────────────────────────────────
+
+  // The insight screenshot lives in the detail dialog (a Radix dialog) while
+  // the card with the "Submit View" button is on the list behind it. Like the
+  // Send Task button, pointer-events:none on <body> while a dialog is open
+  // would disable this button, so re-enable it explicitly and stop the
+  // pointerdown from closing the site's dialog.
+  const viewButton = document.createElement('button');
+  viewButton.id = 'gpt-submit-view-button';
+  const viewMobile = isNarrow();
+  viewButton.textContent = viewMobile ? '📊' : '📊 Submit View';
+  Object.assign(viewButton.style, {
+    position: 'fixed',
+    right: viewMobile ? '16px' : '20px',
+    bottom: viewMobile ? '80px' : '72px',
+    zIndex: '2147483647',
+    border: 'none',
+    background: '#2FBF71',
+    color: '#fff',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    touchAction: 'manipulation',
+    WebkitTapHighlightColor: 'transparent',
+  });
+  if (viewMobile) {
+    Object.assign(viewButton.style, {
+      width: '56px',
+      height: '56px',
+      borderRadius: '50%',
+      fontSize: '24px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '0',
+    });
+  } else {
+    Object.assign(viewButton.style, {
+      padding: '12px 18px',
+      borderRadius: '10px',
+      fontSize: '14px',
+    });
+  }
+  viewButton.style.setProperty('pointer-events', 'auto', 'important');
+  viewButton.addEventListener('pointerdown', (e) => e.stopPropagation());
+  viewButton.addEventListener('click', submitViewFlow);
+  document.body.appendChild(viewButton);
+
+  let trackedViewCard = null;
+  let submitViewBusy = false;
+
+  // The list re-renders on navigation; track the card the manager last clicked
+  // so the floating button always targets the right task and step.
+  document.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('button[data-slot="button"]') : null;
+    if (!btn) return;
+    const text = (btn.textContent || '').trim();
+    if (!/^(Submit View|Available to submit view)/.test(text)) return;
+    const card = btn.closest('div[data-slot="card"]');
+    if (!card) return;
+    const taskId = detectCardTaskId(card);
+    if (!taskId) return;
+    trackedViewCard = { card, taskId, step: detectCardViewStep(card), buttonText: text };
+  }, true);
+
+  function detectCardTaskId(card) {
+    const nodes = card.querySelectorAll('div, span');
+    for (const el of nodes) {
+      if (el.children.length === 0 && (el.textContent || '').trim() === 'Task ID') {
+        const sibling = el.nextElementSibling;
+        if (sibling) {
+          const value = (sibling.textContent || '').trim();
+          if (/^\d+$/.test(value)) return value;
+        }
+      }
+    }
+    return null;
+  }
+
+  function detectCardViewStep(card) {
+    const trigger = card.querySelector('div[data-slot="popover-trigger"]');
+    const text = (trigger && trigger.textContent || '').trim();
+    return /second/i.test(text) ? 2 : 1;
+  }
+
+  function findViewDialog() {
+    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"][data-slot="dialog-content"]'));
+    return dialogs.find((d) => d.querySelector('input[name="exposure_count"]')) || null;
+  }
+
+  function findCardSubmitButton(card) {
+    if (!card) return null;
+    const btn = Array.from(card.querySelectorAll('button[data-slot="button"]')).find((b) =>
+      /^(Submit View|Available to submit view)/.test((b.textContent || '').trim()),
+    );
+    return btn || null;
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // Opens the view-data dialog by clicking the card's "Submit View" button if
+  // it is not already open. Resolves to the dialog or null.
+  async function ensureViewDialog(card) {
+    let dialog = findViewDialog();
+    if (dialog) return dialog;
+    const btn = findCardSubmitButton(card);
+    if (!btn || btn.disabled) return null;
+    btn.click();
+    for (let i = 0; i < 20; i++) {
+      await sleep(100);
+      dialog = findViewDialog();
+      if (dialog) return dialog;
+    }
+    return null;
+  }
+
+  // Downloads the screenshot as a Blob. GM_xmlhttpRequest can return a Blob
+  // directly (Tampermonkey); older builds expose responseType 'arraybuffer'.
+  function fetchImageBlob(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest === 'function') {
+        const done = (res) => {
+          if (res.status < 200 || res.status >= 300) {
+            reject(new Error('Failed to download screenshot (' + res.status + ').'));
+            return;
+          }
+          if (res.response instanceof Blob) {
+            resolve(res.response);
+            return;
+          }
+          if (res.response instanceof ArrayBuffer) {
+            resolve(new Blob([res.response], { type: 'image/png' }));
+            return;
+          }
+          reject(new Error('Unexpected response type from GM_xmlhttpRequest.'));
+        };
+        GM_xmlhttpRequest({
+          method: 'GET',
+          url,
+          responseType: 'blob',
+          timeout: 30000,
+          onload: done,
+          onerror: () => reject(new Error('Screenshot download failed.')),
+          ontimeout: () => reject(new Error('Screenshot download timed out.')),
+        });
+        return;
+      }
+      fetch(url, { credentials: 'omit' })
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to download screenshot (' + res.status + ').');
+          return res.blob();
+        })
+        .then(resolve)
+        .catch(() => reject(new Error('Failed to download screenshot (fetch fallback).')));
+    });
+  }
+
+  // Attaches the Blob to the hidden file input the same way the site's
+  // dropzone would, so the file name and preview appear in the dialog.
+  function attachImageToDialog(dialog, blob, fileName) {
+    const input = dialog.querySelector('input[type="file"][accept="image/*"]');
+    if (!input) {
+      throw new Error('View dialog file input not found.');
+    }
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], fileName, { type: blob.type || 'image/png' }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  async function submitViewFlow() {
+    if (submitViewBusy) return;
+    const settings = getSettings();
+    if (!settings.apiKey) {
+      alert('Submit View is not configured. Use the Tampermonkey menu → "⚙️ Configure Sender..." first.');
+      return;
+    }
+    if (!trackedViewCard) {
+      alert('Click the "Submit View" (or disabled countdown) button on a task card first, then tap 📊 Submit View.');
+      return;
+    }
+
+    const { card, taskId, step, buttonText } = trackedViewCard;
+    const cardButton = findCardSubmitButton(card);
+    if (cardButton && cardButton.disabled) {
+      alert('View-data submission is not available yet for this task:\n"' + buttonText + '".');
+      return;
+    }
+
+    submitViewBusy = true;
+    viewButton.disabled = true;
+    try {
+      const data = await request(settings, 'GET', '/insight/' + taskId + '?step=' + step).then((res) => res.data);
+      if (!data.reminderId) {
+        alert(data.message || 'No insight data available for this task yet.');
+        return;
+      }
+      if (!data.imageUrl) {
+        alert('No screenshot uploaded yet for ' + data.reminderType + '. Upload it in the Discord ticket first.');
+        return;
+      }
+
+      const base = settings.apiUrl.replace(/\/api\/v1\/goparttime\/?$/, '');
+      const imageUrl = new URL(data.imageUrl, base + '/').toString();
+      const blob = await fetchImageBlob(imageUrl);
+      const fileName = 'view-' + taskId + '-step-' + step + '.png';
+
+      const dialog = await ensureViewDialog(card);
+      if (!dialog) {
+        alert('Could not open the view-data dialog. Open it manually, then run Submit View again.');
+        return;
+      }
+      attachImageToDialog(dialog, blob, fileName);
+      alert(
+        '✅ Screenshot attached for step ' + step + ' (' + data.reminderType + ').\n' +
+        'Now: read the view count in the dialog, enter it, click Submit, and verify success in GoPartTime.',
+      );
+    } catch (err) {
+      alert('⚠️ ' + (err && err.message ? err.message : 'Submit View failed.'));
+    } finally {
+      submitViewBusy = false;
+      viewButton.disabled = false;
+    }
+  }
 
   let modal = null;
   let pendingTask = null;
