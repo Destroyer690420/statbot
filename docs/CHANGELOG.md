@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-08-17
+### Deployed
+- **Insight screenshot TTL change deployed** (`161.118.164.85`) at commit `cba8a35` (app-only rebuild, backup `rtm-backup-20260817-1720-pre-cba8a35.tar.gz`). Verified: health healthy, compiled `INSIGHT_TTL_MS = 60` hours, existing screenshots retained.
 ### Changed
 - **Insight screenshot TTL raised 30h → 60h** (`INSIGHT_TTL_MS` in `src/services/insight-storage.service.ts`): GoPartTime Submit View needs the 70h screenshots to stay downloadable while the manager submits view data. Cleanup semantics unchanged (mtime-based, hourly sweep, up to ~1h lag).
 ### Deployed

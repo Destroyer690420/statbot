@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — Submit View manual-task fallback **DEPLOYED** to production (`161.118.164.85`) at git HEAD `60a62b8` (app-only rebuild; endpoint verified live for manual task `POST #688318`).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — insight screenshot TTL raised to 60h and **DEPLOYED** (`161.118.164.85`, git HEAD `cba8a35`, app-only rebuild).
 
 ---
 
@@ -244,6 +244,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-08-17**: **DEPLOYED the insight screenshot TTL change (30h → 60h)** (`161.118.164.85`) at commit `cba8a35` (app-only rebuild; backup `rtm-backup-20260817-1720-pre-cba8a35.tar.gz`; bundle cleaned). Verified live: health healthy, compiled `INSIGHT_TTL_MS = 60` hours, existing 26.5h-old screenshot still retained. Rationale: GoPartTime Submit View needs the 70h screenshots downloadable while the manager submits view data.
 
 - **2026-08-17**: **DEPLOYED the Submit View manual-task fallback** (`161.118.164.85`) at commit `60a62b8` (app-only: `docker compose build app && docker compose up -d app`; backup `rtm-backup-20260817-1655-pre-60a62b8.tar.gz`; bundle cleaned). Verified live: health healthy, boot log OK, `GET /insight/688318?step=1` → `POST_20H`, `?step=2` → `POST_70H` (image on disk, download 200/70.7 KB); no-step → `POST_20H`. Note: the 20h screenshot file itself was already removed by the 30h TTL (uploaded Aug 14) — step-1 download will 404 until a newer screenshot exists.
 
