@@ -35,7 +35,6 @@ export function DailyOutreach() {
   });
 
   const tickets: OutreachTicket[] = statusQuery.data?.data?.tickets || [];
-  const istDate: string = statusQuery.data?.data?.istDate || '';
   const selectedCount = tickets.filter((t) => t.selected).length;
   const visibleTickets = tickets.filter((t) => t.selected);
 
@@ -93,39 +92,31 @@ export function DailyOutreach() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Daily Worker Outreach</h1>
-          <p className="text-dark-400 mt-1">
-            {istDate ? `Today (IST): ${istDate} — resets at 12:00 AM IST` : 'Loading daily state...'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button onClick={openSelect} className="btn-secondary flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Select Tickets
-          </button>
-          <button
-            onClick={handleSend}
-            disabled={selectedCount === 0 || sendMutation.isPending}
-            className="btn-primary flex items-center gap-2"
-          >
-            {sendMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
-            Send Message
-          </button>
-          <button
-            onClick={() => statusQuery.refetch()}
-            disabled={statusQuery.isFetching}
-            className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-5 h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <button onClick={openSelect} className="btn-secondary flex items-center gap-2">
+          <Users className="w-4 h-4" />
+          Select Tickets
+        </button>
+        <button
+          onClick={handleSend}
+          disabled={selectedCount === 0 || sendMutation.isPending}
+          className="btn-primary flex items-center gap-2"
+        >
+          {sendMutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Send className="w-4 h-4" />
+          )}
+          Send Message
+        </button>
+        <button
+          onClick={() => statusQuery.refetch()}
+          disabled={statusQuery.isFetching}
+          className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50"
+          title="Refresh"
+        >
+          <RefreshCw className={`w-5 h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {sendNote && (

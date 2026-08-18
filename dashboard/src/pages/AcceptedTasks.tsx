@@ -54,14 +54,7 @@ export function AcceptedTasks() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-dark-100">Accepted Tasks</h2>
-          <p className="text-sm text-dark-400 mt-1">
-            External tasks awaiting activation. Mark tasks as <span className="text-primary-400">Done</span> to move them
-            to the active task list, or reassign them to another ticket.
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <span className="status-badge border bg-violet-500/10 text-violet-400 border-violet-500/20 px-3 py-1">
           {tasks.length} queued
         </span>
