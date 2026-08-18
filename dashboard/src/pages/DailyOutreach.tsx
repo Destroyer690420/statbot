@@ -112,30 +112,30 @@ export function DailyOutreach() {
         <div className="flex items-center gap-2">
           <button
             onClick={openSelect}
-            className="btn-secondary flex items-center justify-center gap-2 flex-1 md:flex-none"
+            className="btn-secondary flex items-center justify-center gap-1.5 flex-1 md:flex-none text-[13px] md:text-sm py-2 md:py-2.5 px-3 md:px-6"
           >
-            <Users className="w-4 h-4" />
+            <Users className="w-3.5 h-3.5 md:w-4 md:h-4" />
             Select Tickets
           </button>
           <button
             onClick={handleSend}
             disabled={selectedCount === 0 || sendMutation.isPending}
-            className="btn-primary flex items-center justify-center gap-2 flex-1 md:flex-none"
+            className="btn-primary flex items-center justify-center gap-1.5 flex-1 md:flex-none text-[13px] md:text-sm py-2 md:py-2.5 px-3 md:px-6"
           >
             {sendMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5 md:w-4 md:h-4" />
             )}
             Send Message
           </button>
           <button
             onClick={() => statusQuery.refetch()}
             disabled={statusQuery.isFetching}
-            className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50 shrink-0"
+            className="p-2 md:p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50 shrink-0"
             title="Refresh"
           >
-            <RefreshCw className={`w-5 h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
