@@ -37,6 +37,7 @@ export function DailyOutreach() {
   const tickets: OutreachTicket[] = statusQuery.data?.data?.tickets || [];
   const istDate: string = statusQuery.data?.data?.istDate || '';
   const selectedCount = tickets.filter((t) => t.selected).length;
+  const visibleTickets = tickets.filter((t) => t.selected);
 
   const openSelect = () => {
     setDraft(new Map(tickets.map((t) => [t.channelId, t.selected])));
@@ -159,25 +160,20 @@ export function DailyOutreach() {
                     <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
                   </td>
                 </tr>
-              ) : tickets.length === 0 ? (
+              ) : visibleTickets.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-10 text-center text-dark-400">
-                    No tickets found.
+                    No tickets selected yet — open Select Tickets to add.
                   </td>
                 </tr>
               ) : (
-                tickets.map((t) => (
+                visibleTickets.map((t) => (
                   <tr key={t.channelId} className="hover:bg-dark-800/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm text-dark-100">
                           #{t.channelName || t.channelId}
                         </span>
-                        {t.selected && (
-                          <span className="text-[10px] font-semibold text-primary-400/80 uppercase tracking-wider bg-primary-500/10 border border-primary-500/20 px-2 py-0.5 rounded-full">
-                            selected
-                          </span>
-                        )}
                         {t.taskStatus === 'awaiting-submission' && (
                           <span className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider">busy</span>
                         )}
@@ -201,21 +197,16 @@ export function DailyOutreach() {
           <div className="flex justify-center py-10">
             <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
           </div>
-        ) : tickets.length === 0 ? (
-          <p className="text-center text-dark-400 py-10">No tickets found.</p>
+        ) : visibleTickets.length === 0 ? (
+          <p className="text-center text-dark-400 py-10">No tickets selected yet — open Select Tickets to add.</p>
         ) : (
-          tickets.map((t) => (
+          visibleTickets.map((t) => (
             <div key={t.channelId} className="glass-card border border-dark-700/50 overflow-hidden">
               <div className="px-4 pt-4 pb-2 flex items-center justify-between">
                 <div className="min-w-0">
                   <p className="font-mono text-sm text-dark-100 truncate">#{t.channelName || t.channelId}</p>
                   <p className="text-xs text-dark-400 mt-0.5">{t.workerName || '—'}</p>
                 </div>
-                {t.selected && (
-                  <span className="text-[10px] font-semibold text-primary-400/80 uppercase tracking-wider bg-primary-500/10 border border-primary-500/20 px-2 py-0.5 rounded-full">
-                    selected
-                  </span>
-                )}
               </div>
               <div className="grid grid-cols-3 gap-1 px-4 py-2 border-t border-dark-700/30">
                 <div className="flex items-center gap-2">
@@ -251,7 +242,7 @@ export function DailyOutreach() {
               </button>
             </div>
             <p className="text-dark-400 text-sm mb-4">
-              Only checked tickets receive the daily message. Selection is remembered.
+              Only checked tickets appear on the page and receive the daily message. Selection is remembered.
             </p>
             <div className="overflow-y-auto -mx-2 px-2 space-y-2 flex-1">
               {statusQuery.isLoading ? (
