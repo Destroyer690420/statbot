@@ -3,6 +3,7 @@ import { reminderService } from '../../services/reminder.service';
 import { taskService } from '../../services/task.service';
 import { goparttimeService } from '../../services/goparttime.service';
 import { insightStorageService } from '../../services/insight-storage.service';
+import { outreachService } from '../../services/outreach.service';
 import { isSupportedImage, isValidRedditUrl } from '../../utils/validators';
 import { taskRepository } from '../../database/repositories';
 import { TaskStatus, AuditAction } from '../../types';
@@ -15,6 +16,8 @@ export async function handleMessageCreate(message: Message): Promise<void> {
   if (!message.guild) return;
 
   try {
+    await outreachService.onWorkerMessage(message.channel.id, message.author.id);
+
     const handled = await handleInstructionReply(message);
     if (handled) return;
 

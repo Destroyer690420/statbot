@@ -40,6 +40,9 @@ export const TASK_ID_PATTERN = /^[A-Za-z0-9 _#-]{1,32}$/;
 
 /** Reddit URL regex pattern */
 export const REDDIT_URL_PATTERN = /^https?:\/\/(www\.|old\.|new\.)?reddit\.com\/.+/i;
+/** Default daily worker outreach message (configurable via OutreachSettings) */
+export const DEFAULT_OUTREACH_MESSAGE =
+  'Hey, I have got a post and a comment for you. wanna do it? message me once you are free';
 
 /** Embed colors */
 export const COLORS = {

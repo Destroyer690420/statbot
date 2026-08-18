@@ -80,7 +80,7 @@ React dashboard (nginx)           PostgreSQL (Prisma 7, external host) + Redis 7
 │   ├── config/                  # env.ts (zod), constants.ts (all delays/thresholds)
 │   ├── database/                # db.ts (PrismaPg), converters.ts, repositories/ (7 repos)
 │   ├── scheduler/               # queue.ts, jobs.ts, worker.ts (BullMQ reminder engine)
-│   ├── services/                # task, state-machine, reminder, insight-storage, payout, commission, referral(→commission), owner-earnings, analytics, audit, settings, goparttime, goparttime-insight
+│   ├── services/                # task, state-machine, reminder, insight-storage, payout, commission, referral(→commission), owner-earnings, analytics, audit, settings, goparttime, goparttime-insight, outreach
 │   ├── __tests__/               # 8 jest test files
 │   └── utils/                   # validators, goparttime-payload, html-to-discord, plain-task-message, discord-chunker, image-processor, id-generator, logger, permissions, task-display, check-reddit (UNUSED)
 ├── dashboard/                   # React SPA + Dockerfile (nginx) + nginx.conf + public/goparttime-send.user.js
@@ -112,8 +112,9 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 8. **Payout system**: weekly (IST Sunday→Saturday) totals from `PayoutSettings` rates (defaults ₹30/comment, ₹60/post); workers paid per completed task; pay-worker/pay-all create `PayoutBatch` + `PayoutItem`, mark paid COMPLETED tasks ARCHIVED; CSV export; batch history. See `docs/PAYOUT_SYSTEM.md`.
 9. **Referral commissions**: `/referral add` (admins) records inviter→invitee links; normal inviters get a one-time ₹100 bonus after the invitee completes 2 tasks; special inviters (hardcoded list of 3 Discord IDs) get ₹50 one-time bonus after 1 task + ₹10/comment, ₹20/post per task. **Two-Level Referrals**: auto-detects when a normal inviter was referred by a special inviter (`indirectSpecialInviterId`), paying the normal inviter their standard bonus and paying the upstream special inviter per-task commissions (₹20/post, ₹10/comment) on the worker's tasks (no one-time bonus). Commission batches/CSV/history in the dashboard. See `docs/REFERRAL_SYSTEM.md`.
 10. **Owner earnings**: daily/weekly net earnings (hardcoded revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30) minus per-task/one-time commissions (including indirect special per-task commissions); PIN (default `7977` via `OWNER_PIN`) gates navigation from Settings but the API endpoints are unauthenticated. See `docs/FRONTEND.md`.
-11. **Dashboard**: 12 routes — Dashboard, Tasks, TaskDetails, AcceptedTasks, Archives, PayoutLayout (`/payout/tasks` & `/payout/commissions`), Referrals (with Indirect referral badge), Analytics, Settings, OwnerEarnings, Login, NotFound. JWT auth via single dashboard account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`). See `docs/FRONTEND.md`.
-12. **Audit log**: `AuditLog` rows for task/payout/commission/referral/reminder/command events; no dashboard consumer since the Activity page was removed (2026-08-18) — `GET /api/v1/audit-logs` kept for debugging.
+11. **Dashboard**: 13 routes — Dashboard, Tasks, TaskDetails, AcceptedTasks, Daily Outreach, Archives, PayoutLayout (`/payout/tasks` & `/payout/commissions`), Referrals (with Indirect referral badge), Analytics, Settings, OwnerEarnings, Login, NotFound. JWT auth via single dashboard account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`). See `docs/FRONTEND.md`.
+12. **Audit log**: `AuditLog` rows for task/payout/commission/referral/reminder/command/outreach events; no dashboard consumer since the Activity page was removed (2026-08-18) — `GET /api/v1/audit-logs` kept for debugging.
+13. **Daily Worker Outreach**: per-ticket daily availability tracking. Manager selects tickets (persisted in `TicketOutreach`, survives day changes), `POST /api/v1/outreach/send` broadcasts the configurable daily message (`OutreachSettings`, default constant) to checked tickets only; any worker (non-bot/non-admin) message in a checked ticket after the send marks it Available (`messageCreate.ts` hook → `outreachService.onWorkerMessage`). Post/Comment columns auto-derive from today's tasks per channel — assignment workflow unchanged. Daily cycle = IST day (resets at 00:00 IST: Available/Post/Comment go fresh, selection is remembered). See `docs/OUTREACH.md`.
 
 ---
 
@@ -181,7 +182,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 8. Database (summary — details in docs/DATABASE.md)
 
-- PostgreSQL via Prisma 7 (`PrismaPg` driver adapter), `DATABASE_URL` env. Tables: `Task`, `Reminder`, `AuditLog`, `PayoutBatch`, `PayoutItem`, `Referral`, `CommissionBatch`, `CommissionItem`, `PayoutSettings`, `CommissionRates` (10 models, 7 enums).
+- PostgreSQL via Prisma 7 (`PrismaPg` driver adapter), `DATABASE_URL` env. Tables: `Task`, `Reminder`, `AuditLog`, `PayoutBatch`, `PayoutItem`, `Referral`, `CommissionBatch`, `CommissionItem`, `PayoutSettings`, `CommissionRates`, `TicketOutreach`, `OutreachSettings` (12 models, 7 enums).
 - FKs: Reminder→Task (cascade delete); AuditLog→Task (set null); PayoutItem→Batch/Task (restrict); CommissionItem→Batch/Referral/SourceTask (set-null for task).
 - Unique constraints: Task `(source, externalTaskId)` (GoPartTime dedupe). 26 indexes.
 - Migrations: **single hand-maintained, idempotent** `prisma/migrations/migration.sql`, applied manually (NOT `prisma migrate deploy`). Keep SQL ↔ schema.prisma in sync and `IF NOT EXISTS`-safe. **Schema-only, no data statements** — a one-time data backfill (UPDATE/DELETE) that lived there was removed 2026-08-12 after a re-run corrupted 48 activated tasks (recovery tool: `scripts/restore-accepted.ts`; see DEPLOYMENT.md §4).
@@ -294,10 +295,11 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 | `docs/TASK_SYSTEM.md` | Task lifecycle, state machine, validation |
 | `docs/REMINDER_SYSTEM.md` | Reminder engine, scheduling, retries, re-hydration |
 | `docs/INSIGHT_SYSTEM.md` | Insight submission, screenshots, storage |
+| `docs/OUTREACH.md` | Daily Worker Outreach feature (IST daily cycle, availability) |
 | `docs/PAYOUT_SYSTEM.md` | Weekly payout computation, batches, edge cases |
 | `docs/REFERRAL_SYSTEM.md` | Inviters, commissions, batches |
 | `docs/DATABASE.md` | Schema, ER diagram, migrations, indexes |
-| `docs/API.md` | All 56 REST endpoints |
+| `docs/API.md` | All 58 REST endpoints |
 | `docs/FRONTEND.md` | Dashboard pages, components, auth, PWA |
 | `docs/DEPLOYMENT.md` | Docker/nginx/DuckDNS/PM2 deployment |
 | `docs/ENVIRONMENT.md` | All env vars (names only) |

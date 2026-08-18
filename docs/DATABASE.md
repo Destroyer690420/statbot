@@ -21,7 +21,7 @@
 - **Applied manually** (psql/SQL client). **NOT** via `prisma migrate deploy` or `migrate dev` — the Dockerfile only runs `prisma generate` + `npm run build`; no pipeline applies DDL.
 - Style rules: appended sections use `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` / `ALTER TYPE ... ADD VALUE IF NOT EXISTS` so the file can be re-run safely.
 - **Future sessions**: edit BOTH `schema.prisma` AND append an idempotent block to `migration.sql`, matching column-by-column.
-- Historical evolution (from git): initial 272-line file (2026-07-26, `1f01cc2`) → CommissionBatch week-columns append (`072aca9`) → GoPartTime columns + Accepted Tasks append (`445e7cf`, 2026-08-03) → two-level-referral append (`9348d2d`) then removed (`ac441e2`, 2026-08-09 — current file has no trace of it).
+- Historical evolution (from git): initial 272-line file (2026-07-26, `1f01cc2`) → CommissionBatch week-columns append (`072aca9`) → GoPartTime columns + Accepted Tasks append (`445e7cf`, 2026-08-03) → two-level-referral append (`9348d2d`) then removed (`ac441e2`, 2026-08-09 — current file has no trace of it) → **outreach tables append (`TicketOutreach`, `OutreachSettings` + `OUTREACH_MESSAGE_SENT` enum value, 2026-08-18)**.
 - Data import history: Firestore → PostgreSQL via one-time scripts (see §10).
 
 ---
@@ -177,6 +177,20 @@ erDiagram
         timestamp updatedAt
         string updatedBy
     }
+    TicketOutreach {
+        string id PK
+        string channelId UNIQUE "Discord channel ID"
+        boolean selected "persists across days"
+        timestamp messageSentAt "nullable; last daily send"
+        timestamp availableAt "nullable; first worker reply of cycle"
+        timestamp updatedAt
+    }
+    OutreachSettings {
+        string id PK "default 'outreach-message'"
+        string message "configurable daily message"
+        timestamp updatedAt
+        string updatedBy
+    }
 ```
 
 ### Enums (7)
@@ -186,10 +200,10 @@ erDiagram
 | `TaskType` | `POST`, `COMMENT` |
 | `TaskStatus` | `ACCEPTED`, `PENDING`, `REMINDER_20_SENT`, `INSIGHT_20_RECEIVED`, `REMINDER_70_SENT`, `INSIGHT_70_RECEIVED`, `COMPLETED`, `ARCHIVED`, `CANCELLED` |
 | `ReminderType` | `POST_20H`, `POST_70H`, `COMMENT_20H` |
-| `AuditAction` | `TASK_CREATED`, `TASK_DELETED`, `TASK_UPDATED`, `TASK_COMPLETED`, `TASK_CANCELLED`, `TASK_ARCHIVED`, `REMINDER_SENT`, `REMINDER_COMPLETED`, `REMINDER_RETRY`, `REMINDER_RESCHEDULED`, `INSIGHT_RECEIVED`, `ADMIN_ALERT`, `COMMAND_USED`, `PAYOUT_BATCH_CREATED`, `PAYOUT_ITEM_CREATED`, `REFERRAL_ADDED`, `REFERRAL_REMOVED`, `COMMISSION_PAID`, `COMMISSION_BATCH_CREATED`, `TASK_ASSIGNED`, `URL_SUBMITTED`, `TASK_REVIEWED`, `TASK_ACCEPTED`, `ASSIGNMENT_RETRIED` |
+| `AuditAction` | `TASK_CREATED`, `TASK_DELETED`, `TASK_UPDATED`, `TASK_COMPLETED`, `TASK_CANCELLED`, `TASK_ARCHIVED`, `REMINDER_SENT`, `REMINDER_COMPLETED`, `REMINDER_RETRY`, `REMINDER_RESCHEDULED`, `INSIGHT_RECEIVED`, `ADMIN_ALERT`, `COMMAND_USED`, `PAYOUT_BATCH_CREATED`, `PAYOUT_ITEM_CREATED`, `REFERRAL_ADDED`, `REFERRAL_REMOVED`, `COMMISSION_PAID`, `COMMISSION_BATCH_CREATED`, `TASK_ASSIGNED`, `URL_SUBMITTED`, `TASK_REVIEWED`, `TASK_ACCEPTED`, `ASSIGNMENT_RETRIED`, `OUTREACH_MESSAGE_SENT` |
 | `ReferralStatus` | `pending`, `qualified`, `active_per_task`, `closed` |
 | `InviterType` | `normal`, `special` |
-| `CommissionKind` | `one_time`, `per_task` |
+| `CommissionKind` | `one_time`, `per_task`, `per_task_indirect` |
 
 Note: only `pending`, `qualified`, and `active_per_task` are ever written by the code (`commission.service.payInviter/payAll`); `closed` is only read (excluded from payable sets) and must be set manually if ever used (see KNOWN_ISSUES.md #36).
 

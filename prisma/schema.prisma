@@ -284,3 +284,19 @@ model CommissionRates {
   updatedAt                 DateTime
   updatedBy                 String
 }
+
+model TicketOutreach {
+  id            String    @id @default(cuid())
+  channelId     String    @unique
+  selected      Boolean   @default(false)
+  messageSentAt DateTime?
+  availableAt   DateTime?
+  updatedAt     DateTime  @updatedAt
+}
+
+model OutreachSettings {
+  id        String   @id @default("outreach-message")
+  message   String
+  updatedAt DateTime
+  updatedBy String
+}

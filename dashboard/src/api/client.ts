@@ -138,6 +138,33 @@ export async function downloadCsv(params?: Record<string, string>): Promise<void
   URL.revokeObjectURL(url);
 }
 
+// ─── Outreach ────────────────────────────────────────────────
+
+export async function getOutreach() {
+  const { data } = await api.get('/outreach');
+  return data;
+}
+
+export async function getOutreachSettings() {
+  const { data } = await api.get('/outreach/settings');
+  return data;
+}
+
+export async function updateOutreachSettings(body: { message: string }) {
+  const { data } = await api.put('/outreach/settings', body);
+  return data;
+}
+
+export async function saveOutreachSelection(body: { selections: { channelId: string; selected: boolean }[] }) {
+  const { data } = await api.put('/outreach/selection', body);
+  return data;
+}
+
+export async function sendOutreachMessage() {
+  const { data } = await api.post('/outreach/send');
+  return data;
+}
+
 // ─── Payouts ─────────────────────────────────────────────────
 
 export async function getPayoutWeek() {

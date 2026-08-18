@@ -62,12 +62,12 @@ flowchart TB
 |---|---|---|---|---|---|
 | Boot orchestrator | `src/index.ts` | 6-step startup, timers, graceful shutdown | env | — | everything |
 | Discord client | `src/bot/index.ts` | discord.js client (intents: Guilds, GuildMessages, MessageContent, GuildMembers; partials Message/Channel) | gateway events | slash replies, messages | `env.DISCORD_TOKEN` |
-| Bot events | `src/bot/events/interactionCreate.ts`, `messageCreate.ts` | command dispatch; instruction replies (URL submission); insight uploads | interactions/messages | DB writes, embeds, reactions | repositories, services |
+| Bot events | `src/bot/events/interactionCreate.ts`, `messageCreate.ts` | command dispatch; instruction replies (URL submission); insight uploads; daily-outreach availability marking | interactions/messages | DB writes, embeds, reactions | repositories, services |
 | Commands | `src/bot/commands/*.ts` (12) | slash command implementations | interaction args | embeds, DB writes, job scheduling | services, scheduler |
-| API | `src/api/server.ts` + middleware + 14 route files | REST API `/api/v1` | HTTP | JSON/CSV/files | services, schemas |
+| API | `src/api/server.ts` + middleware + 15 route files | REST API `/api/v1` | HTTP | JSON/CSV/files | services, schemas |
 | Scheduler | `src/scheduler/{queue,jobs,worker}.ts` | BullMQ queue/worker for reminders | Redis, DB | reminder embeds, status transitions, overdue alerts | shared Discord client |
-| Services | `src/services/*.ts` (11) | business logic (task, reminder, payout, commission, goparttime, analytics, audit, settings, owner-earnings, insight-storage, state-machine) | repositories | DB writes, audits, jobs | repositories, utils |
-| Repositories | `src/database/repositories/*.ts` (7) | data access (Prisma queries) | services | Prisma results | Prisma client |
+| Services | `src/services/*.ts` (12) | business logic (task, reminder, payout, commission, goparttime, analytics, audit, settings, owner-earnings, insight-storage, state-machine, outreach) | repositories | DB writes, audits, jobs | repositories, utils |
+| Repositories | `src/database/repositories/*.ts` (8) | data access (Prisma queries) | services | Prisma results | Prisma client |
 | DB bootstrap | `src/database/db.ts` | PrismaClient + PrismaPg adapter | `DATABASE_URL` | client singleton | generated client |
 | Utils | `src/utils/*.ts` | validation, formatting, image processing, chunking, logging, permissions | — | — | — |
 

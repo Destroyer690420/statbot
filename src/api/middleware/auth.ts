@@ -30,3 +30,16 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     res.status(401).json({ success: false, message: 'Invalid or expired token.' });
   }
 }
+
+/**
+ * Dashboard-admin gate: only the single dashboard account (the username in
+ * every dashboard JWT) may pass. Must run after authMiddleware.
+ */
+export function requireDashboardAdmin(req: AuthRequest, res: Response): boolean {
+  const username = req.userId || '';
+  if (username !== env.DASHBOARD_USERNAME) {
+    res.status(403).json({ success: false, message: 'Admin access required.' });
+    return false;
+  }
+  return true;
+}

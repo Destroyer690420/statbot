@@ -1,6 +1,6 @@
 import { ReactNode, useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ListTodo, Inbox, BarChart3, Archive, Settings, Wallet, LogOut, Menu, Download, UserPlus } from 'lucide-react';
+import { LayoutDashboard, ListTodo, Inbox, BarChart3, Archive, Settings, Wallet, LogOut, Menu, Download, UserPlus, Users } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -71,6 +71,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Accepted', path: '/accepted', icon: Inbox },
+    { name: 'Daily Outreach', path: '/outreach', icon: Users },
     { name: 'Tasks', path: '/tasks', icon: ListTodo },
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },
     { name: 'Archives', path: '/archives', icon: Archive },
@@ -83,6 +84,7 @@ export function Layout({ children }: { children: ReactNode }) {
     if (pathname === '/') return 'Dashboard';
     if (pathname.startsWith('/tasks')) return 'Tasks';
     if (pathname.startsWith('/accepted')) return 'Accepted Tasks';
+    if (pathname.startsWith('/outreach')) return 'Daily Outreach';
     if (pathname.startsWith('/analytics')) return 'Analytics';
     if (pathname.startsWith('/archives')) return 'Archives';
     if (pathname.startsWith('/payout')) return 'Payments';

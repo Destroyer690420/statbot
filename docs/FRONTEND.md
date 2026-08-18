@@ -13,7 +13,7 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 | dev | `npm run dev` | Vite on **:5173**, proxy `/api` → `VITE_API_TARGET \|\| 'https://161.118.164.85'` (working tree has an uncommitted change `http:` → `https:`) |
 | build | `npm run build` | `tsc && vite build` → `dist/` |
 
-## 2. Routing (App.tsx, 12 routes)
+## 2. Routing (App.tsx, 13 routes)
 
 | Path | Page | Notes |
 |---|---|---|
@@ -21,6 +21,7 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 | `/` | Dashboard | ProtectedRoute + Layout |
 | `/tasks` | Tasks | |
 | `/accepted` | AcceptedTasks | |
+| `/outreach` | DailyOutreach | Daily Worker Outreach page (see below) |
 | `/tasks/:id` | TaskDetails | |
 | `/analytics` | Analytics | |
 | `/archives` | Archives | |
@@ -42,7 +43,7 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 ## 4. API Client (`src/api/client.ts`)
 
 baseURL `/api/v1`. All functions used by pages (see `docs/API.md` for endpoint semantics):
-`login`, `getTasks`, `getTask`, `deleteTask`, `updateTask`, `doneTask`, `reassignTask`, `retryAssignment`, `submitTaskUrl`, `getTickets`, `getReminders`, `getStats`, `getDailyStats`, `getTypeDistribution`, `getEmployeePerformance`, `downloadCsv`, `getPayoutWeek/Summary/Eligible/WorkerDetail`, `payWorker`, `payAll`, `getBatchHistory/Detail`, `downloadPayoutCsv`, `get/updatePayoutRates`, `getCommissionSummary/Breakdown/InviterDetail`, `getReferrals`, `createReferral` (**unused by UI**), `deleteReferral`, `updateReferral`, `payInviter`, `payAllCommissions`, `get/updateCommissionRates`, `getCommissionBatchHistory/Detail`, `downloadCommissionCsv`, `restoreUnpaidArchived`, `verifyOwnerPin`, `getDailyEarnings`, `getDailyEarningsHistory`, `getWeeklyEarnings`.
+`login`, `getTasks`, `getTask`, `deleteTask`, `updateTask`, `doneTask`, `reassignTask`, `retryAssignment`, `submitTaskUrl`, `getTickets`, `getReminders`, `getStats`, `getDailyStats`, `getTypeDistribution`, `getEmployeePerformance`, `downloadCsv`, `getOutreach`, `getOutreachSettings`, `updateOutreachSettings`, `saveOutreachSelection`, `sendOutreachMessage`, `getPayoutWeek/Summary/Eligible/WorkerDetail`, `payWorker`, `payAll`, `getBatchHistory/Detail`, `downloadPayoutCsv`, `get/updatePayoutRates`, `getCommissionSummary/Breakdown/InviterDetail`, `getReferrals`, `createReferral` (**unused by UI**), `deleteReferral`, `updateReferral`, `payInviter`, `payAllCommissions`, `get/updateCommissionRates`, `getCommissionBatchHistory/Detail`, `downloadCommissionCsv`, `restoreUnpaidArchived`, `verifyOwnerPin`, `getDailyEarnings`, `getDailyEarningsHistory`, `getWeeklyEarnings`.
 Unused API functions: `getUpcomingReminders`, `getExportCsvUrl`, `getHealth`, `createReferral`.
 
 ## 5. Pages
@@ -79,12 +80,15 @@ List with search + pagination (15/page); **no create UI** (empty state directs t
 ### Analytics
 7 stat cards (Tasks Today/This Week/Month, Completion %, Avg Completion h, Overdue, Cancelled) + AreaChart (30d) + PieChart (types) + BarChart (employee performance).
 
+### Daily Outreach
+`/outreach` — table Ticket | Worker | Available | Post | Comment. Toolbar: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; draft state, Save Selection → `PUT /outreach/selection`), `Send Message` (confirm dialog → `POST /outreach/send`, disabled with 0 selected; inline ✅/❌ result with per-channel failures), Refresh. Auto-refresh every 30s (`refetchInterval`). Desktop table + mobile cards (Tasks.tsx pattern). Status icons: `Check` green / `X` dark. Subtitle shows today's IST date (resets at 12:00 AM IST).
+
 ### Settings
-Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payout Rates editor; static Reminder Delays + Retry Configuration cards; Commission Rates editor; Danger Zone PIN modal → OwnerEarnings.
+Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payout Rates editor; static Reminder Delays + Retry Configuration cards; Commission Rates editor; **Daily Outreach Message editor** (textarea ≤2000 chars → `PUT /outreach/settings`); Danger Zone PIN modal → OwnerEarnings.
 
 ## 6. Components
 
-- `Layout.tsx`: sidebar (8 nav items, no admin gating), mobile off-canvas drawer + hamburger, auto-hiding header on scroll, PWA install button (`beforeinstallprompt`), logout.
+- `Layout.tsx`: sidebar (9 nav items, no admin gating), mobile off-canvas drawer + hamburger, auto-hiding header on scroll, PWA install button (`beforeinstallprompt`), logout.
 - `CopyButton.tsx`: clipboard with execCommand fallback, "Copied!" 1.5s.
 - `ProtectedRoute.tsx`: auth gate.
 

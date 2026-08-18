@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X } from 'lucide-react';
-import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin } from '../api/client';
+import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X, MessageSquare } from 'lucide-react';
+import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin, getOutreachSettings, updateOutreachSettings } from '../api/client';
 
 export function Settings() {
   const navigate = useNavigate();
@@ -115,6 +115,33 @@ export function Settings() {
       specialPerComment,
       specialPerPost,
     });
+  };
+
+  // ─── Daily Outreach Message ─────────────────────────────────
+
+  const outreachQuery = useQuery({
+    queryKey: ['outreach-settings'],
+    queryFn: getOutreachSettings,
+  });
+
+  const [outreachMessage, setOutreachMessage] = useState('');
+  const [outreachDirty, setOutreachDirty] = useState(false);
+
+  const outreachMutation = useMutation({
+    mutationFn: (body: { message: string }) => updateOutreachSettings(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['outreach-settings'] });
+      setOutreachDirty(false);
+    },
+  });
+
+  if (outreachQuery.data?.data && !outreachDirty && !outreachMutation.isSuccess) {
+    const msg = outreachQuery.data.data.message;
+    if (outreachMessage !== msg && !outreachDirty) setOutreachMessage(msg);
+  }
+
+  const handleSaveOutreachMessage = () => {
+    outreachMutation.mutate({ message: outreachMessage });
   };
 
   return (
@@ -402,6 +429,52 @@ export function Settings() {
           )}
           {commRatesMutation.isError && (
             <p className="mt-2 text-red-400 text-sm">❌ Failed to update commission rates: {(commRatesMutation.error as Error).message}</p>
+          )}
+        </div>
+
+        {/* Daily Outreach Message */}
+        <div className="glass-card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <MessageSquare className="w-5 h-5 text-primary-400" />
+            <h3 className="text-lg font-semibold text-white">Daily Outreach Message</h3>
+          </div>
+          <p className="text-dark-400 text-sm mb-4">
+            Sent to the selected tickets when you press "Send Message" on the Daily Outreach page.
+          </p>
+
+          {outreachQuery.isLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
+            </div>
+          ) : (
+            <textarea
+              value={outreachMessage}
+              onChange={(e) => { setOutreachMessage(e.target.value); setOutreachDirty(true); }}
+              rows={3}
+              maxLength={2000}
+              className="input-field w-full"
+              placeholder="Hey, I have got a post and a comment for you. wanna do it? message me once you are free"
+            />
+          )}
+
+          <button
+            onClick={handleSaveOutreachMessage}
+            disabled={!outreachDirty || outreachMutation.isPending}
+            className="btn-primary flex items-center gap-2 mt-4"
+          >
+            {outreachMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save Message
+          </button>
+
+          {outreachMutation.isSuccess && (
+            <p className="mt-2 text-green-400 text-sm">✅ Daily outreach message updated successfully.</p>
+          )}
+          {outreachMutation.isError && (
+            <p className="mt-2 text-red-400 text-sm">❌ Failed to update message: {(outreachMutation.error as Error).message}</p>
           )}
         </div>
 

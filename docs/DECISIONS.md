@@ -107,3 +107,11 @@
 - **Reason**: TLS termination at nginx; backend unreachable from the internet; domain via DuckDNS for a dynamic IP.
 - **Consequences**: no container healthchecks; LetsEncrypt renewal relies on host cron (not in repo); Redis data loss tolerable via re-hydration.
 - **Status**: Current declared architecture; actual last deployment date UNKNOWN.
+
+## Decision 14: Daily outreach cycle = IST day, lazy reset, persistent selection
+
+- **Context**: Manager broadcasts a daily availability message to ticket channels and tracks who replied; the cycle must follow the IST business day (00:00 IST reset) and survive server restarts.
+- **Decision**: `TicketOutreach` row per channel (`selected` persists across days; `messageSentAt`/`availableAt` are cycle-scoped) + `OutreachSettings` singleton for the message text. No cron/queue: the "reset" is lazy — when `messageSentAt < today's IST midnight` the row is treated as a fresh cycle (Post/Comment are always derived from tasks created today in the channel, never stored). Availability = first worker message after today's send (`messageCreate.ts` hook; bots and admin/manager IDs never count). Message delivery is broadcast-only to checked tickets (no per-worker targeting).
+- **Reason**: matches the established IST-week pattern (Decision 10); zero scheduled infra; selection as a remembered preference avoids re-checking 30+ tickets daily; deriving Post/Comment keeps a single source of truth (Task table).
+- **Consequences**: new tables + `AuditAction OUTREACH_MESSAGE_SENT`; availability can be marked by any worker message (not just a reply to the broadcast); no auto-re-send if the message fails mid-broadcast (per-channel result shown in UI, manager re-clicks).
+- **Status**: Current practice (`src/services/outreach.service.ts`, `src/utils/ist-time.ts`).

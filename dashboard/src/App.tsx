@@ -7,6 +7,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
 import { AcceptedTasks } from './pages/AcceptedTasks';
+import { DailyOutreach } from './pages/DailyOutreach';
 import { TaskDetails } from './pages/TaskDetails';
 import { Analytics } from './pages/Analytics';
 import { Archives } from './pages/Archives';
@@ -55,6 +56,14 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <AcceptedTasks />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/outreach" element={
+              <ProtectedRoute>
+                <Layout>
+                  <DailyOutreach />
                 </Layout>
               </ProtectedRoute>
             } />

@@ -5,3 +5,4 @@ export { settingsRepository, SettingsRepository } from './settings.repository';
 export { payoutRepository, PayoutRepository } from './payout.repository';
 export { referralRepository, ReferralRepository } from './referral.repository';
 export { commissionRepository, CommissionRepository } from './commission.repository';
+export { outreachRepository, OutreachRepository } from './outreach.repository';

@@ -342,3 +342,32 @@ ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TASK_ACCEPTED';
 ALTER TABLE "Referral" ADD COLUMN IF NOT EXISTS "indirectSpecialInviterId" TEXT;
 CREATE INDEX IF NOT EXISTS "Referral_indirectSpecialInviterId_idx" ON "Referral"("indirectSpecialInviterId");
 ALTER TYPE "CommissionKind" ADD VALUE IF NOT EXISTS 'per_task_indirect';
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Daily Worker Outreach (ticket selection + daily state)
+-- ──────────────────────────────────────────────────────────────
+-- One row per Discord ticket channel. `selected` persists across days;
+-- `messageSentAt`/`availableAt` are the current daily cycle (cleared lazily
+-- when the next IST day starts).
+CREATE TABLE IF NOT EXISTS "TicketOutreach" (
+  "id" TEXT NOT NULL,
+  "channelId" TEXT NOT NULL,
+  "selected" BOOLEAN NOT NULL DEFAULT false,
+  "messageSentAt" TIMESTAMP(3),
+  "availableAt" TIMESTAMP(3),
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "TicketOutreach_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "TicketOutreach_channelId_key" ON "TicketOutreach"("channelId");
+
+-- Singleton row holding the configurable daily outreach message
+CREATE TABLE IF NOT EXISTS "OutreachSettings" (
+  "id" TEXT NOT NULL DEFAULT 'outreach-message',
+  "message" TEXT NOT NULL,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  "updatedBy" TEXT NOT NULL,
+  CONSTRAINT "OutreachSettings_pkey" PRIMARY KEY ("id")
+);
+
+-- Audit action for the daily outreach message broadcast
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_MESSAGE_SENT';
