@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — Outreach top toolbar polish **LIVE** (`161.118.164.85`, git HEAD `8252e35`, dashboard-only rebuild; responsive toolbar — info pill + text left, buttons right on PC; stacked full-width buttons on mobile; served bundle `index-CM53e94s.js`, health healthy).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — Outreach mobile button polish **LIVE** (`161.118.164.85`, git HEAD `fd69a2d`, dashboard-only rebuild; compact mobile toolbar buttons — smaller text/padding/icons on phones, desktop unchanged; served bundle `index-BslzhJQE.js`, health healthy).
 
 ---
 
