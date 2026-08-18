@@ -7,8 +7,8 @@ Verified 2026-08-18 — **deployed** (`4f1b84c` live on `161.118.164.85`; tables
 A per-ticket-channel daily availability tracker, surfaced as the **Daily Outreach** dashboard page (`/outreach`).
 
 Manager workflow per day:
-1. Opens `/outreach` — table lists every ticket channel with its assigned worker.
-2. Checks the tickets they want to reach in the **Select Tickets** modal → Save Selection (persists, survives day changes).
+1. Opens `/outreach` — the table lists **only the tickets selected on previous days** (selection is remembered; unselected tickets are hidden).
+2. Checks/unchecks tickets in the **Select Tickets** modal (lists ALL tickets with their current state) → Save Selection — newly checked tickets appear on the page, unchecked ones disappear.
 3. Clicks **Send Message** — the configurable daily message is posted by the bot into each checked ticket.
 4. As workers reply in their tickets, **Available** flips to ✅ automatically (first worker message after the send).
 5. **Post/Comment** columns reflect tasks created in the channel today (IST), derived from the Task table — nothing manual.
@@ -71,8 +71,8 @@ Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXIST
 ## 6. Dashboard (`dashboard/src/pages/DailyOutreach.tsx`)
 
 - Route `/outreach`; sidebar item **Daily Outreach** (`Users` icon) between Accepted and Archives; title branch in `Layout.tsx`.
-- Table (desktop) + cards (mobile, Tasks pattern); columns Ticket | Worker | Available | Post | Comment.
-- Toolbar: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; draft until **Save Selection** → `PUT /outreach/selection`), `Send Message` (confirm dialog; disabled when 0 selected; inline per-channel ✅/❌ result), Refresh.
+- Table (desktop) + cards (mobile, Tasks pattern); columns Ticket | Worker | Available | Post | Comment. **Rows = selected tickets only** (`tickets.filter(t => t.selected)` — the API returns all tickets with their `selected` flag; the modal needs the full list to add new ones).
+- Toolbar: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; lists all tickets with current state; draft until **Save Selection** → `PUT /outreach/selection`), `Send Message` (confirm dialog; disabled when 0 selected; inline per-channel ✅/❌ result), Refresh.
 - Auto-refresh every 30s (`refetchInterval`); subtitle shows today's IST date.
 - Settings page: **Daily Outreach Message** card (textarea, ≤2000 chars, Save → `PUT /outreach/settings`).
 - Client fns in `dashboard/src/api/client.ts`: `getOutreach`, `getOutreachSettings`, `updateOutreachSettings`, `saveOutreachSelection`, `sendOutreachMessage`.

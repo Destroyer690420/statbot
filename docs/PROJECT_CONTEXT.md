@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — Daily Worker Outreach **LIVE** (`161.118.164.85`, git HEAD `4f1b84c`, app + dashboard rebuild; `TicketOutreach`/`OutreachSettings` tables + `OUTREACH_MESSAGE_SENT` migration applied; health healthy, bot logged in, route mounted, no log errors).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — Daily Worker Outreach **LIVE** (`161.118.164.85`, git HEAD `27738d4`, dashboard-only rebuild; outreach page shows **only selected tickets**, modal adds/removes them; served bundle `index-Cnk5Q6fj.js`, health healthy).
 
 ---
 
