@@ -1,6 +1,6 @@
 # OUTREACH.md — Daily Worker Outreach
 
-Verified 2026-08-18 (code) — feature implemented, not yet deployed at time of writing.
+Verified 2026-08-18 — **deployed** (`4f1b84c` live on `161.118.164.85`; tables applied, route mounted, verified).
 
 ## 1. What It Is
 

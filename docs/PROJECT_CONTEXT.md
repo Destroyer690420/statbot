@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — dashboard **Activity page REMOVED** (`161.118.164.85`, git HEAD `44df94b`, dashboard-only rebuild; dashboard 200 + health healthy; served bundle free of audit-log UI).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — Daily Worker Outreach **LIVE** (`161.118.164.85`, git HEAD `4f1b84c`, app + dashboard rebuild; `TicketOutreach`/`OutreachSettings` tables + `OUTREACH_MESSAGE_SENT` migration applied; health healthy, bot logged in, route mounted, no log errors).
 
 ---
 

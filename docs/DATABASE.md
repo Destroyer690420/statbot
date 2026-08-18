@@ -17,7 +17,7 @@
 
 ## 2. Migration System (IMPORTANT)
 
-- **Single hand-maintained, idempotent file**: `prisma/migrations/migration.sql` (338 lines). No `migration_lock.toml`, no timestamped folders.
+- **Single hand-maintained, idempotent file**: `prisma/migrations/migration.sql` (373 lines). No `migration_lock.toml`, no timestamped folders.
 - **Applied manually** (psql/SQL client). **NOT** via `prisma migrate deploy` or `migrate dev` — the Dockerfile only runs `prisma generate` + `npm run build`; no pipeline applies DDL.
 - Style rules: appended sections use `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` / `ALTER TYPE ... ADD VALUE IF NOT EXISTS` so the file can be re-run safely.
 - **Future sessions**: edit BOTH `schema.prisma` AND append an idempotent block to `migration.sql`, matching column-by-column.
