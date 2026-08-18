@@ -112,8 +112,8 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 8. **Payout system**: weekly (IST Sunday→Saturday) totals from `PayoutSettings` rates (defaults ₹30/comment, ₹60/post); workers paid per completed task; pay-worker/pay-all create `PayoutBatch` + `PayoutItem`, mark paid COMPLETED tasks ARCHIVED; CSV export; batch history. See `docs/PAYOUT_SYSTEM.md`.
 9. **Referral commissions**: `/referral add` (admins) records inviter→invitee links; normal inviters get a one-time ₹100 bonus after the invitee completes 2 tasks; special inviters (hardcoded list of 3 Discord IDs) get ₹50 one-time bonus after 1 task + ₹10/comment, ₹20/post per task. **Two-Level Referrals**: auto-detects when a normal inviter was referred by a special inviter (`indirectSpecialInviterId`), paying the normal inviter their standard bonus and paying the upstream special inviter per-task commissions (₹20/post, ₹10/comment) on the worker's tasks (no one-time bonus). Commission batches/CSV/history in the dashboard. See `docs/REFERRAL_SYSTEM.md`.
 10. **Owner earnings**: daily/weekly net earnings (hardcoded revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30) minus per-task/one-time commissions (including indirect special per-task commissions); PIN (default `7977` via `OWNER_PIN`) gates navigation from Settings but the API endpoints are unauthenticated. See `docs/FRONTEND.md`.
-11. **Dashboard**: 13 routes — Dashboard, Tasks, TaskDetails, AcceptedTasks, Archives, PayoutLayout (`/payout/tasks` & `/payout/commissions`), Referrals (with Indirect referral badge), Analytics, Activity, Settings, OwnerEarnings, Login, NotFound. JWT auth via single dashboard account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`). See `docs/FRONTEND.md`.
-12. **Audit log**: `AuditLog` rows for task/payout/commission/referral/reminder/command events; Activity page consumes `/api/v1/audit-logs`.
+11. **Dashboard**: 12 routes — Dashboard, Tasks, TaskDetails, AcceptedTasks, Archives, PayoutLayout (`/payout/tasks` & `/payout/commissions`), Referrals (with Indirect referral badge), Analytics, Settings, OwnerEarnings, Login, NotFound. JWT auth via single dashboard account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`). See `docs/FRONTEND.md`.
+12. **Audit log**: `AuditLog` rows for task/payout/commission/referral/reminder/command events; no dashboard consumer since the Activity page was removed (2026-08-18) — `GET /api/v1/audit-logs` kept for debugging.
 
 ---
 
@@ -209,7 +209,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 5. **Stale root `dist/`** build (missing newer modules like `html-to-discord`), gitignored.
 6. **`.env.example` stale**: still lists removed `FIREBASE_*` vars, missing required `DATABASE_URL`.
 7. Payout week windows rely on **post-completion times derived from reminder `.completedAt`**, not stored completion times; edge cases exist (see docs/PAYOUT_SYSTEM.md).
-8. Dashboard: Theme picker stub; Activity page ignores `?taskId=`; `w-4.5` invalid Tailwind class; `tailwindcss-animate` classes inert; OwnerEarnings route JWT-only (PIN not enforced server-side per request).
+8. Dashboard: Theme picker stub; `w-4.5` invalid Tailwind class; `tailwindcss-animate` classes inert; OwnerEarnings route JWT-only (PIN not enforced server-side per request).
 9. Rate limit (100 req/15 min/IP) applies to the whole `/api/` prefix including health/login.
 10. `insightStorageService.deleteTaskDir`, `check-reddit.ts` (`isPostDeleted`), `DELETED_DETECTION_THRESHOLD_MS`, `generateCommissionBatchId` — dead code.
 11. Duplicate userscript copies (`scripts/` and `dashboard/public/`) must stay in sync.
@@ -223,7 +223,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 - No TODO/FIXME comments exist in `src/` or `dashboard/src/` (verified by grep).
 - `sending.md` Phase-23 acceptance checklists are all unchecked (spec, not tracker).
 - `plan.md` outlines future ideas (monitoring, notifications, backup, roles) with no implementation.
-- Obvious unfinished items: owner-earnings auth, theme picker, Activity filter param, one-task-per-ticket Post-70H follow-up handling for comments? (not implemented — `COMMENT` only has a 20h reminder).
+- Obvious unfinished items: owner-earnings auth, theme picker, one-task-per-ticket Post-70H follow-up handling for comments? (not implemented — `COMMENT` only has a 20h reminder).
 
 ---
 

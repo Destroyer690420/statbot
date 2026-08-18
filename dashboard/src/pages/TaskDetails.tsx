@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTask, getReminders, getAuditLogs, doneTask, retryAssignment, submitTaskUrl } from '../api/client';
+import { getTask, getReminders, doneTask, retryAssignment, submitTaskUrl } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
-import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, History, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Download, Image, RotateCcw, Link2, Send, Edit3 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Download, Image, RotateCcw, Link2, Send, Edit3 } from 'lucide-react';
 
 export function TaskDetails() {
   const { id } = useParams<{ id: string }>();
@@ -21,12 +21,6 @@ export function TaskDetails() {
     enabled: !!id,
   });
 
-  const { data: auditData, isLoading: auditLoading } = useQuery({
-    queryKey: ['audit-logs', id],
-    queryFn: () => getAuditLogs({ taskId: id! }),
-    enabled: !!id,
-  });
-
   const queryClient = useQueryClient();
   const [submitUrl, setSubmitUrl] = useState('');
   const [replacing, setReplacing] = useState(false);
@@ -36,7 +30,6 @@ export function TaskDetails() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
       queryClient.invalidateQueries({ queryKey: ['reminders', id] });
-      queryClient.invalidateQueries({ queryKey: ['audit-logs', id] });
     },
   });
 
@@ -44,7 +37,6 @@ export function TaskDetails() {
     mutationFn: () => retryAssignment(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
-      queryClient.invalidateQueries({ queryKey: ['audit-logs', id] });
     },
   });
 
@@ -54,7 +46,6 @@ export function TaskDetails() {
       setSubmitUrl('');
       setReplacing(false);
       queryClient.invalidateQueries({ queryKey: ['task', id] });
-      queryClient.invalidateQueries({ queryKey: ['audit-logs', id] });
     },
   });
 
@@ -544,46 +535,6 @@ export function TaskDetails() {
                   </p>
                 )}
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Audit Log */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <History className="w-5 h-5 text-primary-400" />
-            Activity Log
-          </h3>
-
-          {auditLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
-            </div>
-          ) : !auditData?.data?.length ? (
-            <p className="text-dark-400 text-sm">No activity recorded for this task.</p>
-          ) : (
-            <div className="space-y-2">
-              {auditData.data.slice(0, 5).map((log: any) => (
-                <div key={log.id} className="bg-dark-800/50 rounded-xl p-3 border border-dark-700/50 flex items-center justify-between">
-                  <div>
-                    <span className="text-sm text-dark-100 font-medium">{log.action.replace(/_/g, ' ')}</span>
-                    {log.details && (
-                      <p className="text-xs text-dark-400 mt-0.5">{log.details}</p>
-                    )}
-                  </div>
-                  <span className="text-xs text-dark-500 whitespace-nowrap ml-4">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-              {auditData.data.length > 5 && (
-                <Link
-                  to={`/activity?taskId=${encodeURIComponent(id!)}`}
-                  className="block text-center text-sm text-primary-400 hover:text-primary-300 mt-3 transition-colors"
-                >
-                  View all {auditData.data.length} events →
-                </Link>
-              )}
             </div>
           )}
         </div>

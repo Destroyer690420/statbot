@@ -73,13 +73,7 @@
 - **Files**: schema FK `CommissionItem.referralId`, `src/api/routes/commissions.ts`.
 - **Next step**: soft-delete referrals or friendly error handling.
 
-### 9. Activity page ignores `?taskId=` filter
-- **Description**: TaskDetails links "View all events" with `?taskId=`, but Activity never reads the param.
-- **Severity**: Low (UX bug).
-- **Files**: `dashboard/src/pages/Activity.tsx`, `TaskDetails.tsx`.
-- **Next step**: read the search param.
-
-### 10. Theme picker is a stub
+### 9. Theme picker is a stub
 - **Description**: Settings theme buttons do nothing; `<html class="dark">` is hardcoded.
 - **Severity**: Low.
 - **Files**: `dashboard/src/pages/Settings.tsx`, `index.html`.

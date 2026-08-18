@@ -32,7 +32,7 @@
 5. Remove legacy Firestore artifacts (firebase.json, firestore.indexes.json, stale comment, `formatFirestoreDate`).
 6. Delete dead code (`check-reddit.ts`, `DELETED_DETECTION_THRESHOLD_MS`, `generateCommissionBatchId`, `deleteTaskDir`, unused `markReviewed`/review fields).
 7. Store `completedAt` on the task (payout week correctness).
-8. Make Activity page honor `?taskId=`; implement or remove theme picker; drop inert CSS classes.
+8. Implement or remove theme picker; drop inert CSS classes.
 9. Fix "delete paid referral" error UX (FK RESTRICT).
 10. Sync duplicate userscript copies (or serve one canonical file).
 

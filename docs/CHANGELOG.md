@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-08-18
+### Removed
+- **Dashboard Activity page removed** (frontend-only): deleted `dashboard/src/pages/Activity.tsx`, the `/activity` route (`App.tsx`), the sidebar item + page-title branch + unused `History` icon (`Layout.tsx`), the per-task "Activity Log" card + its query + invalidations (`TaskDetails.tsx`), and the now-unused `getAuditLogs()` client fn (`api/client.ts`). Backend untouched: audit-log writes in all core flows and `GET /api/v1/audit-logs` remain (used for debugging; `/activity` URLs now 404 → NotFound).
+
 ## 2026-08-17
 ### Deployed
 - **Reassign ticket-picker modal deployed** (`161.118.164.85`) at commit `0fa702c` (dashboard-only rebuild, backup `rtm-backup-20260817-1915-pre-0fa702c.tar.gz`). Verified: dashboard 200, health healthy, all containers Up.

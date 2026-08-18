@@ -1,6 +1,6 @@
 # FRONTEND.md — Admin Dashboard
 
-> Verified against `dashboard/src/**`, `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/nginx.conf` on 2026-08-11.
+> Verified against `dashboard/src/**`, `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/nginx.conf` on 2026-08-18.
 
 ---
 
@@ -13,7 +13,7 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 | dev | `npm run dev` | Vite on **:5173**, proxy `/api` → `VITE_API_TARGET \|\| 'https://161.118.164.85'` (working tree has an uncommitted change `http:` → `https:`) |
 | build | `npm run build` | `tsc && vite build` → `dist/` |
 
-## 2. Routing (App.tsx, 13 routes)
+## 2. Routing (App.tsx, 12 routes)
 
 | Path | Page | Notes |
 |---|---|---|
@@ -23,7 +23,6 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 | `/accepted` | AcceptedTasks | |
 | `/tasks/:id` | TaskDetails | |
 | `/analytics` | Analytics | |
-| `/activity` | Activity | ignores `?taskId=` (dead link from TaskDetails) |
 | `/archives` | Archives | |
 | `/settings` | Settings | contains Owner PIN gate |
 | `/owner-earnings` | OwnerEarnings | **not in sidebar**; JWT-only protection (PIN not enforced per-request) |
@@ -43,7 +42,7 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 ## 4. API Client (`src/api/client.ts`)
 
 baseURL `/api/v1`. All functions used by pages (see `docs/API.md` for endpoint semantics):
-`login`, `getTasks`, `getTask`, `deleteTask`, `updateTask`, `doneTask`, `reassignTask`, `retryAssignment`, `submitTaskUrl`, `getTickets`, `getReminders`, `getStats`, `getDailyStats`, `getTypeDistribution`, `getEmployeePerformance`, `downloadCsv`, `getAuditLogs`, `getPayoutWeek/Summary/Eligible/WorkerDetail`, `payWorker`, `payAll`, `getBatchHistory/Detail`, `downloadPayoutCsv`, `get/updatePayoutRates`, `getCommissionSummary/Breakdown/InviterDetail`, `getReferrals`, `createReferral` (**unused by UI**), `deleteReferral`, `updateReferral`, `payInviter`, `payAllCommissions`, `get/updateCommissionRates`, `getCommissionBatchHistory/Detail`, `downloadCommissionCsv`, `restoreUnpaidArchived`, `verifyOwnerPin`, `getDailyEarnings`, `getDailyEarningsHistory`, `getWeeklyEarnings`.
+`login`, `getTasks`, `getTask`, `deleteTask`, `updateTask`, `doneTask`, `reassignTask`, `retryAssignment`, `submitTaskUrl`, `getTickets`, `getReminders`, `getStats`, `getDailyStats`, `getTypeDistribution`, `getEmployeePerformance`, `downloadCsv`, `getPayoutWeek/Summary/Eligible/WorkerDetail`, `payWorker`, `payAll`, `getBatchHistory/Detail`, `downloadPayoutCsv`, `get/updatePayoutRates`, `getCommissionSummary/Breakdown/InviterDetail`, `getReferrals`, `createReferral` (**unused by UI**), `deleteReferral`, `updateReferral`, `payInviter`, `payAllCommissions`, `get/updateCommissionRates`, `getCommissionBatchHistory/Detail`, `downloadCommissionCsv`, `restoreUnpaidArchived`, `verifyOwnerPin`, `getDailyEarnings`, `getDailyEarningsHistory`, `getWeeklyEarnings`.
 Unused API functions: `getUpcomingReminders`, `getExportCsvUrl`, `getHealth`, `createReferral`.
 
 ## 5. Pages
@@ -55,7 +54,7 @@ Server stat cards (Total/Pending/Completed/Overdue) + AreaChart (7-day activity)
 Search (id, url, channel), 15/page client-side pagination, status filter; desktop table / mobile cards. Actions: cancelledReason dropdown (OK/Deleted/Deleted Later → PATCH), Download latest insight image, Copy submitted link, View, Delete (confirm). CSV export.
 
 ### TaskDetails
-Task info + GoPartTime external block (assignmentStatus badge, Retry Delivery on FAILED, error text, externalTaskId/subreddit/flair/payment/deadline/sourceUrl/postLink/formattedContent/taskImages grid) + Submission section (record/replace URL, Mark as Done when ACCEPTED) + Activity Log (last 5, links to `/activity?taskId=`) + Reminder Timeline (built from `RETRY_DELAYS` 2h/6h assumptions) + Submitted Screenshots (each reminder's `insightImageUrl`, click-to-open, download).
+Task info + GoPartTime external block (assignmentStatus badge, Retry Delivery on FAILED, error text, externalTaskId/subreddit/flair/payment/deadline/sourceUrl/postLink/formattedContent/taskImages grid) + Submission section (record/replace URL, Mark as Done when ACCEPTED) + Reminder Timeline (built from `RETRY_DELAYS` 2h/6h assumptions) + Submitted Screenshots (each reminder's `insightImageUrl`, click-to-open, download).
 
 ### AcceptedTasks
 Queue of ACCEPTED tasks; Reassign (ticket select with `(busy)` marker for `awaiting-submission` channels), Done (activation), copy link, delete; 15/page.
@@ -80,15 +79,12 @@ List with search + pagination (15/page); **no create UI** (empty state directs t
 ### Analytics
 7 stat cards (Tasks Today/This Week/Month, Completion %, Avg Completion h, Overdue, Cancelled) + AreaChart (30d) + PieChart (types) + BarChart (employee performance).
 
-### Activity
-Audit feed, auto-refresh 30s; action filter; `ACTION_CONFIG` icons; relative timestamps.
-
 ### Settings
 Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payout Rates editor; static Reminder Delays + Retry Configuration cards; Commission Rates editor; Danger Zone PIN modal → OwnerEarnings.
 
 ## 6. Components
 
-- `Layout.tsx`: sidebar (9 nav items, no admin gating), mobile off-canvas drawer + hamburger, auto-hiding header on scroll, PWA install button (`beforeinstallprompt`), logout.
+- `Layout.tsx`: sidebar (8 nav items, no admin gating), mobile off-canvas drawer + hamburger, auto-hiding header on scroll, PWA install button (`beforeinstallprompt`), logout.
 - `CopyButton.tsx`: clipboard with execCommand fallback, "Copied!" 1.5s.
 - `ProtectedRoute.tsx`: auth gate.
 
@@ -106,4 +102,4 @@ Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payou
 
 - `w-4.5 h-4.5` classes have no Tailwind definition (icons render default size).
 - `animate-in fade-in`/`zoom-in-95` classes inert (tailwindcss-animate not installed).
-- Theme picker non-functional; Activity `?taskId=` ignored; OwnerEarnings route JWT-only; `getUpcomingReminders`/`getHealth`/`getExportCsvUrl`/`createReferral` client fns unused.
+- Theme picker non-functional; OwnerEarnings route JWT-only; `getUpcomingReminders`/`getHealth`/`getExportCsvUrl`/`createReferral` client fns unused.

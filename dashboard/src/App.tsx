@@ -9,7 +9,6 @@ import { Tasks } from './pages/Tasks';
 import { AcceptedTasks } from './pages/AcceptedTasks';
 import { TaskDetails } from './pages/TaskDetails';
 import { Analytics } from './pages/Analytics';
-import { Activity } from './pages/Activity';
 import { Archives } from './pages/Archives';
 import { Settings } from './pages/Settings';
 import { PayoutLayout } from './pages/payout/PayoutLayout';
@@ -72,14 +71,6 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Analytics />
-                </Layout>
-              </ProtectedRoute>
-            } />
-
-            <Route path="/activity" element={
-              <ProtectedRoute>
-                <Layout>
-                  <Activity />
                 </Layout>
               </ProtectedRoute>
             } />
