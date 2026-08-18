@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — userscript **v1.4.0 (Submit View disabled on mobile) DEPLOYED** (`161.118.164.85`, git HEAD `b98bf68`, dashboard-only rebuild; served userscript SHA-256 byte-identical to local).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — dashboard **reassign ticket-picker modal fix DEPLOYED** (`161.118.164.85`, git HEAD `0fa702c`, dashboard-only rebuild; dashboard 200 + health healthy).
 
 ---
 
@@ -245,7 +245,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-08-17**: **Fixed dashboard reassign picker on mobile**: the inline `<select>` (with `onBlur`-unmount) in `AcceptedTasks.tsx` never showed its ticket list on phones — opening the native picker blurs the select and unmounts it before the list renders. Replaced with a shared ticket-picker modal (dark glass-card, `#channelName` rows + busy marker, loading/empty states, ✕/Cancel, disabled while mutating) used by both desktop table and mobile cards. Dashboard build clean; no backend/userscript change.
+- **2026-08-17**: **DEPLOYED the reassign picker fix** (`161.118.164.85`) at commit `0fa702c` (dashboard-only rebuild; backup `rtm-backup-20260817-1915-pre-0fa702c.tar.gz`; bundle cleaned). Verified: dashboard 200, health healthy. Pending: user verification on phone (Accepted Tasks → Reassign → modal ticket list).
 
 - **2026-08-17**: **DEPLOYED userscript v1.4.0 — Submit View disabled on phones** (`161.118.164.85`) at commit `b98bf68` (dashboard-only rebuild; backup `rtm-backup-20260817-1830-pre-b98bf68.tar.gz`; bundle cleaned). Verified: health healthy, served `/goparttime-send.user.js` reports `@version 1.4.0` and hashes `9BD9776A…` (SHA-256) — byte-identical to both local copies. New behavior: on narrow (≤767px) viewports the `📊 Submit View` button, card tracking, and preview are **never created** (insights are only submitted from the PC); override via Tampermonkey menu "📊 Submit View: ON/OFF" (storage `gpt_submit_view_enabled`, reloads to apply). Send Task untouched. Pending manual test: reinstall script on phone + PC.
 

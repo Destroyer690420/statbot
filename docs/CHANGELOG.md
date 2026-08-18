@@ -4,6 +4,7 @@
 
 ## 2026-08-17
 ### Deployed
+- **Reassign ticket-picker modal deployed** (`161.118.164.85`) at commit `0fa702c` (dashboard-only rebuild, backup `rtm-backup-20260817-1915-pre-0fa702c.tar.gz`). Verified: dashboard 200, health healthy, all containers Up.
 - **Userscript v1.4.0 deployed** (`161.118.164.85`) at commit `b98bf68` (dashboard-only rebuild, backup `rtm-backup-20260817-1830-pre-b98bf68.tar.gz`). Verified: served `/goparttime-send.user.js` = `@version 1.4.0`, SHA-256 `9BD9776A…` byte-identical to local copies; health healthy.
 - **Insight screenshot TTL change deployed** (`161.118.164.85`) at commit `cba8a35` (app-only rebuild, backup `rtm-backup-20260817-1720-pre-cba8a35.tar.gz`). Verified: health healthy, compiled `INSIGHT_TTL_MS = 60` hours, existing screenshots retained.
 - **Userscript v1.3.0 preview deployed** (`161.118.164.85`) at commit `138c317` (dashboard-only rebuild, backup `rtm-backup-20260817-1745-pre-138c317.tar.gz`). Verified: served `/goparttime-send.user.js` = `@version 1.3.0`, SHA-256 `97A16E73…` byte-identical to local copies; health healthy. `.gitattributes` (`c277eb0`) pins `*.user.js` to LF so Windows checkouts can't diverge.
