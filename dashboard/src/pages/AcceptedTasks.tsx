@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { getTasks, doneTask, reassignTask, deleteTask, getTickets } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
-import { Loader2, CheckCircle2, Repeat, Trash2, Eye, ExternalLink } from 'lucide-react';
+import { Loader2, CheckCircle2, Repeat, Trash2, Eye, ExternalLink, X } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
@@ -129,38 +129,13 @@ export function AcceptedTasks() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-1">
-                        {ticketFor === task.id ? (
-                          <div className="flex items-center gap-1">
-                            <select
-                              className="bg-dark-800 border border-dark-600 rounded-lg px-2 py-1 text-xs text-dark-200 cursor-pointer appearance-none min-w-[140px]"
-                              value=""
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  reassignMutation.mutate({ id: task.id, ticket: e.target.value });
-                                } else {
-                                  setTicketFor(null);
-                                }
-                              }}
-                              onBlur={() => setTicketFor(null)}
-                              autoFocus
-                            >
-                              <option value="">Select ticket...</option>
-                              {tickets.map((t: any) => (
-                                <option key={t.channelId} value={t.channelId}>
-                                  #{t.channelName || t.channelId} {t.taskStatus === 'awaiting-submission' ? '(busy)' : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setTicketFor(task.id)}
-                            className="p-2 text-dark-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
-                            title="Reassign"
-                          >
-                            <Repeat className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setTicketFor(task.id)}
+                          className="p-2 text-dark-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
+                          title="Reassign"
+                        >
+                          <Repeat className="w-4 h-4" />
+                        </button>
                         {task.submittedRedditUrl && (
                           <CopyButton value={task.submittedRedditUrl} title="Copy submitted link" />
                         )}
@@ -309,6 +284,56 @@ export function AcceptedTasks() {
             >
               Next
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Reassign ticket picker (modal — works on mobile; native <select> + onBlur unmount broke on phones) */}
+      {ticketFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-dark-800 rounded-2xl p-6 w-full max-w-sm mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Reassign task</h3>
+              <button
+                onClick={() => setTicketFor(null)}
+                className="text-dark-500 hover:text-white transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto -mx-2 px-2 space-y-2 flex-1">
+              {ticketsQuery.isLoading ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+                </div>
+              ) : tickets.length === 0 ? (
+                <p className="text-center text-dark-400 text-sm py-10">No tickets available.</p>
+              ) : (
+                tickets.map((t: any) => (
+                  <button
+                    key={t.channelId}
+                    onClick={() => reassignMutation.mutate({ id: ticketFor, ticket: t.channelId })}
+                    disabled={reassignMutation.isPending}
+                    className="w-full text-left px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60 hover:border-amber-400/40 hover:bg-amber-400/5 text-dark-200 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    <span className="font-mono text-sm">#{t.channelName || t.channelId}</span>
+                    {t.taskStatus === 'awaiting-submission' && (
+                      <span className="ml-2 text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider">busy</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setTicketFor(null)}
+                disabled={reassignMutation.isPending}
+                className="px-4 py-2 text-sm text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
