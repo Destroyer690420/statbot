@@ -70,7 +70,9 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 - [ ] Reassign moves task to another ticket and re-delivers
 - [ ] One awaiting task per ticket enforced
 
-### Submit View flow (v1.3.0)
+### Submit View flow (v1.4.0)
+- [ ] Narrow viewport (≤767px, e.g. phone): "📊 Submit View" button is NOT created; Send Task still works; no tracking/preview code runs; menu toggle "📊 Submit View: ON/OFF" → ON forces it back (override stored, page reloads)
+- [ ] Desktop: button present (unchanged behavior)
 - [ ] Click card "Submit View" → "📊 Submit View" button attaches the 20h screenshot to the View dialog; count/Submit/verify stay manual
 - [ ] Screenshot preview panel appears on the left with the same screenshot (single Blob: preview + upload identical)
 - [ ] Preview: scrollable if large; `− Zoom`/`Zoom +` steps 0.25× between 0.5×–5×; `Open ↗` opens the blob URL full-size; ✕ closes and revokes the URL

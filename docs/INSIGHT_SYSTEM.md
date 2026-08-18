@@ -56,7 +56,7 @@ State transitions (see `docs/TASK_SYSTEM.md` for the diagram):
 - `Tasks` page "Download Image" fetches the latest screenshot of the task's reminders.
 - Audit log keeps `INSIGHT_RECEIVED` entries with details.
 
-## 7b. GoPartTime Consumption (Submit View, userscript v1.3.0 — 2026-08-17)
+## 7b. GoPartTime Consumption (Submit View, userscript v1.4.0 — 2026-08-17)
 
 - Read-only endpoint `GET /api/v1/goparttime/insight/:externalTaskId?step=1|2` (extension key) lets the userscript fetch the stored screenshot for the GoPartTime view-data dialog.
 - Resolution (`src/services/goparttime-insight.service.ts`, `resolveInsightReminder`): step 1 → the first reminder in `dueAt` order (`POST_20H`/`COMMENT_20H`); step 2 → the second (`POST_70H`, posts only — throws for comments); no step → first `sent && !completed`, else first with `insightImageUrl`, else earliest.

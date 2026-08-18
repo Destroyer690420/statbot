@@ -32,7 +32,7 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
 8. Normal lifecycle continues (reminders/insights/payout) — same as manual tasks
 ```
 
-### View-data (insight) submission — Submit View automation (userscript v1.3.0, 2026-08-17)
+### View-data (insight) submission — Submit View automation (userscript v1.4.0, 2026-08-17)
 ```
 1. Manager opens the View dialog for a task on goparttime.net ("Submit view data" = step 1 / 20h insight,
    "Submit second view data" = step 2 / 70h insight, posts only)
@@ -106,7 +106,7 @@ Every guild's TextChannels; `taskStatus`: `awaiting-submission` (a task awaiting
 |---|---|---|
 | `GET /api/v1/goparttime/tickets` | extension key | ticket dropdown data |
 | `POST /api/v1/goparttime/assign` | extension key | assign + deliver |
-| `GET /api/v1/goparttime/insight/:externalTaskId` | extension key | **read-only**; the stored insight screenshot for a task's view-data step (`?step=1\|2`, default: resolve automatically); used by Submit View (v1.3.0) |
+| `GET /api/v1/goparttime/insight/:externalTaskId` | extension key | **read-only**; the stored insight screenshot for a task's view-data step (`?step=1\|2`, default: resolve automatically); used by Submit View (v1.4.0) |
 | `GET /api/v1/discord/tickets` | JWT + admin username | same list for dashboard |
 | `POST /api/v1/tasks/assign-from-goparttime` | JWT | dashboard twin (same service) |
 | `POST /api/v1/tasks/:id/submit-url` | JWT | dashboard URL submission |
@@ -149,5 +149,6 @@ Note: `TASK_REVIEWED`/`markReviewed` exist (model + repo) but no current flow ca
 7. The extension key is a single shared secret for all workers (`GOPARTTIME_API_KEY`).
 8. Two copies of the userscript exist (`scripts/` and `dashboard/public/`) and must be kept identical (they currently are, byte-for-byte).
 9. Submit View is **deliberately manual** at the end: no success detection, no confirm endpoint, no DB writes — the manager reads the count, clicks Submit, and verifies. The userscript's step-2 request for a comment task errors ("Comments have only one view-data step (COMMENT_20H).") and comments currently render no "Submit View" button in the GoPartTime UI (step 1 is assumed).
-10. Insight screenshots expire from disk after 60h (see `docs/INSIGHT_SYSTEM.md`); Submit View after expiry returns no image.
+10. Submit View is **desktop-only** (userscript v1.4.0): auto-disabled on narrow/mobile viewports (insights are submitted from the PC only); the Tampermonkey menu "📊 Submit View: ON/OFF" can force it on via the `gpt_submit_view_enabled` storage override.
+11. Insight screenshots expire from disk after 60h (see `docs/INSIGHT_SYSTEM.md`); Submit View after expiry returns no image.
 11. **Manual-task fallback** (2026-08-17): the insight endpoint also resolves manually-created tasks (slash command / dashboard) whose id embeds the GoPartTime number (`POST #688318`, `Comment #688318`, case-insensitive) — it only matches tasks with no `source`, so GoPartTime-linked tasks always win. Manual ids in a different format can't be matched.

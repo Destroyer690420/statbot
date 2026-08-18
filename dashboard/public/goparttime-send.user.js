@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.3.0
+// @version      1.4.0
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,16 +18,16 @@
 // ==/UserScript==
 
 /**
- * v1.3.0 — Submit View automation + screenshot preview. Adds a "📊 Submit View"
- * button that fetches the Statbot insight screenshot for the tracked task
- * card's current view-data step, shows it in a floating zoomable preview
- * (same Blob that is attached to the file input — no second download), and
- * attaches it to the GoPartTime view dialog's file input. View-count entry
- * and submission stay manual (read the count from the preview, enter it,
- * click Submit, verify success in GoPartTime yourself); the preview auto-
- * closes when the view dialog closes. Feature-detected like v1.1.0: runs
- * under Tampermonkey (GM_* APIs) and as a plain bookmarklet / non-GM context
- * (fetch + localStorage).
+ * v1.4.0 — Submit View disabled on phones. The "📊 Submit View" button, card
+ * tracking, and screenshot preview are auto-disabled on narrow (mobile,
+ * ≤767px) viewports — insights are only submitted from the PC. Everything else
+ * (Send Task, settings, preview on desktop) is unchanged. A Tampermonkey menu
+ * toggle ("📊 Submit View: ON/OFF") can force it back on via the
+ * gpt_submit_view_enabled storage override; it reloads the page to apply.
+ * v1.3.0 added the zoomable screenshot preview (same Blob as the upload — no
+ * second download); v1.2.0 added the Submit View automation; v1.1.0 the send
+ * flow. Feature-detected: runs under Tampermonkey (GM_* APIs) and as a plain
+ * bookmarklet / non-GM context (fetch + localStorage).
  */
 (function () {
   'use strict';
@@ -90,9 +90,27 @@
     alert('Settings saved.');
   }
 
+  // Submit View is auto-disabled on narrow (mobile) viewports — insights are
+  // only submitted from the PC. An optional override (gpt_submit_view_enabled)
+  // can force it on or off; the menu toggle reloads the page to apply.
+  function submitViewEnabled() {
+    const stored = storageGet('gpt_submit_view_enabled');
+    if (stored === '1' || stored === 'true') return true;
+    if (stored === '0' || stored === 'false') return false;
+    return !isNarrow();
+  }
+
+  function toggleSubmitView() {
+    const next = !submitViewEnabled();
+    storageSet('gpt_submit_view_enabled', next ? '1' : '0');
+    alert('📊 Submit View is now ' + (next ? 'ON' : 'OFF') + '. Reloading…');
+    location.reload();
+  }
+
   if (typeof GM_registerMenuCommand === 'function') {
     GM_registerMenuCommand('⚙️ Configure Sender...', openSettings);
     GM_registerMenuCommand('🔍 Debug Task Detection', runDebug);
+    GM_registerMenuCommand('📊 Submit View: ON/OFF', toggleSubmitView);
   }
 
   // ─── UI ─────────────────────────────────────────────────────
@@ -147,6 +165,7 @@
   button.addEventListener('click', openModal);
   document.body.appendChild(button);
 
+  if (submitViewEnabled()) {
   // ─── Submit View automation ────────────────────────────────
 
   // The insight screenshot lives in the detail dialog (a Radix dialog) while
@@ -468,6 +487,8 @@
       viewButton.disabled = false;
     }
   }
+
+  } // end submitViewEnabled() guard
 
   let modal = null;
   let pendingTask = null;
