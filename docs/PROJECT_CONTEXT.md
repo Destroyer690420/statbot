@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — userscript **v1.3.0 (insight screenshot preview) DEPLOYED** (`161.118.164.85`, git HEAD `138c317`, dashboard-only rebuild; served userscript SHA-256 byte-identical to local).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — userscript **v1.4.0 (Submit View disabled on mobile) DEPLOYED** (`161.118.164.85`, git HEAD `b98bf68`, dashboard-only rebuild; served userscript SHA-256 byte-identical to local).
 
 ---
 
@@ -244,6 +244,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-08-17**: **DEPLOYED userscript v1.4.0 — Submit View disabled on phones** (`161.118.164.85`) at commit `b98bf68` (dashboard-only rebuild; backup `rtm-backup-20260817-1830-pre-b98bf68.tar.gz`; bundle cleaned). Verified: health healthy, served `/goparttime-send.user.js` reports `@version 1.4.0` and hashes `9BD9776A…` (SHA-256) — byte-identical to both local copies. New behavior: on narrow (≤767px) viewports the `📊 Submit View` button, card tracking, and preview are **never created** (insights are only submitted from the PC); override via Tampermonkey menu "📊 Submit View: ON/OFF" (storage `gpt_submit_view_enabled`, reloads to apply). Send Task untouched. Pending manual test: reinstall script on phone + PC.
 
 - **2026-08-17**: **DEPLOYED userscript v1.3.0 — insight screenshot preview** (`161.118.164.85`) at commit `138c317` (dashboard-only rebuild; backup `rtm-backup-20260817-1745-pre-138c317.tar.gz`; bundle cleaned). Verified: health healthy, all containers Up, served `/goparttime-send.user.js` reports `@version 1.3.0` and hashes `97A16E73…` (SHA-256) — byte-identical to both local copies. Follow-up commit `c277eb0` pins `*.user.js` to LF via `.gitattributes` (Windows `core.autocrlf` had been CRLF-converting local checkouts; git/sever always stored LF — no functional change, no redeploy). Manual test still pending on goparttime.net: preview panel, zoom, ✕, auto-close on dialog close.
 

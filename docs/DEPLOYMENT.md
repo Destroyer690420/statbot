@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-17 — live deploy at git HEAD `138c317`** (userscript v1.3.0 insight screenshot preview; dashboard-only rebuild; no DB migration; served userscript SHA-256 matches local `97A16E73…`; health healthy). Previous deploys: `cba8a35` (TTL 30h→60h), `60a62b8` (Submit View manual-task fallback), `e0112f2` (Submit View automation).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-17 — live deploy at git HEAD `b98bf68`** (userscript v1.4.0 Submit View disabled on mobile; dashboard-only rebuild; no DB migration; served userscript SHA-256 matches local `9BD9776A…`; health healthy). Previous deploys: `138c317` (userscript v1.3.0 preview), `cba8a35` (TTL 30h→60h), `60a62b8` (Submit View manual-task fallback), `e0112f2` (Submit View automation).
 
 ---
 
