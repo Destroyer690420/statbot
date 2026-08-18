@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-17 — live deploy at git HEAD `0fa702c`** (dashboard: reassign ticket-picker modal fix for mobile; dashboard-only rebuild; no DB migration; dashboard 200 + health healthy). Previous deploys: `b98bf68` (userscript v1.4.0 mobile-disable), `138c317` (userscript v1.3.0 preview), `cba8a35` (TTL 30h→60h), `60a62b8` (Submit View manual-task fallback), `e0112f2` (Submit View automation).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-18 — live deploy at git HEAD `44df94b`** (dashboard: Activity page removed — page/route/nav/per-task audit-log card; dashboard-only rebuild; no DB migration; dashboard 200 + health healthy; served bundle has no audit-log UI code). Previous deploys: `0fa702c` (reassign ticket-picker modal fix), `b98bf68` (userscript v1.4.0 mobile-disable), `138c317` (userscript v1.3.0 preview), `cba8a35` (TTL 30h→60h), `60a62b8` (Submit View manual-task fallback), `e0112f2` (Submit View automation).
 
 ---
 

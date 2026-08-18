@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-17 — dashboard **reassign ticket-picker modal fix DEPLOYED** (`161.118.164.85`, git HEAD `0fa702c`, dashboard-only rebuild; dashboard 200 + health healthy).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — dashboard **Activity page REMOVED** (`161.118.164.85`, git HEAD `44df94b`, dashboard-only rebuild; dashboard 200 + health healthy; served bundle free of audit-log UI).
 
 ---
 

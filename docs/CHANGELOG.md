@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-08-18
+### Deployed
+- **Activity page removal deployed** (`161.118.164.85`) at commit `44df94b` (dashboard-only rebuild, backup `rtm-backup-20260818-1743-pre-44df94b.tar.gz`). Verified: dashboard 200 via `statbot.duckdns.org`, health healthy, served `index-BffsGtZE.js` contains no Activity-page/Activity-Log/audit-logs code; `/activity` now renders the NotFound page (route removed). App + redis containers untouched.
 ### Removed
 - **Dashboard Activity page removed** (frontend-only): deleted `dashboard/src/pages/Activity.tsx`, the `/activity` route (`App.tsx`), the sidebar item + page-title branch + unused `History` icon (`Layout.tsx`), the per-task "Activity Log" card + its query + invalidations (`TaskDetails.tsx`), and the now-unused `getAuditLogs()` client fn (`api/client.ts`). Backend untouched: audit-log writes in all core flows and `GET /api/v1/audit-logs` remain (used for debugging; `/activity` URLs now 404 → NotFound).
 
