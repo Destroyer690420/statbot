@@ -92,42 +92,57 @@ export function DailyOutreach() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <button onClick={openSelect} className="btn-secondary flex items-center gap-2">
-          <Users className="w-4 h-4" />
-          Select Tickets
-        </button>
-        <button
-          onClick={handleSend}
-          disabled={selectedCount === 0 || sendMutation.isPending}
-          className="btn-primary flex items-center gap-2"
-        >
-          {sendMutation.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2.5">
+          {selectedCount > 0 ? (
+            <>
+              <span className="status-badge border bg-primary-500/10 text-primary-400 border-primary-500/20 px-3 py-1">
+                {selectedCount} selected
+              </span>
+              <p className="text-sm text-dark-400">
+                They will receive the daily message.
+              </p>
+            </>
           ) : (
-            <Send className="w-4 h-4" />
+            <p className="text-sm text-dark-400">
+              No tickets selected yet — open Select Tickets to add.
+            </p>
           )}
-          Send Message
-        </button>
-        <button
-          onClick={() => statusQuery.refetch()}
-          disabled={statusQuery.isFetching}
-          className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-5 h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
-        </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openSelect}
+            className="btn-secondary flex items-center justify-center gap-2 flex-1 md:flex-none"
+          >
+            <Users className="w-4 h-4" />
+            Select Tickets
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={selectedCount === 0 || sendMutation.isPending}
+            className="btn-primary flex items-center justify-center gap-2 flex-1 md:flex-none"
+          >
+            {sendMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            Send Message
+          </button>
+          <button
+            onClick={() => statusQuery.refetch()}
+            disabled={statusQuery.isFetching}
+            className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50 shrink-0"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-5 h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {sendNote && (
         <p className={`text-sm ${sendNote.ok ? 'text-green-400' : 'text-red-400'}`}>
           {sendNote.ok ? '✅ ' : '❌ '}{sendNote.text}
-        </p>
-      )}
-
-      {selectedCount > 0 && (
-        <p className="text-sm text-primary-400">
-          {selectedCount} ticket(s) selected — they will receive the daily message.
         </p>
       )}
 
