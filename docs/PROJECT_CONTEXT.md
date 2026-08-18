@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — Daily Worker Outreach **LIVE** (`161.118.164.85`, git HEAD `27738d4`, dashboard-only rebuild; outreach page shows **only selected tickets**, modal adds/removes them; served bundle `index-Cnk5Q6fj.js`, health healthy).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — page-header cleanup **LIVE** (`161.118.164.85`, git HEAD `d52ee94`, dashboard-only rebuild; Daily Outreach + Accepted Tasks redundant in-page headers removed — titles stay in top bar; served bundle `index-DuSGd8jY.js`, health healthy).
 
 ---
 

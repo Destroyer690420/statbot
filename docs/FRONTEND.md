@@ -58,7 +58,7 @@ Search (id, url, channel), 15/page client-side pagination, status filter; deskto
 Task info + GoPartTime external block (assignmentStatus badge, Retry Delivery on FAILED, error text, externalTaskId/subreddit/flair/payment/deadline/sourceUrl/postLink/formattedContent/taskImages grid) + Submission section (record/replace URL, Mark as Done when ACCEPTED) + Reminder Timeline (built from `RETRY_DELAYS` 2h/6h assumptions) + Submitted Screenshots (each reminder's `insightImageUrl`, click-to-open, download).
 
 ### AcceptedTasks
-Queue of ACCEPTED tasks; Reassign (ticket select with `(busy)` marker for `awaiting-submission` channels), Done (activation), copy link, delete; 15/page.
+Queue of ACCEPTED tasks; Reassign (ticket select with `(busy)` marker for `awaiting-submission` channels), Done (activation), copy link, delete; 15/page. No in-page heading (top bar shows "Accepted Tasks"; "N queued" badge top-right).
 
 ### Archives
 Read-only ARCHIVED list + search + CSV; table-only (scrolls horizontally).
@@ -81,7 +81,7 @@ List with search + pagination (15/page); **no create UI** (empty state directs t
 7 stat cards (Tasks Today/This Week/Month, Completion %, Avg Completion h, Overdue, Cancelled) + AreaChart (30d) + PieChart (types) + BarChart (employee performance).
 
 ### Daily Outreach
-`/outreach` — table Ticket | Worker | Available | Post | Comment. **Shows only selected tickets** (rows = `tickets.filter(t => t.selected)`); empty state prompts opening Select Tickets. Toolbar: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; lists **all** tickets with their current state, draft until Save Selection → `PUT /outreach/selection` — newly checked tickets appear on the page after save, unchecked ones disappear), `Send Message` (confirm dialog → `POST /outreach/send`, disabled with 0 selected; inline ✅/❌ result with per-channel failures), Refresh. Auto-refresh every 30s (`refetchInterval`). Desktop table + mobile cards (Tasks.tsx pattern). Status icons: `Check` green / `X` dark. Subtitle shows today's IST date (resets at 12:00 AM IST).
+`/outreach` — table Ticket | Worker | Available | Post | Comment. **Shows only selected tickets** (rows = `tickets.filter(t => t.selected)`); empty state prompts opening Select Tickets. Toolbar: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; lists **all** tickets with their current state, draft until Save Selection → `PUT /outreach/selection` — newly checked tickets appear on the page after save, unchecked ones disappear), `Send Message` (confirm dialog → `POST /outreach/send`, disabled with 0 selected; inline ✅/❌ result with per-channel failures), Refresh. Auto-refresh every 30s (`refetchInterval`). Desktop table + mobile cards (Tasks.tsx pattern). Status icons: `Check` green / `X` dark. No in-page heading (top bar shows "Daily Outreach").
 
 ### Settings
 Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payout Rates editor; static Reminder Delays + Retry Configuration cards; Commission Rates editor; **Daily Outreach Message editor** (textarea ≤2000 chars → `PUT /outreach/settings`); Danger Zone PIN modal → OwnerEarnings.
