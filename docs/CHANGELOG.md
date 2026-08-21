@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-08-21
+### Deployed
+- **Multi-level indirect referral fix deployed** (`161.118.164.85`) at commit `72e264c` (app-only rebuild; backup `rtm-backup-20260821-181410-pre-72e264c.tar.gz`; no DB migration — schema unchanged). Backfill run on host (host-side `npx prisma generate` first — stale generated client): 42 normal-inviter referrals checked, **9 linked, 0 cleared**; psql-verified chain: `notshagunatp` / `bavish.exe` / `batman_441` all → `indirectSpecialInviterId = 1202294567706316911` (isee_speed). Verified live: health healthy, boot "All systems online!", dashboard 200, no app errors.
 ### Fixed
 - **Multi-level indirect referral attribution** (implemented + verified locally, NOT yet deployed): referral creation checked only ONE level up the invite chain, so below `special → A → B → C → D` only A's invitees were linked to the special inviter; B/C/D's referrals got `indirectSpecialInviterId = null` and the special was never paid per-task commissions on their tasks. Replaced with `resolveIndirectSpecialInviterId(inviterId)` (`commission.service.ts`) — BFS walk of the full ancestor chain via `findByInviteeId`: cycle-safe (visited set), depth cap 10 (`MAX_INDIRECT_CHAIN_DEPTH`), shallowest open special wins on branching chains, closed links skipped without blocking open paths elsewhere. Wired into `createReferral` for normal inviters (covers `/referral add` + dashboard POST). No schema change.
 ### Added

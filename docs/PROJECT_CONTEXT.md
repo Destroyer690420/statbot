@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-18 — Outreach mobile button polish **LIVE** (`161.118.164.85`, git HEAD `fd69a2d`, dashboard-only rebuild; compact mobile toolbar buttons — smaller text/padding/icons on phones, desktop unchanged; served bundle `index-BslzhJQE.js`, health healthy).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-21 — Multi-level indirect referral fix **LIVE** (`161.118.164.85`, git HEAD `72e264c`, app-only rebuild; backfill script linked 9 referrals incl. bavish.exe/batman_441 chains to their special inviter; health healthy).
 
 ---
 
@@ -129,7 +129,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 | GoPartTime integration | Implemented (userscript + backend + delivery + submission + activation + reassign/retry + Submit View screenshot automation + preview + mobile-disable — userscript v1.4.0 + `GET /goparttime/insight/:externalTaskId`, **deployed 2026-08-17 at `e0112f2`**) |
 | Payout system | Implemented (weekly IST window, batches, CSV, restore-unpaid) |
 | Referral commissions | Implemented (normal/special, one-time + per-task, batches, CSV) |
-| Two-level referral (indirect special commissions) | **Deployed to production 2026-08-13** (`a558f1d`): schema + code live; migration applied schema-only (no data statements); task statuses verified untouched (ACCEPTED=0). **Multi-level chain-walk fix implemented 2026-08-21 — NOT yet deployed** (one-level-only detection bug: grandchildren+ of a special inviter were never linked/paid) |
+| Two-level referral (indirect special commissions) | **Deployed 2026-08-13** (`a558f1d`); **multi-level chain-walk fix DEPLOYED 2026-08-21** (`72e264c`, app-only rebuild) + backfill run live: 42 normal-inviter referrals checked, 9 linked (incl. bavish.exe + batman_441 → `1202294567706316911`), verified in DB |
 | Auto Reddit-deletion detection | **Removed/deprecated** (manual `cancelledReason` override instead); `check-reddit.ts` is dead code |
 | Owner earnings | Implemented (daily, 7-day history, weekly) |
 | Dashboard theme picker | **Stub** (UI-only, does nothing) |
@@ -246,7 +246,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-08-21**: **Fixed multi-level indirect referral attribution** (implemented + verified locally, **NOT yet deployed**). Root cause: `createReferral` checked only ONE level up the invite chain, so in `special → A → B → C → D` only B's referral got `indirectSpecialInviterId`; C/D never linked and the special inviter was unpaid on their tasks. Fix: exported `resolveIndirectSpecialInviterId(inviterId)` in `src/services/commission.service.ts` — BFS walk of the FULL ancestor chain (`findByInviteeId`, cycle-safe visited set, depth cap 10, shallowest open special wins, closed links don't block open paths) — used by `createReferral` for normal inviters (bot `/referral add` + dashboard POST). New one-off data-repair script `scripts/backfill-indirect-referrers.ts` recomputes all normal-inviter referrals from scratch (sets/clears values, only updates changed rows, idempotent) — **must be run manually against prod DB after deploy**. 10 new jest tests (`src/__tests__/commission-indirect.test.ts`); 154/154 pass, typecheck + build clean. No schema change. Docs: REFERRAL_SYSTEM.md rewritten.
+- **2026-08-21**: **DEPLOYED the multi-level indirect referral fix** (`161.118.164.85`) at commit `72e264c` (app-only rebuild; backup `rtm-backup-20260821-181410-pre-72e264c.tar.gz`; no DB migration — schema unchanged). Backfill `scripts/backfill-indirect-referrers.ts` run on the host (needed a host-side `npx prisma generate` first — the host tree's generated client was stale): 42 normal-inviter referrals checked, **9 linked** (0 cleared), including the reported chain — `notshagunatp`, `bavish.exe`, `batman_441` all now carry `indirectSpecialInviterId = 1202294567706316911` (isee_speed), verified via psql. Verified live: health healthy (DB+Redis), boot log "All systems online!", dashboard 200, no errors in app logs. Host scratch files (bundle, runner scripts) cleaned.
+  Implementation: `resolveIndirectSpecialInviterId()` BFS walk-up in `commission.service.ts` (replaces one-level-only check), backfill script idempotent, 10 new jest tests (`src/__tests__/commission-indirect.test.ts`), 154/154 pass. Docs: REFERRAL_SYSTEM.md rewritten.
 
 - **2026-08-17**: **DEPLOYED the reassign picker fix** (`161.118.164.85`) at commit `0fa702c` (dashboard-only rebuild; backup `rtm-backup-20260817-1915-pre-0fa702c.tar.gz`; bundle cleaned). Verified: dashboard 200, health healthy. Pending: user verification on phone (Accepted Tasks → Reassign → modal ticket list).
 
