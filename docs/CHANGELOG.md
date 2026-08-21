@@ -2,6 +2,13 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-08-21
+### Fixed
+- **Multi-level indirect referral attribution** (implemented + verified locally, NOT yet deployed): referral creation checked only ONE level up the invite chain, so below `special → A → B → C → D` only A's invitees were linked to the special inviter; B/C/D's referrals got `indirectSpecialInviterId = null` and the special was never paid per-task commissions on their tasks. Replaced with `resolveIndirectSpecialInviterId(inviterId)` (`commission.service.ts`) — BFS walk of the full ancestor chain via `findByInviteeId`: cycle-safe (visited set), depth cap 10 (`MAX_INDIRECT_CHAIN_DEPTH`), shallowest open special wins on branching chains, closed links skipped without blocking open paths elsewhere. Wired into `createReferral` for normal inviters (covers `/referral add` + dashboard POST). No schema change.
+### Added
+- **`scripts/backfill-indirect-referrers.ts`**: one-off data repair for rows created before the fix — recomputes `indirectSpecialInviterId` from scratch for every normal-inviter referral (sets correct values AND clears stale ones; only changed rows updated; idempotent). Run manually against prod DB after deploy: `npx tsx scripts/backfill-indirect-referrers.ts`.
+- **`src/__tests__/commission-indirect.test.ts`** (10 tests): one/two/four-level chains (the reported isee_speed scenario), no-chain null, all-normal null, closed-link skip + continue, branching shallowest-wins, cycle termination, `createReferral` wiring (stores resolved id; skips detection for direct special inviters). Total suite now 154/154.
+
 ## 2026-08-18
 ### Deployed
 - **Outreach mobile button polish deployed** (`161.118.164.85`) at commit `fd69a2d` (dashboard-only rebuild, backup `rtm-backup-20260818-1917-pre-fd69a2d.tar.gz`). Verified: served bundle `index-BslzhJQE.js` contains the compact mobile button classes; health healthy. No backend/DB change.

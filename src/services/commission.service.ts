@@ -19,6 +19,41 @@ import { logger } from '../utils/logger';
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
+export const MAX_INDIRECT_CHAIN_DEPTH = 10;
+
+/**
+ * Walk the referral ancestor chain upward from `inviterId` (level by level,
+ * across all parent paths) and return the first non-closed SPECIAL inviter
+ * found at ANY depth — or null when the chain has no special inviter.
+ * Cycle-safe via a visited set, with a hard depth cap.
+ */
+export async function resolveIndirectSpecialInviterId(inviterId: string): Promise<string | null> {
+  const visited = new Set<string>([inviterId]);
+  let frontier: string[] = [inviterId];
+
+  for (let depth = 0; depth < MAX_INDIRECT_CHAIN_DEPTH && frontier.length > 0; depth++) {
+    const nextFrontier: string[] = [];
+    for (const currentId of frontier) {
+      const parentRefs = await referralRepository.findByInviteeId(currentId);
+      for (const parent of parentRefs) {
+        if ((parent as any).inviterType === 'special' && (parent as any).status !== 'closed') {
+          return parent.inviterId;
+        }
+        // Not an open special: keep exploring through this ancestor
+        // (deduped so cycles terminate); a special seen only through a
+        // closed link stays discoverable via an open link later.
+        if (!visited.has(parent.inviterId)) {
+          visited.add(parent.inviterId);
+          nextFrontier.push(parent.inviterId);
+        }
+      }
+    }
+    frontier = nextFrontier;
+  }
+
+  return null;
+}
+
 const DEFAULT_RATES: CommissionRates = {
   normalInviteBonus: 100,
   normalInviteTaskThreshold: 2,
@@ -152,15 +187,12 @@ class CommissionService {
       throw new Error(`A referral already exists for invitee <@${data.inviteeId}>.`);
     }
 
-    // Auto-detect two-level chain: if this normal inviter was invited by a special inviter
+    // Auto-detect multi-level chain: walk this normal inviter's ancestor
+    // chain upward to find a special inviter at ANY depth (not just one level)
     let indirectSpecialInviterId: string | null = null;
     if (data.inviterType === 'normal') {
-      const parentReferrals = await referralRepository.findByInviteeId(data.inviterId);
-      const specialParent = parentReferrals.find(
-        (r) => (r as any).inviterType === 'special' && (r as any).status !== 'closed',
-      );
-      if (specialParent) {
-        indirectSpecialInviterId = (specialParent as any).inviterId;
+      indirectSpecialInviterId = await resolveIndirectSpecialInviterId(data.inviterId);
+      if (indirectSpecialInviterId) {
         logger.info('Indirect special inviter detected', {
           normalInviter: data.inviterId,
           specialInviter: indirectSpecialInviterId,
