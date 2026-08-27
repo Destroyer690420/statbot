@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-27 — Outreach post/comment counts **LIVE** (`161.118.164.85`, git HEAD `346fec7`, app + dashboard rebuild; health healthy, All systems online). Previous: multi-level indirect referral fix (`72e264c`).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-27 — Ticket auto-welcome **LIVE** (`161.118.164.85`, git HEAD `50f4378`, app-only rebuild; health healthy, All systems online). Previous: outreach post/comment counts (`346fec7`).
 
 ---
 
@@ -115,6 +115,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 11. **Dashboard**: 13 routes — Dashboard, Tasks, TaskDetails, AcceptedTasks, Daily Outreach, Archives, PayoutLayout (`/payout/tasks` & `/payout/commissions`), Referrals (with Indirect referral badge), Analytics, Settings, OwnerEarnings, Login, NotFound. JWT auth via single dashboard account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`). See `docs/FRONTEND.md`.
 12. **Audit log**: `AuditLog` rows for task/payout/commission/referral/reminder/command/outreach events; no dashboard consumer since the Activity page was removed (2026-08-18) — `GET /api/v1/audit-logs` kept for debugging.
 13. **Daily Worker Outreach**: per-ticket daily availability tracking. Manager selects tickets (persisted in `TicketOutreach`, survives day changes), `POST /api/v1/outreach/send` broadcasts the configurable daily message (`OutreachSettings`, default constant) to checked tickets only; any worker (non-bot/non-admin) message in a checked ticket after the send marks it Available (`messageCreate.ts` hook → `outreachService.onWorkerMessage`). Post/Comment columns show **counts** of tasks created today per channel (any status; `0` → cross, `>0` → green count) — assignment workflow unchanged. Daily cycle = IST day (resets at 00:00 IST: Available/Post/Comment go fresh, selection is remembered). See `docs/OUTREACH.md`.
+14. **Ticket Auto-Welcome**: bot listens to `channelCreate` — when a new ticket `TextChannel` is created, it auto-sends `Hey, @user Can you please share your reddit profile link?` tagging the opener. Creator resolved via audit log (`ChannelCreate`) or single non-bot non-admin member in channel (2.5 s delay + 3 s retry; admin/manager and public channels with 0 or >1 candidates are ignored). See `src/bot/events/channelCreate.ts`, `src/config/constants.ts:47`.
 
 ---
 
@@ -246,6 +247,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-08-27**: **DEPLOYED ticket auto-welcome** (`161.118.164.85`) at commit `50f4378` (app-only rebuild; backup `rtm-backup-20260827-140805-pre-50f4378.tar.gz`; no DB migration — schema unchanged). Bot now listens to `channelCreate` — on new ticket `TextChannel` it sends `Hey, @user Can you please share your reddit profile link?` tagging the opener. Verified live: health healthy (DB+Redis), boot log "All systems online!", dashboard 200, `dist/bot/events/channelCreate.js` + `dist/bot/index.js` show `channelCreate` handler, 155/155 jest pass.
+  Implementation: `src/bot/events/channelCreate.ts` (audit log + single-member fallback, 2.5 s delay + 3 s retry, admin/manager + public-channel guards), `src/bot/index.ts` (`channelCreate` listener), `src/config/constants.ts:47` (`TICKET_WELCOME_MESSAGE`).
 - **2026-08-27**: **DEPLOYED outreach post/comment counts** (`161.118.164.85`) at commit `346fec7` (app + dashboard rebuild; backup `rtm-backup-20260827-104537-pre-346fec7.tar.gz`; no DB migration — schema unchanged). Daily Outreach Post/Comment now show numeric counts (any task created today IST; `0` → cross, `>0` → green count) instead of boolean ticks; Available stays tick/cross. Verified live: health healthy (DB+Redis), boot log "All systems online!", dashboard 200, `dist/utils/outreach-rows.js` shows `filter().length`, 155/155 jest pass (new multi-count test). Docs: OUTREACH, API, FRONTEND updated.
   Implementation: `src/utils/outreach-rows.ts` (`post`/`comment`: `boolean` → `number`, `some` → `filter().length`), `dashboard/src/pages/DailyOutreach.tsx` (`OutreachTicket` numbers + `CountCell` — X for 0, green number for >0, desktop table + mobile cards), `src/__tests__/outreach.test.ts` (boolean → count assertions + multi-count case).
 

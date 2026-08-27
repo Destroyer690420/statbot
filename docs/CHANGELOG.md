@@ -4,7 +4,10 @@
 
 ## 2026-08-27
 ### Deployed
+- **Ticket auto-welcome deployed** (`161.118.164.85`) at commit `50f4378` (app-only rebuild, backup `rtm-backup-20260827-140805-pre-50f4378.tar.gz`). Verified: health healthy (DB+Redis, `All systems online!`), dashboard 200, `dist/bot/events/channelCreate.js` + `dist/bot/index.js` wired, 155/155 jest pass. No DB migration.
 - **Outreach post/comment counts deployed** (`161.118.164.85`) at commit `346fec7` (app + dashboard rebuild, backup `rtm-backup-20260827-104537-pre-346fec7.tar.gz`). Verified: health healthy (DB+Redis, `All systems online!`), dashboard 200, backend `dist/utils/outreach-rows.js` uses `filter().length`, 155/155 jest pass. No DB migration.
+### Added
+- **Ticket auto-welcome**: `src/bot/events/channelCreate.ts` + `src/bot/index.ts` `channelCreate` listener; on new `TextChannel` sends `Hey, @user Can you please share your reddit profile link?` tagging the opener (constant `TICKET_WELCOME_MESSAGE`). Creator resolved via audit log (`ChannelCreate`, 15 s window, non-bot non-admin) with fallback to single non-bot non-admin `channel.members` (2.5 s delay + 3 s retry); admin/manager and public channels (0 or >1 candidates) are skipped.
 ### Changed
 - **Daily Outreach Post/Comment now shows counts** instead of boolean ticks: backend `OutreachRow` `post`/`comment` `boolean` → `number` (`src/utils/outreach-rows.ts` `some` → `filter().length`); frontend `OutreachTicket` `post`/`comment` `boolean` → `number` + new `CountCell` (`dashboard/src/pages/DailyOutreach.tsx`): `0` → `X` (dark), `>0` → green count number; applied to desktop table and mobile cards; `Available` unchanged. Docs updated (`OUTREACH.md`, `API.md`, `FRONTEND.md`). Tests updated + new multi-count case (`post:2 comment:3`).
 

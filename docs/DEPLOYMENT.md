@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-27 — live deploy at git HEAD `346fec7`** (outreach post/comment counts — app + dashboard rebuild; health + All systems online verified). Previous deploys: `72e264c` (multi-level indirect referral fix — app-only rebuild + host-run backfill script), `fd69a2d` (Outreach mobile button polish), `8252e35` (outreach top toolbar polish), `d52ee94` (redundant page headers removed), `27738d4` (outreach selected-only display), `4f1b84c` (Daily Worker Outreach — app + dashboard, schema migration applied), `44df94b` (Activity page removed — dashboard-only), `0fa702c` (reassign ticket-picker modal fix), `b98bf68` (userscript v1.4.0 mobile-disable), `138c317` (userscript v1.3.0 preview), `cba8a35` (TTL 30h→60h), `60a62b8` (Submit View manual-task fallback), `e0112f2` (Submit View automation).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-08-27 — live deploy at git HEAD `50f4378`** (ticket auto-welcome — app-only rebuild; health + All systems online verified, `channelCreate` sends reddit profile request tagging opener). Previous deploys: `346fec7` (outreach post/comment counts — app + dashboard rebuild), `72e264c` (multi-level indirect referral fix — app-only rebuild + host-run backfill script), `fd69a2d` (Outreach mobile button polish), `8252e35` (outreach top toolbar polish), `d52ee94` (redundant page headers removed), `27738d4` (outreach selected-only display), `4f1b84c` (Daily Worker Outreach — app + dashboard, schema migration applied), `44df94b` (Activity page removed — dashboard-only), `0fa702c` (reassign ticket-picker modal fix), `b98bf68` (userscript v1.4.0 mobile-disable), `138c317` (userscript v1.3.0 preview), `cba8a35` (TTL 30h→60h), `60a62b8` (Submit View manual-task fallback), `e0112f2` (Submit View automation).
 
 ---
 
@@ -96,7 +96,7 @@ docker compose up -d --build
 ## 7. Discord Bot Deployment Notes
 
 - Commands must be (re)deployed after edits: `npm run deploy-commands` (guild-scoped; requires `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`).
-- Bot must be in the guild and have permissions to send messages in ticket channels; Message Content intent must be enabled (used by reply parsing).
+- Bot must be in the guild and have permissions to send messages in ticket channels; Message Content intent must be enabled (used by reply parsing). For ticket auto-welcome on `channelCreate`, bot needs **View Audit Log** permission to fetch the creator via audit logs (falls back to member detection if denied) and **Send Messages** in ticket channels.
 
 ## 8. GoPartTime Extension Deployment
 

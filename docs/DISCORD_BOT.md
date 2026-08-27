@@ -9,7 +9,7 @@
 - Single `discord.js` v14 `Client` created by `createBotClient()` (`src/bot/index.ts`).
   - Intents: `Guilds`, `GuildMessages`, `MessageContent`, `GuildMembers`
   - Partials: `Message`, `Channel`
-- Events: `ready` (logs tag + guild count), `interactionCreate` → `handleInteractionCreate` (`src/bot/events/interactionCreate.ts`), `messageCreate` → `handleMessageCreate` (`src/bot/events/messageCreate.ts`), `error`/`warn` → logger.
+- Events: `ready` (logs tag + guild count), `interactionCreate` → `handleInteractionCreate` (`src/bot/events/interactionCreate.ts`), `messageCreate` → `handleMessageCreate` (`src/bot/events/messageCreate.ts`), `channelCreate` → `handleChannelCreate` (`src/bot/events/channelCreate.ts`) — ticket auto-welcome, `error`/`warn` → logger.
 - `startBot()` = `client.login(env.DISCORD_TOKEN)`.
 - The **same client instance** is handed to `initializeWorker(discordClient)` so the BullMQ worker sends reminder messages on the bot's gateway connection.
 - **Guild-scoped commands only**: deployed via `Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID)` in `src/bot/deploy-commands.ts` (run `npm run deploy-commands` after command edits).
@@ -46,7 +46,16 @@ Permission checks are **per-command** (top of `execute()`), not centralized. `ge
 
 All commands audit `COMMAND_USED` (user, `/<command>`) before executing; failures reply `❌ An error occurred while executing this command.` (ephemeral).
 
-## 4. Message Events (`src/bot/events/messageCreate.ts`)
+## 4. Channel Events (`src/bot/events/channelCreate.ts`)
+
+Ticket auto-welcome — fires on every `TextChannel` creation. After 2.5 s delay (3 s retry if needed) it resolves the ticket opener:
+
+1. **Audit log path**: `guild.fetchAuditLogs({ type: ChannelCreate, limit: 5 })` — finds entry with `target.id === channel.id` created within 15 s; if executor is a non-bot non-admin/manager human, that user is tagged.
+2. **Fallback — member detection**: the single `channel.members` entry that is `!bot && !isAdminOrManager`. Public channels with `0` or `>1` such members are skipped (prevents spam on admin-created / general channels). Members are fetched via `guild.members.fetch()` first; a second attempt runs 3 s later if the first is empty.
+
+If a valid opener is found and not an admin/manager, the bot sends `TICKET_WELCOME_MESSAGE` (`src/config/constants.ts` — `Hey, {user} Can you please share your reddit profile link?` with `{user}` → `<@opener>`) via `channel.send`. Requires **View Audit Log** (for audit path; falls back gracefully) and **Send Messages** in the ticket channel.
+
+## 5. Message Events (`src/bot/events/messageCreate.ts`)
 
 Bot messages and DMs ignored. Two handlers run in order; the first that handles a message returns:
 
@@ -64,11 +73,11 @@ Bot messages and DMs ignored. Two handlers run in order; the first that handles 
    - Saves image via `insightStorageService.save` (non-fatal on failure), `updateInsightImage`.
    - React `✅`, reply "✅ Insight received successfully.", audit `INSIGHT_RECEIVED`.
 
-## 5. Reminder Messages (sent by worker — see `docs/REMINDER_SYSTEM.md`)
+## 6. Reminder Messages (sent by worker — see `docs/REMINDER_SYSTEM.md`)
 
 `channel.send({ content: '<@worker>', embeds: [reminderEmbed] })` — a mention + single embed, **no components**. Embed: "🔔 Insight Reminder" (or "🔔 Final Reminder" for POST_70H), description asks for the 20/70-hour insight, fields Task ID / Task type / Reddit (URL or "Awaiting submission"); WARNING color on retries with footer "Retry N of 3 — Reply with your screenshot." The sent message ID is persisted to `reminder.reminderMessageId` — this is what insight replies match on.
 
-## 6. Embeds (`src/bot/embeds/index.ts`)
+## 7. Embeds (`src/bot/embeds/index.ts`)
 
 | Builder | Used by |
 |---|---|
@@ -82,7 +91,7 @@ Bot messages and DMs ignored. Two handlers run in order; the first that handles 
 
 Colors: `COLORS` in `src/config/constants.ts` (SUCCESS 0x00d26a, ERROR 0xff4757, WARNING 0xffa502, INFO 0x3742fa, PENDING 0xffc312, OVERDUE 0xff6348). Status icons: 🟡 PENDING, 🔵 reminder sent, 🟢 insight received, ✅ COMPLETED, 📦 ARCHIVED, 🗑️/❌ CANCELLED.
 
-## 7. End-to-End Workflows
+## 8. End-to-End Workflows
 
 ### Manual task (`/task` admin/manager)
 ```
@@ -106,7 +115,7 @@ reminder unanswered after 3 sends (initial @dueAt, +2h, +6h) OR worker failure
 → notifyAdminOverdue: embed "⚠️ Overdue Task" @mention admins + managers in the ticket
 ```
 
-## 8. Edge Cases & Gotchas
+## 9. Edge Cases & Gotchas
 
 - `/delete` blocks while confirmation is pending (button collector); timeout cancels.
 - Insight replies must be **replies to the reminder message**; an attachment reply to anything else is ignored.
@@ -117,10 +126,10 @@ reminder unanswered after 3 sends (initial @dueAt, +2h, +6h) OR worker failure
 - Command permission denial replies are ephemeral; `/task` etc. use ephemeral defer; `/status`/`/find` replies are public.
 - No DM support: handlers skip messages without a guild.
 
-## 9. Relevant Files
+## 10. Relevant Files
 
 - Entry: `src/bot/index.ts`, `src/bot/deploy-commands.ts`
-- Events: `src/bot/events/interactionCreate.ts`, `src/bot/events/messageCreate.ts`
+- Events: `src/bot/events/interactionCreate.ts`, `src/bot/events/messageCreate.ts`, `src/bot/events/channelCreate.ts`
 - Commands: `src/bot/commands/{task,status,find,delete,pending,completed,overdue,stats,reschedule,send-now,help,referral}.ts`
 - Embeds: `src/bot/embeds/index.ts`
 - Sending: `src/scheduler/worker.ts` (reminder embeds + overdue pings)
