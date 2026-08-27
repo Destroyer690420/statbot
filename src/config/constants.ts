@@ -51,6 +51,11 @@ export const TICKET_WELCOME_MESSAGE = 'Hey, {user} Can you please share your red
 export const TICKET_GUIDE_MESSAGE =
   'To understand everything i would advise you to read <#1520466000477163550>, <#1520481331773968384>, <#1520620297399828571>. it will barely take 10 mins to read it all but you will understand everything after reading these. and once you are done you can ask me your doubts and after that we can get started, so lemme know once you are done reading we will start after that. ok?';
 
+/** Member join welcome sent in #invites when someone joins the guild */
+export const INVITES_CHANNEL_ID = '1520616800063328437';
+export const VERIFICATION_CHANNEL_ID = '1520483343018496104';
+export const MEMBER_WELCOME_MESSAGE = 'hey {user} please create your ticket in <#{verification}> then we can get started';
+
 /** Embed colors */
 export const COLORS = {
   SUCCESS: 0x00d26a,
