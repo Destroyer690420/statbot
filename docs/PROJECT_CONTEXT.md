@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-08-21 — Multi-level indirect referral fix **LIVE** (`161.118.164.85`, git HEAD `72e264c`, app-only rebuild; backfill script linked 9 referrals incl. bavish.exe/batman_441 chains to their special inviter; health healthy).
+> Repository: `reddit-task-manager` · Last verified: 2026-08-27 — Outreach post/comment counts **LIVE** (`161.118.164.85`, git HEAD `346fec7`, app + dashboard rebuild; health healthy, All systems online). Previous: multi-level indirect referral fix (`72e264c`).
 
 ---
 
@@ -114,7 +114,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 10. **Owner earnings**: daily/weekly net earnings (hardcoded revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30) minus per-task/one-time commissions (including indirect special per-task commissions); PIN (default `7977` via `OWNER_PIN`) gates navigation from Settings but the API endpoints are unauthenticated. See `docs/FRONTEND.md`.
 11. **Dashboard**: 13 routes — Dashboard, Tasks, TaskDetails, AcceptedTasks, Daily Outreach, Archives, PayoutLayout (`/payout/tasks` & `/payout/commissions`), Referrals (with Indirect referral badge), Analytics, Settings, OwnerEarnings, Login, NotFound. JWT auth via single dashboard account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`). See `docs/FRONTEND.md`.
 12. **Audit log**: `AuditLog` rows for task/payout/commission/referral/reminder/command/outreach events; no dashboard consumer since the Activity page was removed (2026-08-18) — `GET /api/v1/audit-logs` kept for debugging.
-13. **Daily Worker Outreach**: per-ticket daily availability tracking. Manager selects tickets (persisted in `TicketOutreach`, survives day changes), `POST /api/v1/outreach/send` broadcasts the configurable daily message (`OutreachSettings`, default constant) to checked tickets only; any worker (non-bot/non-admin) message in a checked ticket after the send marks it Available (`messageCreate.ts` hook → `outreachService.onWorkerMessage`). Post/Comment columns auto-derive from today's tasks per channel — assignment workflow unchanged. Daily cycle = IST day (resets at 00:00 IST: Available/Post/Comment go fresh, selection is remembered). See `docs/OUTREACH.md`.
+13. **Daily Worker Outreach**: per-ticket daily availability tracking. Manager selects tickets (persisted in `TicketOutreach`, survives day changes), `POST /api/v1/outreach/send` broadcasts the configurable daily message (`OutreachSettings`, default constant) to checked tickets only; any worker (non-bot/non-admin) message in a checked ticket after the send marks it Available (`messageCreate.ts` hook → `outreachService.onWorkerMessage`). Post/Comment columns show **counts** of tasks created today per channel (any status; `0` → cross, `>0` → green count) — assignment workflow unchanged. Daily cycle = IST day (resets at 00:00 IST: Available/Post/Comment go fresh, selection is remembered). See `docs/OUTREACH.md`.
 
 ---
 
@@ -245,6 +245,9 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-08-27**: **DEPLOYED outreach post/comment counts** (`161.118.164.85`) at commit `346fec7` (app + dashboard rebuild; backup `rtm-backup-20260827-104537-pre-346fec7.tar.gz`; no DB migration — schema unchanged). Daily Outreach Post/Comment now show numeric counts (any task created today IST; `0` → cross, `>0` → green count) instead of boolean ticks; Available stays tick/cross. Verified live: health healthy (DB+Redis), boot log "All systems online!", dashboard 200, `dist/utils/outreach-rows.js` shows `filter().length`, 155/155 jest pass (new multi-count test). Docs: OUTREACH, API, FRONTEND updated.
+  Implementation: `src/utils/outreach-rows.ts` (`post`/`comment`: `boolean` → `number`, `some` → `filter().length`), `dashboard/src/pages/DailyOutreach.tsx` (`OutreachTicket` numbers + `CountCell` — X for 0, green number for >0, desktop table + mobile cards), `src/__tests__/outreach.test.ts` (boolean → count assertions + multi-count case).
 
 - **2026-08-21**: **DEPLOYED the multi-level indirect referral fix** (`161.118.164.85`) at commit `72e264c` (app-only rebuild; backup `rtm-backup-20260821-181410-pre-72e264c.tar.gz`; no DB migration — schema unchanged). Backfill `scripts/backfill-indirect-referrers.ts` run on the host (needed a host-side `npx prisma generate` first — the host tree's generated client was stale): 42 normal-inviter referrals checked, **9 linked** (0 cleared), including the reported chain — `notshagunatp`, `bavish.exe`, `batman_441` all now carry `indirectSpecialInviterId = 1202294567706316911` (isee_speed), verified via psql. Verified live: health healthy (DB+Redis), boot log "All systems online!", dashboard 200, no errors in app logs. Host scratch files (bundle, runner scripts) cleaned.
   Implementation: `resolveIndirectSpecialInviterId()` BFS walk-up in `commission.service.ts` (replaces one-level-only check), backfill script idempotent, 10 new jest tests (`src/__tests__/commission-indirect.test.ts`), 154/154 pass. Docs: REFERRAL_SYSTEM.md rewritten.

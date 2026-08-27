@@ -2,6 +2,12 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-08-27
+### Deployed
+- **Outreach post/comment counts deployed** (`161.118.164.85`) at commit `346fec7` (app + dashboard rebuild, backup `rtm-backup-20260827-104537-pre-346fec7.tar.gz`). Verified: health healthy (DB+Redis, `All systems online!`), dashboard 200, backend `dist/utils/outreach-rows.js` uses `filter().length`, 155/155 jest pass. No DB migration.
+### Changed
+- **Daily Outreach Post/Comment now shows counts** instead of boolean ticks: backend `OutreachRow` `post`/`comment` `boolean` → `number` (`src/utils/outreach-rows.ts` `some` → `filter().length`); frontend `OutreachTicket` `post`/`comment` `boolean` → `number` + new `CountCell` (`dashboard/src/pages/DailyOutreach.tsx`): `0` → `X` (dark), `>0` → green count number; applied to desktop table and mobile cards; `Available` unchanged. Docs updated (`OUTREACH.md`, `API.md`, `FRONTEND.md`). Tests updated + new multi-count case (`post:2 comment:3`).
+
 ## 2026-08-21
 ### Deployed
 - **Multi-level indirect referral fix deployed** (`161.118.164.85`) at commit `72e264c` (app-only rebuild; backup `rtm-backup-20260821-181410-pre-72e264c.tar.gz`; no DB migration — schema unchanged). Backfill run on host (host-side `npx prisma generate` first — stale generated client): 42 normal-inviter referrals checked, **9 linked, 0 cleared**; psql-verified chain: `notshagunatp` / `bavish.exe` / `batman_441` all → `indirectSpecialInviterId = 1202294567706316911` (isee_speed). Verified live: health healthy, boot "All systems online!", dashboard 200, no app errors.
