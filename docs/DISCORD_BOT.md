@@ -57,7 +57,11 @@ If a valid opener is found and not an admin/manager, the bot sends `TICKET_WELCO
 
 ## 5. Message Events (`src/bot/events/messageCreate.ts`)
 
-Bot messages and DMs ignored. Two handlers run in order; the first that handles a message returns:
+Bot messages and DMs ignored. `outreachService.onWorkerMessage` runs first on every message, then the ticket guide, then two handlers in order (first that handles a message returns):
+
+0. **`handleTicketGuide`** — onboarding guide (best-effort, never blocks other handlers):
+    - Trigger: **any** message from the ticket opener (the single `!bot && !isAdminOrManager` `channel.members` viewer) in a **new ticket** where `TicketOnboarding.welcomeSentAt` exists and `guideSentAt` is null. Old tickets (no row) never get the guide; public/general channels (`0` or `>1` candidates) are skipped; admin/manager messages ignored.
+    - Action: `channel.send(TICKET_GUIDE_MESSAGE)` (`src/config/constants.ts` — `To understand everything i would advise you to read <#1520466000477163550>, <#1520481331773968384>, <#1520620297399828571>. ... ok?` with 3 clickable mentions, no user tag) → `onboardingRepository.markGuideSent`. Exactly-once per `channelId` (persisted), survives restarts.
 
 1. **`handleInstructionReply`** — GoPartTime URL submission:
    - Trigger: reply to a message whose ID is in a task's `deliveryMessages` (`taskRepository.findByDeliveryMessageId`).
