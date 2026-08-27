@@ -1,15 +1,17 @@
-import { Message } from 'discord.js';
+import { Message, TextChannel } from 'discord.js';
 import { reminderService } from '../../services/reminder.service';
 import { taskService } from '../../services/task.service';
 import { goparttimeService } from '../../services/goparttime.service';
 import { insightStorageService } from '../../services/insight-storage.service';
 import { outreachService } from '../../services/outreach.service';
 import { isSupportedImage, isValidRedditUrl } from '../../utils/validators';
-import { taskRepository } from '../../database/repositories';
+import { taskRepository, onboardingRepository } from '../../database/repositories';
 import { TaskStatus, AuditAction } from '../../types';
 import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
 import { auditLogService } from '../../services/audit.service';
 import { logger } from '../../utils/logger';
+import { getAllAdminIds } from '../../utils/permissions';
+import { TICKET_GUIDE_MESSAGE } from '../../config/constants';
 
 export async function handleMessageCreate(message: Message): Promise<void> {
   if (message.author.bot) return;
@@ -17,6 +19,14 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 
   try {
     await outreachService.onWorkerMessage(message.channel.id, message.author.id);
+
+    // Ticket onboarding guide: once per new ticket, on the opener's first message after welcome
+    await handleTicketGuide(message).catch((err) =>
+      logger.warn('Ticket guide handler failed', {
+        channelId: message.channel.id,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
 
     const handled = await handleInstructionReply(message);
     if (handled) return;
@@ -171,4 +181,54 @@ async function handleInsightUpload(message: Message): Promise<void> {
     userId: message.author.id,
     channelId: message.channel.id,
   });
+}
+
+/**
+ * Ticket onboarding guide: sent once per new ticket channel.
+ * Trigger: the first message from the ticket opener (single non-bot
+ * non-admin member) after the welcome was sent. Only for new tickets
+ * where welcomeSentAt exists and guide has not yet been sent.
+ * Scope matches welcome: exactly one non-bot non-admin viewer = ticket,
+ * so public/general channels (0 or >1 candidates) are ignored.
+ */
+async function handleTicketGuide(message: Message): Promise<void> {
+  if (!message.guild) return;
+  if (message.author.bot) return;
+  if (getAllAdminIds().includes(message.author.id)) return;
+
+  const channel = message.channel;
+  if (!(channel instanceof TextChannel)) return;
+
+  // Only for new tickets where welcome was delivered and guide not yet sent
+  let onboarding;
+  try {
+    onboarding = await onboardingRepository.findByChannelId(channel.id);
+  } catch {
+    return;
+  }
+  if (!onboarding?.welcomeSentAt) return;
+  if (onboarding.guideSentAt) return;
+
+  // Verify ticket-like: exactly one non-bot non-admin viewer and author is that viewer
+  try {
+    await channel.guild.members.fetch().catch(() => undefined);
+    const candidates = channel.members.filter((m) => !m.user.bot && !getAllAdminIds().includes(m.id));
+    if (candidates.size !== 1) return;
+    const soleId = candidates.first()!.id;
+    if (soleId !== message.author.id) return;
+  } catch {
+    return;
+  }
+
+  try {
+    await channel.send(TICKET_GUIDE_MESSAGE);
+    await onboardingRepository.markGuideSent(channel.id);
+    logger.info('Ticket guide sent', { channelId: channel.id, channelName: channel.name, userId: message.author.id });
+  } catch (error) {
+    logger.error('Ticket guide: failed to send', {
+      channelId: channel.id,
+      channelName: channel.name,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

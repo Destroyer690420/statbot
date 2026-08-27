@@ -2,6 +2,7 @@ import { AuditLogEvent, Channel, TextChannel } from 'discord.js';
 import { getAllAdminIds } from '../../utils/permissions';
 import { logger } from '../../utils/logger';
 import { TICKET_WELCOME_MESSAGE } from '../../config/constants';
+import { onboardingRepository } from '../../database/repositories';
 
 const WELCOME_DELAY_MS = 2500;
 const RETRY_DELAY_MS = 3000;
@@ -74,6 +75,14 @@ export async function handleChannelCreate(channel: Channel): Promise<void> {
 
     const content = TICKET_WELCOME_MESSAGE.replace('{user}', `<@${creatorId}>`);
     await channel.send(content);
+    try {
+      await onboardingRepository.markWelcomeSent(channel.id);
+    } catch (dbErr) {
+      logger.warn('Ticket welcome: sent but failed to mark onboarding', {
+        channelId: channel.id,
+        error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+      });
+    }
     logger.info('Ticket welcome sent', { channelId: channel.id, channelName: channel.name, creatorId });
   } catch (error) {
     logger.error('Ticket welcome: failed to send', {

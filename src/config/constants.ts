@@ -47,6 +47,10 @@ export const DEFAULT_OUTREACH_MESSAGE =
 /** Welcome message sent automatically when a ticket channel is created (tag placeholder {user} is replaced) */
 export const TICKET_WELCOME_MESSAGE = 'Hey, {user} Can you please share your reddit profile link?';
 
+/** Onboarding guide sent once per new ticket when the opener sends their first message */
+export const TICKET_GUIDE_MESSAGE =
+  'To understand everything i would advise you to read <#1520466000477163550>, <#1520481331773968384>, <#1520620297399828571>. it will barely take 10 mins to read it all but you will understand everything after reading these. and once you are done you can ask me your doubts and after that we can get started, so lemme know once you are done reading we will start after that. ok?';
+
 /** Embed colors */
 export const COLORS = {
   SUCCESS: 0x00d26a,

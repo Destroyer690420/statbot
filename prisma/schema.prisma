@@ -300,3 +300,11 @@ model OutreachSettings {
   updatedAt DateTime
   updatedBy String
 }
+
+model TicketOnboarding {
+  channelId     String    @id
+  welcomeSentAt DateTime?
+  guideSentAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}

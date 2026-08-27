@@ -371,3 +371,18 @@ CREATE TABLE IF NOT EXISTS "OutreachSettings" (
 
 -- Audit action for the daily outreach message broadcast
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_MESSAGE_SENT';
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Ticket onboarding (auto-welcome + guide, once per ticket)
+-- ──────────────────────────────────────────────────────────────
+-- One row per new ticket channel. welcomeSentAt set when channelCreate
+-- welcome is sent; guideSentAt set when the opener's first message triggers
+-- the onboarding guide. Both guard exactly-once delivery after restarts.
+CREATE TABLE IF NOT EXISTS "TicketOnboarding" (
+  "channelId" TEXT NOT NULL,
+  "welcomeSentAt" TIMESTAMP(3),
+  "guideSentAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "TicketOnboarding_pkey" PRIMARY KEY ("channelId")
+);
