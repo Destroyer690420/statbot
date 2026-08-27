@@ -3,6 +3,7 @@ import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { handleInteractionCreate } from './events/interactionCreate';
 import { handleMessageCreate } from './events/messageCreate';
+import { handleChannelCreate } from './events/channelCreate';
 
 /**
  * Create and configure the Discord bot client.
@@ -30,6 +31,7 @@ export function createBotClient(): Client {
 
   client.on('interactionCreate', handleInteractionCreate);
   client.on('messageCreate', handleMessageCreate);
+  client.on('channelCreate', handleChannelCreate);
 
   client.on('error', (error) => {
     logger.error('Discord client error', { error: error.message });
