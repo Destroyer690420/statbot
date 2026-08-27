@@ -54,7 +54,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXIST
 | `selected` | stored |
 | `messageSentAt` | stored (null → Send Message enabled) |
 | `available` | `availableAt != null` AND set in the current cycle (i.e. after today's send) |
-| `post` / `comment` | **any** task of that type with `createdAt` inside today's IST window (any status — the manager decides what counts) |
+| `post` / `comment` | **counts** of tasks of that type with `createdAt` inside today's IST window (any status — the manager decides what counts). `0` → cross, `>0` → count number |
 | `stale` | cycle needs reset (see §2) — GET re-applies the reset lazily |
 
 ## 5. Backend

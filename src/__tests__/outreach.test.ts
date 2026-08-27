@@ -65,7 +65,7 @@ describe('buildOutreachRows', () => {
     expect(rows[1].available).toBe(false);
   });
 
-  it('derives Post/Comment from today\'s tasks in the channel', () => {
+  it('derives Post/Comment counts from today\'s tasks in the channel', () => {
     const tasksToday = [
       { channelId: 'c1', type: 'POST' },
       { channelId: 'c1', type: 'COMMENT' },
@@ -79,12 +79,25 @@ describe('buildOutreachRows', () => {
     const c1 = rows.find((r) => r.channelId === 'c1')!;
     const c2 = rows.find((r) => r.channelId === 'c2')!;
     const c3 = rows.find((r) => r.channelId === 'c3')!;
-    expect(c1.post).toBe(true);
-    expect(c1.comment).toBe(true);
-    expect(c2.post).toBe(true);
-    expect(c2.comment).toBe(false);
-    expect(c3.post).toBe(false);
-    expect(c3.comment).toBe(false);
+    expect(c1.post).toBe(1);
+    expect(c1.comment).toBe(1);
+    expect(c2.post).toBe(1);
+    expect(c2.comment).toBe(0);
+    expect(c3.post).toBe(0);
+    expect(c3.comment).toBe(0);
+  });
+
+  it('counts multiple posts and comments per channel', () => {
+    const tasksToday = [
+      { channelId: 'c1', type: 'POST' },
+      { channelId: 'c1', type: 'POST' },
+      { channelId: 'c1', type: 'COMMENT' },
+      { channelId: 'c1', type: 'COMMENT' },
+      { channelId: 'c1', type: 'COMMENT' },
+    ];
+    const rows = buildOutreachRows([{ ...base, tasksToday }]);
+    expect(rows[0].post).toBe(2);
+    expect(rows[0].comment).toBe(3);
   });
 
   it('does not count tasks from other channels', () => {
@@ -94,7 +107,8 @@ describe('buildOutreachRows', () => {
         tasksToday: [{ channelId: 'other', type: 'POST' }],
       },
     ]);
-    expect(rows[0].post).toBe(false);
+    expect(rows[0].post).toBe(0);
+    expect(rows[0].comment).toBe(0);
   });
 
   it('sorts rows by channel name', () => {

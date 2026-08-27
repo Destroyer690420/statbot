@@ -10,8 +10,8 @@ interface OutreachTicket {
   workerName: string | null;
   selected: boolean;
   available: boolean;
-  post: boolean;
-  comment: boolean;
+  post: number;
+  comment: number;
 }
 
 function StatusIcon({ ok }: { ok: boolean }) {
@@ -19,6 +19,14 @@ function StatusIcon({ ok }: { ok: boolean }) {
     <Check className="w-5 h-5 text-green-400" />
   ) : (
     <X className="w-5 h-5 text-dark-600" />
+  );
+}
+
+function CountCell({ count }: { count: number }) {
+  return count === 0 ? (
+    <X className="w-5 h-5 text-dark-600" />
+  ) : (
+    <span className="text-sm font-semibold text-green-400">{count}</span>
   );
 }
 
@@ -187,8 +195,8 @@ export function DailyOutreach() {
                     </td>
                     <td className="px-6 py-4 text-sm text-dark-200">{t.workerName || '—'}</td>
                     <td className="px-6 py-4"><StatusIcon ok={t.available} /></td>
-                    <td className="px-6 py-4"><StatusIcon ok={t.post} /></td>
-                    <td className="px-6 py-4"><StatusIcon ok={t.comment} /></td>
+                    <td className="px-6 py-4"><CountCell count={t.post} /></td>
+                    <td className="px-6 py-4"><CountCell count={t.comment} /></td>
                   </tr>
                 ))
               )}
@@ -220,11 +228,11 @@ export function DailyOutreach() {
                   <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Available</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <StatusIcon ok={t.post} />
+                  <CountCell count={t.post} />
                   <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Post</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <StatusIcon ok={t.comment} />
+                  <CountCell count={t.comment} />
                   <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Comment</p>
                 </div>
               </div>

@@ -21,15 +21,15 @@ export interface OutreachRow {
   selected: boolean;
   messageSentAt: string | null;
   available: boolean;
-  post: boolean;
-  comment: boolean;
+  post: number;
+  comment: number;
 }
 
 /**
  * Pure builder: given per-ticket daily state plus today's tasks, produces the
  * page rows. `available` requires both a sent message and a worker reply in
- * the current cycle; `post`/`comment` derive from tasks created today in the
- * channel (assigned through the existing workflow).
+ * the current cycle; `post`/`comment` are counts of tasks created today in the
+ * channel (any status — assigned through the existing workflow, filtered by IST day).
  */
 export function buildOutreachRows(inputs: OutreachRowInput[]): OutreachRow[] {
   const rows = inputs.map((t) => {
@@ -43,8 +43,8 @@ export function buildOutreachRows(inputs: OutreachRowInput[]): OutreachRow[] {
       selected: t.selected,
       messageSentAt: t.messageSentAt,
       available: t.availableAt !== null && t.messageSentAt !== null,
-      post: today.some((x) => x.type === 'POST'),
-      comment: today.some((x) => x.type === 'COMMENT'),
+      post: today.filter((x) => x.type === 'POST').length,
+      comment: today.filter((x) => x.type === 'COMMENT').length,
     };
   });
 

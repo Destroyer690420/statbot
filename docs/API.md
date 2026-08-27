@@ -136,13 +136,13 @@ All computed in memory over `taskService.findAll` (`src/services/analytics.servi
 
 | Method | Path | Purpose | Body | Response | Errors |
 |---|---|---|---|---|---|
-| GET | `/outreach` | Full daily page state | — | `{ istDate: 'YYYY-MM-DD' (IST), message, tickets: [{ channelId, channelName, guildId, taskStatus: 'idle'\|'active'\|'awaiting-submission', workerName, selected, messageSentAt, available, post, comment }] }` (sorted by channel name; stale daily cycles lazily reset) | 500 |
+| GET | `/outreach` | Full daily page state | — | `{ istDate: 'YYYY-MM-DD' (IST), message, tickets: [{ channelId, channelName, guildId, taskStatus: 'idle'\|'active'\|'awaiting-submission', workerName, selected, messageSentAt, available: boolean, post: number, comment: number }] }` (sorted by channel name; stale daily cycles lazily reset; `post`/`comment` are counts of tasks created today IST — `0` shows cross, `>0` shows number) | 500 |
 | PUT | `/outreach/selection` | Persist checkbox selection | `{ selections: [{ channelId, selected }] }` (max 500) | `{ updated }` (transactional upserts; selection survives day changes) | 400; 500 |
 | POST | `/outreach/send` | Send daily message to **selected** tickets only | — | `{ sent: [{ channelId, channelName, ok, error? }] }` — per-channel, non-fatal; audit `OUTREACH_MESSAGE_SENT` | 500 |
 | GET | `/outreach/settings` | Current message | — | `{ message }` (defaults to `DEFAULT_OUTREACH_MESSAGE`) | 500 |
 | PUT | `/outreach/settings` | Update message | `{ message: 1..2000 chars }` | `{ message }` | 400; 500 |
 
-Availability semantics: a ticket becomes `available` only when its worker (non-bot, non-admin) sends any message in it **after** today's `Send Message` (first reply only). Post/Comment derive from tasks created today (IST) in the channel — any status.
+Availability semantics: a ticket becomes `available` only when its worker (non-bot, non-admin) sends any message in it **after** today's `Send Message` (first reply only). Post/Comment are **counts** of tasks created today (IST) in the channel — any status.
 
 ---
 
