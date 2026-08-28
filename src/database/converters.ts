@@ -17,7 +17,7 @@ type PrismaTask = {
   notes: string | null; cancelledReason: string | null;
   source: string | null; externalTaskId: string | null; sourceUrl: string | null;
   subreddit: string | null; subredditUrl: string | null; flair: string | null;
-  title: string | null; postLink: string | null;
+  title: string | null; postLink: string | null; commentLink?: string | null;
   contentHtml: string | null; formattedContent: string | null;
   payment: string | null; deadline: string | null;
   taskImages: Prisma.JsonValue; deliveryMessages: Prisma.JsonValue;
@@ -38,7 +38,7 @@ export function toTask(t: PrismaTask): Task {
     notes: t.notes, cancelledReason: t.cancelledReason,
     source: t.source, externalTaskId: t.externalTaskId, sourceUrl: t.sourceUrl,
     subreddit: t.subreddit, subredditUrl: t.subredditUrl, flair: t.flair,
-    title: t.title, postLink: t.postLink,
+    title: t.title, postLink: t.postLink, commentLink: (t as any).commentLink ?? null,
     contentHtml: t.contentHtml, formattedContent: t.formattedContent,
     payment: t.payment, deadline: t.deadline,
     taskImages: (t.taskImages || null) as Task['taskImages'],

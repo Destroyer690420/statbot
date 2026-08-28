@@ -36,8 +36,9 @@ export const goPartTimePayloadSchema = z
     flair: z.string().max(64).optional().nullable(),
     title: z.string().max(300).optional().nullable(),
 
-    // Comment-only field
+    // Comment-only fields (postLink for type-1, commentLink for type-2 reply-under-comment)
     postLink: z.string().url().optional().nullable(),
+    commentLink: z.string().url().optional().nullable(),
 
     // Content as extracted from the task dialog (div.prose innerHTML)
     contentHtml: z.string().min(1).max(100_000),
@@ -73,8 +74,10 @@ export const goPartTimePayloadSchema = z
     }
 
     if (data.type === 'comment') {
-      if (!data.postLink || data.postLink.trim().length === 0) {
-        ctx.addIssue({ code: 'custom', path: ['postLink'], message: 'Post link is required for comments.' });
+      const hasPost = !!data.postLink?.trim();
+      const hasComment = !!data.commentLink?.trim();
+      if (!hasPost && !hasComment) {
+        ctx.addIssue({ code: 'custom', path: ['postLink'], message: 'Post link or Comment link is required for comments.' });
       }
     }
   });

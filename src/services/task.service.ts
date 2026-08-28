@@ -62,6 +62,7 @@ class TaskService {
       flair: null,
       title: null,
       postLink: null,
+      commentLink: null,
       contentHtml: null,
       formattedContent: null,
       payment: null,

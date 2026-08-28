@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.4.0
+// @version      1.4.1
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -732,6 +732,7 @@
       info.subreddit = t.subreddit || null;
       info.title = t.title || null;
       info.postLink = t.postLink || null;
+      info.commentLink = t.commentLink || null;
       info.contentLength = (t.contentHtml || '').length;
       info.images = (t.images || []).length;
     } catch (e) {
@@ -753,6 +754,7 @@
         flair: !!document.querySelector('input[name="flair"]'),
         title: !!document.querySelector('input[name="title"]'),
         post_link: !!document.querySelector('input[name="post_link"]'),
+        comment_link: !!document.querySelector('input[name="comment_link"]'),
       };
     }
     console.log('[Send Task] Debug:', JSON.stringify(info, null, 2));
@@ -836,6 +838,7 @@
     let flair = null;
     let title = null;
     let postLink = null;
+    let commentLink = null;
 
     if (type === 'post') {
       const subInput = root.querySelector('input[name="subreddit"]');
@@ -851,6 +854,8 @@
     } else {
       const postLinkInput = root.querySelector('input[name="post_link"]');
       postLink = postLinkInput ? (postLinkInput.value || '').trim() || null : null;
+      const commentLinkInput = root.querySelector('input[name="comment_link"]');
+      commentLink = commentLinkInput ? (commentLinkInput.value || '').trim() || null : null;
     }
 
     const images = extractImages(root);
@@ -865,6 +870,7 @@
       flair,
       title,
       postLink,
+      commentLink,
       contentHtml,
       images,
       sourceUrl: window.location.href,

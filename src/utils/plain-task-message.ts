@@ -32,6 +32,7 @@ export interface TaskMessageFields {
   flair?: string | null;
   title?: string | null;
   postLink?: string | null;
+  commentLink?: string | null;
 }
 
 export interface TaskMessagePlan {
@@ -56,6 +57,11 @@ export interface InstructionMessage {
 
 function buildMetadata(fields: TaskMessageFields): string[] {
   const messages: string[] = [];
+
+  if (fields.commentLink) {
+    messages.push('comment', fields.commentLink);
+    return messages;
+  }
 
   if (fields.postLink) {
     messages.push('post', fields.postLink);
@@ -90,7 +96,7 @@ export function buildTaskMessagePlan(fields: TaskMessageFields, content: string)
     return { metadata, content: [], instruction: buildInstructionMessage(fields) };
   }
 
-  const contentLabel = fields.postLink ? 'comment' : 'content';
+  const contentLabel = fields.postLink || fields.commentLink ? 'comment' : 'content';
   const chunks = chunkText(contentStr, {
     target: DEFAULT_CHUNK_TARGET,
     hardMax: MAX_MESSAGE_LENGTH,
@@ -104,7 +110,7 @@ export function buildTaskMessagePlan(fields: TaskMessageFields, content: string)
 }
 
 export function buildInstructionMessage(fields: TaskMessageFields): InstructionMessage {
-  if (fields.postLink) {
+  if (fields.postLink || fields.commentLink) {
     return {
       title: '📌 IMPORTANT — Reply with your comment link',
       lines: [

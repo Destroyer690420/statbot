@@ -55,6 +55,7 @@ export interface Task {
   flair: string | null;
   title: string | null;
   postLink: string | null;
+  commentLink: string | null;
   contentHtml: string | null;
   formattedContent: string | null;
   payment: string | null;

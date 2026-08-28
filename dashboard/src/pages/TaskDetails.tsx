@@ -369,14 +369,21 @@ export function TaskDetails() {
                 </div>
               )}
 
-              {task.postLink && (
+              {task.commentLink ? (
+                <div>
+                  <p className="text-dark-400 text-xs font-medium mb-0.5">Comment Link</p>
+                  <a href={task.commentLink} target="_blank" rel="noreferrer" className="text-primary-400 hover:text-primary-300 text-sm break-all">
+                    {task.commentLink}
+                  </a>
+                </div>
+              ) : task.postLink ? (
                 <div>
                   <p className="text-dark-400 text-xs font-medium mb-0.5">Post Link</p>
                   <a href={task.postLink} target="_blank" rel="noreferrer" className="text-primary-400 hover:text-primary-300 text-sm break-all">
                     {task.postLink}
                   </a>
                 </div>
-              )}
+              ) : null}
 
               {task.formattedContent && (
                 <div>

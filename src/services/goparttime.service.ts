@@ -85,6 +85,7 @@ class GoPartTimeService {
       flair: parsed.flair || null,
       title: parsed.title || null,
       postLink: parsed.postLink || null,
+      commentLink: parsed.commentLink || null,
       contentHtml: parsed.contentHtml,
       formattedContent,
       payment: parsed.payment || null,
@@ -562,6 +563,7 @@ deliveryMessages: null as any,
         flair: task.flair,
         title: task.title,
         postLink: task.postLink,
+        commentLink: (task as any).commentLink || null,
       };
     }
     const payload = data;
@@ -571,6 +573,7 @@ deliveryMessages: null as any,
       flair: payload.flair || null,
       title: payload.title || null,
       postLink: payload.postLink || null,
+      commentLink: (payload as any).commentLink || null,
     };
   }
 }
