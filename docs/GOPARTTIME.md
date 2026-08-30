@@ -1,6 +1,6 @@
 # GOPARTTIME.md — GoPartTime Integration
 
-> Verified against `src/services/goparttime.service.ts`, `src/utils/goparttime-payload.ts`, `scripts/goparttime-send.user.js`, `src/api/routes/goparttime.ts`, `src/bot/events/messageCreate.ts` on 2026-08-11.
+> Verified against `src/services/goparttime.service.ts`, `src/utils/goparttime-payload.ts`, `scripts/goparttime-send.user.js` v1.4.3, `src/api/routes/goparttime.ts` (`validateBody` now `Validation failed: field: msg; …` + `errors`), `src/bot/events/messageCreate.ts` on 2026-08-30.
 
 ---
 
@@ -61,14 +61,14 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
 | `flair` | string? ≤64 | post only |
 | `title` | string? ≤300 | **post only, required** |
 | `postLink` | url? | **comment only, required** |
-| `contentHtml` | string 1–100000 | must not be whitespace-only |
+| `contentHtml` | string 0–100000, default `""` | empty allowed **only** when `images.length>0` (image-only posts e.g. #880072 `r/Nocfree`, v1.4.2); else “Content or images required.” |
 | `images` | array ≤20 | `{ order (sequential from 1), url }` |
 | `sourceUrl` | url? | page URL for audit/debug |
 
 ## 4. Data Extracted by the Userscript (see `docs/BROWSER_EXTENSION.md` for DOM details)
 
 - From dialog labels: Task ID, Task Type (→ post/comment), Deadline, Payment.
-- `contentHtml` = `div.prose.innerHTML`.
+- `contentHtml` = `div.prose.innerHTML` (`""` when no prose but `images.length>0` — v1.4.2 image-only fix).
 - Post: `input[name="subreddit"]` (r/ stripped, subredditUrl constructed), `input[name="flair"]`, `input[name="title"]`.
 - Comment: `input[name="post_link"]`.
 - `images`: `img` with http(s) alt/src, `naturalWidth ≥ 60`, not in buttons, max 20, DOM order, prefer `alt` original URL.

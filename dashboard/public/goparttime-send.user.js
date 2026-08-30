@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.4.1
+// @version      1.4.3
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,16 +18,18 @@
 // ==/UserScript==
 
 /**
- * v1.4.0 — Submit View disabled on phones. The "📊 Submit View" button, card
- * tracking, and screenshot preview are auto-disabled on narrow (mobile,
- * ≤767px) viewports — insights are only submitted from the PC. Everything else
- * (Send Task, settings, preview on desktop) is unchanged. A Tampermonkey menu
- * toggle ("📊 Submit View: ON/OFF") can force it back on via the
- * gpt_submit_view_enabled storage override; it reloads the page to apply.
- * v1.3.0 added the zoomable screenshot preview (same Blob as the upload — no
- * second download); v1.2.0 added the Submit View automation; v1.1.0 the send
- * flow. Feature-detected: runs under Tampermonkey (GM_* APIs) and as a plain
- * bookmarklet / non-GM context (fetch + localStorage).
+ * v1.4.3 — Surface Zod validation details (Validation failed: field: message)
+ * and keep v1.4.2 image-only fix (contentHtml may be empty when images exist,
+ * e.g. task #880072 r/Nocfree). v1.4.0 disabled Submit View on phones — the
+ * "📊 Submit View" button, card tracking, and screenshot preview are
+ * auto-disabled on narrow (mobile, ≤767px) viewports — insights are only
+ * submitted from the PC. Everything else (Send Task, settings, preview on
+ * desktop) is unchanged. A Tampermonkey menu toggle ("📊 Submit View: ON/OFF")
+ * can force it back on via the gpt_submit_view_enabled storage override; it
+ * reloads the page to apply. v1.3.0 added the zoomable screenshot preview (same
+ * Blob as the upload — no second download); v1.2.0 added the Submit View
+ * automation; v1.1.0 the send flow. Feature-detected: runs under Tampermonkey
+ * (GM_* APIs) and as a plain bookmarklet / non-GM context (fetch + localStorage).
  */
 (function () {
   'use strict';
@@ -648,7 +650,17 @@
     if (status >= 200 && status < 300) {
       return json || { success: true };
     }
-    const message = (json && json.message) || '';
+    const rawMessage = (json && json.message) || '';
+    const errors = json && Array.isArray(json.errors) ? json.errors : [];
+    const detail = errors.join('; ');
+    // Backend now sends Validation failed: field: message in rawMessage; keep compat
+    // with old generic message by appending detail only when not already included.
+    let message = rawMessage;
+    if (detail) {
+      if (!rawMessage || !rawMessage.includes(detail)) {
+        message = rawMessage ? rawMessage + ' ' + detail : detail;
+      }
+    }
     if (status === 409) throw new Error(message || 'Task has already been assigned.');
     if (status === 401) throw new Error('Authentication failed. Check your API key.');
     if (status === 503) throw new Error('Extension endpoint is not configured on the server.');
@@ -827,11 +839,14 @@
     const deadline = findField('Deadline', root) || null;
     const payment = findField('Payment', root) || null;
 
+    const images = extractImages(root);
+
     const contentEl = root.querySelector('div.prose');
-    if (!contentEl) {
+    const contentHtml = contentEl ? contentEl.innerHTML : '';
+
+    if (!contentHtml.trim() && images.length === 0) {
       throw new Error('Could not extract task content.');
     }
-    const contentHtml = contentEl.innerHTML;
 
     let subreddit = null;
     let subredditUrl = null;
@@ -857,8 +872,6 @@
       const commentLinkInput = root.querySelector('input[name="comment_link"]');
       commentLink = commentLinkInput ? (commentLinkInput.value || '').trim() || null : null;
     }
-
-    const images = extractImages(root);
 
     return {
       taskId,

@@ -61,7 +61,8 @@ class GoPartTimeService {
 
     const member = await this.detectWorker(channel);
     const now = new Date();
-    const formattedContent = htmlToDiscord(parsed.contentHtml);
+    const rawContentHtml = parsed.contentHtml || '';
+    const formattedContent = rawContentHtml.trim() ? htmlToDiscord(rawContentHtml) : '';
     const taskType = parsed.type === 'post' ? TaskType.POST : TaskType.COMMENT;
 
     const taskRow = await taskRepository.create({
@@ -86,8 +87,8 @@ class GoPartTimeService {
       title: parsed.title || null,
       postLink: parsed.postLink || null,
       commentLink: parsed.commentLink || null,
-      contentHtml: parsed.contentHtml,
-      formattedContent,
+      contentHtml: parsed.contentHtml || null,
+      formattedContent: formattedContent || null,
       payment: parsed.payment || null,
       deadline: parsed.deadline || null,
       taskImages: parsed.images.length > 0 ? parsed.images.map((i) => ({ order: i.order, url: i.url })) : null,

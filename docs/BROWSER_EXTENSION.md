@@ -1,12 +1,12 @@
 # BROWSER_EXTENSION.md — GoPartTime Userscript
 
-> Verified against `scripts/goparttime-send.user.js` (identical to `dashboard/public/goparttime-send.user.js`, SHA-256 verified byte-for-byte) on 2026-08-17 (v1.4.0). Served publicly at `https://statbot.duckdns.org/goparttime-send.user.js`.
+> Verified against `scripts/goparttime-send.user.js` (identical to `dashboard/public/goparttime-send.user.js`, SHA-256 `396FF12D…` byte-for-byte) on 2026-08-30 (v1.4.3). Served publicly at `https://statbot.duckdns.org/goparttime-send.user.js`.
 
 ---
 
 ## 1. Identity
 
-Tampermonkey userscript **"Discord Task Sender"** (v1.4.0, author "Manager"), designed for desktop and mobile (Kiwi Browser / Edge Canary noted in the header and `ANDROID_SETUP.md`). Works as a plain bookmarklet/non-GM fallback too (localStorage + fetch). v1.4.0 **disables Submit View on narrow (mobile) viewports** — insights are only submitted from the PC; everything else (Send Task, settings, desktop preview) is unchanged. v1.3.0 added the **insight screenshot preview** to the v1.2.0 **Submit View** automation (which itself sits on top of v1.1.0's send flow).
+Tampermonkey userscript **"Discord Task Sender"** (v1.4.3, author "Manager"), designed for desktop and mobile (Kiwi Browser / Edge Canary noted in the header and `ANDROID_SETUP.md`). Works as a plain bookmarklet/non-GM fallback too (localStorage + fetch). v1.4.3 **surfaces Zod validation details** (`Validation failed: field: message` + `errors` array shown in Tampermonkey) and keeps v1.4.2 image-only fix (empty `div.prose` allowed when `images>0` e.g. #880072 `r/Nocfree`); v1.4.0 disabled Submit View on narrow (mobile) viewports — insights are only submitted from the PC; everything else (Send Task, settings, desktop preview) is unchanged. v1.3.0 added the **insight screenshot preview** to the v1.2.0 **Submit View** automation (which itself sits on top of v1.1.0's send flow).
 
 ## 2. Metadata & Permissions
 
@@ -30,7 +30,7 @@ Tampermonkey userscript **"Discord Task Sender"** (v1.4.0, author "Manager"), de
 - `findTaskRoot()`: `[role="dialog"]`, else ancestor containing both a leaf text node `"Task ID"` and `div.prose`.
 - `findField(label)`: leaf `div`/`span` with the exact label → value from `nextElementSibling`.
 - Extracted: `taskId` ("Task ID"), `type` ("Task Type" → post/comment; throws if neither), `deadline` ("Deadline"), `payment` ("Payment").
-- `contentHtml` = `div.prose.innerHTML` (required).
+- `contentHtml` = `div.prose.innerHTML` (empty `""` allowed when `images.length>0` — image-only posts like #880072 `r/Nocfree` have no prose block; the script throws only when both prose and images are empty — v1.4.2).
 - Post-only: `subreddit` from `input[name="subreddit"]` (r/ stripped), `subredditUrl` = `https://www.reddit.com/r/<name>/`, `flair` from `input[name="flair"]`, `title` from `input[name="title"]`.
 - Comment-only: `postLink` from `input[name="post_link"]`.
 - `images`: `img` with http(s) `alt` or `src`, not inside a `button`, `naturalWidth >= 60` (skips icon UI images), max 20, DOM order, prefer `alt` (original URL — avoids Next.js-optimized `src`).
@@ -82,6 +82,7 @@ Step 2 on a comment → 400 "Comments have only one view-data step (COMMENT_20H)
 | 409 | "Task has already been assigned." |
 | 401 | "Authentication failed. Check your API key." |
 | 503 | "Extension endpoint is not configured on the server." |
+| other 400 `Validation failed` | `message` + `errors` joined `; ` — e.g. `Validation failed: contentHtml: Content or images required.; title: Title is required for posts.` (v1.4.3) |
 | other | server `message` or "Server error (status)" |
 | network/timeout | "Server is unavailable." / "(timeout)" |
 

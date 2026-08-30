@@ -12,9 +12,10 @@ export function validateBody(schema: ZodSchema) {
     } catch (error) {
       if (error instanceof ZodError) {
         const messages = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
+        const detail = messages.join('; ');
         res.status(400).json({
           success: false,
-          message: 'Validation failed.',
+          message: detail ? `Validation failed: ${detail}` : 'Validation failed.',
           errors: messages,
         });
         return;
@@ -35,9 +36,10 @@ export function validateQuery(schema: ZodSchema) {
     } catch (error) {
       if (error instanceof ZodError) {
         const messages = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
+        const detail = messages.join('; ');
         res.status(400).json({
           success: false,
-          message: 'Invalid query parameters.',
+          message: detail ? `Invalid query parameters: ${detail}` : 'Invalid query parameters.',
           errors: messages,
         });
         return;

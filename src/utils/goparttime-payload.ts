@@ -41,15 +41,18 @@ export const goPartTimePayloadSchema = z
     commentLink: z.string().url().optional().nullable(),
 
     // Content as extracted from the task dialog (div.prose innerHTML)
-    contentHtml: z.string().min(1).max(100_000),
+    // Empty string is allowed for image-only posts (e.g. #880072 r/Nocfree) as
+    // long as at least one image is present — see userscript v1.4.2.
+    contentHtml: z.string().max(100_000).optional().default(''),
 
     images: z.array(goPartTimeImageSchema).max(20).optional().default([]),
 
     sourceUrl: z.string().url().optional().nullable(),
   })
   .superRefine((data, ctx) => {
-    if (data.contentHtml.trim().length === 0) {
-      ctx.addIssue({ code: 'custom', path: ['contentHtml'], message: 'Content is missing.' });
+    const contentEmpty = !data.contentHtml || data.contentHtml.trim().length === 0;
+    if (contentEmpty && data.images.length === 0) {
+      ctx.addIssue({ code: 'custom', path: ['contentHtml'], message: 'Content or images required.' });
     }
 
     if (data.images.length > 0) {
