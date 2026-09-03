@@ -15,6 +15,27 @@ function resolveInviterType(inviterId: string | null): 'normal' | 'special' {
   return inviterId && SPECIAL_INVITER_IDS.includes(inviterId) ? 'special' : 'normal';
 }
 
+/**
+ * Best-effort Discord display-name lookup (REST, no gateway client needed).
+ * Returns the global display name (falling back to the username), or null
+ * when the token is missing, the user is unknown, or the request fails.
+ * Never throws — callers treat null as "keep whatever we have".
+ */
+async function fetchDiscordDisplayName(userId: string): Promise<string | null> {
+  try {
+    const token = process.env.DISCORD_TOKEN;
+    if (!token) return null;
+    const res = await fetch(`https://discord.com/api/v10/users/${userId}`, {
+      headers: { Authorization: `Bot ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { username?: string; global_name?: string | null };
+    return data.global_name || data.username || null;
+  } catch {
+    return null;
+  }
+}
+
 class InviteDetectionService {
   async listPending(limit = 100): Promise<InviteDetection[]> {
     const rows = await inviteDetectionRepository.findPending(limit);
@@ -152,10 +173,14 @@ class InviteDetectionService {
     // Lazy require avoids a commission↔invite import cycle at module load.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { commissionService } = require('./commission.service');
+    // Auto-fill a missing inviter name from Discord so ID-only rows still
+    // get a readable referral (failure keeps the ID fallback below).
+    const inviterName =
+      detection.inviterName ?? (await fetchDiscordDisplayName(detection.inviterId)) ?? detection.inviterId;
     const referral = await commissionService.createReferral(
       {
         inviterId: detection.inviterId,
-        inviterName: detection.inviterName ?? detection.inviterId,
+        inviterName,
         inviteeId: detection.inviteeId,
         inviteeName: detection.inviteeName ?? detection.inviteeId,
         inviterType: resolveInviterType(detection.inviterId),
@@ -216,9 +241,17 @@ class InviteDetectionService {
       throw new Error('Invalid inviter ID.');
     }
 
+    // Auto-fill: ID saved without a name → look the display name up from
+    // Discord so the queue (and later the referral) shows a real name.
+    let inviterName = data.inviterName;
+    const effectiveInviterId = data.inviterId !== undefined ? data.inviterId : detection.inviterId;
+    if (effectiveInviterId && inviterName !== undefined && !inviterName) {
+      inviterName = (await fetchDiscordDisplayName(effectiveInviterId)) ?? null;
+    }
+
     const updated = await inviteDetectionRepository.update(id, {
       ...(data.inviterId !== undefined ? { inviterId: data.inviterId } : {}),
-      ...(data.inviterName !== undefined ? { inviterName: data.inviterName } : {}),
+      ...(inviterName !== undefined ? { inviterName } : {}),
       ...(data.inviteeName !== undefined ? { inviteeName: data.inviteeName } : {}),
       updatedAt: new Date(),
     });

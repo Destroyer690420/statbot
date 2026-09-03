@@ -301,4 +301,102 @@ describe('inviteDetectionService.updateDetection', () => {
       inviteDetectionService.updateDetection('INV-1', { inviterName: 'x' }, 'admin-1'),
     ).rejects.toThrow('already approved');
   });
+
+  describe('inviter name auto-fill', () => {
+    const realFetch = global.fetch;
+
+    beforeEach(() => {
+      process.env.DISCORD_TOKEN = 'test-token';
+    });
+
+    afterEach(() => {
+      global.fetch = realFetch;
+      delete process.env.DISCORD_TOKEN;
+    });
+
+    it('fills a missing name from Discord on update', async () => {
+      (inviteDetectionRepository.findById as jest.Mock).mockResolvedValue(pendingRow);
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ username: 'boss_login', global_name: 'Boss Display' }),
+      }) as any;
+      (inviteDetectionRepository.update as jest.Mock).mockImplementation(async (_id: string, d: any) => ({
+        ...pendingRow,
+        ...d,
+      }));
+
+      const row = await inviteDetectionService.updateDetection(
+        'INV-1',
+        { inviterId: '123456789012345678', inviterName: null },
+        'admin-1',
+      );
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://discord.com/api/v10/users/123456789012345678',
+        expect.objectContaining({ headers: { Authorization: 'Bot test-token' } }),
+      );
+      expect(row.inviterName).toBe('Boss Display');
+    });
+
+    it('does not fetch when a name is given', async () => {
+      (inviteDetectionRepository.findById as jest.Mock).mockResolvedValue(pendingRow);
+      global.fetch = jest.fn() as any;
+      (inviteDetectionRepository.update as jest.Mock).mockImplementation(async (_id: string, d: any) => ({
+        ...pendingRow,
+        ...d,
+      }));
+
+      await inviteDetectionService.updateDetection(
+        'INV-1',
+        { inviterId: '123456789012345678', inviterName: 'typed-name' },
+        'admin-1',
+      );
+
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('keeps a null name when Discord lookup fails', async () => {
+      (inviteDetectionRepository.findById as jest.Mock).mockResolvedValue(pendingRow);
+      global.fetch = jest.fn().mockResolvedValue({ ok: false }) as any;
+      (inviteDetectionRepository.update as jest.Mock).mockImplementation(async (_id: string, d: any) => ({
+        ...pendingRow,
+        ...d,
+      }));
+
+      const row = await inviteDetectionService.updateDetection(
+        'INV-1',
+        { inviterId: '123456789012345678', inviterName: null },
+        'admin-1',
+      );
+
+      expect(row.inviterName).toBeNull();
+    });
+
+    it('approve falls back to the Discord name when the row has none', async () => {
+      (inviteDetectionRepository.findById as jest.Mock).mockResolvedValue({
+        ...pendingRow,
+        inviterId: '123456789012345678',
+        inviterName: null,
+        ticketChannelId: null,
+        ticketName: null,
+      });
+      (referralRepository.findByInviteeAndInviter as jest.Mock).mockResolvedValue(null);
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ username: 'boss_login', global_name: null }),
+      }) as any;
+      (commissionService.createReferral as jest.Mock).mockResolvedValue({ id: 'REF-11' });
+      (inviteDetectionRepository.update as jest.Mock).mockImplementation(async (_id: string, d: any) => ({
+        ...pendingRow,
+        ...d,
+      }));
+
+      await inviteDetectionService.approve('INV-1', 'admin-1');
+
+      expect(commissionService.createReferral).toHaveBeenCalledWith(
+        expect.objectContaining({ inviterName: 'boss_login' }),
+        'admin-1',
+      );
+    });
+  });
 });
