@@ -1,6 +1,8 @@
 import { GuildMember, TextChannel } from 'discord.js';
 import { INVITES_CHANNEL_ID, MEMBER_WELCOME_MESSAGE, VERIFICATION_CHANNEL_ID } from '../../config/constants';
 import { logger } from '../../utils/logger';
+import { resolveUsedInvite } from '../../services/invite-tracker.service';
+import { inviteDetectionService } from '../../services/invite-detection.service';
 
 /**
  * Guild member join welcome.
@@ -36,6 +38,23 @@ export async function handleGuildMemberAdd(member: GuildMember): Promise<void> {
     logger.error('Member welcome: failed to send', {
       userId: member.id,
       guildId: member.guild?.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // Best-effort invite detection → approval queue (never blocks/thows).
+  try {
+    const used = await resolveUsedInvite(member.guild);
+    await inviteDetectionService.recordJoin({
+      inviteeId: member.id,
+      inviteeName: member.user.username,
+      inviterId: used?.inviterId ?? null,
+      inviterName: used?.inviterName ?? null,
+      inviteCode: used?.code ?? null,
+    });
+  } catch (error) {
+    logger.warn('Invite detection: recordJoin failed', {
+      userId: member.id,
       error: error instanceof Error ? error.message : String(error),
     });
   }

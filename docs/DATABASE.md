@@ -21,7 +21,7 @@
 - **Applied manually** (psql/SQL client). **NOT** via `prisma migrate deploy` or `migrate dev` — the Dockerfile only runs `prisma generate` + `npm run build`; no pipeline applies DDL.
 - Style rules: appended sections use `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` / `ALTER TYPE ... ADD VALUE IF NOT EXISTS` so the file can be re-run safely.
 - **Future sessions**: edit BOTH `schema.prisma` AND append an idempotent block to `migration.sql`, matching column-by-column.
-- Historical evolution (from git): initial 272-line file (2026-07-26, `1f01cc2`) → CommissionBatch week-columns append (`072aca9`) → GoPartTime columns + Accepted Tasks append (`445e7cf`, 2026-08-03) → two-level-referral append (`9348d2d`) then removed (`ac441e2`, 2026-08-09 — current file has no trace of it) → **outreach tables append (`TicketOutreach`, `OutreachSettings` + `OUTREACH_MESSAGE_SENT` enum value, 2026-08-18)**.
+- Historical evolution (from git): initial 272-line file (2026-07-26, `1f01cc2`) → CommissionBatch week-columns append (`072aca9`) → GoPartTime columns + Accepted Tasks append (`445e7cf`, 2026-08-03) → two-level-referral append (`9348d2d`) then removed (`ac441e2`, 2026-08-09 — current file has no trace of it) → **outreach tables append (`TicketOutreach`, `OutreachSettings` + `OUTREACH_MESSAGE_SENT` enum value, 2026-08-18)** → **invite approval-queue append (`InviteDetection` table + indexes + `INVITE_DETECTED`/`INVITE_APPROVED`/`INVITE_REJECTED` enum values, 2026-09-03, NOT yet deployed)**.
 - Data import history: Firestore → PostgreSQL via one-time scripts (see §10).
 
 ---
@@ -191,6 +191,19 @@ erDiagram
         timestamp updatedAt
         string updatedBy
     }
+    InviteDetection {
+        string id PK "INV-XXXXXXXX"
+        string inviterId "nullable; null = unknown"
+        string inviterName "nullable"
+        string inviteeId
+        string inviteeName "nullable"
+        string inviteCode "nullable"
+        string ticketChannelId "nullable; first ticket only"
+        string ticketName "nullable"
+        string status "pending|approved|rejected (plain text)"
+        timestamp createdAt
+        timestamp updatedAt
+    }
 ```
 
 ### Enums (7)
@@ -200,7 +213,7 @@ erDiagram
 | `TaskType` | `POST`, `COMMENT` |
 | `TaskStatus` | `ACCEPTED`, `PENDING`, `REMINDER_20_SENT`, `INSIGHT_20_RECEIVED`, `REMINDER_70_SENT`, `INSIGHT_70_RECEIVED`, `COMPLETED`, `ARCHIVED`, `CANCELLED` |
 | `ReminderType` | `POST_20H`, `POST_70H`, `COMMENT_20H` |
-| `AuditAction` | `TASK_CREATED`, `TASK_DELETED`, `TASK_UPDATED`, `TASK_COMPLETED`, `TASK_CANCELLED`, `TASK_ARCHIVED`, `REMINDER_SENT`, `REMINDER_COMPLETED`, `REMINDER_RETRY`, `REMINDER_RESCHEDULED`, `INSIGHT_RECEIVED`, `ADMIN_ALERT`, `COMMAND_USED`, `PAYOUT_BATCH_CREATED`, `PAYOUT_ITEM_CREATED`, `REFERRAL_ADDED`, `REFERRAL_REMOVED`, `COMMISSION_PAID`, `COMMISSION_BATCH_CREATED`, `TASK_ASSIGNED`, `URL_SUBMITTED`, `TASK_REVIEWED`, `TASK_ACCEPTED`, `ASSIGNMENT_RETRIED`, `OUTREACH_MESSAGE_SENT` |
+| `AuditAction` | `TASK_CREATED`, `TASK_DELETED`, `TASK_UPDATED`, `TASK_COMPLETED`, `TASK_CANCELLED`, `TASK_ARCHIVED`, `REMINDER_SENT`, `REMINDER_COMPLETED`, `REMINDER_RETRY`, `REMINDER_RESCHEDULED`, `INSIGHT_RECEIVED`, `ADMIN_ALERT`, `COMMAND_USED`, `PAYOUT_BATCH_CREATED`, `PAYOUT_ITEM_CREATED`, `REFERRAL_ADDED`, `REFERRAL_REMOVED`, `COMMISSION_PAID`, `COMMISSION_BATCH_CREATED`, `TASK_ASSIGNED`, `URL_SUBMITTED`, `TASK_REVIEWED`, `TASK_ACCEPTED`, `ASSIGNMENT_RETRIED`, `OUTREACH_MESSAGE_SENT`, `INVITE_DETECTED`, `INVITE_APPROVED`, `INVITE_REJECTED` |
 | `ReferralStatus` | `pending`, `qualified`, `active_per_task`, `closed` |
 | `InviterType` | `normal`, `special` |
 | `CommissionKind` | `one_time`, `per_task`, `per_task_indirect` |

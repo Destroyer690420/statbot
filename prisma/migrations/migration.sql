@@ -387,3 +387,35 @@ CREATE TABLE IF NOT EXISTS "TicketOnboarding" (
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "TicketOnboarding_pkey" PRIMARY KEY ("channelId")
 );
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Invite auto-detection approval queue
+-- ──────────────────────────────────────────────────────────────
+-- Staging rows for Discord-invite joins. A row is created on
+-- guildMemberAdd (inviter resolved via invite-use diff, ticket empty),
+-- the invitee's first ticket is linked on channelCreate, and an admin
+-- approves the row from the dashboard — approval creates the real
+-- Referral via commissionService.createReferral. Unapproved rows never
+-- enter payout/commission math.
+CREATE TABLE IF NOT EXISTS "InviteDetection" (
+  "id" TEXT NOT NULL,
+  "inviterId" TEXT,
+  "inviterName" TEXT,
+  "inviteeId" TEXT NOT NULL,
+  "inviteeName" TEXT,
+  "inviteCode" TEXT,
+  "ticketChannelId" TEXT,
+  "ticketName" TEXT,
+  "status" TEXT NOT NULL DEFAULT 'pending',
+  "createdAt" TIMESTAMP(3) NOT NULL,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "InviteDetection_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "InviteDetection_inviteeId_idx" ON "InviteDetection"("inviteeId");
+CREATE INDEX IF NOT EXISTS "InviteDetection_status_idx" ON "InviteDetection"("status");
+CREATE INDEX IF NOT EXISTS "InviteDetection_createdAt_idx" ON "InviteDetection"("createdAt");
+
+-- Audit actions for the invite approval flow
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'INVITE_DETECTED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'INVITE_APPROVED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'INVITE_REJECTED';

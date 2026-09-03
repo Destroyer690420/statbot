@@ -55,8 +55,12 @@ export class ReferralRepository {
   }
 
   async update(id: string, data: {
+    inviterId?: string;
     inviterName?: string;
+    inviteeId?: string;
     inviteeName?: string;
+    inviterType?: string;
+    indirectSpecialInviterId?: string | null;
     ticketId?: string | null;
     status?: string;
     oneTimeCommissionPaid?: boolean;

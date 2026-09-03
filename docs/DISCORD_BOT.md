@@ -7,9 +7,9 @@
 ## 1. Architecture
 
 - Single `discord.js` v14 `Client` created by `createBotClient()` (`src/bot/index.ts`).
-  - Intents: `Guilds`, `GuildMessages`, `MessageContent`, `GuildMembers`
+  - Intents: `Guilds`, `GuildMessages`, `MessageContent`, `GuildMembers`, `GuildInvites` (invites = invite-use tracking for the referral approval queue; bot role needs **Manage Guild** to list invites)
   - Partials: `Message`, `Channel`, `GuildMember`
-- Events: `ready` (logs tag + guild count), `interactionCreate` → `handleInteractionCreate` (`src/bot/events/interactionCreate.ts`), `messageCreate` → `handleMessageCreate` (`src/bot/events/messageCreate.ts`), `channelCreate` → `handleChannelCreate` (`src/bot/events/channelCreate.ts`) — ticket auto-welcome, `guildMemberAdd` → `handleGuildMemberAdd` (`src/bot/events/guildMemberAdd.ts`) — member join welcome in `#invites`, `error`/`warn` → logger.
+- Events: `ready` (logs tag + guild count, snapshots all guild invites), `interactionCreate` → `handleInteractionCreate` (`src/bot/events/interactionCreate.ts`), `messageCreate` → `handleMessageCreate` (`src/bot/events/messageCreate.ts`), `channelCreate` → `handleChannelCreate` (`src/bot/events/channelCreate.ts`) — ticket auto-welcome + invite-ticket linking, `guildMemberAdd` → `handleGuildMemberAdd` (`src/bot/events/guildMemberAdd.ts`) — member join welcome in `#invites` + invite detection, `inviteCreate`/`inviteDelete` → `handleInviteCreate`/`handleInviteDelete` (`src/bot/events/invites.ts`) — invite cache upkeep, `error`/`warn` → logger.
 - `startBot()` = `client.login(env.DISCORD_TOKEN)`.
 - The **same client instance** is handed to `initializeWorker(discordClient)` so the BullMQ worker sends reminder messages on the bot's gateway connection.
 - **Guild-scoped commands only**: deployed via `Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID)` in `src/bot/deploy-commands.ts` (run `npm run deploy-commands` after command edits).
@@ -49,6 +49,12 @@ All commands audit `COMMAND_USED` (user, `/<command>`) before executing; failure
 ## 4. Guild Member Events (`src/bot/events/guildMemberAdd.ts`)
 
 Member join welcome — fires on `GuildMemberAdd` (every join, bots skipped, immediate, no dedup). Resolves `#invites` channel by ID `1520616800063328437`; sends `MEMBER_WELCOME_MESSAGE` (`src/config/constants.ts` — `hey {user} please create your ticket in <#{verification}> then we can get started` with `{user}` → `<@joiner>` and `{verification}` → `1520483343018496104` as `<#1520483343018496104>`) via `channel.send`. Requires **Server Members Intent** (`GuildMembers` already enabled via `src/bot/index.ts:17`) and **Send Messages** in `#invites`. Skips `member.user.bot`.
+
+After the welcome (best-effort, never throws): resolves the used invite via `resolveUsedInvite()` (invite-use diff vs the `ready`-time snapshot) and records an `InviteDetection` staging row (`recordJoin()` — keep-first per invitee). See `docs/REFERRAL_SYSTEM.md` §3b.
+
+## 4b. Invite Cache Events (`src/bot/events/invites.ts`)
+
+`inviteCreate`/`inviteDelete` keep the per-guild invite-use snapshot fresh; `ready` re-snapshots all guilds (restart recovery). Joins during a restart gap or via vanity/OAuth resolve to unknown inviter.
 
 ## 5. Channel Events (`src/bot/events/channelCreate.ts`)
 

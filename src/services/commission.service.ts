@@ -249,15 +249,33 @@ class CommissionService {
 
   async updateReferral(
     referralId: string,
-    data: { inviterName?: string; inviteeName?: string; ticketId?: string | null },
+    data: { inviterId?: string; inviteeId?: string; inviterName?: string; inviteeName?: string; ticketId?: string | null },
     updatedBy: string,
   ): Promise<Referral> {
     const ref = await referralRepository.findById(referralId);
     if (!ref) throw new Error('Referral not found.');
+    const current = toReferral(ref as any);
+
+    const newInviterId = data.inviterId ?? current.inviterId;
+    const newInviteeId = data.inviteeId ?? current.inviteeId;
+    if (!/^\d{17,20}$/.test(newInviterId)) throw new Error('Invalid inviter ID.');
+    if (!/^\d{17,20}$/.test(newInviteeId)) throw new Error('Invalid invitee ID.');
+
+    // Keep-first: the (invitee, inviter) pair must stay unique.
+    if (newInviterId !== current.inviterId || newInviteeId !== current.inviteeId) {
+      const dup = await referralRepository.findByInviteeAndInviter(newInviteeId, newInviterId);
+      if (dup && (dup as any).id !== referralId) {
+        throw new Error(`Another referral already exists for invitee <@${newInviteeId}>.`);
+      }
+    }
 
     const updateData: {
+      inviterId?: string;
       inviterName?: string;
+      inviteeId?: string;
       inviteeName?: string;
+      inviterType?: string;
+      indirectSpecialInviterId?: string | null;
       ticketId?: string | null;
       updatedAt: Date;
     } = { updatedAt: new Date() };
@@ -265,6 +283,22 @@ class CommissionService {
     if (data.inviterName !== undefined) updateData.inviterName = data.inviterName;
     if (data.inviteeName !== undefined) updateData.inviteeName = data.inviteeName;
     if (data.ticketId !== undefined) updateData.ticketId = data.ticketId;
+    if (data.inviterId !== undefined) updateData.inviterId = data.inviterId;
+    if (data.inviteeId !== undefined) updateData.inviteeId = data.inviteeId;
+
+    // Inviter change re-derives type + indirect chain (same rule as creation:
+    // hardcoded special list; normal inviters walk the ancestor chain).
+    if (data.inviterId !== undefined && data.inviterId !== current.inviterId) {
+      const SPECIAL_INVITER_IDS = [
+        '582595416294555649',
+        '1202294567706316911',
+        '1506900129792135211',
+      ];
+      const newType = SPECIAL_INVITER_IDS.includes(newInviterId) ? 'special' : 'normal';
+      updateData.inviterType = newType;
+      updateData.indirectSpecialInviterId =
+        newType === 'normal' ? await resolveIndirectSpecialInviterId(newInviterId) : null;
+    }
 
     await referralRepository.update(referralId, updateData);
 

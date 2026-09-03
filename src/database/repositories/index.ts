@@ -7,3 +7,4 @@ export { referralRepository, ReferralRepository } from './referral.repository';
 export { commissionRepository, CommissionRepository } from './commission.repository';
 export { outreachRepository, OutreachRepository } from './outreach.repository';
 export { onboardingRepository, OnboardingRepository } from './onboarding.repository';
+export { inviteDetectionRepository, InviteDetectionRepository } from './invite-detection.repository';

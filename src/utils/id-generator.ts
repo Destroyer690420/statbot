@@ -44,6 +44,10 @@ export function generateReferralId(): string {
   return `REF-${nanoid(8).toUpperCase()}`;
 }
 
+export function generateInviteDetectionId(): string {
+  return `INV-${nanoid(8).toUpperCase()}`;
+}
+
 export function generateCommissionBatchId(): string {
   return `CB-${nanoid(8).toUpperCase()}`;
 }

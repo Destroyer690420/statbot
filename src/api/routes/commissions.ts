@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { commissionService } from '../../services/commission.service';
+import { inviteDetectionService } from '../../services/invite-detection.service';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { isAdmin } from '../../utils/permissions';
@@ -51,6 +52,8 @@ const createReferralSchema = z.object({
 });
 
 const updateReferralSchema = z.object({
+  inviterId: z.string().regex(/^\d{17,20}$/, 'Invalid inviter ID.').optional(),
+  inviteeId: z.string().regex(/^\d{17,20}$/, 'Invalid invitee ID.').optional(),
   inviterName: z.string().min(1).optional(),
   inviteeName: z.string().min(1).optional(),
   ticketId: z.string().nullable().optional(),
@@ -304,6 +307,81 @@ router.get('/batches/:batchId', async (req: Request, res: Response): Promise<voi
   } catch (error) {
     logger.error('GET /commissions/batches/:batchId failed', { error });
     res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
+/**
+ * GET /api/v1/commissions/invite-detections
+ * Approval queue: auto-detected joins (pending by default).
+ */
+router.get('/invite-detections', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const status = req.query.status as string | undefined;
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    const rows =
+      status === 'all'
+        ? await inviteDetectionService.listAll(limit)
+        : await inviteDetectionService.listPending(limit);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    logger.error('GET /commissions/invite-detections failed', { error });
+    res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
+/**
+ * POST /api/v1/commissions/invite-detections/:id/approve
+ * Creates the real Referral from a pending detection.
+ */
+router.post('/invite-detections/:id/approve', async (req: Request, res: Response): Promise<void> => {
+  if (!requireDashboardAdmin(req, res)) return;
+
+  try {
+    const userId = (req as AuthRequest).userId || 'api';
+    const result = await inviteDetectionService.approve(String(req.params.id), userId);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error.';
+    res.status(400).json({ success: false, message });
+  }
+});
+
+/**
+ * POST /api/v1/commissions/invite-detections/:id/reject
+ */
+router.post('/invite-detections/:id/reject', async (req: Request, res: Response): Promise<void> => {
+  if (!requireDashboardAdmin(req, res)) return;
+
+  try {
+    const userId = (req as AuthRequest).userId || 'api';
+    const detection = await inviteDetectionService.reject(String(req.params.id), userId);
+    res.json({ success: true, data: detection });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error.';
+    res.status(400).json({ success: false, message });
+  }
+});
+
+const updateDetectionSchema = z.object({
+  inviterId: z.string().regex(/^\d{17,20}$/, 'Invalid inviter ID.').nullable().optional(),
+  inviterName: z.string().min(1).nullable().optional(),
+  inviteeName: z.string().min(1).optional(),
+});
+
+/**
+ * PATCH /api/v1/commissions/invite-detections/:id
+ * Fix up a pending row (e.g. set the inviter on unknown/backfilled rows).
+ */
+router.patch('/invite-detections/:id', validateBody(updateDetectionSchema), async (req: Request, res: Response): Promise<void> => {
+  if (!requireDashboardAdmin(req, res)) return;
+
+  try {
+    const userId = (req as AuthRequest).userId || 'api';
+    const detection = await inviteDetectionService.updateDetection(String(req.params.id), req.body, userId);
+    res.json({ success: true, data: detection });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error.';
+    res.status(400).json({ success: false, message });
   }
 });
 

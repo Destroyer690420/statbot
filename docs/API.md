@@ -188,6 +188,9 @@ Week params (`weekStart`/`weekEnd`) accepted in **query or body** (parsed as Dat
 | DELETE | `/commissions/referrals/:referralId` | Delete | — | 403; 400 |
 | POST | `/commissions/pay-inviter/:inviterId` | Pay one inviter (batch + items + referral flags) | — | 403; 400 |
 | POST | `/commissions/pay-all` | Pay all inviters in one batch | — | 403; 400 `'No unpaid commissions available.'` |
+| GET | `/commissions/invite-detections` | Approval queue (auto-detected joins) | `status?` (`pending` default, `all`), `limit?` (default 100, cap 500) | 500 |
+| POST | `/commissions/invite-detections/:id/approve` | Approve → creates the real Referral | — | 403; 400 (unknown inviter / dup / already handled) |
+| POST | `/commissions/invite-detections/:id/reject` | Reject a pending detection | — | 403; 400 |
 | GET | `/commissions/export/csv` | CSV | `batchId?`, week params | `commission-batch-<id>-<ts>.csv`; headers `Inviter Name, Inviter Type, Invitee Name, Bonus (₹), Per-Task (₹), Total Commission (₹), Status` |
 | GET | `/commissions/batches` | Batch history | `limit?` (default 20, cap 100) | 500 |
 | GET | `/commissions/batches/:batchId` | Batch detail | — | 404 |

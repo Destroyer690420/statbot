@@ -145,6 +145,9 @@ export enum AuditAction {
   TASK_ACCEPTED = 'TASK_ACCEPTED',
   ASSIGNMENT_RETRIED = 'ASSIGNMENT_RETRIED',
   OUTREACH_MESSAGE_SENT = 'OUTREACH_MESSAGE_SENT',
+  INVITE_DETECTED = 'INVITE_DETECTED',
+  INVITE_APPROVED = 'INVITE_APPROVED',
+  INVITE_REJECTED = 'INVITE_REJECTED',
 }
 
 export interface AuditLog {
@@ -253,6 +256,24 @@ export interface CommissionRates {
   specialPerPost: number;
   updatedAt: Date;
   updatedBy: string;
+}
+
+// ─── Invite Detection (approval queue) ─────────────────────────
+
+export type InviteDetectionStatus = 'pending' | 'approved' | 'rejected';
+
+export interface InviteDetection {
+  id: string;
+  inviterId: string | null;
+  inviterName: string | null;
+  inviteeId: string;
+  inviteeName: string | null;
+  inviteCode: string | null;
+  ticketChannelId: string | null;
+  ticketName: string | null;
+  status: InviteDetectionStatus;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // ─── Create Task Input ───────────────────────────────────────

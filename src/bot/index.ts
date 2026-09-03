@@ -5,6 +5,7 @@ import { handleInteractionCreate } from './events/interactionCreate';
 import { handleMessageCreate } from './events/messageCreate';
 import { handleChannelCreate } from './events/channelCreate';
 import { handleGuildMemberAdd } from './events/guildMemberAdd';
+import { handleInviteCreate, handleInviteDelete, handleReady } from './events/invites';
 
 /**
  * Create and configure the Discord bot client.
@@ -16,6 +17,7 @@ export function createBotClient(): Client {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildInvites,
     ],
     partials: [
       Partials.Message,
@@ -29,12 +31,15 @@ export function createBotClient(): Client {
   client.once('ready', (readyClient) => {
     logger.info(`Discord bot logged in as ${readyClient.user.tag}`);
     logger.info(`Serving ${readyClient.guilds.cache.size} guild(s)`);
+    void handleReady(readyClient);
   });
 
   client.on('interactionCreate', handleInteractionCreate);
   client.on('messageCreate', handleMessageCreate);
   client.on('channelCreate', handleChannelCreate);
   client.on('guildMemberAdd', handleGuildMemberAdd);
+  client.on('inviteCreate', handleInviteCreate);
+  client.on('inviteDelete', handleInviteDelete);
 
   client.on('error', (error) => {
     logger.error('Discord client error', { error: error.message });

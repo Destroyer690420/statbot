@@ -8,6 +8,7 @@ import {
   CommissionItem, CommissionKind,
   CommissionBatch,
   PayoutSettings, CommissionRates,
+  InviteDetection, InviteDetectionStatus,
 } from '../types';
 
 type PrismaTask = {
@@ -186,5 +187,23 @@ export function toCommissionRates(r: {
     specialInviteBonus: 0, specialInviteTaskThreshold: 0,
     specialPerComment: 0, specialPerPost: 0,
     updatedAt: new Date(), updatedBy: 'system',
+  };
+}
+
+type PrismaInviteDetection = {
+  id: string; inviterId: string | null; inviterName: string | null;
+  inviteeId: string; inviteeName: string | null; inviteCode: string | null;
+  ticketChannelId: string | null; ticketName: string | null;
+  status: string; createdAt: Date; updatedAt: Date;
+};
+
+export function toInviteDetection(r: PrismaInviteDetection): InviteDetection {
+  return {
+    id: r.id, inviterId: r.inviterId, inviterName: r.inviterName,
+    inviteeId: r.inviteeId, inviteeName: r.inviteeName,
+    inviteCode: r.inviteCode,
+    ticketChannelId: r.ticketChannelId, ticketName: r.ticketName,
+    status: r.status as InviteDetectionStatus,
+    createdAt: r.createdAt, updatedAt: r.updatedAt,
   };
 }

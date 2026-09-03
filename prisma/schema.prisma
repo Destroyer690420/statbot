@@ -309,3 +309,21 @@ model TicketOnboarding {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
+
+model InviteDetection {
+  id              String    @id
+  inviterId       String?
+  inviterName     String?
+  inviteeId       String
+  inviteeName     String?
+  inviteCode      String?
+  ticketChannelId String?
+  ticketName      String?
+  status          String    @default("pending")
+  createdAt       DateTime
+  updatedAt       DateTime
+
+  @@index([inviteeId])
+  @@index([status])
+  @@index([createdAt])
+}

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getReferrals, getTickets, deleteReferral, updateReferral } from '../api/client';
-import { Search, Loader2, ChevronLeft, ChevronRight, Pencil, Trash2, X, Save } from 'lucide-react';
+import { getReferrals, getTickets, deleteReferral, updateReferral, getInviteDetections, approveInviteDetection, rejectInviteDetection, updateInviteDetection } from '../api/client';
+import { Search, Loader2, ChevronLeft, ChevronRight, Pencil, Trash2, X, Save, Check, UserPlus } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
@@ -22,8 +22,17 @@ export function Referrals() {
   const [editingRef, setEditingRef] = useState<any | null>(null);
   const [formInviter, setFormInviter] = useState('');
   const [formInvitee, setFormInvitee] = useState('');
+  const [formInviterId, setFormInviterId] = useState('');
+  const [formInviteeId, setFormInviteeId] = useState('');
   const [formTicket, setFormTicket] = useState('');
   const [formError, setFormError] = useState('');
+
+  const [editingDetection, setEditingDetection] = useState<any | null>(null);
+  const [detInviterId, setDetInviterId] = useState('');
+  const [detInviterName, setDetInviterName] = useState('');
+  const [detInviteeName, setDetInviteeName] = useState('');
+
+  const SNOWFLAKE_RE = /^\d{17,20}$/;
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['referrals'],
@@ -34,6 +43,52 @@ export function Referrals() {
     queryKey: ['tickets'],
     queryFn: getTickets,
   });
+
+  const detectionsQuery = useQuery({
+    queryKey: ['invite-detections'],
+    queryFn: () => getInviteDetections('pending'),
+    refetchInterval: 30000,
+  });
+  const detections = (detectionsQuery.data?.data || []) as any[];
+  const [detectionError, setDetectionError] = useState('');
+  const [actingId, setActingId] = useState<string | null>(null);
+
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => approveInviteDetection(id),
+    onMutate: (id) => { setActingId(id); setDetectionError(''); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invite-detections'] });
+      queryClient.invalidateQueries({ queryKey: ['referrals'] });
+      refetch();
+      detectionsQuery.refetch();
+    },
+    onError: (error: any) => {
+      setDetectionError(error?.response?.data?.message || error.message || 'Failed to approve.');
+    },
+    onSettled: () => setActingId(null),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (id: string) => rejectInviteDetection(id),
+    onMutate: (id) => { setActingId(id); setDetectionError(''); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invite-detections'] });
+      detectionsQuery.refetch();
+    },
+    onError: (error: any) => {
+      setDetectionError(error?.response?.data?.message || error.message || 'Failed to reject.');
+    },
+    onSettled: () => setActingId(null),
+  });
+
+  const resolveDetectionTicket = (d: any): string => {
+    if (d?.ticketChannelId && ticketNameMap.get(String(d.ticketChannelId))) {
+      return `#${ticketNameMap.get(String(d.ticketChannelId))}`;
+    }
+    if (d?.ticketName) return `#${String(d.ticketName).replace(/^#/, '')}`;
+    if (d?.ticketChannelId) return `#${d.ticketChannelId}`;
+    return 'No ticket yet';
+  };
 
   const ticketNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -90,7 +145,7 @@ export function Referrals() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: { inviterName: string; inviteeName: string; ticketId: string | null } }) =>
+    mutationFn: ({ id, body }: { id: string; body: { inviterId?: string; inviteeId?: string; inviterName: string; inviteeName: string; ticketId: string | null } }) =>
       updateReferral(id, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['referrals'] });
@@ -102,10 +157,49 @@ export function Referrals() {
     },
   });
 
+  const updateDetectionMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { inviterId?: string | null; inviterName?: string | null; inviteeName?: string } }) =>
+      updateInviteDetection(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invite-detections'] });
+      detectionsQuery.refetch();
+      setEditingDetection(null);
+    },
+    onError: (error: any) => {
+      setDetectionError(error?.response?.data?.message || error.message || 'Failed to update invite.');
+    },
+  });
+
+  const openDetEdit = (d: any) => {
+    setEditingDetection(d);
+    setDetInviterId(d.inviterId || '');
+    setDetInviterName(d.inviterName || '');
+    setDetInviteeName(d.inviteeName || '');
+    setDetectionError('');
+  };
+
+  const handleDetSave = () => {
+    if (detInviterId.trim() && !SNOWFLAKE_RE.test(detInviterId.trim())) {
+      setDetectionError('Inviter ID must be a valid Discord user ID (17–20 digits).');
+      return;
+    }
+    setDetectionError('');
+    updateDetectionMutation.mutate({
+      id: editingDetection.id,
+      body: {
+        inviterId: detInviterId.trim() || null,
+        inviterName: detInviterName.trim() || null,
+        inviteeName: detInviteeName.trim() || undefined,
+      },
+    });
+  };
+
   const openEdit = (r: any) => {
     setEditingRef(r);
     setFormInviter(r.inviterName || '');
     setFormInvitee(r.inviteeName || '');
+    setFormInviterId(r.inviterId || '');
+    setFormInviteeId(r.inviteeId || '');
     setFormTicket(resolveTicketValue(r.ticketId));
     setFormError('');
   };
@@ -121,10 +215,16 @@ export function Referrals() {
       setFormError('Inviter and invitee names are required.');
       return;
     }
+    if (!SNOWFLAKE_RE.test(formInviterId.trim()) || !SNOWFLAKE_RE.test(formInviteeId.trim())) {
+      setFormError('Inviter and invitee IDs must be valid Discord user IDs (17–20 digits).');
+      return;
+    }
     setFormError('');
     updateMutation.mutate({
       id: editingRef.id,
       body: {
+        inviterId: formInviterId.trim(),
+        inviteeId: formInviteeId.trim(),
         inviterName: formInviter.trim(),
         inviteeName: formInvitee.trim(),
         ticketId: formTicket.trim() || null,
@@ -146,6 +246,93 @@ export function Referrals() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="glass-card overflow-hidden">
+        <div className="px-6 py-4 border-b border-dark-700/50 bg-dark-800/50 flex items-center gap-2">
+          <UserPlus className="w-4 h-4 text-primary-400" />
+          <h2 className="font-semibold text-white text-sm">Pending Invites ({detections.length})</h2>
+          <span className="text-[11px] text-dark-400">auto-detected joins — approve to create the referral</span>
+        </div>
+        {detectionsQuery.isLoading ? (
+          <div className="px-6 py-8 text-center">
+            <Loader2 className="w-6 h-6 text-primary-500 animate-spin mx-auto" />
+          </div>
+        ) : detections.length === 0 ? (
+          <p className="px-6 py-6 text-center text-dark-400 text-sm">No pending invites. New server joins will appear here automatically.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-dark-700/50 bg-dark-800/30">
+                  <th className="px-6 py-3 font-semibold text-dark-200 text-xs uppercase tracking-wider">Inviter</th>
+                  <th className="px-6 py-3 font-semibold text-dark-200 text-xs uppercase tracking-wider">Invitee</th>
+                  <th className="px-6 py-3 font-semibold text-dark-200 text-xs uppercase tracking-wider">Ticket</th>
+                  <th className="px-6 py-3 font-semibold text-dark-200 text-xs uppercase tracking-wider">Joined</th>
+                  <th className="px-6 py-3 font-semibold text-dark-200 text-xs uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-dark-700/50">
+                {detections.map((d: any) => {
+                  const noTicket = !d.ticketChannelId && !d.ticketName;
+                  const unknownInviter = !d.inviterId;
+                  return (
+                    <tr key={d.id} className="hover:bg-dark-800/30 transition-colors">
+                      <td className="px-6 py-3">
+                        <p className="text-sm font-medium text-white truncate">{d.inviterName || (unknownInviter ? 'Unknown' : d.inviterId)}</p>
+                        {d.inviterId && <p className="text-[11px] text-dark-500 font-mono truncate">{d.inviterId}</p>}
+                        {unknownInviter && <p className="text-[11px] text-amber-400">vanity / unknown link — verify manually</p>}
+                      </td>
+                      <td className="px-6 py-3">
+                        <p className="text-sm font-medium text-white truncate">{d.inviteeName || d.inviteeId}</p>
+                        <p className="text-[11px] text-dark-500 font-mono truncate">{d.inviteeId}</p>
+                      </td>
+                      <td className="px-6 py-3">
+                        <span className={`font-mono text-sm px-2 py-1 rounded-md border ${noTicket ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' : 'text-dark-200 bg-dark-800/50 border-dark-700/50'}`}>
+                          {resolveDetectionTicket(d)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-sm text-dark-300">
+                        {new Date(d.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openDetEdit(d)}
+                            disabled={actingId === d.id}
+                            className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors disabled:opacity-40"
+                            title="Edit inviter (e.g. set the inviter on unknown rows)"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => approveMutation.mutate(d.id)}
+                            disabled={actingId === d.id}
+                            className="p-2 text-green-400 hover:text-green-300 hover:bg-green-400/10 rounded-lg transition-colors disabled:opacity-40"
+                            title={noTicket ? 'Approve without ticket (commission still counts by worker)' : 'Approve and create referral'}
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { if (confirm(`Reject invite for ${d.inviteeName || d.inviteeId}?`)) rejectMutation.mutate(d.id); }}
+                            disabled={actingId === d.id}
+                            className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-40"
+                            title="Reject"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {detectionError && (
+          <p className="px-6 py-3 text-red-400 text-sm border-t border-dark-700/50">{detectionError}</p>
+        )}
+      </div>
+
       <div className="relative flex-1">
         <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-dark-400 pointer-events-none" />
         <input
@@ -361,6 +548,29 @@ export function Referrals() {
             </div>
 
             <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Inviter ID</label>
+                  <input
+                    type="text"
+                    value={formInviterId}
+                    onChange={(e) => setFormInviterId(e.target.value)}
+                    placeholder="17–20 digit user ID"
+                    className="input-field w-full font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Invitee ID</label>
+                  <input
+                    type="text"
+                    value={formInviteeId}
+                    onChange={(e) => setFormInviteeId(e.target.value)}
+                    placeholder="17–20 digit user ID"
+                    className="input-field w-full font-mono"
+                  />
+                </div>
+              </div>
+              <p className="-mt-2 text-[11px] text-dark-500">Changing the inviter re-derives special/normal type and the indirect chain automatically.</p>
               <div>
                 <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Inviter Name</label>
                 <input
@@ -414,6 +624,80 @@ export function Referrals() {
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {updateMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingDetection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-dark-800 rounded-2xl p-8 w-full max-w-md mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Edit Pending Invite</h3>
+              <button
+                onClick={() => setEditingDetection(null)}
+                className="text-dark-500 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Invitee ID</label>
+                <input
+                  type="text"
+                  value={editingDetection.inviteeId || ''}
+                  disabled
+                  className="input-field w-full font-mono opacity-60"
+                />
+              </div>
+
+              <div>
+                <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Inviter ID</label>
+                <input
+                  type="text"
+                  value={detInviterId}
+                  onChange={(e) => setDetInviterId(e.target.value)}
+                  placeholder="17–20 digit user ID (empty = unknown)"
+                  className="input-field w-full font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Inviter Name</label>
+                <input
+                  type="text"
+                  value={detInviterName}
+                  onChange={(e) => setDetInviterName(e.target.value)}
+                  placeholder="Inviter name"
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-dark-400 text-xs font-semibold uppercase tracking-wider mb-1.5">Invitee Name</label>
+                <input
+                  type="text"
+                  value={detInviteeName}
+                  onChange={(e) => setDetInviteeName(e.target.value)}
+                  placeholder="Invitee name"
+                  className="input-field w-full"
+                />
+              </div>
+
+              <button
+                onClick={handleDetSave}
+                disabled={updateDetectionMutation.isPending}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
+                {updateDetectionMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Save className="w-4 h-4" />

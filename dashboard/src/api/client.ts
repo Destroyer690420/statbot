@@ -276,8 +276,13 @@ export async function deleteReferral(referralId: string) {
   return data;
 }
 
-export async function updateReferral(referralId: string, body: { inviterName?: string; inviteeName?: string; ticketId?: string | null }) {
+export async function updateReferral(referralId: string, body: { inviterId?: string; inviteeId?: string; inviterName?: string; inviteeName?: string; ticketId?: string | null }) {
   const { data } = await api.patch(`/commissions/referrals/${encodeURIComponent(referralId)}`, body);
+  return data;
+}
+
+export async function updateInviteDetection(id: string, body: { inviterId?: string | null; inviterName?: string | null; inviteeName?: string }) {
+  const { data } = await api.patch(`/commissions/invite-detections/${encodeURIComponent(id)}`, body);
   return data;
 }
 
@@ -315,6 +320,21 @@ export async function getCommissionBatchHistory() {
 
 export async function getCommissionBatchDetail(batchId: string) {
   const { data } = await api.get(`/commissions/batches/${encodeURIComponent(batchId)}`);
+  return data;
+}
+
+export async function getInviteDetections(status: 'pending' | 'all' = 'pending') {
+  const { data } = await api.get('/commissions/invite-detections', { params: { status } });
+  return data;
+}
+
+export async function approveInviteDetection(id: string) {
+  const { data } = await api.post(`/commissions/invite-detections/${encodeURIComponent(id)}/approve`);
+  return data;
+}
+
+export async function rejectInviteDetection(id: string) {
+  const { data } = await api.post(`/commissions/invite-detections/${encodeURIComponent(id)}/reject`);
   return data;
 }
 

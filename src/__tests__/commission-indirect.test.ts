@@ -168,3 +168,86 @@ describe('createReferral indirect wiring', () => {
     expect(referralRepository.findByInviteeId as jest.Mock).not.toHaveBeenCalled();
   });
 });
+
+describe('updateReferral with inviter/invitee IDs', () => {
+  const baseRow = {
+    id: 'REF-1',
+    inviterId: '111111111111111111',
+    inviterName: 'old-boss',
+    inviteeId: '222222222222222222',
+    inviteeName: 'worker',
+    inviterType: 'normal',
+    status: 'pending',
+    oneTimeCommissionPaid: false,
+    oneTimeCommissionPaidAt: null,
+    perTaskCommissionActive: false,
+    ticketId: null,
+    indirectSpecialInviterId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    let saved: any = { ...baseRow };
+    (referralRepository.findById as jest.Mock).mockImplementation(async () => ({ ...saved }));
+    (referralRepository.findByInviteeAndInviter as jest.Mock).mockResolvedValue(null);
+    (referralRepository.update as jest.Mock).mockImplementation(async (_id: string, d: any) => {
+      saved = { ...saved, ...d };
+      return { ...saved };
+    });
+    mockChain({});
+  });
+
+  it('updates names + ticket without touching the chain when IDs are unchanged', async () => {
+    const updated = await commissionService.updateReferral(
+      'REF-1',
+      { inviterName: 'new-boss', inviteeName: 'worker2', ticketId: 'ticket-1' },
+      'admin-1',
+    );
+
+    expect(updated.inviterName).toBe('new-boss');
+    expect(referralRepository.findByInviteeAndInviter as jest.Mock).not.toHaveBeenCalled();
+    expect(referralRepository.findByInviteeId as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  it('recomputes the indirect chain when the inviter changes to normal', async () => {
+    mockChain({
+      ['333333333333333333']: [parentRef(SPECIAL, 'special')],
+    });
+
+    await commissionService.updateReferral(
+      'REF-1',
+      { inviterId: '333333333333333333' },
+      'admin-1',
+    );
+
+    const updateArg = (referralRepository.update as jest.Mock).mock.calls[0][1];
+    expect(updateArg.inviterId).toBe('333333333333333333');
+    expect(updateArg.inviterType).toBe('normal');
+    expect(updateArg.indirectSpecialInviterId).toBe(SPECIAL);
+  });
+
+  it('flips to special with no indirect link when the new inviter is special', async () => {
+    const REAL_SPECIAL = '582595416294555649';
+    await commissionService.updateReferral('REF-1', { inviterId: REAL_SPECIAL }, 'admin-1');
+
+    const updateArg = (referralRepository.update as jest.Mock).mock.calls[0][1];
+    expect(updateArg.inviterType).toBe('special');
+    expect(updateArg.indirectSpecialInviterId).toBeNull();
+  });
+
+  it('rejects a pair that belongs to another referral', async () => {
+    (referralRepository.findByInviteeAndInviter as jest.Mock).mockResolvedValue({ id: 'REF-OTHER' });
+
+    await expect(
+      commissionService.updateReferral('REF-1', { inviterId: '333333333333333333' }, 'admin-1'),
+    ).rejects.toThrow('Another referral already exists');
+  });
+
+  it('rejects invalid snowflakes', async () => {
+    await expect(
+      commissionService.updateReferral('REF-1', { inviterId: 'abc' }, 'admin-1'),
+    ).rejects.toThrow('Invalid inviter ID.');
+  });
+});

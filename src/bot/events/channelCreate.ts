@@ -3,6 +3,7 @@ import { getAllAdminIds } from '../../utils/permissions';
 import { logger } from '../../utils/logger';
 import { TICKET_WELCOME_MESSAGE } from '../../config/constants';
 import { onboardingRepository } from '../../database/repositories';
+import { inviteDetectionService } from '../../services/invite-detection.service';
 
 const WELCOME_DELAY_MS = 2500;
 const RETRY_DELAY_MS = 3000;
@@ -71,6 +72,17 @@ export async function handleChannelCreate(channel: Channel): Promise<void> {
     if (getAllAdminIds().includes(creatorId)) {
       logger.info('Ticket welcome: creator is admin/manager, skipping', { channelId: channel.id, creatorId });
       return;
+    }
+
+    // Best-effort: link this first ticket to a pending invite detection.
+    try {
+      await inviteDetectionService.linkTicket(creatorId, channel.id, channel.name);
+    } catch (linkErr) {
+      logger.warn('Invite detection: linkTicket failed', {
+        channelId: channel.id,
+        creatorId,
+        error: linkErr instanceof Error ? linkErr.message : String(linkErr),
+      });
     }
 
     const content = TICKET_WELCOME_MESSAGE.replace('{user}', `<@${creatorId}>`);
