@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-03 — Invite auto-detection approval queue **LIVE** (`161.118.164.85`, git HEAD `e60ed28`, app + dashboard rebuild; 49 backfilled detections pending approval, task counts unchanged, health healthy, All systems online). Previous live: member join welcome (`c206c5d`).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-03 — Inviter auto-fill **LIVE** (`161.118.164.85`, git HEAD `7a4dc76`, app-only rebuild; saving an inviter ID with empty name auto-fills the Discord display name; live REST lookup verified; health healthy, All systems online). Previous live: invite approval queue + backfill (`e60ed28`, 49 pending).
 
 ---
 

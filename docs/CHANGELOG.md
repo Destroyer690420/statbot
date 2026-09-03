@@ -8,6 +8,7 @@
 
 ## 2026-09-03
 ### Deployed
+- **Inviter auto-fill deployed** (`161.118.164.85`) at commit `7a4dc76` (app-only rebuild, no migration, no command redeploy). Saving a pending invite with an inviter ID + empty name now auto-fills the current Discord display name server-side (bot-token REST lookup, best-effort); Approve falls back the same way. Verified: compiled code live, live REST lookup as the bot resolves a real user, health healthy, boot "All systems online!". Tests: 4 new auto-fill cases (20/20 invite suite).
 - **Invite auto-detection approval queue deployed** (`161.118.164.85`) at commits `ca4471e` + `e60ed28` (app + dashboard rebuild, backup `rtm-backup-20260903-ca4471e.tar.gz`). Migration applied as an excerpt (`InviteDetection` table + 3 `AuditAction` values; full-file re-run avoided per the 2026-08-12 rule). Backfill `--since 2026-08-29` run on host: 49 members joined → **49 staged (31 with ticket)**, inviters unknown. Follow-up `e60ed28` fixed `schema.prisma` missing the `INVITE_*` enum values (first build staged rows but dropped their audits non-fatally) + repair script inserted the 49 missing `INVITE_DETECTED` audits. Verified: health healthy (DB+Redis), boot "All systems online!" + "Invite tracker: snapshot complete", dashboard 200, task counts unchanged (149/6/17/7/55/366). No slash-command redeploy. Bundles + host scratch cleaned.
 
 ## 2026-08-27
