@@ -184,13 +184,14 @@ Week params (`weekStart`/`weekEnd`) accepted in **query or body** (parsed as Dat
 | GET | `/commissions/inviters/:inviterId` | Inviter detail | week params | `{ inviterName, inviterType, status, referrals[{referralId, inviteeName, inviteeTasks, bonusAmount, perTaskAmount, isSuccessful, bonusPaid}], totalBonus, totalPerTask, totalCommission }` |
 | GET | `/commissions/referrals` | All referrals | — | `Referral[]` |
 | POST | `/commissions/referrals` | Create referral (admin) | `{ inviterId, inviterName, inviteeId, inviteeName, inviterType }` (`ticketId` accepted by service but NOT in zod) | 201; 400 dup invitee+inviter |
-| PATCH | `/commissions/referrals/:referralId` | Update (names/ticketId) | `{ inviterName?, inviteeName?, ticketId? nullable }` | 403; 404 |
+| PATCH | `/commissions/referrals/:referralId` | Update (names, inviter/invitee IDs, ticketId; inviter change re-derives type + chain) | `{ inviterId?, inviteeId? (snowflakes), inviterName?, inviteeName?, ticketId? nullable }` | 403; 404; 400 |
 | DELETE | `/commissions/referrals/:referralId` | Delete | — | 403; 400 |
 | POST | `/commissions/pay-inviter/:inviterId` | Pay one inviter (batch + items + referral flags) | — | 403; 400 |
 | POST | `/commissions/pay-all` | Pay all inviters in one batch | — | 403; 400 `'No unpaid commissions available.'` |
 | GET | `/commissions/invite-detections` | Approval queue (auto-detected joins) | `status?` (`pending` default, `all`), `limit?` (default 100, cap 500) | 500 |
 | POST | `/commissions/invite-detections/:id/approve` | Approve → creates the real Referral | — | 403; 400 (unknown inviter / dup / already handled) |
 | POST | `/commissions/invite-detections/:id/reject` | Reject a pending detection | — | 403; 400 |
+| PATCH | `/commissions/invite-detections/:id` | Edit a pending detection (set inviter etc.) | `{ inviterId? (snowflake, nullable), inviterName? (nullable), inviteeName? }` | 403; 400 |
 | GET | `/commissions/export/csv` | CSV | `batchId?`, week params | `commission-batch-<id>-<ts>.csv`; headers `Inviter Name, Inviter Type, Invitee Name, Bonus (₹), Per-Task (₹), Total Commission (₹), Status` |
 | GET | `/commissions/batches` | Batch history | `limit?` (default 20, cap 100) | 500 |
 | GET | `/commissions/batches/:batchId` | Batch detail | — | 404 |
