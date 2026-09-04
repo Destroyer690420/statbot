@@ -50,3 +50,25 @@ export function buildOutreachRows(inputs: OutreachRowInput[]): OutreachRow[] {
 
   return rows.sort((a, b) => (a.channelName ?? '').localeCompare(b.channelName ?? ''));
 }
+
+/**
+ * Placeholder tag workers are mentioned with in the daily outreach message.
+ * Same `{user}` convention as the ticket welcome and #invites welcome.
+ */
+export const OUTREACH_USER_PLACEHOLDER = '{user}';
+
+/**
+ * Pure formatter: tags the ticket's worker in the daily outreach message.
+ * - `{user}` placeholders are replaced with the worker mention.
+ * - Messages without the placeholder get the mention prepended, so previously
+ *   saved custom messages start tagging with no dashboard edit needed.
+ * - Unknown worker (null) returns the message unchanged — never throws.
+ */
+export function formatOutreachMessage(message: string, workerId: string | null): string {
+  if (!workerId) return message;
+  const mention = `<@${workerId}>`;
+  if (message.includes(OUTREACH_USER_PLACEHOLDER)) {
+    return message.split(OUTREACH_USER_PLACEHOLDER).join(mention);
+  }
+  return `${mention} ${message}`;
+}

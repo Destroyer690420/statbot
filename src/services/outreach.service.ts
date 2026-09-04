@@ -2,13 +2,13 @@ import { Client, TextChannel } from 'discord.js';
 import { outreachRepository, taskRepository } from '../database/repositories';
 import { auditLogService } from './audit.service';
 import { getIstDayBoundaries, isStaleDailyCycle } from '../utils/ist-time';
-import { buildOutreachRows, OutreachRowInput, OutreachRow, TicketTaskStatus } from '../utils/outreach-rows';
+import { buildOutreachRows, formatOutreachMessage, OutreachRowInput, OutreachRow, TicketTaskStatus } from '../utils/outreach-rows';
 import { DEFAULT_OUTREACH_MESSAGE } from '../config/constants';
 import { AuditAction } from '../types';
 import { getAllAdminIds } from '../utils/permissions';
 import { logger } from '../utils/logger';
 
-export { buildOutreachRows, OutreachRowInput, OutreachRow, TicketTaskStatus };
+export { buildOutreachRows, formatOutreachMessage, OutreachRowInput, OutreachRow, TicketTaskStatus };
 
 export interface OutreachStatus {
   istDate: string;
@@ -115,6 +115,12 @@ class OutreachService {
     const freshRows = await outreachRepository.findAll();
     const selected = freshRows.filter((r) => r.selected);
 
+    // Warm the member cache so each ticket's worker can be tagged in the
+    // message (same pattern as resolveWorkerNames). Best-effort per guild.
+    for (const guild of discordClient.guilds.cache.values()) {
+      await guild.members.fetch().catch(() => undefined);
+    }
+
     const sent: SendResult[] = [];
     for (const row of selected) {
       try {
@@ -122,7 +128,16 @@ class OutreachService {
         if (!channel || !(channel instanceof TextChannel)) {
           throw new Error('Channel not found or not a text channel.');
         }
-        await channel.send(message);
+        const workerId =
+          channel.members.filter((m) => !m.user.bot && !getAllAdminIds().includes(m.id)).first()?.id ??
+          null;
+        const content = formatOutreachMessage(message, workerId);
+        if (!workerId) {
+          logger.warn('Outreach sending untagged: no worker found in ticket', {
+            channelId: row.channelId,
+          });
+        }
+        await channel.send(content);
         await outreachRepository.setMessageSent(row.channelId, new Date());
         sent.push({ channelId: row.channelId, channelName: channel.name, ok: true });
       } catch (error) {

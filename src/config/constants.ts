@@ -40,9 +40,9 @@ export const TASK_ID_PATTERN = /^[A-Za-z0-9 _#-]{1,32}$/;
 
 /** Reddit URL regex pattern */
 export const REDDIT_URL_PATTERN = /^https?:\/\/(www\.|old\.|new\.)?reddit\.com\/.+/i;
-/** Default daily worker outreach message (configurable via OutreachSettings) */
+/** Default daily worker outreach message (configurable via OutreachSettings; {user} tags the ticket's worker) */
 export const DEFAULT_OUTREACH_MESSAGE =
-  'Hey, I have got a post and a comment for you. wanna do it? message me once you are free';
+  'Hey {user}, I have got a post and a comment for you. wanna do it? message me once you are free';
 
 /** Welcome message sent automatically when a ticket channel is created (tag placeholder {user} is replaced) */
 export const TICKET_WELCOME_MESSAGE = 'Hey, {user} Can you please share your reddit profile link?';

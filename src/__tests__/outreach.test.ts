@@ -1,5 +1,5 @@
 import { getIstDayBoundaries, isStaleDailyCycle } from '../utils/ist-time';
-import { buildOutreachRows, OutreachRowInput } from '../utils/outreach-rows';
+import { buildOutreachRows, formatOutreachMessage, OutreachRowInput } from '../utils/outreach-rows';
 
 describe('getIstDayBoundaries', () => {
   it('returns the IST day key for a UTC instant', () => {
@@ -134,5 +134,33 @@ describe('buildOutreachRows', () => {
   it('serializes messageSentAt when present', () => {
     const rows = buildOutreachRows([base]);
     expect(rows[0].messageSentAt).toBe('2026-08-17T19:00:00.000Z');
+  });
+});
+
+describe('formatOutreachMessage', () => {
+  it('replaces the {user} placeholder with the worker mention', () => {
+    expect(formatOutreachMessage('Hey {user}, got work for you', '123')).toBe(
+      'Hey <@123>, got work for you',
+    );
+  });
+
+  it('replaces every occurrence of the placeholder', () => {
+    expect(formatOutreachMessage('{user} hi {user}', '123')).toBe('<@123> hi <@123>');
+  });
+
+  it('prepends the mention when the message has no placeholder', () => {
+    expect(formatOutreachMessage('Hey, got work for you', '123')).toBe(
+      '<@123> Hey, got work for you',
+    );
+  });
+
+  it('returns the message unchanged when the worker is unknown', () => {
+    expect(formatOutreachMessage('Hey {user}, got work for you', null)).toBe(
+      'Hey {user}, got work for you',
+    );
+  });
+
+  it('returns an empty message unchanged when the worker is unknown', () => {
+    expect(formatOutreachMessage('', null)).toBe('');
   });
 });

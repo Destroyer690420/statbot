@@ -59,7 +59,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXIST
 
 ## 5. Backend
 
-- **Service** `src/services/outreach.service.ts`: `getStatus(client)`, `saveSelection(selections)`, `sendMessage(client, senderId)` (broadcasts only to `selected` channels; per-channel try/catch → `{ sent: [{channelId, channelName, ok, error?}] }`; audit `OUTREACH_MESSAGE_SENT` per channel), `onWorkerMessage(channelId, authorId)` (marks Available — called from `messageCreate.ts` first, best-effort, never throws), `getMessage` / `updateMessage` (OutreachSettings).
+- **Service** `src/services/outreach.service.ts`: `getStatus(client)`, `saveSelection(selections)`, `sendMessage(client, senderId)` (broadcasts only to `selected` channels; per-channel try/catch → `{ sent: [{channelId, channelName, ok, error?}] }`; audit `OUTREACH_MESSAGE_SENT` per channel; each send **tags the ticket's worker** — see worker tagging below), `onWorkerMessage(channelId, authorId)` (marks Available — called from `messageCreate.ts` first, best-effort, never throws), `getMessage` / `updateMessage` (OutreachSettings).
 - **Repository** `src/database/repositories/outreach.repository.ts` (Prisma, upserts/transactions).
 - **Routes** `src/api/routes/outreach.ts` (factory `createOutreachRoutes(discordClient)`; all `requireDashboardAdmin` — middleware extracted to `src/api/middleware/auth.ts`, shared with discord routes):
   - `GET /api/v1/outreach` → `{ istDate, message, tickets[] }`
@@ -74,12 +74,18 @@ Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXIST
 - Table (desktop) + cards (mobile, Tasks pattern); columns Ticket | Worker | Available | Post | Comment. **Rows = selected tickets only** (`tickets.filter(t => t.selected)` — the API returns all tickets with their `selected` flag; the modal needs the full list to add new ones).
 - Toolbar: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; lists all tickets with current state; draft until **Save Selection** → `PUT /outreach/selection`), `Send Message` (confirm dialog; disabled when 0 selected; inline per-channel ✅/❌ result), Refresh.
 - Auto-refresh every 30s (`refetchInterval`); subtitle shows today's IST date.
-- Settings page: **Daily Outreach Message** card (textarea, ≤2000 chars, Save → `PUT /outreach/settings`).
+- Settings page: **Daily Outreach Message** card (textarea, ≤2000 chars, Save → `PUT /outreach/settings`; supports the `{user}` tag placeholder — hint shown under the box).
 - Client fns in `dashboard/src/api/client.ts`: `getOutreach`, `getOutreachSettings`, `updateOutreachSettings`, `saveOutreachSelection`, `sendOutreachMessage`.
+
+## 6b. Worker tagging in the sent message
+
+- `sendMessage` resolves each ticket's worker (first non-bot, non-admin in `channel.members` — same rule as the Worker column; members fetched once per guild beforehand) and formats the text with `formatOutreachMessage` (`src/utils/outreach-rows.ts`, pure/tested, re-exported by the service).
+- `{user}` in the message is replaced with `<@workerId>` (all occurrences); messages without the placeholder get the mention **prepended**, so previously saved custom texts start tagging with no dashboard edit; unknown worker (left server / not cached) sends the message untagged + `logger.warn`, never fails the channel.
+- Default message is `Hey {user}, I have got a post and a comment for you. wanna do it? message me once you are free` (`DEFAULT_OUTREACH_MESSAGE`); the stored `OutreachSettings` copy wins when customized.
 
 ## 7. Tests
 
-`src/__tests__/outreach.test.ts` (pure functions only — importing the service would pull env/DB): IST boundary math, `isStaleDailyCycle`, `buildOutreachRows` (selection, availability gating, post/comment derivation, no-tickets case). 13 tests; suite total 144.
+`src/__tests__/outreach.test.ts` (pure functions only — importing the service would pull env/DB): IST boundary math, `isStaleDailyCycle`, `buildOutreachRows` (selection, availability gating, post/comment derivation, no-tickets case), `formatOutreachMessage` (placeholder replaced, all occurrences, prepend fallback, null worker). 19 tests; suite total 185.
 
 ## 8. Limitations / Notes
 

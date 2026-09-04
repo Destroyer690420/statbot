@@ -440,6 +440,7 @@ export function Settings() {
           </div>
           <p className="text-dark-400 text-sm mb-4">
             Sent to the selected tickets when you press "Send Message" on the Daily Outreach page.
+            Use <code className="text-primary-300">{'{user}'}</code> anywhere in the message to tag that ticket's worker.
           </p>
 
           {outreachQuery.isLoading ? (
@@ -453,7 +454,7 @@ export function Settings() {
               rows={3}
               maxLength={2000}
               className="input-field w-full"
-              placeholder="Hey, I have got a post and a comment for you. wanna do it? message me once you are free"
+              placeholder="Hey {user}, I have got a post and a comment for you. wanna do it? message me once you are free"
             />
           )}
 
