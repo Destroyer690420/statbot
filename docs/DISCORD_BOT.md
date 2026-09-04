@@ -23,11 +23,11 @@
 |---|---|---|
 | Admin | `ADMIN_USER_IDS` | full command access |
 | Manager | `MANAGER_USER_IDS` | `isAdminOrManager` commands |
-| Anyone | — | `/status`, `/find`, `/help` |
+| Anyone | — | `/status`, `/find`, `/help`, `/mystats` (own), `/myinvites` (own) |
 
 Permission checks are **per-command** (top of `execute()`), not centralized. `getAllAdminIds()` = admins ∪ managers (used for overdue pings and GoPartTime worker detection).
 
-## 3. Slash Commands (12)
+## 3. Slash Commands (14)
 
 | Command | Permission | Summary |
 |---|---|---|
@@ -43,6 +43,8 @@ Permission checks are **per-command** (top of `execute()`), not centralized. `ge
 | `/send-now` | Admin/Manager | `task_id`, `reminder` (20h/70h). Cancels main + retry jobs, sets `dueAt = now`, fires immediately (delay 0). Requires task non-terminal and reminder not completed. |
 | `/help` | Anyone | Ephemeral help embed for all commands ("🔒 = Admin only"). |
 | `/referral add` | Admin | `inviter` (user, required), `invitee` (user, required), `ticket` (string, required, e.g. `ticket-0036` or `#channelId`). Rejects `inviter.id === invitee.id`. Inviter type from **hardcoded list** `SPECIAL_INVITER_IDS = ['582595416294555649','1202294567706316911','1506900129792135211']` → `special`, else `normal`. Resolves ticket name via `guild.channels.fetch`. Calls `commissionService.createReferral`. |
+| `/mystats` | Anyone (own) + Admin/Manager lookup | Self-service worker stats, **public reply** (for ticket use). Sections: This Week (payout-week Sun–Sat IST: done posts/comments, paid ₹, pending ~₹) + All Time (total posts/comments, completed, in progress, paid ₹, pending ~₹). Paid = payout item in a paid batch (actual amounts); pending = COMPLETED tasks (all insights received) with no paid item, estimated at current rates; cancelled excluded. Optional `user` param — admins/managers only. `memberStatsService.getWorkerStats` (pure math in `utils/member-stats.ts`). Empty state when no tasks. |
+| `/myinvites` | Anyone (own) + Admin/Manager lookup | Self-service inviter progress, **public reply**. Per direct invitee: mention, ticket (`no ticket yet` when null), tasks X/threshold (2 normal, 1 special — ✅ when met), bonus paid/pending; totals (invited, tickets, qualified, bonus + per-task paid/pending). Reuses `computeReferralStatus`/`getPayableItems`; commission item exists = paid (batches always `paidAt`-set). Optional `user` param — admins/managers only. Direct invites only (no indirect rows). Empty state when no referrals. |
 
 All commands audit `COMMAND_USED` (user, `/<command>`) before executing; failures reply `❌ An error occurred while executing this command.` (ephemeral).
 
@@ -99,6 +101,7 @@ Bot messages and DMs ignored. `outreachService.onWorkerMessage` runs first on ev
 | `taskStatusEmbed(task, reminders)` | `/status` |
 | `taskListEmbed(title, tasks, page, totalPages)` | `/find`, `/pending`, `/completed` |
 | `statsEmbed(stats)` | `/stats` |
+| `workerStatsEmbed(displayName, stats)` / `inviterStatsEmbed(stats)` | `/mystats` / `/myinvites` |
 | `errorEmbed` / `successEmbed` / `warningEmbed` | all |
 | `helpEmbed()` | `/help` |
 | `submissionInstructionEmbed(instruction)` | GoPartTime delivery (worker instruction message) |
@@ -144,7 +147,7 @@ reminder unanswered after 3 sends (initial @dueAt, +2h, +6h) OR worker failure
 
 - Entry: `src/bot/index.ts`, `src/bot/deploy-commands.ts`
 - Events: `src/bot/events/interactionCreate.ts`, `src/bot/events/messageCreate.ts`, `src/bot/events/channelCreate.ts`, `src/bot/events/guildMemberAdd.ts`
-- Commands: `src/bot/commands/{task,status,find,delete,pending,completed,overdue,stats,reschedule,send-now,help,referral}.ts`
+- Commands: `src/bot/commands/{task,status,find,delete,pending,completed,overdue,stats,reschedule,send-now,help,referral,mystats,myinvites}.ts`
 - Embeds: `src/bot/embeds/index.ts`
 - Sending: `src/scheduler/worker.ts` (reminder embeds + overdue pings)
 - Permissions: `src/utils/permissions.ts`

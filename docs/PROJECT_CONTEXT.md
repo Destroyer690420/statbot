@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-04 — Outreach worker tagging **LIVE** (`161.118.164.85`, git HEAD `7a59efd`, app + dashboard rebuild; daily outreach message tags each ticket's worker; health healthy, All systems online). Previous live: inviter auto-fill (`7a4dc76`) + invite approval queue + backfill (`e60ed28`, 49 pending).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-04 — Self-service `/mystats` + `/myinvites` **LIVE** (`161.118.164.85`, git HEAD `441fc12`, app-only rebuild + 14 commands registered; workers see week/all-time tasks, paid vs pending ₹; inviters see per-invitee ticket + X/threshold + bonus; health healthy, All systems online). Previous live: outreach worker tagging (`7a59efd`) + inviter auto-fill (`7a4dc76`) + invite approval queue + backfill (`e60ed28`, 49 pending).
 
 ---
 
@@ -247,6 +247,9 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-09-04**: **DEPLOYED self-service /mystats + /myinvites** (`161.118.164.85`) at commit `441fc12` (app-only rebuild; backup `rtm-backup-20260904-073430-pre-441fc12.tar.gz`; no DB migration — schema unchanged; dashboard untouched; commands registered via in-container `node dist/bot/deploy-commands.js` — 14 total, local `.env` absent so host-side run). Public (non-ephemeral) replies for ticket use; optional `user` lookup gated to admins/managers. `/mystats`: This Week (payout-week Sun–Sat IST) + All Time — totals posts/comments, completed/in-progress, paid ₹ (actual, item in paid batch) vs pending ~₹ (COMPLETED-only, current rates); cancelled excluded. `/myinvites`: per direct invitee — ticket (`no ticket yet`), tasks X/threshold (2 normal, 1 special), bonus paid/pending + commission totals. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login + invite snapshot, compiled commands + `member-stats` in `dist/`, 194/194 jest pass (9 new), backend build clean. Bundles + host scratch cleaned.
+  Implementation: `src/utils/member-stats.ts` (pure `buildWorkerStats`/`isWorkDone`), `src/services/member-stats.service.ts` (`getWorkerStats`/`getInviterStats`, reuses `computeReferralStatus`/`getPayableItems`), `src/database/repositories/task.repository.ts` (`findAllByWorkerId`), `src/database/repositories/payout.repository.ts` (`findItemsByWorkerId`), `src/bot/commands/mystats.ts` + `myinvites.ts`, `src/bot/embeds/index.ts` (`workerStatsEmbed`/`inviterStatsEmbed`), wiring in `deploy-commands.ts` + `interactionCreate.ts` + `help.ts`, `src/__tests__/member-stats.test.ts`.
 
 - **2026-09-04**: **DEPLOYED outreach worker tagging** (`161.118.164.85`) at commit `7a59efd` (app + dashboard rebuild; backup `rtm-backup-20260904-061828-pre-7a59efd.tar.gz`; no DB migration — schema unchanged; no slash-command redeploy). `POST /api/v1/outreach/send` now tags each ticket's worker (`{user}` → `<@workerId>`; prepend fallback; untagged + warn on unknown worker). Verified live: health healthy (DB+Redis), boot "All systems online!" + invite snapshot, compiled `formatOutreachMessage` + new default in `dist/`, dashboard 200 with bundle `index-DmgAvYSt.js` (hash matches local build, hint text present), 185/185 jest pass, backend + dashboard builds clean. Bundles + host scratch cleaned.
   Implementation: `src/utils/outreach-rows.ts` (`OUTREACH_USER_PLACEHOLDER`, `formatOutreachMessage`), `src/services/outreach.service.ts` (member-cache warm + per-channel worker resolve + format), `src/config/constants.ts:43` (default text), `dashboard/src/pages/Settings.tsx` (hint + placeholder), `src/__tests__/outreach.test.ts` (5 new cases).
