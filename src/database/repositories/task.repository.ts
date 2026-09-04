@@ -96,6 +96,13 @@ export class TaskRepository {
     });
   }
 
+  async findAllByWorkerId(workerId: string) {
+    return getDb().task.findMany({
+      where: { assignedUserId: workerId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findByAssignedUserIdAndStatus(userId: string, status: TaskStatus) {
     return getDb().task.findMany({
       where: { assignedUserId: userId, status: status as any },

@@ -2,6 +2,8 @@ import { EmbedBuilder } from 'discord.js';
 import { Task, Reminder, TaskStats, ReminderType } from '../../types';
 import { InstructionMessage } from '../../utils/plain-task-message';
 import { displayTaskId } from '../../utils/task-display';
+import { WorkerStats, TaskMoneySplit } from '../../utils/member-stats';
+import { InviterStats } from '../../services/member-stats.service';
 import { COLORS } from '../../config/constants';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -138,6 +140,87 @@ export function statsEmbed(stats: TaskStats): EmbedBuilder {
 }
 
 /**
+ * Format a rupee amount without trailing noise (₹100, not ₹100.00).
+ */
+function formatRs(amount: number): string {
+  return `₹${Number.isInteger(amount) ? amount : amount.toFixed(2)}`;
+}
+
+function formatMoneySplit(split: TaskMoneySplit, pending: boolean): string {
+  const prefix = pending ? '~' : '';
+  return `${prefix}${formatRs(split.amount)} (${split.tasks} task${split.tasks === 1 ? '' : 's'})`;
+}
+
+/**
+ * Build a worker's personal stats embed (week + all-time sections).
+ */
+export function workerStatsEmbed(displayName: string, stats: WorkerStats): EmbedBuilder {
+  const w = stats.week;
+  const a = stats.allTime;
+  return new EmbedBuilder()
+    .setTitle(`📊 Stats — ${displayName}`)
+    .setColor(COLORS.INFO)
+    .addFields(
+      {
+        name: `📅 This Week (${stats.weekLabel})`,
+        value: [
+          `✅ ${w.completed} done (📝 ${w.posts} · 💬 ${w.comments})`,
+          `💰 Paid: ${formatMoneySplit(w.paid, false)}`,
+          `⏳ Pending: ${formatMoneySplit(w.pending, true)}`,
+        ].join('\n'),
+        inline: false,
+      },
+      {
+        name: '📊 All Time',
+        value: [
+          `🗂️ ${a.total} tasks (📝 ${a.posts} · 💬 ${a.comments})`,
+          `✅ ${a.completed} completed · 🔄 ${a.inProgress} in progress`,
+          `💰 Paid: ${formatMoneySplit(a.paid, false)}`,
+          `⏳ Pending: ${formatMoneySplit(a.pending, true)}`,
+        ].join('\n'),
+        inline: false,
+      },
+    )
+    .setFooter({ text: 'Pending = all insights received, awaiting payout • Reddit Task Manager' })
+    .setTimestamp();
+}
+
+/**
+ * Build an inviter's referral progress embed (direct invites only).
+ */
+export function inviterStatsEmbed(stats: InviterStats): EmbedBuilder {
+  const t = stats.totals;
+  const lines = stats.invitees.slice(0, 15).map((inv) => {
+    const ticket = inv.ticketId ? `🎟 \`${inv.ticketId}\`` : '🎟 no ticket yet';
+    const progress = inv.thresholdMet ? '✅' : '⏳';
+    const bonus = inv.bonusPaid > 0
+      ? `${formatRs(inv.bonusPaid)} paid`
+      : inv.bonusPending > 0
+        ? `~${formatRs(inv.bonusPending)} pending`
+        : '—';
+    return `<@${inv.inviteeId}> · ${ticket} · tasks **${inv.tasks}/${inv.threshold}** ${progress} · bonus ${bonus}`;
+  });
+  if (stats.invitees.length > 15) {
+    lines.push(`…and ${stats.invitees.length - 15} more`);
+  }
+  return new EmbedBuilder()
+    .setTitle(`🔗 Invites — ${stats.inviterName} (${stats.inviterType})`)
+    .setColor(COLORS.INFO)
+    .setDescription(lines.join('\n'))
+    .addFields({
+      name: '📊 Totals',
+      value: [
+        `👥 ${t.invited} invited · 🎟 ${t.ticketsCreated} tickets · ✅ ${t.qualified} qualified`,
+        `💰 Bonus: ${formatRs(t.bonusPaid)} paid · ~${formatRs(t.bonusPending)} pending`,
+        `💰 Per-task: ${formatRs(t.perTaskPaid)} paid · ~${formatRs(t.perTaskPending)} pending`,
+      ].join('\n'),
+      inline: false,
+    })
+    .setFooter({ text: 'Direct invites only • Reddit Task Manager' })
+    .setTimestamp();
+}
+
+/**
  * Build an error embed.
  */
 export function errorEmbed(message: string): EmbedBuilder {
@@ -224,6 +307,14 @@ export function helpEmbed(): EmbedBuilder {
       {
         name: '🔗 /referral add',
         value: 'Add a referral link (admin only).\n`/referral add inviter invitee type`\n🔒',
+      },
+      {
+        name: '📊 /mystats',
+        value: 'Check your task stats: done, paid and pending (week + all time).\n`/mystats [user]` (user = admins only)',
+      },
+      {
+        name: '🔗 /myinvites',
+        value: 'Check your invites: tickets, task progress and bonus.\n`/myinvites [user]` (user = admins only)',
       },
     )
     .setFooter({ text: '🔒 = Admin only • Reddit Task Manager' });

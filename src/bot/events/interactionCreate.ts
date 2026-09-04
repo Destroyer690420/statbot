@@ -16,6 +16,8 @@ import * as rescheduleCmd from '../commands/reschedule';
 import * as sendNowCmd from '../commands/send-now';
 import * as helpCmd from '../commands/help';
 import * as referralCmd from '../commands/referral';
+import * as mystatsCmd from '../commands/mystats';
+import * as myinvitesCmd from '../commands/myinvites';
 
 const commands = new Map<string, { execute: (interaction: ChatInputCommandInteraction) => Promise<void> }>();
 commands.set('task', taskCmd);
@@ -30,6 +32,8 @@ commands.set('reschedule', rescheduleCmd);
 commands.set('send-now', sendNowCmd);
 commands.set('help', helpCmd);
 commands.set('referral', referralCmd);
+commands.set('mystats', mystatsCmd);
+commands.set('myinvites', myinvitesCmd);
 
 /**
  * Handle interactionCreate event — route slash commands.

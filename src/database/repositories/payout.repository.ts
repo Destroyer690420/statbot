@@ -73,6 +73,12 @@ export class PayoutRepository {
     });
   }
 
+  async findItemsByWorkerId(workerId: string) {
+    return getDb().payoutItem.findMany({
+      where: { workerId },
+    });
+  }
+
   async findAllItems() {
     return getDb().payoutItem.findMany();
   }
