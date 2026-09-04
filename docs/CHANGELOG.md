@@ -2,9 +2,14 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
-## Unreleased (implemented 2026-09-03, NOT yet deployed)
+## 2026-09-04
+### Deployed
+- **Outreach worker tagging deployed** (`161.118.164.85`) at commit `7a59efd` (app + dashboard rebuild, backup `rtm-backup-20260904-061828-pre-7a59efd.tar.gz`). `POST /api/v1/outreach/send` now mentions each ticket's worker (`{user}` → `<@workerId>`; prepend fallback; untagged + warn on unknown worker). Verified: health healthy (DB+Redis), boot "All systems online!", compiled `formatOutreachMessage` + new default live in `dist/`, dashboard 200 with bundle `index-DmgAvYSt.js` (hash matches local build, hint text present), 185/185 jest pass. No DB migration, no slash-command redeploy. Bundles + host scratch cleaned.
 ### Added
 - **Daily outreach tags the worker**: `POST /api/v1/outreach/send` now mentions the ticket's worker in every sent message. New pure `formatOutreachMessage(message, workerId)` (`src/utils/outreach-rows.ts`, re-exported by the service): `{user}` placeholders → `<@workerId>` (all occurrences); messages without the placeholder get the mention prepended (previously saved custom texts tag with no dashboard edit); unknown worker sends untagged + warn, never fails the channel. `sendMessage` warms the guild member cache, then resolves each ticket's worker with the same first-non-bot-non-admin rule as the Worker column. Default message updated to `Hey {user}, I have got a post and a comment for you…`; Settings page gained a "`{user}` tags the worker" hint. Tests: 5 new `formatOutreachMessage` cases (19/19 outreach file, 185/185 total). No DB migration.
+
+## Unreleased (implemented 2026-09-03, NOT yet deployed)
+### Added
 - **Referral editing by IDs + pending-invite editing**: `PATCH /commissions/referrals/:id` now accepts `inviterId`/`inviteeId` (snowflake-validated) alongside names + ticket — an inviter change re-derives special/normal type from the hardcoded list and recomputes `indirectSpecialInviterId` via the full chain walk (pair stays unique, keep-first). New `PATCH /commissions/invite-detections/:id` edits pending rows (set the inviter on unknown/backfilled rows before approving). Dashboard Referrals edit modal gained Inviter/Invitee ID fields; Pending Invites rows gained an Edit (pencil) modal. Tests: 5 new `updateReferral` cases + 3 new `updateDetection` cases (176/176 total).
 
 ## 2026-09-03
