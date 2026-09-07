@@ -38,6 +38,11 @@ const envSchema = z.object({
 
   // Owner panel PIN
   OWNER_PIN: z.string().default('7977'),
+
+  // GoPartTime automation vault (AES-256-GCM hex key, 32 bytes). Empty = vault disabled.
+  GOPARTTIME_SESSION_KEY: z.string().default(''),
+  // Real GoPartTime acceptance behind a flag. Default false = dry-run only.
+  GOPARTTIME_AUTO_ACCEPT: z.string().default('false').transform((v) => v === 'true'),
 });
 
 function loadEnv() {

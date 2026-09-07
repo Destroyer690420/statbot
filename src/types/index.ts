@@ -148,6 +148,14 @@ export enum AuditAction {
   INVITE_DETECTED = 'INVITE_DETECTED',
   INVITE_APPROVED = 'INVITE_APPROVED',
   INVITE_REJECTED = 'INVITE_REJECTED',
+  AUTOMATION_CYCLE_STARTED = 'AUTOMATION_CYCLE_STARTED',
+  AUTOMATION_CONTACT_SENT = 'AUTOMATION_CONTACT_SENT',
+  AUTOMATION_CONTACT_CONFIRMED = 'AUTOMATION_CONTACT_CONFIRMED',
+  AUTOMATION_TASK_ACCEPTED = 'AUTOMATION_TASK_ACCEPTED',
+  AUTOMATION_TASK_FAILED = 'AUTOMATION_TASK_FAILED',
+  AUTOMATION_BLOCKED = 'AUTOMATION_BLOCKED',
+  AUTOMATION_SESSION_UPDATED = 'AUTOMATION_SESSION_UPDATED',
+  AUTOMATION_STOPPED = 'AUTOMATION_STOPPED',
 }
 
 export interface AuditLog {
@@ -344,4 +352,48 @@ export interface ReminderJobData {
   type: ReminderType;
   isRetry: boolean;
   retryCount: number;
+}
+
+// ─── Automation (GoPartTime auto-accept) ───────────────────────
+
+export type AutomationCycleStatus = 'RUNNING' | 'DONE' | 'STOPPED';
+
+export type AutomationContactStatus =
+  | 'CONTACTED'
+  | 'CONFIRMED'
+  | 'RESERVED'
+  | 'ASSIGNED'
+  | 'TIMED_OUT'
+  | 'DECLINED'
+  | 'BUSY';
+
+export type AutomationTaskStatus =
+  | 'ELIGIBLE'
+  | 'SKIPPED_COMMENT'
+  | 'BLOCKED'
+  | 'DUPLICATE'
+  | 'NO_WORKER'
+  | 'WOULD_ACCEPT'
+  | 'ACCEPTED'
+  | 'FAILED';
+
+export interface DetectedGoPartTimeTask {
+  subTaskId: string;
+  taskId: string;
+  type: 'post' | 'comment';
+  subreddit: string | null;
+  title: string | null;
+  postLink: string | null;
+  contentHtml: string;
+  images: { order: number; url: string }[];
+  payment: string | null;
+  deadline: string | null;
+  karmaLimit: number | null;
+  earnings: number | null;
+}
+
+export interface ValidationResult {
+  eligible: boolean;
+  reason: AutomationTaskStatus;
+  detail?: string;
 }

@@ -91,6 +91,23 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 
 ---
 
+## 7b. Automation — `src/api/routes/automation.ts` (JWT + `requireDashboardAdmin`)
+
+| Method | Path | Purpose | Body | Errors |
+|---|---|---|---|---|
+| GET | `/automation/status` | Master switches + running/last cycle + blocked count | — | 500 |
+| PUT | `/automation/settings` | `{ enabled, dryRun, pollEnabled }` | settings | 400; 500 |
+| POST | `/automation/start?forced=1` | Run one cycle now | — | 400 |
+| POST | `/automation/stop` | Mark running cycle STOPPED (no new accepts) | — | 500 |
+| GET | `/automation/cycles` | Last 20 cycles | — | 500 |
+| GET | `/automation/cycles/:id` | Cycle + contacts + task logs | — | 404; 500 |
+| GET | `/automation/blocked` | Blocked subreddit list | — | 500 |
+| PUT | `/automation/blocked` | Add (normalized exact match) | `{ subreddit, reason? }` | 400; 500 |
+| DELETE | `/automation/blocked/:subreddit` | Remove | — | 500 |
+| POST | `/automation/session` | Save cookies to encrypted vault | `{ sessionToken ≥50ch, csrfToken, callbackUrl?, nextAction 64-hex?, userAgent? }` | 400 vault unconfigured/invalid |
+
+---
+
 ## 8. Reminders — `src/api/routes/reminders.ts` (JWT; mounted at `/api/v1` AFTER uploads)
 
 | Method | Path | Purpose | Params | Errors |

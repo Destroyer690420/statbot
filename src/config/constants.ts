@@ -35,6 +35,26 @@ export const QUEUE_NAME = 'reminder-queue';
 /** Source identifier for tasks delivered from the GoPartTime extension */
 export const GOPARTTIME_SOURCE = 'goparttime';
 
+/** Automated GoPartTime acceptance — human-like, Oracle-safe schedule */
+export const AUTOMATION = {
+  /** Mandatory scans each hour (minutes) + routine 10-min grid */
+  SCAN_MINUTES: [0, 10, 11, 20, 30, 40, 50] as const,
+  /** Jitter windows (ms): mandatory scans tighter, routine scans wider */
+  MANDATORY_JITTER_MS: 30 * 1000,
+  ROUTINE_JITTER_MS: 60 * 1000,
+  /** Worker Stage-2 confirmation window */
+  CONTACT_WINDOW_MS: 5 * 60 * 1000,
+  /** Max accepted posts per worker per IST day */
+  DAILY_POST_CAP: 2,
+  /** Stage-2 confirmation message (tagged worker) */
+  CONFIRM_MESSAGE: 'hey {user}, should i send a post?',
+  /** Random pre-accept delay to look human (never instant snipe) */
+  ACCEPT_DELAY_MIN_MS: 3000,
+  ACCEPT_DELAY_MAX_MS: 8000,
+  /** Backoff on 429 / checkpoint (keep browser context alive) */
+  BACKOFF_MS: [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000] as const,
+} as const;
+
 /** Task ID validation pattern (alphanumeric, spaces, hash, hyphens, underscores, 1-32 chars) */
 export const TASK_ID_PATTERN = /^[A-Za-z0-9 _#-]{1,32}$/;
 

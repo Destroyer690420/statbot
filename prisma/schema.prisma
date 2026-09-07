@@ -56,9 +56,14 @@ enum AuditAction {
   TASK_ACCEPTED
   ASSIGNMENT_RETRIED
   OUTREACH_MESSAGE_SENT
-  INVITE_DETECTED
-  INVITE_APPROVED
-  INVITE_REJECTED
+  AUTOMATION_CYCLE_STARTED
+  AUTOMATION_CONTACT_SENT
+  AUTOMATION_CONTACT_CONFIRMED
+  AUTOMATION_TASK_ACCEPTED
+  AUTOMATION_TASK_FAILED
+  AUTOMATION_BLOCKED
+  AUTOMATION_SESSION_UPDATED
+  AUTOMATION_STOPPED
 }
 
 enum ReferralStatus {
@@ -312,6 +317,83 @@ model TicketOnboarding {
   guideSentAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model BlockedSubreddit {
+  subreddit String   @id
+  reason    String?
+  createdAt DateTime @default(now())
+  createdBy String
+}
+
+model AutomationSettings {
+  id          String   @id @default("automation")
+  enabled     Boolean  @default(false)
+  dryRun      Boolean  @default(true)
+  pollEnabled Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+  updatedBy   String
+}
+
+model GoPartTimeSession {
+  id            String   @id @default("default")
+  sessionCipher String?
+  csrfCipher    String?
+  callbackUrl   String?
+  nextAction    String?
+  userAgent     String?
+  updatedAt     DateTime @updatedAt
+  updatedBy     String
+}
+
+model AutomationCycle {
+  id               String    @id
+  startedAt        DateTime  @default(now())
+  endedAt          DateTime?
+  status           String    @default("RUNNING")
+  tasksDetected    Int       @default(0)
+  eligiblePosts    Int       @default(0)
+  blocked          Int       @default(0)
+  duplicates       Int       @default(0)
+  commentsSkipped  Int       @default(0)
+  workersContacted Int       @default(0)
+  workersConfirmed Int       @default(0)
+  postsAccepted    Int       @default(0)
+  failures         Int       @default(0)
+  dryRun           Boolean   @default(true)
+
+  @@index([startedAt])
+  @@index([status])
+}
+
+model AutomationContact {
+  id          String    @id @default(cuid())
+  cycleId     String
+  channelId   String
+  workerId    String?
+  status      String    @default("CONTACTED")
+  sentAt      DateTime  @default(now())
+  expiresAt   DateTime
+  respondedAt DateTime?
+  messageId   String?
+
+  @@index([cycleId])
+  @@index([channelId, status])
+}
+
+model AutomationTaskLog {
+  id            String   @id @default(cuid())
+  cycleId       String
+  externalTaskId String
+  taskType      String
+  subreddit     String?
+  status        String
+  workerId      String?
+  failureReason String?
+  createdAt     DateTime @default(now())
+
+  @@index([cycleId])
+  @@index([externalTaskId])
 }
 
 model InviteDetection {

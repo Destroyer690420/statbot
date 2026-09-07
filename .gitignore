@@ -10,3 +10,6 @@ ssh-key-*.key.pub
 logs/
 
 /src/generated/prisma
+
+# GoPartTime automation vault (raw session cookies, captures, browser profile - never commit)
+.goparttime/

@@ -4,6 +4,7 @@ import { taskService } from '../../services/task.service';
 import { goparttimeService } from '../../services/goparttime.service';
 import { insightStorageService } from '../../services/insight-storage.service';
 import { outreachService } from '../../services/outreach.service';
+import { handleAutomationReply } from '../../services/automation/worker-manager.service';
 import { isSupportedImage, isValidRedditUrl } from '../../utils/validators';
 import { taskRepository, onboardingRepository } from '../../database/repositories';
 import { TaskStatus, AuditAction } from '../../types';
@@ -19,6 +20,9 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 
   try {
     await outreachService.onWorkerMessage(message.channel.id, message.author.id);
+
+    // Automation Stage-2: worker reply within the 5-min confirmation window.
+    await handleAutomationReply(message.channel.id, message.author.id).catch(() => undefined);
 
     // Ticket onboarding guide: once per new ticket, on the opener's first message after welcome
     await handleTicketGuide(message).catch((err) =>

@@ -124,6 +124,14 @@ async function main(): Promise<void> {
     const apiApp = createApiServer(discordClient);
     startApiServer(apiApp);
 
+    // 7. Start GoPartTime automation scheduler (7 scans/hour, jittered)
+    try {
+      const { startAutomationScheduler } = await import('./services/automation/scheduler');
+      startAutomationScheduler(discordClient);
+    } catch (error) {
+      logger.error('Automation scheduler failed to start', { error });
+    }
+
     logger.info('═══════════════════════════════════════════');
     logger.info('  ✅ All systems online!');
     logger.info('═══════════════════════════════════════════');
@@ -241,7 +249,11 @@ async function main(): Promise<void> {
 
       const { closeQueue } = await import('./scheduler/queue');
       const { closeWorker } = await import('./scheduler/worker');
+      const { stopAutomationScheduler } = await import('./services/automation/scheduler');
+      const { closePoller } = await import('./services/automation/poller.service');
 
+      stopAutomationScheduler();
+      await closePoller().catch(() => undefined);
       await closeWorker();
       await closeQueue();
 

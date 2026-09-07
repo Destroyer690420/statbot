@@ -419,3 +419,99 @@ CREATE INDEX IF NOT EXISTS "InviteDetection_createdAt_idx" ON "InviteDetection"(
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'INVITE_DETECTED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'INVITE_APPROVED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'INVITE_REJECTED';
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Automated GoPartTime Post Acceptance (Phase 1 foundation)
+-- ──────────────────────────────────────────────────────────────
+-- All tables IF NOT EXISTS; all enum values ADD VALUE IF NOT EXISTS.
+-- Schema-only (no data statements). Poller runs in persistent Chromium
+-- (Vercel bot wall blocks plain fetch); cookies live encrypted in
+-- GoPartTimeSession (AES-256-GCM, key GOPARTTIME_SESSION_KEY), never logged.
+CREATE TABLE IF NOT EXISTS "BlockedSubreddit" (
+  "subreddit" TEXT NOT NULL,
+  "reason" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "createdBy" TEXT NOT NULL,
+  CONSTRAINT "BlockedSubreddit_pkey" PRIMARY KEY ("subreddit")
+);
+
+CREATE TABLE IF NOT EXISTS "AutomationSettings" (
+  "id" TEXT NOT NULL DEFAULT 'automation',
+  "enabled" BOOLEAN NOT NULL DEFAULT false,
+  "dryRun" BOOLEAN NOT NULL DEFAULT true,
+  "pollEnabled" BOOLEAN NOT NULL DEFAULT false,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  "updatedBy" TEXT NOT NULL,
+  CONSTRAINT "AutomationSettings_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "GoPartTimeSession" (
+  "id" TEXT NOT NULL DEFAULT 'default',
+  "sessionCipher" TEXT,
+  "csrfCipher" TEXT,
+  "callbackUrl" TEXT,
+  "nextAction" TEXT,
+  "userAgent" TEXT,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  "updatedBy" TEXT NOT NULL,
+  CONSTRAINT "GoPartTimeSession_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "AutomationCycle" (
+  "id" TEXT NOT NULL,
+  "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "endedAt" TIMESTAMP(3),
+  "status" TEXT NOT NULL DEFAULT 'RUNNING',
+  "tasksDetected" INTEGER NOT NULL DEFAULT 0,
+  "eligiblePosts" INTEGER NOT NULL DEFAULT 0,
+  "blocked" INTEGER NOT NULL DEFAULT 0,
+  "duplicates" INTEGER NOT NULL DEFAULT 0,
+  "commentsSkipped" INTEGER NOT NULL DEFAULT 0,
+  "workersContacted" INTEGER NOT NULL DEFAULT 0,
+  "workersConfirmed" INTEGER NOT NULL DEFAULT 0,
+  "postsAccepted" INTEGER NOT NULL DEFAULT 0,
+  "failures" INTEGER NOT NULL DEFAULT 0,
+  "dryRun" BOOLEAN NOT NULL DEFAULT true,
+  CONSTRAINT "AutomationCycle_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "AutomationCycle_startedAt_idx" ON "AutomationCycle"("startedAt");
+CREATE INDEX IF NOT EXISTS "AutomationCycle_status_idx" ON "AutomationCycle"("status");
+
+CREATE TABLE IF NOT EXISTS "AutomationContact" (
+  "id" TEXT NOT NULL,
+  "cycleId" TEXT NOT NULL,
+  "channelId" TEXT NOT NULL,
+  "workerId" TEXT,
+  "status" TEXT NOT NULL DEFAULT 'CONTACTED',
+  "sentAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "expiresAt" TIMESTAMP(3) NOT NULL,
+  "respondedAt" TIMESTAMP(3),
+  "messageId" TEXT,
+  CONSTRAINT "AutomationContact_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "AutomationContact_cycleId_idx" ON "AutomationContact"("cycleId");
+CREATE INDEX IF NOT EXISTS "AutomationContact_channelId_status_idx" ON "AutomationContact"("channelId", "status");
+
+CREATE TABLE IF NOT EXISTS "AutomationTaskLog" (
+  "id" TEXT NOT NULL,
+  "cycleId" TEXT NOT NULL,
+  "externalTaskId" TEXT NOT NULL,
+  "taskType" TEXT NOT NULL,
+  "subreddit" TEXT,
+  "status" TEXT NOT NULL,
+  "workerId" TEXT,
+  "failureReason" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AutomationTaskLog_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "AutomationTaskLog_cycleId_idx" ON "AutomationTaskLog"("cycleId");
+CREATE INDEX IF NOT EXISTS "AutomationTaskLog_externalTaskId_idx" ON "AutomationTaskLog"("externalTaskId");
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_CYCLE_STARTED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_CONTACT_SENT';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_CONTACT_CONFIRMED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_TASK_ACCEPTED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_TASK_FAILED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_BLOCKED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_SESSION_UPDATED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_STOPPED';

@@ -13,6 +13,7 @@ import taskRoutes from './routes/tasks';
 import createDiscordRoutes from './routes/discord';
 import createGoPartTimeRoutes from './routes/goparttime';
 import createOutreachRoutes from './routes/outreach';
+import createAutomationRoutes from './routes/automation';
 import reminderRoutes from './routes/reminders';
 import statsRoutes from './routes/stats';
 import healthRoutes from './routes/health';
@@ -76,6 +77,8 @@ export function createApiServer(discordClient: Client): express.Application {
   app.use('/api/v1/goparttime', createGoPartTimeRoutes(discordClient));
   // Outreach routes (daily worker availability page)
   app.use('/api/v1/outreach', createOutreachRoutes(discordClient));
+  // Automation routes (GoPartTime auto-accept: status/cycles/blocked/session)
+  app.use('/api/v1/automation', createAutomationRoutes(discordClient));
   app.use('/api/v1/stats', statsRoutes);
   app.use('/api/v1/export', exportRoutes);
   app.use('/api/v1/audit-logs', auditRoutes);

@@ -204,6 +204,61 @@ erDiagram
         timestamp createdAt
         timestamp updatedAt
     }
+    BlockedSubreddit {
+        string subreddit PK "normalized lower, no r/ prefix; exact match"
+        string reason "nullable"
+        timestamp createdAt
+        string createdBy
+    }
+    AutomationSettings {
+        string id PK "default 'automation'"
+        boolean enabled "master switch"
+        boolean dryRun "default true; WOULD_ACCEPT only"
+        boolean pollEnabled "browser scans on/off"
+        timestamp updatedAt
+        string updatedBy
+    }
+    GoPartTimeSession {
+        string id PK "default 'default'"
+        string sessionCipher "nullable; AES-256-GCM"
+        string csrfCipher "nullable; AES-256-GCM"
+        string callbackUrl "nullable"
+        string nextAction "nullable; 64-hex server-action id"
+        string userAgent "nullable"
+        timestamp updatedAt
+        string updatedBy
+    }
+    AutomationCycle {
+        string id PK "YYYY-MM-DD-HH:MM + suffix"
+        timestamp startedAt
+        timestamp endedAt "nullable"
+        string status "RUNNING|DONE|STOPPED"
+        int tasksDetected / eligiblePosts / blocked / duplicates / commentsSkipped
+        int workersContacted / workersConfirmed / postsAccepted / failures
+        boolean dryRun
+    }
+    AutomationContact {
+        string id PK "cuid"
+        string cycleId
+        string channelId
+        string workerId "nullable"
+        string status "CONTACTED|CONFIRMED|RESERVED|ASSIGNED|TIMED_OUT|DECLINED|BUSY"
+        timestamp sentAt
+        timestamp expiresAt "+5min"
+        timestamp respondedAt "nullable"
+        string messageId "nullable"
+    }
+    AutomationTaskLog {
+        string id PK "cuid"
+        string cycleId
+        string externalTaskId "GoPartTime sub_task id"
+        string taskType "post|comment"
+        string subreddit "nullable"
+        string status "ELIGIBLE|SKIPPED_COMMENT|BLOCKED|DUPLICATE|NO_WORKER|WOULD_ACCEPT|ACCEPTED|FAILED"
+        string workerId "nullable"
+        string failureReason "nullable"
+        timestamp createdAt
+    }
 ```
 
 ### Enums (7)

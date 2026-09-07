@@ -8,3 +8,4 @@ export { commissionRepository, CommissionRepository } from './commission.reposit
 export { outreachRepository, OutreachRepository } from './outreach.repository';
 export { onboardingRepository, OnboardingRepository } from './onboarding.repository';
 export { inviteDetectionRepository, InviteDetectionRepository } from './invite-detection.repository';
+export { automationRepository, AutomationRepository } from './automation.repository';

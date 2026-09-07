@@ -1,0 +1,199 @@
+import path from 'node:path';
+import type { BrowserContext, Page } from 'playwright-core';
+import { sessionService } from './session.service';
+import { parseTasksHtml } from './parser';
+import { AUTOMATION } from '../../config/constants';
+import { logger } from '../../utils/logger';
+import type { DetectedGoPartTimeTask } from '../../types';
+
+const TASKS_URL = 'https://goparttime.net/tasks';
+const PROFILE_DIR = path.join(process.cwd(), '.goparttime', 'browser-profile');
+
+let ctx: BrowserContext | null = null;
+let page: Page | null = null;
+let launching: Promise<void> | null = null;
+let scanning = false;
+let backoffUntil = 0;
+let backoffLevel = 0;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Human pause 3-8s before accept (never instant-snipe). */
+export function humanAcceptDelay(): Promise<void> {
+  const span = AUTOMATION.ACCEPT_DELAY_MAX_MS - AUTOMATION.ACCEPT_DELAY_MIN_MS;
+  return sleep(AUTOMATION.ACCEPT_DELAY_MIN_MS + Math.random() * span);
+}
+
+export function isThrottled(now: number = Date.now()): boolean {
+  return now < backoffUntil;
+}
+
+export function recordBackoff(): void {
+  const steps = AUTOMATION.BACKOFF_MS;
+  const delay = steps[Math.min(backoffLevel, steps.length - 1)];
+  backoffLevel++;
+  backoffUntil = Date.now() + delay;
+  logger.warn('GoPartTime poller backing off', { delayMs: delay, level: backoffLevel });
+}
+
+export function recordSuccess(): void {
+  backoffLevel = 0;
+  backoffUntil = 0;
+}
+
+async function ensureBrowser(): Promise<Page> {
+  if (page && ctx) return page;
+  if (launching) {
+    await launching;
+    if (page) return page;
+  }
+  launching = (async () => {
+    const session = await sessionService.load();
+    if (!session) throw new Error('GoPartTime session is not configured. Paste cookies via Automation → Session.');
+
+    const { chromium } = await import('playwright-core');
+    const baseOpts: {
+      headless: boolean;
+      viewport: { width: number; height: number };
+      locale: string;
+      timezoneId: string;
+      userAgent: string;
+      args: string[];
+    } = {
+      headless: true,
+      viewport: { width: 1366, height: 768 },
+      locale: 'en-GB',
+      timezoneId: 'Asia/Kolkata',
+      userAgent:
+        session.userAgent ||
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+      args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    };
+    // Resolution order: explicit env (Docker: PLAYWRIGHT_CHROMIUM_PATH) →
+    // system Chrome (dev machines) → bundled Playwright chromium.
+    const candidates: { channel?: 'chrome'; executablePath?: string }[] = [];
+    if (process.env.PLAYWRIGHT_CHROMIUM_PATH) candidates.push({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
+    candidates.push({ executablePath: '/usr/bin/chromium-browser' });
+    candidates.push({ executablePath: '/usr/bin/chromium' });
+    candidates.push({ channel: 'chrome' });
+    candidates.push({});
+    let lastError: unknown = null;
+    for (const c of candidates) {
+      try {
+        ctx = await chromium.launchPersistentContext(PROFILE_DIR, { ...baseOpts, ...c });
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (!ctx) {
+      throw new Error(
+        'No Chromium/Chrome found for the poller (tried PLAYWRIGHT_CHROMIUM_PATH, /usr/bin/chromium*, system Chrome, bundled). ' +
+          `Last error: ${lastError instanceof Error ? lastError.message.split('\n')[0] : String(lastError)}`,
+      );
+    }
+
+    // Oracle-safe: block heavy assets, keep RSC/HTML/JS.
+    await ctx.route('**/*.{png,jpg,jpeg,webp,gif,svg,mp4,webm,woff,woff2,ttf}', (route) => route.abort());
+
+    if (session.sessionToken && session.csrfToken) {
+      await ctx.addCookies([
+        { name: '__Secure-goparttime.session-token', value: session.sessionToken, domain: '.goparttime.net', path: '/' },
+        { name: '__Host-goparttime.csrf-token', value: session.csrfToken, domain: 'goparttime.net', path: '/' },
+      ]);
+    }
+
+    page = ctx.pages()[0] || (await ctx.newPage());
+  })();
+  try {
+    await launching;
+  } finally {
+    launching = null;
+  }
+  if (!page) throw new Error('Poller browser failed to start.');
+  return page;
+}
+
+/**
+ * One human-like scan of /tasks. Throws on missing session, checkpoint,
+ * or concurrent scan. Never parallelizes (single page).
+ */
+export async function scanTasks(): Promise<{ tasks: DetectedGoPartTimeTask[]; nextAction: string | null }> {
+  if (scanning) throw new Error('Scan already in progress.');
+  if (isThrottled()) throw new Error('Poller is in backoff after checkpoint/429.');
+  scanning = true;
+  try {
+    const pg = await ensureBrowser();
+    const resp = await pg.goto(TASKS_URL, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null);
+    // Light human settle: let RSC flight chunks land, no fixed long sleep.
+    await sleep(2500 + Math.random() * 2000);
+
+    const title = await pg.title().catch(() => '');
+    const html = await pg.content();
+    if (
+      resp?.status() === 429 ||
+      /security checkpoint/i.test(title) ||
+      /security checkpoint/i.test(html.slice(0, 5000))
+    ) {
+      recordBackoff();
+      throw new Error('Vercel checkpoint/429 — backing off, context kept alive.');
+    }
+    const url = pg.url();
+    if (/\/login|\/signin/.test(url)) {
+      throw new Error('GoPartTime session expired (redirected to login). Repaste cookies via Automation → Session.');
+    }
+
+    recordSuccess();
+    const tasks = parseTasksHtml(html);
+    const nextAction = extractNextAction(html);
+    logger.info('GoPartTime scan complete', { tasks: tasks.length, url });
+    return { tasks, nextAction };
+  } finally {
+    scanning = false;
+  }
+}
+
+/** Accept one sub-task from inside the page context (same TLS/fingerprint as manual click). */
+export async function acceptTask(subTaskId: string, nextAction: string): Promise<boolean> {
+  await humanAcceptDelay();
+  const pg = await ensureBrowser();
+  const body = JSON.stringify([{ sub_task_id: Number(subTaskId) }]);
+  const text = await pg.evaluate(
+    async ({ action, payload }: { action: string; payload: string }) => {
+      const res = await fetch('/tasks', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'text/x-component',
+          'Content-Type': 'text/plain;charset=UTF-8',
+          'Next-Action': action,
+        },
+        body: payload,
+      });
+      return res.text();
+    },
+    { action: nextAction, payload: body },
+  );
+  const ok = /"success":\s*true/.test(String(text));
+  logger.info('GoPartTime accept attempted', { subTaskId, ok });
+  return ok;
+}
+
+/** Next-Action server-action id rotates on Vercel redeploys; prefer the live one. */
+export function extractNextAction(html: string): string | null {
+  const m = html.match(/\b[0-9a-f]{64}\b/);
+  return m ? m[0] : null;
+}
+
+export async function closePoller(): Promise<void> {
+  try {
+    await ctx?.close();
+  } catch {
+    // best-effort
+  }
+  ctx = null;
+  page = null;
+}

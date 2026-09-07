@@ -14,6 +14,9 @@ services:
       - redis
     volumes:
       - insight-uploads:/app/uploads
+      # Playwright persistent Chromium profile (GoPartTime cookies + Vercel
+      # challenge clearance survive image rebuilds)
+      - browser-profile:/app/.goparttime/browser-profile
     networks:
       - app-network
 
@@ -48,6 +51,7 @@ services:
 
 volumes:
   insight-uploads:
+  browser-profile:
   redis-data:
 
 networks:
