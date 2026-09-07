@@ -10,6 +10,8 @@ import {
   addBlockedSubreddit,
   removeBlockedSubreddit,
   saveAutomationSession,
+  sendTestContact,
+  sendTestAccept,
 } from '../api/client';
 
 export function Automation() {
@@ -17,6 +19,9 @@ export function Automation() {
   const [subInput, setSubInput] = useState('');
   const [session, setSession] = useState({ sessionToken: '', csrfToken: '', nextAction: '' });
   const [selectedCycle, setSelectedCycle] = useState<string | null>(null);
+  const [testChannel, setTestChannel] = useState('');
+  const [testTaskId, setTestTaskId] = useState('');
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 15000 });
   const cyclesQuery = useQuery({ queryKey: ['automation-cycles'], queryFn: getAutomationCycles, refetchInterval: 30000 });
@@ -50,6 +55,22 @@ export function Automation() {
     onSuccess: invalidate,
   });
   const sessionMutation = useMutation({ mutationFn: saveAutomationSession, onSuccess: invalidate });
+  const testContactMutation = useMutation({
+    mutationFn: () => sendTestContact(testChannel.trim(), undefined),
+    onSuccess: (r) => {
+      setTestResult(`Contact sent: ${r.data?.worker?.name || '?'} in #${r.data?.channel?.name || '?'} (5-min window)`);
+      invalidate();
+    },
+    onError: (e: unknown) => setTestResult(`Contact failed: ${(e as { response?: { data?: { message?: string } } }).response?.data?.message || 'error'}`),
+  });
+  const testAcceptMutation = useMutation({
+    mutationFn: (accept: boolean) => sendTestAccept(testTaskId.trim(), testChannel.trim(), accept),
+    onSuccess: (r) => {
+      setTestResult(r.data?.wouldAccept ? `WOULD ACCEPT #${testTaskId} (${r.data?.reason || ''})` : `ACCEPTED #${testTaskId} — push via Send Task button next.`);
+      invalidate();
+    },
+    onError: (e: unknown) => setTestResult(`Accept failed: ${(e as { response?: { data?: { message?: string } } }).response?.data?.message || 'error'}`),
+  });
 
   return (
     <div className="space-y-6">
@@ -203,6 +224,52 @@ export function Automation() {
         >
           Save Session
         </button>
+      </div>
+
+      {/* Cycles */}
+      <div className="bg-white rounded-lg shadow p-4 space-y-3">
+        <h2 className="font-semibold">Manual Single-Task Test</h2>
+        <div className="grid md:grid-cols-2 gap-2">
+          <input
+            className="border rounded px-3 py-2 font-mono text-sm"
+            placeholder="Ticket channel ID (e.g. 1544752619820425287)"
+            value={testChannel}
+            onChange={(e) => setTestChannel(e.target.value)}
+          />
+          <input
+            className="border rounded px-3 py-2 font-mono text-sm"
+            placeholder="GoPartTime task ID (e.g. 955126)"
+            value={testTaskId}
+            onChange={(e) => setTestTaskId(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
+            disabled={!testChannel.trim() || testContactMutation.isPending}
+            onClick={() => testContactMutation.mutate()}
+          >
+            1. Send availability message
+          </button>
+          <button
+            className="px-4 py-2 bg-amber-600 text-white rounded disabled:opacity-50"
+            disabled={!testChannel.trim() || !testTaskId.trim() || testAcceptMutation.isPending}
+            onClick={() => testAcceptMutation.mutate(false)}
+          >
+            2. Dry-run accept check
+          </button>
+          <button
+            className="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50"
+            disabled={!testChannel.trim() || !testTaskId.trim() || testAcceptMutation.isPending}
+            onClick={() => testAcceptMutation.mutate(true)}
+          >
+            3. REAL accept (needs confirmed reply + flags)
+          </button>
+        </div>
+        {testResult && <p className="text-sm text-gray-700">{testResult}</p>}
+        <p className="text-xs text-gray-500">
+          Step 3 requires a CONFIRMED reply within 5 min, settings dry-run OFF, and server GOPARTTIME_AUTO_ACCEPT=true.
+        </p>
       </div>
 
       {/* Cycles */}

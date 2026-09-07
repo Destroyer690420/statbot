@@ -451,4 +451,14 @@ export async function saveAutomationSession(body: {
   return data;
 }
 
+export async function sendTestContact(channelId: string, message?: string) {
+  const { data } = await api.post('/automation/test-contact', { channelId, message });
+  return data;
+}
+
+export async function sendTestAccept(externalTaskId: string, channelId: string, accept = false) {
+  const { data } = await api.post('/automation/test-accept', { externalTaskId, channelId, accept });
+  return data;
+}
+
 export default api;
