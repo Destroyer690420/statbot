@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.3
+// @version      1.0.4
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -40,7 +40,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.3';
+  const VERSION = '1.0.4';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -99,11 +99,16 @@
     const base = s.apiUrl.replace(/\/api\/v1\/automation\/?$/, '');
     const apiUrl = prompt('Backend API URL (base, without /api/v1):', base || 'https://statbot.duckdns.org');
     if (apiUrl === null) return;
-    const apiKey = prompt('API key (GOPARTTIME_API_KEY):', s.apiKey);
+    const apiKey = prompt('API key (GOPARTTIME_API_KEY) - paste the full 64-character key:', s.apiKey);
     if (apiKey === null) return;
+    const cleanKey = apiKey.trim();
     storageSet('gpt_api_url', (apiUrl.trim() || 'https://statbot.duckdns.org') + '/api/v1/goparttime');
-    storageSet('gpt_api_key', apiKey.trim());
-    alert('Settings saved.');
+    storageSet('gpt_api_key', cleanKey);
+    if (/^[0-9a-f]{64}$/i.test(cleanKey)) {
+      alert('Settings saved. Key looks right (64 hex chars).');
+    } else {
+      alert('Settings saved, BUT the key is ' + cleanKey.length + ' chars (expected 64 hex). Please re-paste it carefully.');
+    }
   }
 
   if (typeof GM_registerMenuCommand === 'function') {
