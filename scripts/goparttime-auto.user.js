@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.0
-// @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation — server never touches GoPartTime).
+// @version      1.0.1
+// @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
 // @match        *://www.goparttime.net/*
@@ -18,20 +18,20 @@
 // ==/UserScript==
 
 /**
- * v1.0.0 — Hybrid companion for StatBot automation.
+ * v1.0.1 - Hybrid companion for StatBot automation.
  *
  * Two loops, both best-effort and fully unattended:
  *  1. Monitor (every ~60s on /tasks): parses the page's embedded flight data
  *     for available sub-tasks and POSTs sightings to the backend. The backend
  *     validates (Post/duplicate/blocked), pings workers on Discord, and waits
- *     for confirmation — exactly like the manual flow.
+ *     for confirmation - exactly like the manual flow.
  *  2. Claim (every ~20s, everywhere on goparttime.net): asks the backend for a
  *     pending claim. When the backend has a CONFIRMED worker, it performs the
  *     accept POST in-page (genuine session, genuine TLS, home IP), reports the
  *     verdict, then attempts the full detail push to the ticket via the
  *     existing /assign endpoint (same extraction as the Send Task button).
  *     If the push fails, the accept still stands and the manager can push
- *     manually with Send Task — nothing is lost.
+ *     manually with Send Task - nothing is lost.
  *
  * Auth/session never leave this browser. No passwords, no pasted cookies.
  * Disable anytime via the Tampermonkey menu ("Auto Watcher: ON/OFF").
@@ -48,7 +48,7 @@
   const CLAIM_MS = 20 * 1000;
   const JITTER_MS = 10 * 1000;
 
-  // ─── Storage (GM_* when available, localStorage otherwise) ──
+  // --- Storage (GM_* when available, localStorage otherwise) --
 
   function storageGet(key) {
     try {
@@ -98,7 +98,7 @@
   function toggleWatcher() {
     const next = !watcherEnabled();
     storageSet('gpt_auto_enabled', next ? '1' : '0');
-    alert('Auto Watcher is now ' + (next ? 'ON' : 'OFF') + '. Reloading…');
+    alert('Auto Watcher is now ' + (next ? 'ON' : 'OFF') + '. Reloading...');
     location.reload();
   }
 
@@ -115,11 +115,11 @@
   }
 
   if (typeof GM_registerMenuCommand === 'function') {
-    GM_registerMenuCommand('⚙️ Configure Sender...', openSettings);
-    GM_registerMenuCommand('🤖 Auto Watcher: ON/OFF', toggleWatcher);
+    GM_registerMenuCommand('Configure Sender...', openSettings);
+    GM_registerMenuCommand('Auto Watcher: ON/OFF', toggleWatcher);
   }
 
-  // ─── HTTP (GM transport preferred, fetch fallback) ──
+  // --- HTTP (GM transport preferred, fetch fallback) --
 
   function parseStatus(status, responseText) {
     let json = null;
@@ -174,7 +174,7 @@
     return ms + Math.floor(Math.random() * JITTER_MS);
   }
 
-  // ─── Task-list parsing (page flight data, same shape the backend parses) ──
+  // --- Task-list parsing (page flight data, same shape the backend parses) --
 
   function parseAvailableTasks() {
     const html = document.documentElement ? document.documentElement.innerHTML : '';
@@ -228,7 +228,7 @@
     }
   }
 
-  // ─── Monitor loop: report sightings ──
+  // --- Monitor loop: report sightings --
 
   let monitorBusy = false;
 
@@ -254,7 +254,7 @@
     }
   }
 
-  // ─── Claim loop: accept in-page when the backend has a confirmed worker ──
+  // --- Claim loop: accept in-page when the backend has a confirmed worker --
 
   let claimBusy = false;
 
@@ -324,7 +324,7 @@
       return;
     }
 
-    // Accept recorded — now attempt the full detail push to the ticket.
+    // Accept recorded - now attempt the full detail push to the ticket.
     try {
       const pushed = await pushTaskToTicket(settings, claim, subTaskId);
       console.log('[Auto Watcher] claim ' + claim.id + ' accepted, detail push: ' + (pushed ? 'sent' : 'manual needed'));
@@ -334,7 +334,7 @@
     await reportClaim(settings, claim, true, null);
   }
 
-  // ─── Detail push: open the task dialog, extract, send via /assign ──
+  // --- Detail push: open the task dialog, extract, send via /assign --
 
   function findTaskRoot() {
     const dialog = document.querySelector('[role="dialog"]');
@@ -472,7 +472,7 @@
     }
   }
 
-  // ─── Loops ──
+  // --- Loops --
 
   async function monitorLoop() {
     for (;;) {
