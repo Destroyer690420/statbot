@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.2
+// @version      1.0.3
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -40,7 +40,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.0.3';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -118,6 +118,8 @@
       json = JSON.parse(responseText);
     } catch (e) { /* non-JSON */ }
     if (status >= 200 && status < 300) return json || { success: true };
+    if (status === 401) throw new Error('Authentication failed - check the API key in Configure Sender.');
+    if (status === 503) throw new Error('Extension endpoint is not configured on the server.');
     const message = (json && json.message) || ('Server error (' + status + ').');
     throw new Error(message);
   }
@@ -159,6 +161,42 @@
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // --- On-page status pill (display-only, never intercepts clicks) ---
+
+  let statusEl = null;
+  let lastOkAt = 0;
+
+  function timeNow() {
+    try {
+      return new Date().toLocaleTimeString();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function setStatus(ok, text) {
+    try {
+      if (!statusEl) {
+        statusEl = document.createElement('div');
+        statusEl.id = 'gpt-watcher-status';
+        statusEl.style.position = 'fixed';
+        statusEl.style.left = '16px';
+        statusEl.style.bottom = '16px';
+        statusEl.style.zIndex = '2147483647';
+        statusEl.style.padding = '8px 12px';
+        statusEl.style.borderRadius = '8px';
+        statusEl.style.fontSize = '12px';
+        statusEl.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        statusEl.style.pointerEvents = 'none';
+        document.body.appendChild(statusEl);
+      }
+      if (ok) lastOkAt = Date.now();
+      statusEl.style.background = ok ? 'rgba(20, 120, 60, 0.92)' : 'rgba(160, 30, 30, 0.92)';
+      statusEl.style.color = '#fff';
+      statusEl.textContent = (ok ? 'Watcher OK' : 'Watcher ERROR') + ' ' + timeNow() + (text ? ' - ' + text : '');
+    } catch (e) { /* never break loops for status UI */ }
   }
 
   function withJitter(ms) {
@@ -226,7 +264,10 @@
   async function monitorTick() {
     if (monitorBusy || !watcherEnabled()) return;
     const settings = getSettings();
-    if (!settings.apiKey) return;
+    if (!settings.apiKey) {
+      setStatus(false, 'no API key - use Configure Sender');
+      return;
+    }
     // Only the /tasks page carries the listing.
     if (!/^\/tasks\/?$/.test(window.location.pathname)) return;
     monitorBusy = true;
@@ -238,7 +279,9 @@
         version: VERSION,
         tasks,
       });
+      setStatus(true, tasks.length + ' tasks seen');
     } catch (e) {
+      setStatus(false, e && e.message ? String(e.message).slice(0, 80) : 'send failed');
       console.log('[Auto Watcher] sightings failed:', e && e.message);
     } finally {
       monitorBusy = false;
@@ -252,15 +295,20 @@
   async function claimTick() {
     if (claimBusy || !watcherEnabled()) return;
     const settings = getSettings();
-    if (!settings.apiKey) return;
+    if (!settings.apiKey) {
+      setStatus(false, 'no API key - use Configure Sender');
+      return;
+    }
     claimBusy = true;
     try {
       const res = await request(settings, 'GET', '/claims/pending', null,
         'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION));
+      setStatus(true, 'poll ok');
       const claim = res && res.data && res.data.claim;
       if (!claim) return;
       await processClaim(settings, claim);
     } catch (e) {
+      setStatus(false, e && e.message ? String(e.message).slice(0, 80) : 'poll failed');
       console.log('[Auto Watcher] claim poll failed:', e && e.message);
     } finally {
       claimBusy = false;

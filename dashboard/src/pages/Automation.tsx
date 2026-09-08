@@ -194,7 +194,7 @@ export function Automation() {
         <p className="text-sm text-dark-400">
           {companion?.lastSeenAt
             ? `Last seen ${new Date(companion.lastSeenAt).toLocaleString()}${companion?.version ? ` · v${companion.version}` : ''} · ${companion?.freshSightings ?? 0} fresh sightings · ${companion?.pendingClaims ?? 0} pending claims`
-            : 'No watcher activity yet — install goparttime-auto.user.js in the manager browser.'}
+            : 'No watcher activity yet — install goparttime-auto.user.js in the manager browser. If the script runs but this stays Offline, its API key is wrong: re-enter it via the script menu → Configure Sender.'}
         </p>
         {claims.length > 0 && (
           <div className="space-y-2">
