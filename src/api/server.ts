@@ -47,12 +47,18 @@ export function createApiServer(discordClient: Client): express.Application {
   }));
 
   // ─── Rate Limiting ─────────────────────────────────────────
+  // The manager-browser companion polls claims/pending ~2/min from the same
+  // home IP as the dashboard; those extension-key endpoints are exempt (the
+  // shared secret is the gate — rate limiting adds nothing there).
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Too many requests. Please try again later.' },
+    skip: (req) =>
+      req.path === '/api/v1/automation/claims/pending' ||
+      req.path === '/api/v1/automation/sightings',
   });
   app.use('/api/', limiter);
 

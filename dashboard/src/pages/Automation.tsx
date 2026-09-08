@@ -41,11 +41,11 @@ export function Automation() {
   const [testTaskId, setTestTaskId] = useState('');
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 15000 });
-  const cyclesQuery = useQuery({ queryKey: ['automation-cycles'], queryFn: getAutomationCycles, refetchInterval: 30000 });
+  const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 30000 });
+  const cyclesQuery = useQuery({ queryKey: ['automation-cycles'], queryFn: getAutomationCycles, refetchInterval: 60000 });
   const blockedQuery = useQuery({ queryKey: ['automation-blocked'], queryFn: getBlockedSubreddits });
-  const companionQuery = useQuery({ queryKey: ['automation-companion'], queryFn: getAutomationCompanion, refetchInterval: 15000 });
-  const claimsQuery = useQuery({ queryKey: ['automation-claims'], queryFn: getAutomationClaims, refetchInterval: 15000 });
+  const companionQuery = useQuery({ queryKey: ['automation-companion'], queryFn: getAutomationCompanion, refetchInterval: 60000 });
+  const claimsQuery = useQuery({ queryKey: ['automation-claims'], queryFn: getAutomationClaims, refetchInterval: 60000 });
   const detailQuery = useQuery({
     queryKey: ['automation-cycle', selectedCycle],
     queryFn: () => getAutomationCycle(selectedCycle as string),

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.5
+// @version      1.0.6
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -40,14 +40,31 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.5';
+  const VERSION = '1.0.6';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
   };
   const MONITOR_MS = 60 * 1000;
-  const CLAIM_MS = 20 * 1000;
+  const CLAIM_MS = 30 * 1000;
   const JITTER_MS = 10 * 1000;
+  const RATE_LIMIT_PAUSE_MS = 60 * 1000;
+
+  // Set when the server rate-limits us: loops idle until this time.
+  let rateLimitedUntil = 0;
+
+  function isRateLimited() {
+    return Date.now() < rateLimitedUntil;
+  }
+
+  function noteRateLimit() {
+    rateLimitedUntil = Date.now() + RATE_LIMIT_PAUSE_MS;
+  }
+
+  function isRateLimitError(e) {
+    const m = e && e.message ? String(e.message) : '';
+    return m.indexOf('Too many requests') !== -1;
+  }
 
   // --- Storage (GM_* when available, localStorage otherwise) --
 
@@ -267,7 +284,7 @@
   let monitorBusy = false;
 
   async function monitorTick() {
-    if (monitorBusy || !watcherEnabled()) return;
+    if (monitorBusy || !watcherEnabled() || isRateLimited()) return;
     const settings = getSettings();
     if (!settings.apiKey) {
       setStatus(false, 'no API key - use Configure Sender');
@@ -286,7 +303,12 @@
       });
       setStatus(true, tasks.length + ' tasks seen');
     } catch (e) {
-      setStatus(false, e && e.message ? String(e.message).slice(0, 80) : 'send failed');
+      if (isRateLimitError(e)) {
+        noteRateLimit();
+        setStatus(false, 'rate limited - pausing 1 min');
+      } else {
+        setStatus(false, e && e.message ? String(e.message).slice(0, 80) : 'send failed');
+      }
       console.log('[Auto Watcher] sightings failed:', e && e.message);
     } finally {
       monitorBusy = false;
@@ -298,7 +320,7 @@
   let claimBusy = false;
 
   async function claimTick() {
-    if (claimBusy || !watcherEnabled()) return;
+    if (claimBusy || !watcherEnabled() || isRateLimited()) return;
     const settings = getSettings();
     if (!settings.apiKey) {
       setStatus(false, 'no API key - use Configure Sender');
@@ -313,7 +335,12 @@
       if (!claim) return;
       await processClaim(settings, claim);
     } catch (e) {
-      setStatus(false, e && e.message ? String(e.message).slice(0, 80) : 'poll failed');
+      if (isRateLimitError(e)) {
+        noteRateLimit();
+        setStatus(false, 'rate limited - pausing 1 min');
+      } else {
+        setStatus(false, e && e.message ? String(e.message).slice(0, 80) : 'poll failed');
+      }
       console.log('[Auto Watcher] claim poll failed:', e && e.message);
     } finally {
       claimBusy = false;
