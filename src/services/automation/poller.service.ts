@@ -9,6 +9,65 @@ import type { DetectedGoPartTimeTask } from '../../types';
 const TASKS_URL = 'https://goparttime.net/tasks';
 const PROFILE_DIR = path.join(process.cwd(), '.goparttime', 'browser-profile');
 
+const SESSION_COOKIE = '__Secure-goparttime.session-token';
+const CSRF_COOKIE = '__Host-goparttime.csrf-token';
+const CALLBACK_COOKIE = '__Secure-goparttime.callback-url';
+
+/** addCookies params (Playwright's returned Cookie type lacks `url`, so our own). */
+export interface CookieParams {
+  name: string;
+  value: string;
+  url?: string;
+  domain?: string;
+  path?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: 'Lax' | 'Strict' | 'None';
+}
+
+/**
+ * Playwright cookie params for the GoPartTime vault session.
+ * Prefix rules (RFC 6265bis, enforced by Chromium — violating them throws
+ * "Invalid cookie fields"):
+ * - `__Host-` cookies: Secure + Path=/ and NO Domain attribute.
+ * - `__Secure-` cookies: Secure required (Domain allowed).
+ */
+export function buildCookieParams(s: {
+  sessionToken: string;
+  csrfToken: string;
+  callbackUrl: string | null;
+}): CookieParams[] {
+  const out: CookieParams[] = [
+    {
+      name: SESSION_COOKIE,
+      value: s.sessionToken,
+      domain: '.goparttime.net',
+      path: '/',
+      secure: true,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+    {
+      name: CSRF_COOKIE,
+      value: s.csrfToken,
+      url: 'https://goparttime.net/',
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ];
+  if (s.callbackUrl) {
+    out.push({
+      name: CALLBACK_COOKIE,
+      value: s.callbackUrl,
+      domain: '.goparttime.net',
+      path: '/',
+      secure: true,
+      sameSite: 'Lax',
+    });
+  }
+  return out;
+}
+
 let ctx: BrowserContext | null = null;
 let page: Page | null = null;
 let launching: Promise<void> | null = null;
@@ -100,10 +159,14 @@ async function ensureBrowser(): Promise<Page> {
     await ctx.route('**/*.{png,jpg,jpeg,webp,gif,svg,mp4,webm,woff,woff2,ttf}', (route) => route.abort());
 
     if (session.sessionToken && session.csrfToken) {
-      await ctx.addCookies([
-        { name: '__Secure-goparttime.session-token', value: session.sessionToken, domain: '.goparttime.net', path: '/' },
-        { name: '__Host-goparttime.csrf-token', value: session.csrfToken, domain: 'goparttime.net', path: '/' },
-      ]);
+      try {
+        await ctx.addCookies(buildCookieParams(session));
+      } catch (error) {
+        const msg = error instanceof Error ? error.message.split('\n')[0] : String(error);
+        throw new Error(
+          `Stored GoPartTime cookies were rejected by the browser (${msg}). Repaste fresh raw values via Automation → Session.`,
+        );
+      }
     }
 
     page = ctx.pages()[0] || (await ctx.newPage());
@@ -149,6 +212,22 @@ export async function scanTasks(): Promise<{ tasks: DetectedGoPartTimeTask[]; ne
     recordSuccess();
     const tasks = parseTasksHtml(html);
     const nextAction = extractNextAction(html);
+    // Self-refreshing vault: persist the browser's live cookies + Next-Action
+    // so a single paste keeps working across GoPartTime rotations.
+    // Best-effort — never fails the scan.
+    try {
+      const live = ctx ? await ctx.cookies('https://goparttime.net').catch(() => []) : [];
+      const find = (name: string) => live.find((c) => c.name === name)?.value || null;
+      await sessionService.refreshFromBrowser({
+        sessionToken: find(SESSION_COOKIE),
+        csrfToken: find(CSRF_COOKIE),
+        nextAction,
+      });
+    } catch (error) {
+      logger.warn('Session self-refresh failed (scan still valid)', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     logger.info('GoPartTime scan complete', { tasks: tasks.length, url });
     return { tasks, nextAction };
   } finally {
