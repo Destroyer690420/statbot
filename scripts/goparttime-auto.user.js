@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.6
+// @version      1.0.7
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -40,7 +40,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.6';
+  const VERSION = '1.0.7';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -226,13 +226,43 @@
   }
 
   // --- Task-list parsing (page flight data, same shape the backend parses) --
+  // Live bytes escape quotes with one backslash; tolerate two (copies vary).
 
-  function parseAvailableTasks() {
-    const html = document.documentElement ? document.documentElement.innerHTML : '';
+  function fetchPageHtml() {
+    try {
+      return fetch(window.location.pathname, { credentials: 'include' })
+        .then((res) => (res.ok ? res.text() : null))
+        .catch(() => null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
+
+  function domHtml() {
+    try {
+      return document.documentElement ? document.documentElement.innerHTML : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function pageDebug(html) {
+    try {
+      return {
+        htmlLen: html.length,
+        scriptTags: (html.match(/<script/gi) || []).length,
+        flightHits: (html.match(/sub_task/gi) || []).length,
+      };
+    } catch (e) {
+      return { htmlLen: 0, scriptTags: 0, flightHits: 0 };
+    }
+  }
+
+  function parseAvailableTasks(html) {
     const out = [];
     const seen = {};
     // sub_task blocks use backslash-escaped quotes inside script payloads.
-    const re = /\\"sub_task\\":\{"id":(\d+),"type":"(post|comment)","status":(\d+),"task_id":(\d+)[\s\S]{0,2000}?"grab_user_id":(\d+)/g;
+    const re = /\\{1,2}"sub_task\\{1,2}":\{\\{1,2}"id\\{1,2}":(\d+),\\{1,2}"type\\{1,2}":\\{1,2}"(post|comment)\\{1,2}",\\{1,2}"status\\{1,2}":(\d+),\\{1,2}"task_id\\{1,2}":(\d+)[\s\S]{0,2000}?\\{1,2}"grab_user_id\\{1,2}":(\d+)/g;
     let m = null;
     while ((m = re.exec(html)) !== null) {
       const subId = m[1];
@@ -247,15 +277,16 @@
       let subreddit = null;
       let title = null;
       try {
-        const taskRe = new RegExp('\\\\"task\\\\":\\{"id\\\\":' + taskId + ',[\\s\\S]{0,4000}?\\\\"subreddit_name\\\\":\\\\"([A-Za-z0-9_ ]*?)\\\\"');
+        const qb = '\\\\{1,2}"';
+        const taskRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,4000}?' + qb + 'subreddit_name' + qb + ':' + qb + '([A-Za-z0-9_ ]*?)' + qb);
         const tb = taskRe.exec(html);
         if (tb) {
           subreddit = tb[1] || null;
-          const titleRe = new RegExp('\\\\"task\\\\":\\{"id\\\\":' + taskId + ',[\\s\\S]{0,6000}?\\\\"title\\\\":\\\\"((?:[^\\\\]|\\\\.)*?)\\\\"');
+          const titleRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,6000}?' + qb + 'title' + qb + ':' + qb + '((?:[^\\\\]|\\\\.)*?)' + qb);
           const tt = titleRe.exec(html);
           if (tt) title = tt[1].replace(/\\u003c/gi, '<').replace(/\\u003e/gi, '>').slice(0, 300) || null;
         } else {
-          const linkRe = new RegExp('\\\\"task\\\\":\\{"id\\\\":' + taskId + ',[\\s\\S]{0,4000}?\\\\"post_link\\\\":\\\\"(.*?)\\\\"');
+          const linkRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,4000}?' + qb + 'post_link' + qb + ':' + qb + '(.*?)' + qb);
           const lb = linkRe.exec(html);
           if (lb) {
             const sm = /reddit\.com\/r\/([A-Za-z0-9_]+)/i.exec(lb[1]);
@@ -294,8 +325,24 @@
     if (!/^\/tasks\/?$/.test(window.location.pathname)) return;
     monitorBusy = true;
     try {
-      const tasks = parseAvailableTasks();
-      if (tasks.length === 0) return;
+      // Fresh SSR HTML always embeds the flight scripts; the live DOM may
+      // have them stripped after hydration, so fetch first, DOM as fallback.
+      let html = await fetchPageHtml();
+      let source = 'fetch';
+      if (!html) {
+        html = domHtml();
+        source = 'dom';
+      }
+      const tasks = parseAvailableTasks(html || '');
+      if (tasks.length === 0) {
+        await request(settings, 'POST', '/sightings', {
+          companionId: getCompanionId(),
+          version: VERSION,
+          tasks: [],
+          debug: { source, page: pageDebug(html || '') },
+        }).catch(() => null);
+        return;
+      }
       await request(settings, 'POST', '/sightings', {
         companionId: getCompanionId(),
         version: VERSION,

@@ -1,24 +1,25 @@
 import { parseTasksHtml, unescapeFlight } from '../services/automation/parser';
 
+// Live page bytes escape quotes with a SINGLE backslash.
 const FLIGHT = [
-  'self.__next_f.push([1,"99:[\\\\"$\\\\",\\\\"div\\\\",\\\\"950953\\\\",{}]"])',
+  'self.__next_f.push([1,"99:[\\"$\\",\\"div\\",\\"950953\\",{}]"])',
   '</script><script>self.__next_f.push([1,"',
-  '{\\\\"detail\\\\":{\\\\"sub_task\\\\":{\\\\"id\\\\":950953,\\\\"type\\\\":\\\\"post\\\\",',
-  '\\\\"status\\\\":0,\\\\"task_id\\\\":949972,\\\\"user_id\\\\":87914,\\\\"grab_user_id\\\\":0,',
-  '\\\\"grab_user_c_type\\\\":10,\\\\"grab_at\\\\":0,\\\\"karma_limit\\\\":50,\\\\"earnings\\\\":250,',
-  '\\\\"earnings_str\\\\":\\\\"2.50\\\\"},',
-  '\\\\"task\\\\":{\\\\"id\\\\":949972,\\\\"user_id\\\\":87914,\\\\"status\\\\":1,\\\\"credits\\\\":18,',
-  '\\\\"subreddit_name\\\\":\\\\"ToyotaTacoma\\\\",',
-  '\\\\"title\\\\":\\\\"Just picked up my first Tacoma?\\\\"}}',
+  '{\\"detail\\":{\\"sub_task\\":{\\"id\\":950953,\\"type\\":\\"post\\",',
+  '\\"status\\":0,\\"task_id\\":949972,\\"user_id\\":87914,\\"grab_user_id\\":0,',
+  '\\"grab_user_c_type\\":10,\\"grab_at\\":0,\\"karma_limit\\":50,\\"earnings\\":250,',
+  '\\"earnings_str\\":\\"2.50\\"},',
+  '\\"task\\":{\\"id\\":949972,\\"user_id\\":87914,\\"status\\":1,\\"credits\\":18,',
+  '\\"subreddit_name\\":\\"ToyotaTacoma\\",',
+  '\\"title\\":\\"Just picked up my first Tacoma?\\"}}',
   '"])',
   '</script><script>self.__next_f.push([1,"',
-  '{\\\\"detail\\\\":{\\\\"sub_task\\\\":{\\\\"id\\\\":953006,\\\\"type\\\\":\\\\"comment\\\\",',
-  '\\\\"status\\\\":0,\\\\"task_id\\\\":951671,\\\\"user_id\\\\":5814,\\\\"grab_user_id\\\\":0,',
-  '\\\\"grab_user_c_type\\\\":10,\\\\"grab_at\\\\":0,\\\\"karma_limit\\\\":50,\\\\"earnings\\\\":100,',
-  '\\\\"earnings_str\\\\":\\\\"1.00\\\\"},',
-  '\\\\"task\\\\":{\\\\"id\\\\":951671,\\\\"user_id\\\\":5814,\\\\"status\\\\":1,\\\\"credits\\\\":6,',
-  '\\\\"subreddit_name\\\\":\\\\"Mommit\\\\",',
-  '\\\\"title\\\\":\\\\"Comment task\\\\"}}',
+  '{\\"detail\\":{\\"sub_task\\":{\\"id\\":953006,\\"type\\":\\"comment\\",',
+  '\\"status\\":0,\\"task_id\\":951671,\\"user_id\\":5814,\\"grab_user_id\\":0,',
+  '\\"grab_user_c_type\\":10,\\"grab_at\\":0,\\"karma_limit\\":50,\\"earnings\\":100,',
+  '\\"earnings_str\\":\\"1.00\\"},',
+  '\\"task\\":{\\"id\\":951671,\\"user_id\\":5814,\\"status\\":1,\\"credits\\":6,',
+  '\\"subreddit_name\\":\\"Mommit\\",',
+  '\\"title\\":\\"Comment task\\"}}',
   '"])',
 ].join('');
 
@@ -36,6 +37,13 @@ describe('parseTasksHtml', () => {
     expect(comment.type).toBe('comment');
   });
 
+  it('tolerates doubled backslashes (console-copy artifact)', () => {
+    const doubled = FLIGHT.replace(/\\/g, '\\\\');
+    const tasks = parseTasksHtml(doubled);
+    expect(tasks).toHaveLength(2);
+    expect(tasks.find((t) => t.subTaskId === '950953')?.subreddit).toBe('ToyotaTacoma');
+  });
+
   it('dedupes repeated flight chunks', () => {
     expect(parseTasksHtml(FLIGHT + FLIGHT)).toHaveLength(2);
   });
@@ -48,5 +56,9 @@ describe('parseTasksHtml', () => {
 describe('unescapeFlight', () => {
   it('decodes flight escapes', () => {
     expect(unescapeFlight('a\\u003cb\\u003e')).toBe('a<b>');
+  });
+
+  it('collapses doubled escapes', () => {
+    expect(unescapeFlight('a\\\\"b')).toBe('a"b');
   });
 });

@@ -58,6 +58,20 @@ const sightingsSchema = z.object({
   companionId: z.string().max(64).optional().nullable(),
   version: z.string().max(16).optional().nullable(),
   tasks: z.array(sightingTaskSchema).max(100),
+  debug: z
+    .object({
+      source: z.string().max(16).optional().nullable(),
+      page: z
+        .object({
+          htmlLen: z.number().optional().nullable(),
+          scriptTags: z.number().optional().nullable(),
+          flightHits: z.number().optional().nullable(),
+        })
+        .optional()
+        .nullable(),
+    })
+    .optional()
+    .nullable(),
 });
 
 const claimResultSchema = z.object({
@@ -486,6 +500,9 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           title: t.title || null,
           companionId,
         });
+      }
+      if (req.body.tasks.length === 0 && req.body.debug) {
+        logger.info('Companion sighting: zero tasks parsed', { debug: req.body.debug });
       }
       res.json({ success: true, data: { received: req.body.tasks.length } });
     } catch (error) {
