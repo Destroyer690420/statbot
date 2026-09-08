@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## Unreleased (implemented 2026-09-07, deployed `a3670fa`)
+### Fixed
+- **CONFIRMED-contact lookup (deployed `f27832e`, app rebuild, backup `rtm-backup-20260908-pre-f27832e.tar.gz`)**: `test-accept` searched only `CONTACTED` rows, so a worker reply (which flips the row to `CONFIRMED`) made acceptance impossible — the exact reported error. Fixed with `findConfirmedContact` (CONFIRMED + unexpired) plus precise errors (expired window vs no reply vs already used); cycle batches now pair only current-window confirmations (Rules 6/7). Verified: health healthy, boot clean.
 ### Added
 - **Dashboard UI fix (deployed `1940026`, dashboard rebuild, backup `rtm-backup-20260908-pre-1940026.tar.gz`)**: Automation page rewritten in the site dark system (`glass-card`/`stat-card`/`btn-primary|secondary|danger`/`input-field`/`status-badge`, desktop table + mobile cards, cycle drill-down, confirm dialog on real accept); sidebar title mapping added. Verified: dashboard 200, health healthy.
 ### Added
