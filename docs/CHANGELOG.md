@@ -4,6 +4,8 @@
 
 ## Unreleased (implemented 2026-09-07, deployed `a3670fa`)
 ### Added
+- **Dashboard UI fix (deployed `1940026`, dashboard rebuild, backup `rtm-backup-20260908-pre-1940026.tar.gz`)**: Automation page rewritten in the site dark system (`glass-card`/`stat-card`/`btn-primary|secondary|danger`/`input-field`/`status-badge`, desktop table + mobile cards, cycle drill-down, confirm dialog on real accept); sidebar title mapping added. Verified: dashboard 200, health healthy.
+### Added
 - **Manual single-task test endpoints (deployed `a3670fa`, app + dashboard rebuild, backup `rtm-backup-20260907-pre-a3670fa.tar.gz`)**: `POST /automation/test-contact` (one-ticket Stage-2 message + 5-min contact window, exact-one-worker guard, busy guard) and `POST /automation/test-accept` (requires ACTIVE+CONFIRMED contact, live poller scan, Post/duplicate/blocked validation, real accept only with `accept:true` + `GOPARTTIME_AUTO_ACCEPT=true` + dryRun off, else `WOULD_ACCEPT`); dashboard Automation page gained a Manual Single-Task Test card. Verified: health healthy, boot clean, `/test-contact` 401 without token. Purpose: controlled one-task test (Post #955126 → ticket-0188).
 
 ### Added
