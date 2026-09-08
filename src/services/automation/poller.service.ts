@@ -240,15 +240,29 @@ export async function scanTasks(): Promise<{ tasks: DetectedGoPartTimeTask[]; ne
     // Light human settle: let RSC flight chunks land, no fixed long sleep.
     await sleep(2500 + Math.random() * 2000);
 
-    const title = await pg.title().catch(() => '');
-    const html = await pg.content();
-    if (
-      resp?.status() === 429 ||
-      /security checkpoint/i.test(title) ||
-      /security checkpoint/i.test(html.slice(0, 5000))
-    ) {
-      recordBackoff();
-      throw new Error('Vercel checkpoint/429 — backing off, context kept alive.');
+    let title = await pg.title().catch(() => '');
+    let html = await pg.content();
+    const status = resp?.status() ?? 0;
+    // Vercel's JS challenge auto-solves inside real Chromium and reloads —
+    // give it up to ~25s to clear before treating it as a block.
+    if (status === 429 || /security checkpoint/i.test(title) || /security checkpoint/i.test(html.slice(0, 5000))) {
+      logger.warn('GoPartTime challenge/429 seen, waiting for auto-solve', { status, title });
+      let cleared = false;
+      for (let i = 0; i < 12 && !cleared; i++) {
+        await sleep(2000);
+        title = await pg.title().catch(() => title);
+        if (!/security checkpoint/i.test(title) && pg.url().includes('/tasks')) {
+          html = await pg.content();
+          if (!/security checkpoint/i.test(html.slice(0, 5000))) cleared = true;
+        }
+      }
+      if (!cleared) {
+        const freshStatus = await pg.title().catch(() => title);
+        logger.warn('GoPartTime challenge did not clear', { status, title: freshStatus, url: pg.url() });
+        recordBackoff();
+        throw new Error('Vercel checkpoint/429 — backing off, context kept alive.');
+      }
+      logger.info('GoPartTime challenge auto-solved');
     }
     const url = pg.url();
     if (/\/login|\/signin/.test(url)) {
