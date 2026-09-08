@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.1
+// @version      1.0.2
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -34,7 +34,8 @@
  *     manually with Send Task - nothing is lost.
  *
  * Auth/session never leave this browser. No passwords, no pasted cookies.
- * Disable anytime via the Tampermonkey menu ("Auto Watcher: ON/OFF").
+ * Always on: the watcher starts with every goparttime.net page load.
+ * Disable it from the Tampermonkey dashboard toggle if ever needed.
  */
 (function () {
   'use strict';
@@ -90,16 +91,7 @@
   }
 
   function watcherEnabled() {
-    const stored = storageGet('gpt_auto_enabled');
-    if (stored === '0' || stored === 'false') return false;
-    return true;
-  }
-
-  function toggleWatcher() {
-    const next = !watcherEnabled();
-    storageSet('gpt_auto_enabled', next ? '1' : '0');
-    alert('Auto Watcher is now ' + (next ? 'ON' : 'OFF') + '. Reloading...');
-    location.reload();
+    return true; // always on (disable via the Tampermonkey dashboard toggle)
   }
 
   function openSettings() {
@@ -116,7 +108,6 @@
 
   if (typeof GM_registerMenuCommand === 'function') {
     GM_registerMenuCommand('Configure Sender...', openSettings);
-    GM_registerMenuCommand('Auto Watcher: ON/OFF', toggleWatcher);
   }
 
   // --- HTTP (GM transport preferred, fetch fallback) --
