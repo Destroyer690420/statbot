@@ -461,4 +461,14 @@ export async function sendTestAccept(externalTaskId: string, channelId: string, 
   return data;
 }
 
+export async function getAutomationCompanion() {
+  const { data } = await api.get('/automation/companion');
+  return data;
+}
+
+export async function getAutomationClaims() {
+  const { data } = await api.get('/automation/claims');
+  return data;
+}
+
 export default api;

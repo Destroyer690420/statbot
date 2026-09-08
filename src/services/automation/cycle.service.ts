@@ -25,14 +25,28 @@ function sleep(ms: number): Promise<void> {
 
 let running = false;
 
+export type AcceptStrategy = 'server' | 'companion';
+
+/** Companion claim time-to-live (manager's browser polls the queue). */
+export const CLAIM_TTL_MS = 10 * 60 * 1000;
+
+export interface CycleOpts {
+  forced?: boolean;
+  /** Injected tasks (skips the server scan — used by the sighting flow). */
+  tasks?: DetectedGoPartTimeTask[];
+  /** server = poller accepts; companion = claim queue + in-page accept. */
+  strategy?: AcceptStrategy;
+}
+
 /**
  * Eligible-gated iterative cycle (user spec v3):
  *  poll -> count eligible x -> ping exactly x workers -> 5-min window
  *  -> accept min(eligible, confirmed) -> re-poll remaining -> repeat
  *  until no eligible remains or no workers left.
- * Dry-run (default) logs WOULD_ACCEPT and never calls acceptTask.
+ * Dry-run (default) logs WOULD_ACCEPT and never accepts.
+ * With opts.tasks, runs a SINGLE batch over the injected tasks (sighting flow).
  */
-export async function runCycle(discordClient: Client, opts: { forced?: boolean } = {}): Promise<string | null> {
+export async function runCycle(discordClient: Client, opts: CycleOpts = {}): Promise<string | null> {
   if (running) {
     logger.info('Automation cycle already running, skipping');
     return null;
@@ -58,21 +72,28 @@ export async function runCycle(discordClient: Client, opts: { forced?: boolean }
 
   const contactedChannels = new Set<string>();
   const consumedIds = new Set<string>();
+  const strategy: AcceptStrategy = opts.strategy || 'server';
   let postsAccepted = 0;
   let failures = 0;
 
   try {
     // Iterative batches: each batch re-polls so we ping only remaining eligible count.
-    for (let batch = 0; batch < 6; batch++) {
+    // Injected-tasks mode (sighting flow) runs a single batch — the queue tick re-runs.
+    const maxBatches = opts.tasks ? 1 : 6;
+    for (let batch = 0; batch < maxBatches; batch++) {
       let detected: DetectedGoPartTimeTask[];
-      try {
-        const scan = await scanTasks();
-        detected = scan.tasks;
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        logger.warn('Cycle scan failed', { cycleId, batch, error: msg });
-        failures++;
-        break;
+      if (opts.tasks) {
+        detected = batch === 0 ? opts.tasks : [];
+      } else {
+        try {
+          const scan = await scanTasks();
+          detected = scan.tasks;
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          logger.warn('Cycle scan failed', { cycleId, batch, error: msg });
+          failures++;
+          break;
+        }
       }
 
       // Validate all detected.
@@ -149,7 +170,7 @@ export async function runCycle(discordClient: Client, opts: { forced?: boolean }
         const task = remaining[i];
         const contact = fresh[i];
         consumedIds.add(contact.id);
-        if (dryRun || !env.GOPARTTIME_AUTO_ACCEPT) {
+        if (dryRun || (strategy === 'server' && !env.GOPARTTIME_AUTO_ACCEPT)) {
           await automationRepository.logTask({
             cycleId, externalTaskId: task.subTaskId, taskType: task.type,
             subreddit: task.subreddit, status: 'WOULD_ACCEPT', workerId: contact.workerId,
@@ -158,7 +179,13 @@ export async function runCycle(discordClient: Client, opts: { forced?: boolean }
           postsAccepted++;
           continue;
         }
-        // Real accept (flag-gated).
+        // Real accept (flag-gated for server; companion uses the manager's browser).
+        if (strategy === 'companion') {
+          const ok = await acceptViaClaim(cycleId, task, contact.id, contact.channelId, contact.workerId);
+          if (ok) postsAccepted++;
+          else failures++;
+          continue;
+        }
         try {
           await automationRepository.updateContactStatus(contact.id, 'RESERVED');
           const session = await sessionService.load();
@@ -208,6 +235,62 @@ async function waitForWindow(): Promise<void> {
   while (Date.now() < end) {
     await sleep(15000);
   }
+}
+
+/**
+ * Companion accept: queue a claim for the manager's browser (in-page accept
+ * with the genuine session), then wait for its verdict. Releases the worker
+ * on failure/timeout so nobody is left hanging.
+ */
+async function acceptViaClaim(
+  cycleId: string,
+  task: DetectedGoPartTimeTask,
+  contactId: string,
+  channelId: string,
+  workerId: string | null,
+): Promise<boolean> {
+  await automationRepository.updateContactStatus(contactId, 'RESERVED');
+  const claim = await automationRepository.createClaim({
+    cycleId,
+    externalTaskId: task.subTaskId,
+    channelId,
+    workerId,
+    expiresAt: new Date(Date.now() + CLAIM_TTL_MS),
+  });
+  logger.info('Automation claim queued for companion', { claimId: claim.id, task: task.subTaskId });
+
+  const deadline = Date.now() + CLAIM_TTL_MS + 30 * 1000;
+  while (Date.now() < deadline) {
+    await sleep(10000);
+    const current = await automationRepository.findClaim(claim.id);
+    if (!current) break;
+    if (current.status === 'CLAIMED') {
+      await automationRepository.logTask({
+        cycleId, externalTaskId: task.subTaskId, taskType: task.type,
+        subreddit: task.subreddit, status: 'ACCEPTED', workerId,
+      });
+      await automationRepository.updateContactStatus(contactId, 'ASSIGNED');
+      await auditLogService.log(
+        AuditAction.AUTOMATION_TASK_ACCEPTED, null, null,
+        `Task ${task.subTaskId} accepted via companion for <@${workerId}>`,
+      );
+      return true;
+    }
+    if (current.status === 'FAILED' || current.status === 'EXPIRED') break;
+  }
+
+  const final = await automationRepository.findClaim(claim.id);
+  const reason = !final || final.status === 'PENDING' ? 'Companion did not respond in time' : (final.failureReason || 'Companion reported failure');
+  if (final && final.status === 'PENDING') {
+    await automationRepository.resolveClaim(claim.id, 'EXPIRED', reason);
+  }
+  await automationRepository.logTask({
+    cycleId, externalTaskId: task.subTaskId, taskType: task.type,
+    subreddit: task.subreddit, status: 'FAILED', workerId, failureReason: reason,
+  });
+  await automationRepository.updateContactStatus(contactId, 'RELEASED').catch(() => undefined);
+  await auditLogService.log(AuditAction.AUTOMATION_TASK_FAILED, null, null, `Task ${task.subTaskId} failed: ${reason}`);
+  return false;
 }
 
 export function isCycleRunning(): boolean {

@@ -115,3 +115,11 @@
 - **Reason**: matches the established IST-week pattern (Decision 10); zero scheduled infra; selection as a remembered preference avoids re-checking 30+ tickets daily; deriving Post/Comment keeps a single source of truth (Task table).
 - **Consequences**: new tables + `AuditAction OUTREACH_MESSAGE_SENT`; availability can be marked by any worker message (not just a reply to the broadcast); no auto-re-send if the message fails mid-broadcast (per-channel result shown in UI, manager re-clicks).
 - **Status**: Current practice (`src/services/outreach.service.ts`, `src/utils/ist-time.ts`).
+
+## Decision 15: Hybrid companion flow after Vercel hard-blocks the datacenter
+
+- **Context**: Automated GoPartTime acceptance needs 24/7 task monitoring, but Vercel's bot management returns Code 11 ("Failed to verify your browser") for every server-side client tried with fresh cookies — Node fetch, Alpine Chromium headless/headful under Xvfb, genuine Chrome-for-Testing with stealth flags — while the manager's desktop browser works fine. Verdict implicates datacenter IP reputation + server signals, not the session or binary.
+- **Decision**: The manager's trusted browser (new `goparttime-auto.user.js` companion) reports task sightings and performs the in-page accept; the server validates, matches workers, and queues claims, but never fetches GoPartTime in this mode (`pollEnabled` stays off; the Playwright poller code remains dormant behind its flag). Session cookies never leave the browser.
+- **Reason**: zero Vercel exposure from the Oracle IP; genuine session/TLS/IP on every GoPartTime request; full task detail available from the DOM for the existing assign pipeline (no flight-data content resolution needed).
+- **Consequences**: requires the manager's browser open (not true 24/7); claim queue + heartbeat + expiry machinery; stale claims release workers; dashboard shows watcher online/offline.
+- **Status**: Implemented 2026-09-08 (`src/services/automation/queue.service.ts`, `src/api/routes/automation-companion.ts`, `scripts/goparttime-auto.user.js`).

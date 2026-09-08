@@ -259,6 +259,35 @@ erDiagram
         string failureReason "nullable"
         timestamp createdAt
     }
+    AutomationSighting {
+        string id PK "cuid"
+        string externalTaskId UNIQUE "sub_task id"
+        string taskType "post|comment"
+        string subreddit "nullable"
+        string title "nullable"
+        string status "NEW|CONTACTING|DONE"
+        string companionId "nullable"
+        timestamp firstSeenAt
+        timestamp lastSeenAt
+    }
+    AutomationClaim {
+        string id PK "cuid"
+        string cycleId
+        string externalTaskId
+        string channelId
+        string workerId "nullable"
+        string status "PENDING|CLAIMED|FAILED|EXPIRED"
+        timestamp createdAt
+        timestamp expiresAt "+10min"
+        timestamp respondedAt "nullable"
+        string failureReason "nullable"
+    }
+    CompanionStatus {
+        string id PK "default 'companion'"
+        timestamp lastSeenAt
+        string version "nullable"
+        timestamp updatedAt
+    }
 ```
 
 ### Enums (7)

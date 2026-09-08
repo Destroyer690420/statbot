@@ -16,6 +16,8 @@ import {
   getAutomationCycles,
   getAutomationCycle,
   getBlockedSubreddits,
+  getAutomationCompanion,
+  getAutomationClaims,
   updateAutomationSettings,
   startAutomationCycle,
   stopAutomation,
@@ -42,6 +44,8 @@ export function Automation() {
   const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 15000 });
   const cyclesQuery = useQuery({ queryKey: ['automation-cycles'], queryFn: getAutomationCycles, refetchInterval: 30000 });
   const blockedQuery = useQuery({ queryKey: ['automation-blocked'], queryFn: getBlockedSubreddits });
+  const companionQuery = useQuery({ queryKey: ['automation-companion'], queryFn: getAutomationCompanion, refetchInterval: 15000 });
+  const claimsQuery = useQuery({ queryKey: ['automation-claims'], queryFn: getAutomationClaims, refetchInterval: 15000 });
   const detailQuery = useQuery({
     queryKey: ['automation-cycle', selectedCycle],
     queryFn: () => getAutomationCycle(selectedCycle as string),
@@ -51,12 +55,16 @@ export function Automation() {
   const status = statusQuery.data?.data;
   const cycles: Record<string, unknown>[] = cyclesQuery.data?.data || [];
   const blocked: { subreddit: string; reason: string | null }[] = blockedQuery.data?.data || [];
+  const companion = companionQuery.data?.data;
+  const claims: Record<string, unknown>[] = claimsQuery.data?.data || [];
   const detail = detailQuery.data?.data;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['automation-status'] });
     queryClient.invalidateQueries({ queryKey: ['automation-cycles'] });
     queryClient.invalidateQueries({ queryKey: ['automation-blocked'] });
+    queryClient.invalidateQueries({ queryKey: ['automation-companion'] });
+    queryClient.invalidateQueries({ queryKey: ['automation-claims'] });
   };
 
   const settingsMutation = useMutation({
@@ -173,6 +181,31 @@ export function Automation() {
             <p className="text-2xl font-bold text-white mt-1">{String(value)}</p>
           </div>
         ))}
+      </div>
+
+      {/* Companion watcher */}
+      <div className="glass-card p-4 sm:p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-white">Browser Watcher</h2>
+          <span className={`status-badge border ${companion?.online ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-dark-700/40 text-dark-300 border-dark-600/40'}`}>
+            {companion?.online ? 'Online' : 'Offline'}
+          </span>
+        </div>
+        <p className="text-sm text-dark-400">
+          {companion?.lastSeenAt
+            ? `Last seen ${new Date(companion.lastSeenAt).toLocaleString()}${companion?.version ? ` · v${companion.version}` : ''} · ${companion?.freshSightings ?? 0} fresh sightings · ${companion?.pendingClaims ?? 0} pending claims`
+            : 'No watcher activity yet — install goparttime-auto.user.js in the manager browser.'}
+        </p>
+        {claims.length > 0 && (
+          <div className="space-y-2">
+            {claims.map((cl) => (
+              <div key={String(cl.id)} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60">
+                <span className="font-mono text-sm text-dark-100">#{String(cl.externalTaskId)} → {String(cl.channelId).slice(-4)}</span>
+                <span className="text-xs text-amber-400">awaiting companion accept</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Switches */}

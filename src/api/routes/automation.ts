@@ -200,6 +200,39 @@ export default function createAutomationRoutes(discordClient: Client): Router {
     }
   });
 
+  /** GET /api/v1/automation/companion — watcher heartbeat + queue depth. */
+  router.get('/companion', async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      const companion = await automationRepository.companionStatus();
+      const pending = await automationRepository.listPendingClaims();
+      const since = new Date(Date.now() - 15 * 60 * 1000);
+      const fresh = await automationRepository.listNewSightings(since);
+      res.json({
+        success: true,
+        data: {
+          lastSeenAt: companion?.lastSeenAt || null,
+          version: companion?.version || null,
+          pendingClaims: pending.length,
+          freshSightings: fresh.length,
+          online: !!companion && Date.now() - companion.lastSeenAt.getTime() < 3 * 60 * 1000,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /** GET /api/v1/automation/claims — pending claim queue (dashboard view). */
+  router.get('/claims', async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      res.json({ success: true, data: await automationRepository.listPendingClaims() });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
   /**
    * POST /api/v1/automation/test-contact — manual single-ticket Stage-2 test.
    * Sends the availability message to one ticket and opens a 5-min contact

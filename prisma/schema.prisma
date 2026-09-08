@@ -396,6 +396,43 @@ model AutomationTaskLog {
   @@index([externalTaskId])
 }
 
+model AutomationSighting {
+  id             String   @id @default(cuid())
+  externalTaskId String   @unique
+  taskType       String
+  subreddit      String?
+  title          String?
+  status         String   @default("NEW")
+  companionId    String?
+  firstSeenAt    DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+
+  @@index([status, lastSeenAt])
+}
+
+model AutomationClaim {
+  id             String    @id @default(cuid())
+  cycleId        String
+  externalTaskId String
+  channelId      String
+  workerId       String?
+  status         String    @default("PENDING")
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime
+  respondedAt    DateTime?
+  failureReason  String?
+
+  @@index([status, expiresAt])
+  @@index([externalTaskId])
+}
+
+model CompanionStatus {
+  id         String   @id @default("companion")
+  lastSeenAt DateTime @default(now())
+  version    String?
+  updatedAt  DateTime @updatedAt
+}
+
 model InviteDetection {
   id              String    @id
   inviterId       String?

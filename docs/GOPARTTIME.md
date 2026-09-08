@@ -153,6 +153,17 @@ Note: `TASK_REVIEWED`/`markReviewed` exist (model + repo) but no current flow ca
 11. Insight screenshots expire from disk after 60h (see `docs/INSIGHT_SYSTEM.md`); Submit View after expiry returns no image.
 11. **Manual-task fallback** (2026-08-17): the insight endpoint also resolves manually-created tasks (slash command / dashboard) whose id embeds the GoPartTime number (`POST #688318`, `Comment #688318`, case-insensitive) — it only matches tasks with no `source`, so GoPartTime-linked tasks always win. Manual ids in a different format can't be matched.
 
+## 11. Hybrid Companion Flow (2026-09-08 — server never fetches GoPartTime)
+
+Vercel's bot management hard-blocks the Oracle datacenter (Code 11 on every client: Node fetch, Alpine Chromium headless/headful, genuine Chrome-for-Testing — all with fresh cookies), so server-side polling is dormant (`pollEnabled` off). Instead the **manager's trusted browser** does all GoPartTime I/O via `goparttime-auto.user.js` v1.0.0 (`scripts/` + byte-identical `dashboard/public/` copy, served for install like the send script):
+
+- **Monitor** (60s + jitter, `/tasks` only): parses flight-data `sub_task` blocks (available + unclaimed only) → `POST /api/v1/automation/sightings` (extension key). Also the heartbeat source.
+- **Queue** (server, 60s tick, `processSightingQueue`): expires stale claims (releasing workers) → validates fresh NEW sightings (Post/duplicate/blocked, 15-min TTL) → runs one companion-strategy cycle (existing worker Stage-2 flow, then a claim per pair instead of a server accept).
+- **Claim** (companion polls `GET /claims/pending` every 20s): on a pending claim performs the accept POST in-page (genuine session/TLS/IP), reports via `POST /claims/:id/result`, then attempts the full detail push through the existing `/goparttime/assign` (same extraction as Send Task; falls back to manual push).
+- **Safety**: claims expire in 10 min (worker released); dry-run logs `WOULD_ACCEPT` with no GoPartTime mutation (Discord contact messages are still really sent, as with all dry-runs); malformed sightings parked; idempotent by `sub_task_id`.
+- **Visibility**: dashboard Automation page shows watcher online/offline (3-min heartbeat), fresh sighting count, pending claims; cycles table unchanged.
+- Tables: `AutomationSighting` (status NEW/CONTACTING/DONE), `AutomationClaim` (PENDING/CLAIMED/FAILED/EXPIRED), `CompanionStatus` heartbeat.
+
 ## 10. Automated Post Acceptance (foundation, 2026-09-07 — NOT deployed, dry-run default)
 
 Server-side loop that monitors GoPartTime without the manager's PC. Verified findings: GoPartTime is Next.js RSC on Vercel; task list lives in `/tasks` flight data as `detail.sub_task {id, type post|comment, status 0=available, task_id, grab_user_id 0=unclaimed, karma_limit, earnings}` + parent `task {subreddit_name, title}`; accept is `POST /tasks` with `Next-Action: <64-hex>` + `[{sub_task_id}]` → `{"success":true}`; plain Node fetch gets `429 + Vercel Security Checkpoint`, so the poller uses persistent Chromium (Playwright, `.goparttime/browser-profile`) and accepts from inside the page context.

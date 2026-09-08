@@ -108,6 +108,16 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 
 ---
 
+## 7c. Automation Companion — `src/api/routes/automation-companion.ts` (extension Bearer key)
+
+| Method | Path | Purpose | Body | Errors |
+|---|---|---|---|---|
+| POST | `/automation/sightings` | Watcher task-list snapshot (upserts + heartbeat) | `{ companionId?, version?, tasks: [{ subTaskId, type: post\|comment, subreddit?, title? }] ≤100 }` | 400 |
+| GET | `/automation/claims/pending?companionId&version` | Oldest actionable claim (also heartbeat) | — | 500 |
+| POST | `/automation/claims/:id/result` | In-page accept verdict | `{ ok, failureReason? }` | 404 resolved; 410 expired; 500 |
+
+---
+
 ## 8. Reminders — `src/api/routes/reminders.ts` (JWT; mounted at `/api/v1` AFTER uploads)
 
 | Method | Path | Purpose | Params | Errors |

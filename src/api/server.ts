@@ -14,6 +14,7 @@ import createDiscordRoutes from './routes/discord';
 import createGoPartTimeRoutes from './routes/goparttime';
 import createOutreachRoutes from './routes/outreach';
 import createAutomationRoutes from './routes/automation';
+import createAutomationCompanionRoutes from './routes/automation-companion';
 import reminderRoutes from './routes/reminders';
 import statsRoutes from './routes/stats';
 import healthRoutes from './routes/health';
@@ -79,6 +80,8 @@ export function createApiServer(discordClient: Client): express.Application {
   app.use('/api/v1/outreach', createOutreachRoutes(discordClient));
   // Automation routes (GoPartTime auto-accept: status/cycles/blocked/session)
   app.use('/api/v1/automation', createAutomationRoutes(discordClient));
+  // Companion routes (manager-browser watcher: sightings/claims, extension key)
+  app.use('/api/v1/automation', createAutomationCompanionRoutes());
   app.use('/api/v1/stats', statsRoutes);
   app.use('/api/v1/export', exportRoutes);
   app.use('/api/v1/audit-logs', auditRoutes);

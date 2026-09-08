@@ -515,3 +515,47 @@ ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_TASK_FAILED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_BLOCKED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_SESSION_UPDATED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_STOPPED';
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Hybrid companion flow (browser watcher + claim queue)
+-- ──────────────────────────────────────────────────────────────
+-- The manager's trusted browser reports task sightings and performs the
+-- in-page accept; the server never fetches GoPartTime in this mode.
+CREATE TABLE IF NOT EXISTS "AutomationSighting" (
+  "id" TEXT NOT NULL,
+  "externalTaskId" TEXT NOT NULL,
+  "taskType" TEXT NOT NULL,
+  "subreddit" TEXT,
+  "title" TEXT,
+  "status" TEXT NOT NULL DEFAULT 'NEW',
+  "companionId" TEXT,
+  "firstSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AutomationSighting_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "AutomationSighting_externalTaskId_key" ON "AutomationSighting"("externalTaskId");
+CREATE INDEX IF NOT EXISTS "AutomationSighting_status_lastSeenAt_idx" ON "AutomationSighting"("status", "lastSeenAt");
+
+CREATE TABLE IF NOT EXISTS "AutomationClaim" (
+  "id" TEXT NOT NULL,
+  "cycleId" TEXT NOT NULL,
+  "externalTaskId" TEXT NOT NULL,
+  "channelId" TEXT NOT NULL,
+  "workerId" TEXT,
+  "status" TEXT NOT NULL DEFAULT 'PENDING',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "expiresAt" TIMESTAMP(3) NOT NULL,
+  "respondedAt" TIMESTAMP(3),
+  "failureReason" TEXT,
+  CONSTRAINT "AutomationClaim_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "AutomationClaim_status_expiresAt_idx" ON "AutomationClaim"("status", "expiresAt");
+CREATE INDEX IF NOT EXISTS "AutomationClaim_externalTaskId_idx" ON "AutomationClaim"("externalTaskId");
+
+CREATE TABLE IF NOT EXISTS "CompanionStatus" (
+  "id" TEXT NOT NULL DEFAULT 'companion',
+  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "version" TEXT,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "CompanionStatus_pkey" PRIMARY KEY ("id")
+);

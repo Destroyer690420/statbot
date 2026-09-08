@@ -147,6 +147,91 @@ export class AutomationRepository {
   async listCycleLogs(cycleId: string) {
     return getDb().automationTaskLog.findMany({ where: { cycleId }, orderBy: { createdAt: 'asc' } });
   }
+
+  // ─── Sightings (companion-reported task list) ───
+  async upsertSighting(data: {
+    externalTaskId: string; taskType: string; subreddit: string | null;
+    title: string | null; companionId: string | null;
+  }) {
+    const now = new Date();
+    return getDb().automationSighting.upsert({
+      where: { externalTaskId: data.externalTaskId },
+      create: { ...data, status: 'NEW', firstSeenAt: now, lastSeenAt: now },
+      update: {
+        taskType: data.taskType,
+        subreddit: data.subreddit,
+        title: data.title,
+        companionId: data.companionId,
+        lastSeenAt: now,
+      },
+    });
+  }
+
+  async listNewSightings(since: Date) {
+    return getDb().automationSighting.findMany({
+      where: { status: 'NEW', lastSeenAt: { gte: since } },
+      orderBy: { firstSeenAt: 'asc' },
+    });
+  }
+
+  async markSightings(ids: string[], status: string) {
+    if (ids.length === 0) return { count: 0 };
+    return getDb().automationSighting.updateMany({ where: { id: { in: ids } }, data: { status } });
+  }
+
+  // ─── Claims (server asks companion to accept in-page) ───
+  async createClaim(data: {
+    cycleId: string; externalTaskId: string; channelId: string;
+    workerId: string | null; expiresAt: Date;
+  }) {
+    return getDb().automationClaim.create({ data: { ...data, status: 'PENDING' } });
+  }
+
+  async findClaim(id: string) {
+    return getDb().automationClaim.findUnique({ where: { id } });
+  }
+
+  async pendingClaim() {
+    return getDb().automationClaim.findFirst({
+      where: { status: 'PENDING', expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async listPendingClaims() {
+    return getDb().automationClaim.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async resolveClaim(id: string, status: 'CLAIMED' | 'FAILED' | 'EXPIRED', failureReason?: string | null) {
+    return getDb().automationClaim.update({
+      where: { id },
+      data: { status, respondedAt: new Date(), failureReason: failureReason || null },
+    });
+  }
+
+  async expireDueClaims(now: Date = new Date()) {
+    return getDb().automationClaim.updateMany({
+      where: { status: 'PENDING', expiresAt: { lte: now } },
+      data: { status: 'EXPIRED', respondedAt: now },
+    });
+  }
+
+  // ─── Companion heartbeat ───
+  async heartbeat(companionId: string | null, version: string | null) {
+    void companionId;
+    return getDb().companionStatus.upsert({
+      where: { id: 'companion' },
+      create: { id: 'companion', lastSeenAt: new Date(), version },
+      update: { lastSeenAt: new Date(), version },
+    });
+  }
+
+  async companionStatus() {
+    return getDb().companionStatus.findUnique({ where: { id: 'companion' } });
+  }
 }
 
 export const automationRepository = new AutomationRepository();
