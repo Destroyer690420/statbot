@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-07 — GoPartTime auto-accept foundation **DEPLOYED** (`161.118.164.85`, git HEAD `54bf6f7`, app + dashboard rebuild; backup `rtm-backup-20260907-pre-de9ad85.tar.gz`; migration excerpt applied, task counts unchanged; health healthy, "All systems online!" + scheduler live; dry-run default, session not pasted yet). Previous live: self-service `/mystats` + `/myinvites` (`441fc12`).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-08 — Hybrid companion flow **DEPLOYED** (`161.118.164.85`, git HEAD `47b79f1`, app + dashboard rebuild; backup `rtm-backup-20260908-pre-47b79f1.tar.gz`; migration excerpt applied; health healthy, boot clean + sighting queue live, watcher script served 200). Server poller dormant (Vercel Code 11). Previous: auto-accept foundation + fixes (`54bf6f7`…`9999b8a`).
 
 ---
 
@@ -249,6 +249,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-08**: **DEPLOYED hybrid companion flow** (`161.118.164.85`) at commit `47b79f1` (app + dashboard rebuild; backup `rtm-backup-20260908-pre-47b79f1.tar.gz`). Browser watcher + claim queue + sighting tick; server poller dormant after Vercel Code 11 evidence. Verified live: health healthy, boot clean + sighting queue, `/goparttime-auto.user.js` 200.
 - **2026-09-07**: **DEPLOYED GoPartTime auto-accept foundation** (`161.118.164.85`) at commit `54bf6f7` (app + dashboard rebuild; backup `rtm-backup-20260907-pre-de9ad85.tar.gz`; no slash-command redeploy — no command files changed). Pre-deploy: `GOPARTTIME_SESSION_KEY` (32-byte hex) generated + `GOPARTTIME_AUTO_ACCEPT=false` appended to server `.env`; migration excerpt applied (6 tables + 8 audit values, task snapshot identical before/after: 153/5/13/7/39/428/2); Playwright Chromium deps installed on host (`install --with-deps`), then host browser caches removed (~2GB freed — container uses baked-in Alpine Chromium 149 + `browser-profile` volume); lockfile fixed server-side with npm 10 (npm 11 had pruned 2 `@emnapi/*` entries → `npm ci` failure, fixed with zero other changes). Verified live: compose all Up, health healthy (DB+Redis), boot "All systems online!" + "Automation scheduler started [0,10,11,20,30,40,50]", dashboard 200, userscript 200, `/automation/status` 401 without token, Chromium + 8 compiled automation modules in container, host scratch cleaned. Dry-run default — session paste + enable still pending (Automation → Session).
 
 

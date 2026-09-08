@@ -2,7 +2,9 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
-## Unreleased (implemented 2026-09-07, deployed `a3670fa`)
+## Unreleased (hybrid companion flow, deployed `47b79f1`)
+### Added
+- **Hybrid companion flow (deployed `47b79f1`, app + dashboard rebuild, backup `rtm-backup-20260908-pre-47b79f1.tar.gz`)**: manager-browser watcher (`goparttime-auto.user.js` v1.0.0, served at `/goparttime-auto.user.js`) reports sightings + performs in-page accepts; server validates/matches workers via claim queue (`AutomationSighting`/`AutomationClaim`/`CompanionStatus` tables, migration excerpt applied, no data touched); sighting queue tick (60s) + claim sweeper; dashboard watcher status + pending claims. Verified: health healthy, boot clean incl. sighting queue, script served 200. Reason: Vercel Code 11 hard-blocks all server-side clients (server poller dormant).
 ### Fixed
 - **Chromium-valid cookie flags + vault self-refresh (deployed `f882f2e`, app rebuild, backup `rtm-backup-20260908-pre-f882f2e.tar.gz`)**: `addCookies` sent `__Host-` with a Domain and no `secure` flag — Chromium rejected every scan with `Invalid cookie fields`. Fixed per RFC 6265bis (`__Host-` via URL, no domain; `secure` everywhere) with a clear repaste error; vault now self-refreshes live cookies + Next-Action after each scan (paste-once); save-time validation/sanitization for paste artifacts. Verified: health healthy, boot clean; 8 new cookie tests.
 ### Fixed
