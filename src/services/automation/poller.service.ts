@@ -163,6 +163,7 @@ async function ensureBrowser(): Promise<Page> {
       timezoneId: string;
       userAgent: string;
       args: string[];
+      ignoreDefaultArgs: string[];
     } = {
       headless: !HEADFUL,
       viewport: { width: 1366, height: 768 },
@@ -172,8 +173,10 @@ async function ensureBrowser(): Promise<Page> {
         session.userAgent ||
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
       args: HEADFUL
-        ? ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1366,768']
-        : ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+        ? ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1366,768', '--disable-blink-features=AutomationControlled']
+        : ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-blink-features=AutomationControlled'],
+      // Drop Playwright's --enable-automation flag (a top bot-management signal).
+      ignoreDefaultArgs: ['--enable-automation'],
     };
     // Resolution order: explicit env (Docker: PLAYWRIGHT_CHROMIUM_PATH) →
     // system Chrome (dev machines) → bundled Playwright chromium.
@@ -267,6 +270,29 @@ export async function scanTasks(): Promise<{ tasks: DetectedGoPartTimeTask[]; ne
     // give it up to ~25s to clear before treating it as a block.
     if (status === 429 || /security checkpoint/i.test(title) || /security checkpoint/i.test(html.slice(0, 5000))) {
       logger.warn('GoPartTime challenge/429 seen, waiting for auto-solve', { status, title });
+      // Diagnostics: what exactly is Vercel telling us? (retry-after header,
+      // page text, screenshot to /tmp for manual inspection.)
+      try {
+        const headers = (await resp?.allHeaders().catch(() => ({}))) || {};
+        const interesting: Record<string, string> = {};
+        for (const [k, v] of Object.entries(headers)) {
+          if (/retry|ratelimit|vercel|cf-|server|set-cookie/i.test(k)) interesting[k] = Array.isArray(v) ? v.join(';') : String(v).slice(0, 200);
+        }
+        const bodyText = await pg
+          .evaluate('document.body ? document.body.innerText.slice(0, 400) : \'\'')
+          .catch(() => '');
+        try {
+          for (const old of ['/tmp/gpt-challenge-1.png', '/tmp/gpt-challenge-2.png']) {
+            await import('node:fs').then((fs) => fs.rmSync(old, { force: true })).catch(() => undefined);
+          }
+          await pg.screenshot({ path: '/tmp/gpt-challenge-1.png' });
+        } catch {
+          // best-effort
+        }
+        logger.warn('GoPartTime challenge detail', { status, url: pg.url(), headers: interesting, bodyText });
+      } catch {
+        // diagnostics must never break the scan
+      }
       let cleared = false;
       for (let i = 0; i < 12 && !cleared; i++) {
         await sleep(2000);
