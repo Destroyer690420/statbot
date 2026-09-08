@@ -1,8 +1,20 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  Bot,
+  Play,
+  Square,
+  FlaskConical,
+  KeyRound,
+  Ban,
+  Send,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
+import {
   getAutomationStatus,
   getAutomationCycles,
+  getAutomationCycle,
   getBlockedSubreddits,
   updateAutomationSettings,
   startAutomationCycle,
@@ -14,6 +26,10 @@ import {
   sendTestAccept,
 } from '../api/client';
 
+function errMsg(e: unknown): string {
+  return (e as { response?: { data?: { message?: string } } }).response?.data?.message || (e as Error).message || 'error';
+}
+
 export function Automation() {
   const queryClient = useQueryClient();
   const [subInput, setSubInput] = useState('');
@@ -21,15 +37,21 @@ export function Automation() {
   const [selectedCycle, setSelectedCycle] = useState<string | null>(null);
   const [testChannel, setTestChannel] = useState('');
   const [testTaskId, setTestTaskId] = useState('');
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 15000 });
   const cyclesQuery = useQuery({ queryKey: ['automation-cycles'], queryFn: getAutomationCycles, refetchInterval: 30000 });
   const blockedQuery = useQuery({ queryKey: ['automation-blocked'], queryFn: getBlockedSubreddits });
+  const detailQuery = useQuery({
+    queryKey: ['automation-cycle', selectedCycle],
+    queryFn: () => getAutomationCycle(selectedCycle as string),
+    enabled: !!selectedCycle,
+  });
 
   const status = statusQuery.data?.data;
-  const cycles = cyclesQuery.data?.data || [];
-  const blocked = blockedQuery.data?.data || [];
+  const cycles: Record<string, unknown>[] = cyclesQuery.data?.data || [];
+  const blocked: { subreddit: string; reason: string | null }[] = blockedQuery.data?.data || [];
+  const detail = detailQuery.data?.data;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['automation-status'] });
@@ -54,265 +76,394 @@ export function Automation() {
     mutationFn: removeBlockedSubreddit,
     onSuccess: invalidate,
   });
-  const sessionMutation = useMutation({ mutationFn: saveAutomationSession, onSuccess: invalidate });
+  const sessionMutation = useMutation({
+    mutationFn: saveAutomationSession,
+    onSuccess: () => {
+      setSession({ sessionToken: '', csrfToken: '', nextAction: '' });
+      invalidate();
+    },
+  });
   const testContactMutation = useMutation({
     mutationFn: () => sendTestContact(testChannel.trim(), undefined),
     onSuccess: (r) => {
-      setTestResult(`Contact sent: ${r.data?.worker?.name || '?'} in #${r.data?.channel?.name || '?'} (5-min window)`);
+      setTestResult({ ok: true, text: `Contact sent: ${r.data?.worker?.name || '?'} in #${r.data?.channel?.name || '?'} (5-min window)` });
       invalidate();
     },
-    onError: (e: unknown) => setTestResult(`Contact failed: ${(e as { response?: { data?: { message?: string } } }).response?.data?.message || 'error'}`),
+    onError: (e: unknown) => setTestResult({ ok: false, text: `Contact failed: ${errMsg(e)}` }),
   });
   const testAcceptMutation = useMutation({
     mutationFn: (accept: boolean) => sendTestAccept(testTaskId.trim(), testChannel.trim(), accept),
     onSuccess: (r) => {
-      setTestResult(r.data?.wouldAccept ? `WOULD ACCEPT #${testTaskId} (${r.data?.reason || ''})` : `ACCEPTED #${testTaskId} — push via Send Task button next.`);
+      setTestResult({
+        ok: true,
+        text: r.data?.wouldAccept
+          ? `WOULD ACCEPT #${testTaskId} (${r.data?.reason || ''})`
+          : `ACCEPTED #${testTaskId} — push it to the ticket with the Send Task button next.`,
+      });
       invalidate();
     },
-    onError: (e: unknown) => setTestResult(`Accept failed: ${(e as { response?: { data?: { message?: string } } }).response?.data?.message || 'error'}`),
+    onError: (e: unknown) => setTestResult({ ok: false, text: `Accept failed: ${errMsg(e)}` }),
   });
 
+  const live = !!status?.enabled && !status?.dryRun;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Automation</h1>
-        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${status?.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-          {status?.enabled ? (status?.dryRun ? 'DRY RUN' : 'LIVE') : 'STOPPED'}
-        </span>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Status */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2.5">
+          <Bot className="w-5 h-5 text-primary-400" />
+          <span
+            className={`status-badge border ${
+              live
+                ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                : status?.enabled
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                  : 'bg-dark-700/40 text-dark-300 border-dark-600/40'
+            }`}
+          >
+            {status?.enabled ? (status?.dryRun ? 'Dry run' : 'Live') : 'Stopped'}
+          </span>
+          {status?.runningCycle && (
+            <p className="text-sm text-dark-400">Cycle running…</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => stopMutation.mutate()}
+            disabled={stopMutation.isPending}
+            className="btn-danger flex items-center justify-center gap-1.5 flex-1 md:flex-none text-[13px] md:text-sm py-2 md:py-2.5 px-3 md:px-6"
+          >
+            <Square className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            Stop
+          </button>
+          <button
+            onClick={() => startMutation.mutate()}
+            disabled={startMutation.isPending}
+            className="btn-primary flex items-center justify-center gap-1.5 flex-1 md:flex-none text-[13px] md:text-sm py-2 md:py-2.5 px-3 md:px-6"
+          >
+            {startMutation.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin" />
+            ) : (
+              <Play className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            )}
+            Run Cycle Now
+          </button>
+          <button
+            onClick={() => { statusQuery.refetch(); cyclesQuery.refetch(); }}
+            disabled={statusQuery.isFetching}
+            className="p-2 md:p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50 shrink-0"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
-      {/* Status cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {[
           ['Eligible Posts', status?.lastCycle?.eligiblePosts ?? '—'],
           ['Workers Confirmed', status?.lastCycle?.workersConfirmed ?? '—'],
           ['Posts Accepted', status?.lastCycle?.postsAccepted ?? '—'],
           ['Blocked Subs', status?.blockedCount ?? blocked.length],
         ].map(([label, value]) => (
-          <div key={label} className="bg-white rounded-lg shadow p-4">
-            <div className="text-sm text-gray-500">{label}</div>
-            <div className="text-2xl font-bold">{String(value)}</div>
+          <div key={label} className="stat-card">
+            <p className="text-sm text-dark-400">{label}</p>
+            <p className="text-2xl font-bold text-white mt-1">{String(value)}</p>
           </div>
         ))}
       </div>
 
-      {/* Controls */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-3">
-        <h2 className="font-semibold">Controls</h2>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-            disabled={stopMutation.isPending}
-            onClick={() => stopMutation.mutate()}
-          >
-            STOP AUTOMATION
-          </button>
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-            disabled={startMutation.isPending}
-            onClick={() => startMutation.mutate()}
-          >
-            Run Cycle Now (forced)
-          </button>
-        </div>
-        {status && (
-          <div className="flex flex-wrap gap-4 text-sm">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={status.enabled}
-                onChange={(e) =>
-                  settingsMutation.mutate({ enabled: e.target.checked, dryRun: status.dryRun, pollEnabled: status.pollEnabled })
-                }
-              />
-              Enabled
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={status.dryRun}
-                onChange={(e) =>
-                  settingsMutation.mutate({ enabled: status.enabled, dryRun: e.target.checked, pollEnabled: status.pollEnabled })
-                }
-              />
-              Dry-run (no real accept)
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={status.pollEnabled}
-                onChange={(e) =>
-                  settingsMutation.mutate({ enabled: status.enabled, dryRun: status.dryRun, pollEnabled: e.target.checked })
-                }
-              />
-              Polling (7 scans/hour)
-            </label>
+      {/* Switches */}
+      <div className="glass-card p-4 sm:p-6 space-y-3">
+        <h2 className="text-base font-semibold text-white">Switches</h2>
+        {status ? (
+          <div className="flex flex-col gap-3 text-sm">
+            {([
+              ['enabled', 'Enabled', 'Master switch — scheduler and manual runs'],
+              ['dryRun', 'Dry-run', 'Log WOULD ACCEPT, never touch GoPartTime'],
+              ['pollEnabled', 'Polling', '7 scans/hour at :00 :10 :11 :20 :30 :40 :50'],
+            ] as const).map(([key, label, hint]) => (
+              <label key={key} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60 cursor-pointer">
+                <span className="min-w-0">
+                  <span className="block text-dark-100">{label}</span>
+                  <span className="block text-xs text-dark-500 mt-0.5">{hint}</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={!!status[key]}
+                  onChange={(e) => settingsMutation.mutate({ enabled: status.enabled, dryRun: status.dryRun, pollEnabled: status.pollEnabled, [key]: e.target.checked })}
+                  className="accent-primary-500 w-4 h-4 shrink-0 ml-3"
+                />
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="flex justify-center py-6">
+            <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
           </div>
         )}
-        <p className="text-xs text-gray-500">
-          Schedule: scans at :00 :10 :11 :20 :30 :40 :50 with jitter. Mandatory scans at :10/:11. Real acceptance additionally requires
-          GOPARTTIME_AUTO_ACCEPT=true on the server.
+        <p className="text-xs text-dark-500">
+          Real acceptance additionally requires GOPARTTIME_AUTO_ACCEPT=true on the server.
         </p>
       </div>
 
-      {/* Blocked subreddits */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-3">
-        <h2 className="font-semibold">Blocked Subreddits (exact match)</h2>
-        <div className="flex gap-2">
-          <input
-            className="flex-1 border rounded px-3 py-2"
-            placeholder="r/aiagents"
-            value={subInput}
-            onChange={(e) => setSubInput(e.target.value)}
-          />
-          <button
-            className="px-4 py-2 bg-gray-800 text-white rounded disabled:opacity-50"
-            disabled={!subInput.trim() || addBlockedMutation.isPending}
-            onClick={() => addBlockedMutation.mutate(subInput.trim())}
-          >
-            Add
-          </button>
+      {/* Manual test */}
+      <div className="glass-card p-4 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <FlaskConical className="w-4 h-4 text-primary-400" />
+          <h2 className="text-base font-semibold text-white">Manual Single-Task Test</h2>
         </div>
-        <ul className="divide-y">
-          {blocked.map((b: { subreddit: string; reason: string | null }) => (
-            <li key={b.subreddit} className="py-2 flex items-center justify-between">
-              <span className="font-mono">r/{b.subreddit}</span>
-              <button
-                className="text-red-600 text-sm hover:underline"
-                onClick={() => removeBlockedMutation.mutate(b.subreddit)}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-          {blocked.length === 0 && <li className="py-2 text-sm text-gray-500">None blocked.</li>}
-        </ul>
-      </div>
-
-      {/* Session */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-3">
-        <h2 className="font-semibold">GoPartTime Session (cookies, encrypted at rest)</h2>
-        <textarea
-          className="w-full border rounded px-3 py-2 font-mono text-xs"
-          rows={3}
-          placeholder="__Secure-goparttime.session-token value (starts eyJ...)"
-          value={session.sessionToken}
-          onChange={(e) => setSession({ ...session, sessionToken: e.target.value })}
-        />
-        <input
-          className="w-full border rounded px-3 py-2 font-mono text-xs"
-          placeholder="__Host-goparttime.csrf-token value"
-          value={session.csrfToken}
-          onChange={(e) => setSession({ ...session, csrfToken: e.target.value })}
-        />
-        <input
-          className="w-full border rounded px-3 py-2 font-mono text-xs"
-          placeholder="Next-Action id (64 hex, optional)"
-          value={session.nextAction}
-          onChange={(e) => setSession({ ...session, nextAction: e.target.value })}
-        />
-        <button
-          className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
-          disabled={!session.sessionToken.trim() || !session.csrfToken.trim() || sessionMutation.isPending}
-          onClick={() =>
-            sessionMutation.mutate({
-              sessionToken: session.sessionToken.trim(),
-              csrfToken: session.csrfToken.trim(),
-              nextAction: session.nextAction.trim() || undefined,
-            })
-          }
-        >
-          Save Session
-        </button>
-      </div>
-
-      {/* Cycles */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-3">
-        <h2 className="font-semibold">Manual Single-Task Test</h2>
         <div className="grid md:grid-cols-2 gap-2">
           <input
-            className="border rounded px-3 py-2 font-mono text-sm"
-            placeholder="Ticket channel ID (e.g. 1544752619820425287)"
+            className="input-field font-mono text-sm"
+            placeholder="Ticket channel ID"
             value={testChannel}
             onChange={(e) => setTestChannel(e.target.value)}
           />
           <input
-            className="border rounded px-3 py-2 font-mono text-sm"
-            placeholder="GoPartTime task ID (e.g. 955126)"
+            className="input-field font-mono text-sm"
+            placeholder="GoPartTime task ID"
             value={testTaskId}
             onChange={(e) => setTestTaskId(e.target.value)}
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col md:flex-row gap-2">
           <button
-            className="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
+            className="btn-secondary flex items-center justify-center gap-1.5 text-sm py-2 px-4"
             disabled={!testChannel.trim() || testContactMutation.isPending}
             onClick={() => testContactMutation.mutate()}
           >
+            {testContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             1. Send availability message
           </button>
           <button
-            className="px-4 py-2 bg-amber-600 text-white rounded disabled:opacity-50"
+            className="btn-secondary flex items-center justify-center gap-1.5 text-sm py-2 px-4"
             disabled={!testChannel.trim() || !testTaskId.trim() || testAcceptMutation.isPending}
             onClick={() => testAcceptMutation.mutate(false)}
           >
             2. Dry-run accept check
           </button>
           <button
-            className="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50"
+            className="btn-danger flex items-center justify-center gap-1.5 text-sm py-2 px-4"
             disabled={!testChannel.trim() || !testTaskId.trim() || testAcceptMutation.isPending}
-            onClick={() => testAcceptMutation.mutate(true)}
+            onClick={() => {
+              if (!window.confirm(`Really ACCEPT task #${testTaskId.trim()} on GoPartTime? This claims it for real.`)) return;
+              testAcceptMutation.mutate(true);
+            }}
           >
-            3. REAL accept (needs confirmed reply + flags)
+            3. Real accept
           </button>
         </div>
-        {testResult && <p className="text-sm text-gray-700">{testResult}</p>}
-        <p className="text-xs text-gray-500">
-          Step 3 requires a CONFIRMED reply within 5 min, settings dry-run OFF, and server GOPARTTIME_AUTO_ACCEPT=true.
+        {testResult && (
+          <p className={`text-sm ${testResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+            {testResult.ok ? '✅ ' : '❌ '}{testResult.text}
+          </p>
+        )}
+        <p className="text-xs text-dark-500">
+          Step 3 needs a CONFIRMED reply within 5 min, dry-run OFF, and server GOPARTTIME_AUTO_ACCEPT=true.
         </p>
       </div>
 
-      {/* Cycles */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-3">
-        <h2 className="font-semibold">Recent Cycles</h2>
+      {/* Blocked subreddits */}
+      <div className="glass-card p-4 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Ban className="w-4 h-4 text-primary-400" />
+          <h2 className="text-base font-semibold text-white">Blocked Subreddits</h2>
+        </div>
+        <p className="text-sm text-dark-400 -mt-2">Exact match only — blocking aiagents never blocks aiagents2.</p>
+        <div className="flex gap-2">
+          <input
+            className="input-field flex-1 font-mono text-sm"
+            placeholder="r/aiagents"
+            value={subInput}
+            onChange={(e) => setSubInput(e.target.value)}
+          />
+          <button
+            className="btn-secondary text-sm px-4 py-2 shrink-0"
+            disabled={!subInput.trim() || addBlockedMutation.isPending}
+            onClick={() => addBlockedMutation.mutate(subInput.trim())}
+          >
+            Add
+          </button>
+        </div>
+        <div className="space-y-2">
+          {blockedQuery.isLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+            </div>
+          ) : blocked.length === 0 ? (
+            <p className="text-sm text-dark-400">None blocked.</p>
+          ) : (
+            blocked.map((b) => (
+              <div key={b.subreddit} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60">
+                <span className="font-mono text-sm text-dark-100">r/{b.subreddit}</span>
+                <button
+                  className="text-red-400 text-sm hover:underline shrink-0 ml-3"
+                  onClick={() => removeBlockedMutation.mutate(b.subreddit)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Session */}
+      <div className="glass-card p-4 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <KeyRound className="w-4 h-4 text-primary-400" />
+          <h2 className="text-base font-semibold text-white">GoPartTime Session</h2>
+        </div>
+        <p className="text-sm text-dark-400 -mt-2">Cookies are encrypted on the server and never shown back. Pasting new values replaces the old ones.</p>
+        <textarea
+          className="input-field w-full font-mono text-xs"
+          rows={3}
+          placeholder="__Secure-goparttime.session-token value (starts eyJ...)"
+          value={session.sessionToken}
+          onChange={(e) => setSession({ ...session, sessionToken: e.target.value })}
+        />
+        <input
+          className="input-field w-full font-mono text-xs"
+          placeholder="__Host-goparttime.csrf-token value"
+          value={session.csrfToken}
+          onChange={(e) => setSession({ ...session, csrfToken: e.target.value })}
+        />
+        <input
+          className="input-field w-full font-mono text-xs"
+          placeholder="Next-Action id (64 hex, optional)"
+          value={session.nextAction}
+          onChange={(e) => setSession({ ...session, nextAction: e.target.value })}
+        />
+        <div>
+          <button
+            className="btn-primary text-sm px-4 py-2"
+            disabled={!session.sessionToken.trim() || !session.csrfToken.trim() || sessionMutation.isPending}
+            onClick={() =>
+              sessionMutation.mutate({
+                sessionToken: session.sessionToken.trim(),
+                csrfToken: session.csrfToken.trim(),
+                nextAction: session.nextAction.trim() || undefined,
+              })
+            }
+          >
+            {sessionMutation.isPending ? 'Saving…' : 'Save Session'}
+          </button>
+        </div>
+      </div>
+
+      {/* Recent cycles — desktop table */}
+      <div className="glass-card overflow-hidden hidden md:block">
+        <div className="px-6 pt-5 pb-3">
+          <h2 className="text-base font-semibold text-white">Recent Cycles</h2>
+        </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="text-left text-gray-500">
-                <th className="py-2 pr-4">Cycle</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Detected</th>
-                <th className="py-2 pr-4">Eligible</th>
-                <th className="py-2 pr-4">Confirmed</th>
-                <th className="py-2 pr-4">Accepted</th>
+              <tr className="border-y border-dark-700/50 bg-dark-800/50">
+                <th className="px-6 py-4 font-semibold text-dark-200">Cycle</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Status</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Detected</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Eligible</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Confirmed</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Accepted</th>
               </tr>
             </thead>
-            <tbody>
-              {cycles.map((c: Record<string, unknown>) => (
-                <tr key={String(c.id)} className="border-t">
-                  <td className="py-2 pr-4">
-                    <button className="text-blue-600 hover:underline font-mono text-xs" onClick={() => setSelectedCycle(String(c.id))}>
-                      {String(c.id).slice(0, 24)}
-                    </button>
-                  </td>
-                  <td className="py-2 pr-4">{String(c.status)}</td>
-                  <td className="py-2 pr-4">{String(c.tasksDetected)}</td>
-                  <td className="py-2 pr-4">{String(c.eligiblePosts)}</td>
-                  <td className="py-2 pr-4">{String(c.workersConfirmed)}</td>
-                  <td className="py-2 pr-4">{String(c.postsAccepted)}</td>
-                </tr>
-              ))}
-              {cycles.length === 0 && (
+            <tbody className="divide-y divide-dark-700/50">
+              {cyclesQuery.isLoading ? (
                 <tr>
-                  <td colSpan={6} className="py-4 text-gray-500">
+                  <td colSpan={6} className="px-6 py-10 text-center">
+                    <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
+                  </td>
+                </tr>
+              ) : cycles.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-dark-400">
                     No cycles yet.
                   </td>
                 </tr>
+              ) : (
+                cycles.map((c) => (
+                  <tr
+                    key={String(c.id)}
+                    className={`hover:bg-dark-800/30 transition-colors cursor-pointer ${selectedCycle === String(c.id) ? 'bg-dark-800/50' : ''}`}
+                    onClick={() => setSelectedCycle(selectedCycle === String(c.id) ? null : String(c.id))}
+                  >
+                    <td className="px-6 py-4 font-mono text-xs text-primary-400">{String(c.id).slice(0, 24)}</td>
+                    <td className="px-6 py-4 text-sm text-dark-200">{String(c.status)}</td>
+                    <td className="px-6 py-4 text-sm text-dark-200">{String(c.tasksDetected)}</td>
+                    <td className="px-6 py-4 text-sm text-dark-200">{String(c.eligiblePosts)}</td>
+                    <td className="px-6 py-4 text-sm text-dark-200">{String(c.workersConfirmed)}</td>
+                    <td className="px-6 py-4 text-sm text-dark-200">{String(c.postsAccepted)}</td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
-        {selectedCycle && <p className="text-xs text-gray-500">Selected: {selectedCycle} (detail view via API).</p>}
+        {selectedCycle && (
+          <div className="px-6 py-4 border-t border-dark-700/50">
+            {detailQuery.isLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+              </div>
+            ) : detail ? (
+              <div className="grid md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider mb-2">Worker contacts</p>
+                  {(detail.contacts || []).length === 0 && <p className="text-dark-400">None.</p>}
+                  {(detail.contacts || []).map((ct: Record<string, unknown>) => (
+                    <p key={String(ct.id)} className="font-mono text-xs text-dark-200 py-1">
+                      {String(ct.status)} · {String(ct.channelId).slice(-4)} · {ct.respondedAt ? 'replied' : 'no reply'}
+                    </p>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider mb-2">Task decisions</p>
+                  {(detail.logs || []).length === 0 && <p className="text-dark-400">None.</p>}
+                  {(detail.logs || []).map((l: Record<string, unknown>) => (
+                    <p key={String(l.id)} className="font-mono text-xs text-dark-200 py-1">
+                      #{String(l.externalTaskId)} → {String(l.status)}{l.subreddit ? ` · r/${String(l.subreddit)}` : ''}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      {/* Recent cycles — mobile cards */}
+      <div className="md:hidden space-y-4">
+        <div className="glass-card border border-dark-700/50 px-4 pt-4 pb-2">
+          <h2 className="text-base font-semibold text-white pb-2">Recent Cycles</h2>
+        </div>
+        {cyclesQuery.isLoading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          </div>
+        ) : cycles.length === 0 ? (
+          <p className="text-center text-dark-400 py-10">No cycles yet.</p>
+        ) : (
+          cycles.map((c) => (
+            <div key={String(c.id)} className="glass-card border border-dark-700/50 overflow-hidden">
+              <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+                <p className="font-mono text-xs text-primary-400 truncate">{String(c.id).slice(0, 24)}</p>
+                <span className="status-badge bg-dark-700/40 text-dark-300 border border-dark-600/40 ml-2 shrink-0">{String(c.status)}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1 px-4 py-2 border-t border-dark-700/30">
+                {([['Detected', c.tasksDetected], ['Eligible', c.eligiblePosts], ['Confirmed', c.workersConfirmed], ['Accepted', c.postsAccepted]] as const).map(([label, v]) => (
+                  <div key={label} className="text-center">
+                    <p className="text-sm font-semibold text-dark-100">{String(v)}</p>
+                    <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
