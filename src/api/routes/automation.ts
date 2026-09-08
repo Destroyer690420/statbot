@@ -283,9 +283,20 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const userId = (req as unknown as { userId: string }).userId;
       const { externalTaskId, channelId } = req.body;
 
-      const contact = await automationRepository.findActiveContact(channelId);
-      if (!contact || contact.status !== 'CONFIRMED') {
-        res.status(400).json({ success: false, message: 'No confirmed worker for this ticket (reply window expired or no reply yet).' });
+      const contact = await automationRepository.findConfirmedContact(channelId);
+      if (!contact) {
+        const latest = await automationRepository.findLatestContactByChannel(channelId);
+        let message = 'No availability message sent to this ticket yet — use step 1 first.';
+        if (latest) {
+          if (latest.status === 'TIMED_OUT' || (latest.expiresAt && latest.expiresAt <= new Date())) {
+            message = 'Reply window expired (5 min). Send the availability message again for a fresh window.';
+          } else if (latest.status === 'CONTACTED') {
+            message = 'No reply from the worker yet — waiting on their response.';
+          } else if (latest.status === 'ASSIGNED') {
+            message = 'This confirmation was already used for an accepted task.';
+          }
+        }
+        res.status(400).json({ success: false, message });
         return;
       }
 

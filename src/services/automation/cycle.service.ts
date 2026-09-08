@@ -122,12 +122,21 @@ export async function runCycle(discordClient: Client, opts: { forced?: boolean }
       for (const c of candidates) contactedChannels.add(c.channelId);
       await sendConfirmations(discordClient, cycleId, candidates);
       await automationRepository.updateCycle(cycleId, { workersContacted: contactedChannels.size });
+      const batchStart = Date.now();
 
       // 5-minute window (poll every 15s so Ctrl-C/shutdown stays responsive).
       await waitForWindow();
       await expireContacts();
       const confirmed = await collectConfirmed(cycleId);
-      const fresh = confirmed.filter((c: { id: string }) => !consumedIds.has(c.id));
+      // Only confirmations from THIS batch's window count (Rule 6/7: availability
+      // is time-sensitive; a stale reply from an earlier batch must not count).
+      const fresh = confirmed.filter(
+        (c: { id: string; respondedAt: Date | null }) =>
+          !consumedIds.has(c.id) &&
+          !!c.respondedAt &&
+          c.respondedAt.getTime() >= batchStart - 1000 &&
+          c.respondedAt.getTime() <= Date.now(),
+      );
       await automationRepository.updateCycle(cycleId, { workersConfirmed: confirmed.length });
 
       const pairs = Math.min(remaining.length, fresh.length);

@@ -109,6 +109,22 @@ export class AutomationRepository {
     });
   }
 
+  /** A reply that arrived inside the window: CONFIRMED and not yet expired. */
+  async findConfirmedContact(channelId: string) {
+    return getDb().automationContact.findFirst({
+      where: { channelId, status: 'CONFIRMED', expiresAt: { gt: new Date() } },
+      orderBy: { respondedAt: 'desc' },
+    });
+  }
+
+  /** Latest contact regardless of status — used for precise error messages. */
+  async findLatestContactByChannel(channelId: string) {
+    return getDb().automationContact.findFirst({
+      where: { channelId },
+      orderBy: { sentAt: 'desc' },
+    });
+  }
+
   async listCycleContacts(cycleId: string) {
     return getDb().automationContact.findMany({ where: { cycleId }, orderBy: { sentAt: 'asc' } });
   }
