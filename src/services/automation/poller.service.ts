@@ -10,6 +10,23 @@ import type { DetectedGoPartTimeTask } from '../../types';
 const TASKS_URL = 'https://goparttime.net/tasks';
 const PROFILE_DIR = path.join(process.cwd(), '.goparttime', 'browser-profile');
 
+/** Headful (under Xvfb in Docker) looks like a real desktop to bot management. */
+const HEADFUL = process.env.POLLER_HEADFUL === '1';
+
+/**
+ * Masks the strongest headless signals. We authenticate with the manager's
+ * own session — this only stops the browser from volunteering "I'm scripted".
+ * UA says Windows/Chrome while the container is Linux/ARM, so platform and
+ * languages are aligned with the UA; webdriver flag is hidden.
+ */
+const STEALTH_INIT_SCRIPT = `() => {
+  try {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-GB', 'en'] });
+  } catch (e) { /* best-effort */ }
+}`;
+
 const SESSION_COOKIE = '__Secure-goparttime.session-token';
 const CSRF_COOKIE = '__Host-goparttime.csrf-token';
 const CALLBACK_COOKIE = '__Secure-goparttime.callback-url';
@@ -147,14 +164,16 @@ async function ensureBrowser(): Promise<Page> {
       userAgent: string;
       args: string[];
     } = {
-      headless: true,
+      headless: !HEADFUL,
       viewport: { width: 1366, height: 768 },
       locale: 'en-GB',
       timezoneId: 'Asia/Kolkata',
       userAgent:
         session.userAgent ||
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
-      args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      args: HEADFUL
+        ? ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1366,768']
+        : ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     };
     // Resolution order: explicit env (Docker: PLAYWRIGHT_CHROMIUM_PATH) →
     // system Chrome (dev machines) → bundled Playwright chromium.
@@ -171,6 +190,7 @@ async function ensureBrowser(): Promise<Page> {
     const tryCandidate = async (c: { channel?: 'chrome'; executablePath?: string }): Promise<void> => {
       const launched = await chromium.launchPersistentContext(PROFILE_DIR, { ...baseOpts, ...c });
       try {
+        await launched.addInitScript({ content: STEALTH_INIT_SCRIPT });
         // Oracle-safe: block heavy assets, keep RSC/HTML/JS.
         await launched.route('**/*.{png,jpg,jpeg,webp,gif,svg,mp4,webm,woff,woff2,ttf}', (route) => route.abort());
         if (session.sessionToken && session.csrfToken) {

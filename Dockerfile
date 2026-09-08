@@ -15,8 +15,13 @@ FROM node:20-alpine
 WORKDIR /app
 # System Chromium for the GoPartTime automation poller (playwright-core drives
 # it via executablePath; ~170MB, keeps polling inside the free-tier box).
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+# Xvfb lets the poller run headFUL (real-desktop signals for bot management).
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont xvfb
 ENV PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium-browser
+ENV DISPLAY=:99
+ENV POLLER_HEADFUL=1
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 COPY package*.json ./
 RUN npm ci --production
 COPY --from=builder /app/dist ./dist
@@ -27,4 +32,4 @@ RUN mkdir -p logs
 
 EXPOSE 3000
 
-CMD ["node", "dist/index.js"]
+CMD ["./docker-entrypoint.sh"]

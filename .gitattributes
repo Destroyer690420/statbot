@@ -2,3 +2,5 @@
 # (scripts/) and the served copy (dashboard/public/) and match what git stores
 # (LF). Pin LF so Windows checkouts (core.autocrlf=true) don't introduce CRLF.
 *.user.js text eol=lf
+# Container entrypoint must keep LF endings or /bin/sh fails on CRLF.
+docker-entrypoint.sh text eol=lf
