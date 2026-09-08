@@ -1,5 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { BrowserContext, Page } from 'playwright-core';
 import { sessionService } from './session.service';
 import { parseTasksHtml } from './parser';
@@ -9,6 +11,44 @@ import type { DetectedGoPartTimeTask } from '../../types';
 
 const TASKS_URL = 'https://goparttime.net/tasks';
 const PROFILE_DIR = path.join(process.cwd(), '.goparttime', 'browser-profile');
+
+/**
+ * Genuine Google Chrome (not the Chromium build): closest TLS/feature
+ * fingerprint to the manager's desktop browser. Downloaded once (~186MB)
+ * into the persistent volume, then reused. Pinned to the revision proven
+ * working on this stack.
+ */
+const CFT_DIR = path.join(process.cwd(), '.goparttime', 'browsers', 'chrome-linux-arm64');
+const CFT_BIN = path.join(CFT_DIR, 'chrome');
+const CFT_URL =
+  'https://cdn.playwright.dev/builds/cft/153.0.8010.12/linux-arm64/chrome-linux-arm64.zip';
+
+async function ensureRealChrome(): Promise<string | null> {
+  try {
+    await fs.promises.access(CFT_BIN, fs.constants.X_OK);
+    return CFT_BIN;
+  } catch {
+    // not present — download below
+  }
+  try {
+    logger.info('Chrome for Testing not cached — downloading one-time (~186MB)...');
+    await fs.promises.mkdir(path.dirname(CFT_BIN), { recursive: true });
+    const res = await fetch(CFT_URL);
+    if (!res.ok) throw new Error(`CFT download HTTP ${res.status}`);
+    const zipPath = path.join(path.dirname(CFT_DIR), 'cft.zip');
+    await fs.promises.writeFile(zipPath, Buffer.from(await res.arrayBuffer()));
+    await promisify(execFile)('unzip', ['-q', '-o', zipPath, '-d', path.dirname(CFT_DIR)]);
+    await fs.promises.rm(zipPath, { force: true });
+    await fs.promises.access(CFT_BIN, fs.constants.X_OK);
+    logger.info('Chrome for Testing ready');
+    return CFT_BIN;
+  } catch (error) {
+    logger.warn('Chrome for Testing unavailable, falling back to system Chromium', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
 
 /** Headful (under Xvfb in Docker) looks like a real desktop to bot management. */
 const HEADFUL = process.env.POLLER_HEADFUL === '1';
@@ -178,9 +218,11 @@ async function ensureBrowser(): Promise<Page> {
       // Drop Playwright's --enable-automation flag (a top bot-management signal).
       ignoreDefaultArgs: ['--enable-automation'],
     };
-    // Resolution order: explicit env (Docker: PLAYWRIGHT_CHROMIUM_PATH) →
-    // system Chrome (dev machines) → bundled Playwright chromium.
+    // Resolution order: genuine Chrome (best fingerprint) → explicit env →
+    // system Chromium → system Chrome (dev) → bundled Playwright chromium.
     const candidates: { channel?: 'chrome'; executablePath?: string }[] = [];
+    const realChrome = await ensureRealChrome();
+    if (realChrome) candidates.push({ executablePath: realChrome });
     if (process.env.PLAYWRIGHT_CHROMIUM_PATH) candidates.push({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
     candidates.push({ executablePath: '/usr/bin/chromium-browser' });
     candidates.push({ executablePath: '/usr/bin/chromium' });

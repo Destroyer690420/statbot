@@ -16,7 +16,7 @@ WORKDIR /app
 # System Chromium for the GoPartTime automation poller (playwright-core drives
 # it via executablePath; ~170MB, keeps polling inside the free-tier box).
 # Xvfb lets the poller run headFUL (real-desktop signals for bot management).
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont xvfb
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont xvfb unzip
 ENV PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium-browser
 ENV DISPLAY=:99
 ENV POLLER_HEADFUL=1
