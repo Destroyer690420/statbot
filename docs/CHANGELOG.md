@@ -4,6 +4,8 @@
 
 ## Unreleased (implemented 2026-09-07, deployed `a3670fa`)
 ### Fixed
+- **Chromium-valid cookie flags + vault self-refresh (deployed `f882f2e`, app rebuild, backup `rtm-backup-20260908-pre-f882f2e.tar.gz`)**: `addCookies` sent `__Host-` with a Domain and no `secure` flag — Chromium rejected every scan with `Invalid cookie fields`. Fixed per RFC 6265bis (`__Host-` via URL, no domain; `secure` everywhere) with a clear repaste error; vault now self-refreshes live cookies + Next-Action after each scan (paste-once); save-time validation/sanitization for paste artifacts. Verified: health healthy, boot clean; 8 new cookie tests.
+### Fixed
 - **CONFIRMED-contact lookup (deployed `f27832e`, app rebuild, backup `rtm-backup-20260908-pre-f27832e.tar.gz`)**: `test-accept` searched only `CONTACTED` rows, so a worker reply (which flips the row to `CONFIRMED`) made acceptance impossible — the exact reported error. Fixed with `findConfirmedContact` (CONFIRMED + unexpired) plus precise errors (expired window vs no reply vs already used); cycle batches now pair only current-window confirmations (Rules 6/7). Verified: health healthy, boot clean.
 ### Added
 - **Dashboard UI fix (deployed `1940026`, dashboard rebuild, backup `rtm-backup-20260908-pre-1940026.tar.gz`)**: Automation page rewritten in the site dark system (`glass-card`/`stat-card`/`btn-primary|secondary|danger`/`input-field`/`status-badge`, desktop table + mobile cards, cycle drill-down, confirm dialog on real accept); sidebar title mapping added. Verified: dashboard 200, health healthy.
