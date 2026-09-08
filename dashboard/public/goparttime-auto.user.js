@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.4
+// @version      1.0.5
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -40,7 +40,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.4';
+  const VERSION = '1.0.5';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -112,7 +112,7 @@
   }
 
   if (typeof GM_registerMenuCommand === 'function') {
-    GM_registerMenuCommand('Configure Sender...', openSettings);
+    GM_registerMenuCommand('Configure Watcher...', openSettings);
   }
 
   // --- HTTP (GM transport preferred, fetch fallback) --

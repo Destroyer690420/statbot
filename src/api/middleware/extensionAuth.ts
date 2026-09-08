@@ -38,7 +38,14 @@ export function extensionAuth(req: AuthRequest, res: Response, next: NextFunctio
     return;
   }
 
-  logger.warn('Invalid extension token attempt', { ip: req.ip });
+  // TEMPORARY companion-auth diagnostics (no secret values logged — only
+  // length + a truncated hash, which cannot reconstruct the token).
+  try {
+    const digest = crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
+    logger.warn('Invalid extension token attempt', { ip: req.ip, tokenLen: token.length, tokenHash: digest });
+  } catch {
+    logger.warn('Invalid extension token attempt', { ip: req.ip });
+  }
   res.status(401).json({ success: false, message: 'Invalid or expired extension token.' });
 }
 
