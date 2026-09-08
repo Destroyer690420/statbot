@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import type { BrowserContext, Page } from 'playwright-core';
 import { sessionService } from './session.service';
 import { parseTasksHtml } from './parser';
@@ -75,6 +76,31 @@ let scanning = false;
 let backoffUntil = 0;
 let backoffLevel = 0;
 
+function firstLine(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.split('\n')[0];
+}
+
+/** Chromium profile-lock leftovers from a crashed/leaked browser. */
+function clearSingletonLock(): void {
+  for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+    try {
+      fs.rmSync(path.join(PROFILE_DIR, f), { force: true });
+    } catch {
+      // best-effort
+    }
+  }
+}
+
+function isLockError(e: unknown): boolean {
+  const msg = firstLine(e);
+  return (
+    msg.includes('Target page, context or browser has been closed') ||
+    msg.includes('SingletonLock') ||
+    msg.includes('ProcessSingleton')
+  );
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -138,38 +164,58 @@ async function ensureBrowser(): Promise<Page> {
     candidates.push({ executablePath: '/usr/bin/chromium' });
     candidates.push({ channel: 'chrome' });
     candidates.push({});
-    let lastError: unknown = null;
-    for (const c of candidates) {
-      try {
-        ctx = await chromium.launchPersistentContext(PROFILE_DIR, { ...baseOpts, ...c });
-        lastError = null;
-        break;
-      } catch (e) {
-        lastError = e;
-      }
-    }
-    if (!ctx) {
-      throw new Error(
-        'No Chromium/Chrome found for the poller (tried PLAYWRIGHT_CHROMIUM_PATH, /usr/bin/chromium*, system Chrome, bundled). ' +
-          `Last error: ${lastError instanceof Error ? lastError.message.split('\n')[0] : String(lastError)}`,
-      );
-    }
+    const describe = (c: { channel?: string; executablePath?: string }): string =>
+      c.executablePath || (c.channel ? `channel:${c.channel}` : 'bundled');
 
-    // Oracle-safe: block heavy assets, keep RSC/HTML/JS.
-    await ctx.route('**/*.{png,jpg,jpeg,webp,gif,svg,mp4,webm,woff,woff2,ttf}', (route) => route.abort());
-
-    if (session.sessionToken && session.csrfToken) {
+    /** Launch + set up one candidate. Never leaks a half-open context. */
+    const tryCandidate = async (c: { channel?: 'chrome'; executablePath?: string }): Promise<void> => {
+      const launched = await chromium.launchPersistentContext(PROFILE_DIR, { ...baseOpts, ...c });
       try {
-        await ctx.addCookies(buildCookieParams(session));
+        // Oracle-safe: block heavy assets, keep RSC/HTML/JS.
+        await launched.route('**/*.{png,jpg,jpeg,webp,gif,svg,mp4,webm,woff,woff2,ttf}', (route) => route.abort());
+        if (session.sessionToken && session.csrfToken) {
+          try {
+            await launched.addCookies(buildCookieParams(session));
+          } catch (error) {
+            throw new Error(
+              `Stored GoPartTime cookies were rejected by the browser (${firstLine(error)}). Repaste fresh raw values via Automation → Session.`,
+            );
+          }
+        }
+        ctx = launched;
+        page = ctx.pages()[0] || (await ctx.newPage());
       } catch (error) {
-        const msg = error instanceof Error ? error.message.split('\n')[0] : String(error);
-        throw new Error(
-          `Stored GoPartTime cookies were rejected by the browser (${msg}). Repaste fresh raw values via Automation → Session.`,
-        );
+        // Never leak a half-initialized context holding the profile lock.
+        await launched.close().catch(() => undefined);
+        if (ctx === launched) ctx = null;
+        page = null;
+        throw error;
       }
-    }
+    };
 
-    page = ctx.pages()[0] || (await ctx.newPage());
+    const errors: string[] = [];
+    for (const c of candidates) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await tryCandidate(c);
+          break;
+        } catch (e) {
+          // Stale profile lock from a previous crash/leak: clear once and retry.
+          if (attempt === 0 && isLockError(e)) {
+            clearSingletonLock();
+            continue;
+          }
+          errors.push(`${describe(c)}: ${firstLine(e)}`);
+          break;
+        }
+      }
+      if (page && ctx) break;
+    }
+    if (!page || !ctx) {
+      ctx = null;
+      page = null;
+      throw new Error(`No Chromium/Chrome usable for the poller. ${errors.join(' | ')}`);
+    }
   })();
   try {
     await launching;
