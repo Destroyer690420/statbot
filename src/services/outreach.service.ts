@@ -3,6 +3,7 @@ import { outreachRepository, taskRepository } from '../database/repositories';
 import { auditLogService } from './audit.service';
 import { getIstDayBoundaries, isStaleDailyCycle } from '../utils/ist-time';
 import { buildOutreachRows, formatOutreachMessage, OutreachRowInput, OutreachRow, TicketTaskStatus } from '../utils/outreach-rows';
+import { isBlastFull, isAtDailyCap } from '../utils/outreach-blast';
 import { DEFAULT_OUTREACH_MESSAGE } from '../config/constants';
 import { AuditAction } from '../types';
 import { getAllAdminIds } from '../utils/permissions';
@@ -14,6 +15,7 @@ export interface OutreachStatus {
   istDate: string;
   message: string;
   tickets: OutreachRow[];
+  blast: { id: string; slotsTotal: number; slotsFilled: number; status: string } | null;
 }
 
 export interface SendResult {
@@ -22,6 +24,15 @@ export interface SendResult {
   ok: boolean;
   error?: string;
 }
+
+export interface SkippedTicket {
+  channelId: string;
+  channelName: string | null;
+  reason: string;
+}
+
+/** Posts assigned per worker per IST day before outreach skips them. */
+export const DAILY_POST_CAP = 2;
 
 class OutreachService {
   /**
@@ -82,7 +93,16 @@ class OutreachService {
       istDate: dayKey,
       message: await this.getMessage(),
       tickets: buildOutreachRows(inputs),
+      blast: await this.getOpenBlastState(),
     };
+  }
+
+  /** Live open-blast state for the dashboard banner (null when none open). */
+  async getOpenBlastState(): Promise<OutreachStatus['blast']> {
+    const open = await outreachRepository.getOpenBlast().catch(() => null);
+    if (!open) return null;
+    const filled = await outreachRepository.countReplies(open.id).catch(() => open.slotsFilled);
+    return { id: open.id, slotsTotal: open.slotsTotal, slotsFilled: filled, status: open.status };
   }
 
   /**
@@ -96,13 +116,18 @@ class OutreachService {
   }
 
   /**
-   * Sends the daily availability message to every currently selected ticket.
-   * Per-channel failures are non-fatal and surfaced in the response. Sending
-   * starts (or restarts) today's cycle: messageSentAt is set so subsequent
-   * worker replies mark the ticket available.
+   * Sends a blast campaign: asks for worker availability in every selected
+   * ticket except workers already at the daily post cap. The first
+   * `slotsTotal` repliers win; on fill, the bot message is deleted from all
+   * other contacted tickets (winners keep theirs). Supersedes any open blast.
+   * Per-channel failures are non-fatal and surfaced in the response.
    */
-  async sendMessage(discordClient: Client): Promise<{ sent: SendResult[] }> {
-    const { dayStart } = getIstDayBoundaries();
+  async sendBlast(
+    discordClient: Client,
+    slotsTotal: number,
+    senderId: string | null,
+  ): Promise<{ blast: { id: string; slotsTotal: number }; sent: SendResult[]; skipped: SkippedTicket[] }> {
+    const { dayStart, dayEnd } = getIstDayBoundaries();
     const message = await this.getMessage();
 
     const rows = await outreachRepository.findAll();
@@ -112,37 +137,55 @@ class OutreachService {
       }
     }
 
+    // A new blast supersedes any still-open one (its un-won messages stay —
+    // those workers already saw them; only the new blast auto-cleans).
+    const previous = await outreachRepository.getOpenBlast().catch(() => null);
+    if (previous) {
+      const filled = await outreachRepository.countReplies(previous.id).catch(() => 0);
+      await outreachRepository.closeBlast(previous.id, filled).catch(() => undefined);
+    }
+
+    const blast = await outreachRepository.createBlast(slotsTotal, senderId);
+
     const freshRows = await outreachRepository.findAll();
     const selected = freshRows.filter((r) => r.selected);
 
-    // Warm the member cache so each ticket's worker can be tagged in the
-    // message (same pattern as resolveWorkerNames). Best-effort per guild.
     for (const guild of discordClient.guilds.cache.values()) {
       await guild.members.fetch().catch(() => undefined);
     }
 
     const sent: SendResult[] = [];
+    const skipped: SkippedTicket[] = [];
     for (const row of selected) {
       try {
         const channel = await discordClient.channels.fetch(row.channelId);
         if (!channel || !(channel instanceof TextChannel)) {
           throw new Error('Channel not found or not a text channel.');
         }
-        const workerId =
-          channel.members.filter((m) => !m.user.bot && !getAllAdminIds().includes(m.id)).first()?.id ??
-          null;
-        const content = formatOutreachMessage(message, workerId);
-        if (!workerId) {
-          logger.warn('Outreach sending untagged: no worker found in ticket', {
-            channelId: row.channelId,
-          });
+        const worker = channel.members
+          .filter((m) => !m.user.bot && !getAllAdminIds().includes(m.id))
+          .first();
+        if (!worker) {
+          skipped.push({ channelId: row.channelId, channelName: channel.name, reason: 'no worker in ticket' });
+          continue;
         }
-        await channel.send(content);
+        const assignedToday = await this.countPostsAssignedToday(worker.id, dayStart, dayEnd);
+        if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+          skipped.push({
+            channelId: row.channelId,
+            channelName: channel.name,
+            reason: `worker at daily cap (${assignedToday}/${DAILY_POST_CAP})`,
+          });
+          continue;
+        }
+        const content = formatOutreachMessage(message, worker.id);
+        const msg = await channel.send(content);
+        await outreachRepository.recordBlastMessage(blast.id, channel.id, msg.id);
         await outreachRepository.setMessageSent(row.channelId, new Date());
         sent.push({ channelId: row.channelId, channelName: channel.name, ok: true });
       } catch (error) {
         const messageText = error instanceof Error ? error.message : String(error);
-        logger.error('Outreach send failed', { channelId: row.channelId, error: messageText });
+        logger.error('Outreach blast send failed', { channelId: row.channelId, error: messageText });
         sent.push({ channelId: row.channelId, channelName: null, ok: false, error: messageText });
       }
     }
@@ -152,24 +195,46 @@ class OutreachService {
     await auditLogService.log(
       AuditAction.OUTREACH_MESSAGE_SENT,
       null,
-      null,
-      `Daily outreach message sent to ${okChannels.length} ticket(s)${okChannels.length ? `: ${okChannels.join(', ')}` : ''}${failedChannels.length ? ` — failed: ${failedChannels.join(', ')}` : ''}`,
+      senderId,
+      `Outreach blast ${blast.id} (${slotsTotal} slots) sent to ${okChannels.length} ticket(s)${okChannels.length ? `: ${okChannels.join(', ')}` : ''}${failedChannels.length ? ` — failed: ${failedChannels.join(', ')}` : ''}${skipped.length ? ` — skipped ${skipped.length} (daily cap / no worker)` : ''}`,
     );
 
-    return { sent };
+    return { blast: { id: blast.id, slotsTotal }, sent, skipped };
   }
 
   /**
-   * Bot hook: a worker messaged their ticket. Marks the ticket Available when
-   * the daily message was sent today, the ticket is selected, and the author
-   * is a worker (non-bot, non-admin/manager). Manager and bot messages never
+   * Posts assigned (created) today IST for a worker — the daily-cap basis.
+   * Counts GoPartTime Post tasks in any non-terminal status.
+   */
+  async countPostsAssignedToday(workerId: string, dayStart: Date, dayEnd: Date): Promise<number> {
+    const tasks = (await taskRepository.findByCreatedAt(dayStart, dayEnd)) as {
+      source: string | null;
+      type: string;
+      status: string;
+      assignedUserId: string;
+    }[];
+    return tasks.filter(
+      (t) =>
+        t.source === 'goparttime' &&
+        t.type === 'POST' &&
+        t.assignedUserId === workerId &&
+        t.status !== 'CANCELLED' &&
+        t.status !== 'ARCHIVED',
+    ).length;
+  }
+
+  /**
+   * Bot hook: a worker messaged their ticket. Always maintains the daily
+   * Available flag; when a blast is open, the first `slotsTotal` repliers
+   * (under the daily cap) win, and on fill the blast closes with its message
+   * deleted from every other contacted ticket. Manager and bot messages never
    * count. Best-effort — never throws into message handling.
    */
-  async onWorkerMessage(channelId: string, userId: string): Promise<void> {
+  async onWorkerMessage(channelId: string, userId: string, discordClient?: Client): Promise<void> {
     try {
       if (getAllAdminIds().includes(userId)) return;
 
-      const { dayStart } = getIstDayBoundaries();
+      const { dayStart, dayEnd } = getIstDayBoundaries();
       const row = await outreachRepository.findByChannelId(channelId);
       if (!row || !row.selected) return;
 
@@ -178,13 +243,79 @@ class OutreachService {
         return;
       }
       if (!row.messageSentAt) return;
-      if (row.availableAt) return;
+      if (!row.availableAt) {
+        await outreachRepository.markAvailable(channelId, new Date());
+        logger.info('Worker marked available for daily outreach', { channelId, userId });
+      }
 
-      await outreachRepository.markAvailable(channelId, new Date());
-      logger.info('Worker marked available for daily outreach', { channelId, userId });
+      const blast = await outreachRepository.getOpenBlast().catch(() => null);
+      if (!blast || !discordClient) return;
+
+      // Daily cap re-checked at reply time: capped workers never consume slots.
+      const assignedToday = await this.countPostsAssignedToday(userId, dayStart, dayEnd);
+      if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+        logger.info('Blast reply ignored: worker at daily cap', { channelId, userId, blastId: blast.id });
+        return;
+      }
+
+      const { duplicate } = await outreachRepository.recordReply(blast.id, channelId, userId);
+      if (duplicate) return;
+
+      const filled = await outreachRepository.countReplies(blast.id);
+      logger.info('Blast reply recorded', { blastId: blast.id, channelId, userId, filled, slots: blast.slotsTotal });
+      if (!isBlastFull(filled, blast.slotsTotal)) return;
+
+      // Slots full: close the blast and remove our message everywhere else.
+      await outreachRepository.closeBlast(blast.id, filled);
+      const winners = new Set(await outreachRepository.listReplyChannelIds(blast.id));
+      const cleaned = await this.deleteBlastMessages(discordClient, blast.id, winners);
+      await auditLogService.log(
+        AuditAction.OUTREACH_MESSAGE_SENT,
+        null,
+        null,
+        `Outreach blast ${blast.id} closed (${filled}/${blast.slotsTotal} slots); message removed from ${cleaned.deleted} other ticket(s)${cleaned.failed ? `, ${cleaned.failed} removal(s) failed` : ''}`,
+      );
     } catch (error) {
       logger.error('Outreach onWorkerMessage failed', { channelId, userId, error });
     }
+  }
+
+  /**
+   * Deletes the blast's bot message from every contacted channel except the
+   * winners. Best-effort per message (hand-deleted or missing messages are
+   * skipped); only our own messages are ever touched.
+   */
+  private async deleteBlastMessages(
+    discordClient: Client,
+    blastId: string,
+    keepChannelIds: Set<string>,
+  ): Promise<{ deleted: number; failed: number }> {
+    let deleted = 0;
+    let failed = 0;
+    const selfId = discordClient.user?.id;
+    const messages = await outreachRepository.listBlastMessages(blastId).catch(() => []);
+    for (const m of messages) {
+      if (keepChannelIds.has(m.channelId)) continue;
+      try {
+        const channel = await discordClient.channels.fetch(m.channelId).catch(() => null);
+        if (!channel || !(channel instanceof TextChannel)) {
+          failed++;
+          continue;
+        }
+        const msg = await channel.messages.fetch(m.messageId).catch(() => null);
+        if (!msg) continue; // already gone — not a failure
+        if (selfId && msg.author.id !== selfId) {
+          failed++;
+          continue;
+        }
+        await msg.delete();
+        deleted++;
+      } catch {
+        failed++;
+      }
+    }
+    logger.info('Blast cleanup complete', { blastId, deleted, failed });
+    return { deleted, failed };
   }
 
   async getMessage(): Promise<string> {

@@ -160,8 +160,8 @@ export async function saveOutreachSelection(body: { selections: { channelId: str
   return data;
 }
 
-export async function sendOutreachMessage() {
-  const { data } = await api.post('/outreach/send');
+export async function sendOutreachMessage(slots: number) {
+  const { data } = await api.post('/outreach/send', { slots });
   return data;
 }
 

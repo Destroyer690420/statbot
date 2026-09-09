@@ -35,6 +35,8 @@ export function DailyOutreach() {
   const [selectOpen, setSelectOpen] = useState(false);
   const [draft, setDraft] = useState<Map<string, boolean>>(new Map());
   const [sendNote, setSendNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [slotsOpen, setSlotsOpen] = useState(false);
+  const [slotsInput, setSlotsInput] = useState('5');
 
   const statusQuery = useQuery({
     queryKey: ['outreach'],
@@ -43,6 +45,8 @@ export function DailyOutreach() {
   });
 
   const tickets: OutreachTicket[] = statusQuery.data?.data?.tickets || [];
+  const blast: { id: string; slotsTotal: number; slotsFilled: number; status: string } | null =
+    statusQuery.data?.data?.blast || null;
   const selectedCount = tickets.filter((t) => t.selected).length;
   const visibleTickets = tickets.filter((t) => t.selected);
 
@@ -64,21 +68,26 @@ export function DailyOutreach() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: sendOutreachMessage,
+    mutationFn: (slots: number) => sendOutreachMessage(slots),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['outreach'] });
+      setSlotsOpen(false);
       const sent = res?.data?.sent || [];
+      const skipped = res?.data?.skipped || [];
+      const blast = res?.data?.blast;
       const okCount = sent.filter((s: any) => s.ok).length;
       const failed = sent.filter((s: any) => !s.ok);
+      let text = `Blast for ${blast?.slotsTotal ?? '?'} post(s) sent to ${okCount} ticket(s).`;
+      if (skipped.length > 0) text += ` Skipped ${skipped.length} (daily cap / no worker).`;
       if (failed.length > 0) {
         setSendNote({
           ok: false,
-          text: `Sent to ${okCount} ticket(s). Failed for ${failed.length}: ${failed
+          text: `${text} Failed for ${failed.length}: ${failed
             .map((f: any) => `#${f.channelName || f.channelId}`)
             .join(', ')}`,
         });
       } else {
-        setSendNote({ ok: true, text: `Daily message sent to ${okCount} ticket(s).` });
+        setSendNote({ ok: true, text });
       }
     },
     onError: (error: Error) => {
@@ -88,9 +97,18 @@ export function DailyOutreach() {
 
   const handleSend = () => {
     if (selectedCount === 0) return;
-    if (!window.confirm(`Send the daily availability message to ${selectedCount} selected ticket(s)?`)) return;
     setSendNote(null);
-    sendMutation.mutate();
+    setSlotsOpen(true);
+  };
+
+  const handleConfirmSend = () => {
+    const slots = Math.floor(Number(slotsInput));
+    if (!Number.isFinite(slots) || slots < 1 || slots > 500) {
+      setSendNote({ ok: false, text: 'Enter posts available as a number from 1 to 500.' });
+      return;
+    }
+    setSendNote(null);
+    sendMutation.mutate(slots);
   };
 
   const handleSaveSelection = () => {
@@ -152,6 +170,59 @@ export function DailyOutreach() {
         <p className={`text-sm ${sendNote.ok ? 'text-green-400' : 'text-red-400'}`}>
           {sendNote.ok ? '✅ ' : '❌ '}{sendNote.text}
         </p>
+      )}
+
+      {blast && blast.status === 'OPEN' && (
+        <div className="glass-card px-4 sm:px-6 py-4 flex items-center justify-between gap-3 border-primary-700/20 bg-gradient-to-r from-primary-950/40 to-dark-900/60">
+          <p className="text-sm text-dark-100">
+            Blast open: <span className="font-semibold text-primary-400">{blast.slotsFilled}/{blast.slotsTotal}</span> replied
+          </p>
+          <p className="text-xs text-dark-400">Closes automatically at {blast.slotsTotal}; message removed from the rest.</p>
+        </div>
+      )}
+
+      {/* Slots prompt modal */}
+      {slotsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-dark-800 rounded-2xl p-6 w-full max-w-sm mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-semibold text-white">How many posts available?</h3>
+            <p className="text-dark-400 text-sm mt-1 mb-4">
+              The message goes to all {selectedCount} selected ticket(s). The first{' '}
+              <span className="text-dark-100 font-semibold">{slotsInput || '?'}</span> workers to reply win;
+              the message is then deleted for everyone else.
+            </p>
+            <input
+              type="number"
+              min={1}
+              max={500}
+              value={slotsInput}
+              onChange={(e) => setSlotsInput(e.target.value)}
+              className="input-field w-full text-center text-lg"
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setSlotsOpen(false)}
+                disabled={sendMutation.isPending}
+                className="px-4 py-2 text-sm text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSend}
+                disabled={sendMutation.isPending}
+                className="btn-primary flex items-center gap-2 text-sm px-4 py-2"
+              >
+                {sendMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                Send to all
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Desktop Table */}

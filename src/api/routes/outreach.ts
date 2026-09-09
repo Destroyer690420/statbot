@@ -59,18 +59,24 @@ export default function createOutreachRoutes(discordClient: Client): Router {
 
   /**
    * POST /api/v1/outreach/send
-   * Sends the daily availability message to every currently selected ticket.
+   * Opens a blast campaign with `slots` availability slots across every
+   * currently selected ticket (skipping capped workers). First-n repliers win.
    */
-  router.post('/send', async (req: Request, res: Response): Promise<void> => {
-    if (!requireDashboardAdmin(req, res)) return;
-    try {
-      const result = await outreachService.sendMessage(discordClient);
-      res.json({ success: true, data: result });
-    } catch (error) {
-      logger.error('POST /outreach/send failed', { error });
-      res.status(500).json({ success: false, message: 'Internal server error.' });
-    }
-  });
+  router.post(
+    '/send',
+    validateBody(z.object({ slots: z.number().int().min(1).max(500) })),
+    async (req: Request, res: Response): Promise<void> => {
+      if (!requireDashboardAdmin(req, res)) return;
+      try {
+        const userId = (req as AuthRequest).userId || null;
+        const result = await outreachService.sendBlast(discordClient, req.body.slots, userId);
+        res.json({ success: true, data: result });
+      } catch (error) {
+        logger.error('POST /outreach/send failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
 
   /**
    * GET /api/v1/outreach/settings

@@ -19,7 +19,7 @@ export async function handleMessageCreate(message: Message): Promise<void> {
   if (!message.guild) return;
 
   try {
-    await outreachService.onWorkerMessage(message.channel.id, message.author.id);
+    await outreachService.onWorkerMessage(message.channel.id, message.author.id, message.client);
 
     // Automation Stage-2: worker reply within the 5-min confirmation window.
     await handleAutomationReply(message.channel.id, message.author.id).catch(() => undefined);

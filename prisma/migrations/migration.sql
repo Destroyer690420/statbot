@@ -559,3 +559,43 @@ CREATE TABLE IF NOT EXISTS "CompanionStatus" (
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "CompanionStatus_pkey" PRIMARY KEY ("id")
 );
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Outreach Blast (n-slot campaigns)
+-- ──────────────────────────────────────────────────────────────
+-- Each Send creates a blast with n slots. First-n repliers win; on fill,
+-- the bot message is deleted from all other contacted tickets (winners keep
+-- theirs). Workers at the 2-post daily cap are never contacted. Reload-safe:
+-- all state in Postgres. Schema-only, no data statements.
+CREATE TABLE IF NOT EXISTS "OutreachBlast" (
+  "id" TEXT NOT NULL,
+  "slotsTotal" INTEGER NOT NULL,
+  "slotsFilled" INTEGER NOT NULL DEFAULT 0,
+  "status" TEXT NOT NULL DEFAULT 'OPEN',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "createdBy" TEXT,
+  CONSTRAINT "OutreachBlast_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "OutreachBlast_status_createdAt_idx" ON "OutreachBlast"("status", "createdAt");
+
+CREATE TABLE IF NOT EXISTS "OutreachBlastMessage" (
+  "id" TEXT NOT NULL,
+  "blastId" TEXT NOT NULL REFERENCES "OutreachBlast"("id") ON DELETE CASCADE,
+  "channelId" TEXT NOT NULL,
+  "messageId" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "OutreachBlastMessage_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "OutreachBlastMessage_blastId_channelId_key" ON "OutreachBlastMessage"("blastId", "channelId");
+CREATE INDEX IF NOT EXISTS "OutreachBlastMessage_blastId_idx" ON "OutreachBlastMessage"("blastId");
+
+CREATE TABLE IF NOT EXISTS "OutreachReply" (
+  "id" TEXT NOT NULL,
+  "blastId" TEXT NOT NULL REFERENCES "OutreachBlast"("id") ON DELETE CASCADE,
+  "channelId" TEXT NOT NULL,
+  "workerId" TEXT NOT NULL,
+  "repliedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "OutreachReply_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "OutreachReply_blastId_channelId_key" ON "OutreachReply"("blastId", "channelId");
+CREATE INDEX IF NOT EXISTS "OutreachReply_blastId_idx" ON "OutreachReply"("blastId");

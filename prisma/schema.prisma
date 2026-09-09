@@ -311,6 +311,46 @@ model OutreachSettings {
   updatedBy String
 }
 
+model OutreachBlast {
+  id          String   @id @default(cuid())
+  slotsTotal  Int
+  slotsFilled Int      @default(0)
+  status      String   @default("OPEN")
+  createdAt   DateTime @default(now())
+  createdBy   String?
+
+  messages OutreachBlastMessage[]
+  replies  OutreachReply[]
+
+  @@index([status, createdAt])
+}
+
+model OutreachBlastMessage {
+  id        String   @id @default(cuid())
+  blastId   String
+  channelId String
+  messageId String
+  createdAt DateTime @default(now())
+
+  blast OutreachBlast @relation(fields: [blastId], references: [id], onDelete: Cascade)
+
+  @@unique([blastId, channelId])
+  @@index([blastId])
+}
+
+model OutreachReply {
+  id        String   @id @default(cuid())
+  blastId   String
+  channelId String
+  workerId  String
+  repliedAt DateTime @default(now())
+
+  blast OutreachBlast @relation(fields: [blastId], references: [id], onDelete: Cascade)
+
+  @@unique([blastId, channelId])
+  @@index([blastId])
+}
+
 model TicketOnboarding {
   channelId     String    @id
   welcomeSentAt DateTime?

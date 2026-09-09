@@ -54,6 +54,71 @@ export class OutreachRepository {
       update: data,
     });
   }
+
+  // ─── Blast campaigns (n-slot outreach) ───
+
+  async createBlast(slotsTotal: number, createdBy: string | null) {
+    return getDb().outreachBlast.create({
+      data: { slotsTotal, slotsFilled: 0, status: 'OPEN', createdBy },
+    });
+  }
+
+  async getBlast(id: string) {
+    return getDb().outreachBlast.findUnique({ where: { id } });
+  }
+
+  async getOpenBlast() {
+    return getDb().outreachBlast.findFirst({
+      where: { status: 'OPEN' },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async closeBlast(id: string, slotsFilled: number) {
+    return getDb().outreachBlast.update({
+      where: { id },
+      data: { status: 'CLOSED', slotsFilled },
+    });
+  }
+
+  async recordBlastMessage(blastId: string, channelId: string, messageId: string) {
+    return getDb().outreachBlastMessage.upsert({
+      where: { blastId_channelId: { blastId, channelId } },
+      create: { blastId, channelId, messageId },
+      update: { messageId },
+    });
+  }
+
+  async listBlastMessages(blastId: string) {
+    return getDb().outreachBlastMessage.findMany({ where: { blastId } });
+  }
+
+  async recordReply(blastId: string, channelId: string, workerId: string) {
+    try {
+      const row = await getDb().outreachReply.create({
+        data: { blastId, channelId, workerId },
+      });
+      return { row, duplicate: false as const };
+    } catch {
+      // Unique (blastId, channelId) — channel already replied in this blast.
+      const row = await getDb().outreachReply.findUnique({
+        where: { blastId_channelId: { blastId, channelId } },
+      });
+      return { row, duplicate: true as const };
+    }
+  }
+
+  async countReplies(blastId: string) {
+    return getDb().outreachReply.count({ where: { blastId } });
+  }
+
+  async listReplyChannelIds(blastId: string) {
+    const rows = await getDb().outreachReply.findMany({
+      where: { blastId },
+      select: { channelId: true },
+    });
+    return rows.map((r) => r.channelId);
+  }
 }
 
 export const outreachRepository = new OutreachRepository();
