@@ -2,6 +2,11 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-09-09
+### Deployed
+- **Outreach Blast live** (`161.118.164.85`) at commit `d3153f3` (app + dashboard rebuild, backup `rtm-backup-20260909-pre-d3153f3.tar.gz`; migration excerpt applied: `OutreachBlast`/`OutreachBlastMessage`/`OutreachReply`; pushed to GitHub `de90191..d3153f3`). Send now asks posts-available `n`; first-n repliers win and the message is deleted from all other tickets; 2-post/day IST cap enforced at send + reply; repeatable anytime. Verified: health healthy, boot clean, 221/221 jest, tables exist.
+
+
 ## Unreleased (hybrid companion flow, deployed `47b79f1`)
 ### Fixed
 - **In-page drawer acceptance fix (v1.0.8)**: `goparttime-auto.user.js` (and byte-identical `dashboard/public/goparttime-auto.user.js`) updated to use the true in-page drawer flow: clicking "Accept Task" on the matching card in `/tasks` opens the modal drawer (`role="dialog"`), extracts full task details (`Task ID`, `Subreddit`, `Title`, `Content` with HTML, `Flair`, `Deadline`, `Payment`), clicks `"Confirm acceptance"`, intercepts the server response (or waits for drawer close), and pushes full details to `/api/v1/goparttime/assign`. Replaces the broken `findNextAction()` regex (which looked for non-existent 64-char hex in raw HTML) and broken card-lookup.

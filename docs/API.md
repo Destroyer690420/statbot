@@ -165,7 +165,7 @@ All computed in memory over `taskService.findAll` (`src/services/analytics.servi
 |---|---|---|---|---|---|
 | GET | `/outreach` | Full daily page state | — | `{ istDate: 'YYYY-MM-DD' (IST), message, tickets: [{ channelId, channelName, guildId, taskStatus: 'idle'\|'active'\|'awaiting-submission', workerName, selected, messageSentAt, available: boolean, post: number, comment: number }] }` (sorted by channel name; stale daily cycles lazily reset; `post`/`comment` are counts of tasks created today IST — `0` shows cross, `>0` shows number) | 500 |
 | PUT | `/outreach/selection` | Persist checkbox selection | `{ selections: [{ channelId, selected }] }` (max 500) | `{ updated }` (transactional upserts; selection survives day changes) | 400; 500 |
-| POST | `/outreach/send` | Send daily message to **selected** tickets only | — | `{ sent: [{ channelId, channelName, ok, error? }] }` — per-channel, non-fatal; audit `OUTREACH_MESSAGE_SENT` | 500 |
+| POST | `/outreach/send` | Open a blast with N slots across selected tickets (skips capped workers) | `{ slots: 1..500 }` | `{ blast, sent[], skipped[] }` | 400; 500 |
 | GET | `/outreach/settings` | Current message | — | `{ message }` (defaults to `DEFAULT_OUTREACH_MESSAGE`) | 500 |
 | PUT | `/outreach/settings` | Update message | `{ message: 1..2000 chars }` | `{ message }` | 400; 500 |
 

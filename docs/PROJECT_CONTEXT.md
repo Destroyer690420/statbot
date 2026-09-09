@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-08 — Hybrid companion flow **DEPLOYED** (`161.118.164.85`, git HEAD `47b79f1`, app + dashboard rebuild; backup `rtm-backup-20260908-pre-47b79f1.tar.gz`; migration excerpt applied; health healthy, boot clean + sighting queue live, watcher script served 200). Server poller dormant (Vercel Code 11). Previous: auto-accept foundation + fixes (`54bf6f7`…`9999b8a`).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-09 — Outreach Blast **DEPLOYED** (`161.118.164.85`, git HEAD `d3153f3`, app + dashboard rebuild; pushed to GitHub; migration excerpt applied; health healthy, boot clean, 221/221 jest). Previous: hybrid companion flow (`47b79f1`).
 
 ---
 
@@ -248,6 +248,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-09-09**: **DEPLOYED Outreach Blast** (`161.118.164.85`) at commit `d3153f3` (app + dashboard rebuild; pushed to GitHub; backup `rtm-backup-20260909-pre-d3153f3.tar.gz`). Send asks posts-available `n`; first-n repliers win and the message is deleted from all other tickets; 2-post/day IST cap at send + reply; repeatable anytime. Verified: health healthy, tables exist, 221/221 jest.
 
 - **2026-09-09**: **DEPLOYED push-visibility fix + removed Automation dashboard page** (`161.118.164.85`) at commit `1dee1c1` (full rebuild; backup `rtm-backup-20260909-pre-1dee1c1.tar.gz`). Companion reports push outcome (NEEDS_PUSH tracked), `/assign` rate-limit exempt, no double bookkeeping; watcher v1.0.9. Verified live: health healthy, served script v1.0.9, 217/217 jest.
 - **2026-09-08**: **GoPartTime in-page drawer acceptance fix** (`goparttime-auto.user.js` v1.0.8, synced to `dashboard/public/`). Uses the genuine two-step drawer flow on `/tasks`: opens the modal drawer (`role="dialog"`) by clicking "Accept Task" on the candidate card, extracts full task details while open (`Task ID`, `Subreddit`, `Title`, `Content`, `Flair`, `Deadline`, `Payment`), clicks `"Confirm acceptance"` to invoke GoPartTime's native Server Action, intercepts the server response / detects drawer closing, and pushes the extracted task details to the Discord ticket (`POST /api/v1/goparttime/assign`). Eliminates the broken `findNextAction()` regex and card text matching.

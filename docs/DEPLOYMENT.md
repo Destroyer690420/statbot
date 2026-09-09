@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-08 — hybrid companion flow live at git HEAD `47b79f1`** (app + dashboard rebuild, backup `rtm-backup-20260908-pre-47b79f1.tar.gz`; migration excerpt applied: `AutomationSighting`/`AutomationClaim`/`CompanionStatus` + indexes, task counts live-changed only by workflow; verified: compose all Up, health healthy DB+Redis, boot "All systems online!" + sighting queue tick, `/goparttime-auto.user.js` served 200. Server poller dormant — Vercel Code 11 blocks all server-side clients). Previous: 2026-09-07 auto-accept foundation (`54bf6f7`) + fixes (`f27832e`, `f882f2e`, `1103dae`, `49ea511`, `9999b8a`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-09 — Outreach Blast live at git HEAD `d3153f3`** (app + dashboard rebuild, backup `rtm-backup-20260909-pre-d3153f3.tar.gz`; migration excerpt applied: `OutreachBlast`/`OutreachBlastMessage`/`OutreachReply`; pushed to GitHub `de90191..d3153f3`; verified: compose all Up, health healthy DB+Redis, boot clean, tables exist, dashboard 200. Previous: hybrid companion flow (`47b79f1`).
 
 ---
 
