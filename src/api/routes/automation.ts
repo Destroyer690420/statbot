@@ -77,6 +77,7 @@ const sightingsSchema = z.object({
 const claimResultSchema = z.object({
   ok: z.boolean(),
   failureReason: z.string().max(500).optional().nullable(),
+  pushed: z.boolean().optional().default(false),
 });
 
 export default function createAutomationRoutes(discordClient: Client): Router {
@@ -559,6 +560,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
 
       if (req.body.ok) {
         await automationRepository.resolveClaim(claim.id, 'CLAIMED');
+        const pushed = req.body.pushed === true;
         try {
           const contacts = await automationRepository.listCycleContacts(claim.cycleId);
           const held = contacts.find(
@@ -573,9 +575,20 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         } catch {
           // best-effort bookkeeping; the claim verdict itself is recorded
         }
+        await automationRepository.logTask({
+          cycleId: claim.cycleId,
+          externalTaskId: claim.externalTaskId,
+          taskType: 'post',
+          subreddit: null,
+          status: pushed ? 'ACCEPTED' : 'NEEDS_PUSH',
+          workerId: claim.workerId,
+          failureReason: pushed ? null : 'Accepted on GoPartTime but not delivered to Discord — push via Send Task button',
+        });
         await auditLogService.log(
           AuditAction.AUTOMATION_TASK_ACCEPTED, null, 'companion',
-          `Task ${claim.externalTaskId} accepted via companion for channel ${claim.channelId}`,
+          pushed
+            ? `Task ${claim.externalTaskId} accepted via companion for channel ${claim.channelId}`
+            : `Task ${claim.externalTaskId} accepted via companion but NEEDS manual push to channel ${claim.channelId}`,
         );
       } else {
         const reason = req.body.failureReason || 'Companion reported failure';

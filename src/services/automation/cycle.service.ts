@@ -265,15 +265,9 @@ async function acceptViaClaim(
     const current = await automationRepository.findClaim(claim.id);
     if (!current) break;
     if (current.status === 'CLAIMED') {
-      await automationRepository.logTask({
-        cycleId, externalTaskId: task.subTaskId, taskType: task.type,
-        subreddit: task.subreddit, status: 'ACCEPTED', workerId,
-      });
-      await automationRepository.updateContactStatus(contactId, 'ASSIGNED');
-      await auditLogService.log(
-        AuditAction.AUTOMATION_TASK_ACCEPTED, null, null,
-        `Task ${task.subTaskId} accepted via companion for <@${workerId}>`,
-      );
+      // Bookkeeping (contact ASSIGNED, logs, audit) is owned by the result
+      // endpoint, which has the push outcome. Here just count the pair.
+      logger.info('Automation claim accepted by companion', { claimId: claim.id, task: task.subTaskId });
       return true;
     }
     if (current.status === 'FAILED' || current.status === 'EXPIRED') break;

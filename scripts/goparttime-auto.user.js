@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.7
-// @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
+// @version      1.0.9
+// @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
 // @match        *://www.goparttime.net/*
@@ -18,20 +18,21 @@
 // ==/UserScript==
 
 /**
- * v1.0.1 - Hybrid companion for StatBot automation.
+ * v1.0.9 - Hybrid companion for StatBot automation.
  *
  * Two loops, both best-effort and fully unattended:
  *  1. Monitor (every ~60s on /tasks): parses the page's embedded flight data
  *     for available sub-tasks and POSTs sightings to the backend. The backend
  *     validates (Post/duplicate/blocked), pings workers on Discord, and waits
  *     for confirmation - exactly like the manual flow.
- *  2. Claim (every ~20s, everywhere on goparttime.net): asks the backend for a
+ *  2. Claim (every ~30s, everywhere on goparttime.net): asks the backend for a
  *     pending claim. When the backend has a CONFIRMED worker, it performs the
- *     accept POST in-page (genuine session, genuine TLS, home IP), reports the
- *     verdict, then attempts the full detail push to the ticket via the
- *     existing /assign endpoint (same extraction as the Send Task button).
- *     If the push fails, the accept still stands and the manager can push
- *     manually with Send Task - nothing is lost.
+ *     genuine in-page acceptance on /tasks via the task drawer:
+ *       - Opens the task detail drawer by clicking "Accept Task" on the matching card
+ *       - Extracts full task details (Task ID, subreddit, title, content, flair, etc.)
+ *       - Clicks "Confirm acceptance" inside the drawer (fires native Server Action)
+ *       - Observes the response and reports the verdict
+ *       - Automatically pushes the extracted details to the worker's Discord ticket
  *
  * Auth/session never leave this browser. No passwords, no pasted cookies.
  * Always on: the watcher starts with every goparttime.net page load.
@@ -40,7 +41,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.7';
+  const VERSION = '1.0.9';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -64,6 +65,37 @@
   function isRateLimitError(e) {
     const m = e && e.message ? String(e.message) : '';
     return m.indexOf('Too many requests') !== -1;
+  }
+
+  // --- Server Action / Fetch interceptor to detect GoPartTime responses ---
+  let lastServerActionResponse = null;
+
+  try {
+    const targetWin = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+    if (targetWin && targetWin.fetch) {
+      const origFetch = targetWin.fetch;
+      targetWin.fetch = async function (...args) {
+        const res = await origFetch.apply(this, args);
+        try {
+          const [resource, config] = args;
+          const url = typeof resource === 'string' ? resource : (resource && resource.url) || '';
+          const headers = (config && config.headers) || {};
+          const isNextAction = headers['Next-Action'] || (headers.get && headers.get('Next-Action'));
+          if (isNextAction || url.includes('/tasks')) {
+            const clone = res.clone();
+            const text = await clone.text();
+            lastServerActionResponse = {
+              status: res.status,
+              text,
+              timestamp: Date.now(),
+            };
+          }
+        } catch (e) { /* ignore */ }
+        return res;
+      };
+    }
+  } catch (e) {
+    console.log('[Auto Watcher] fetch intercept setup note:', e && e.message);
   }
 
   // --- Storage (GM_* when available, localStorage otherwise) --
@@ -300,16 +332,6 @@
     return out;
   }
 
-  function findNextAction() {
-    try {
-      const html = document.documentElement ? document.documentElement.innerHTML : '';
-      const m = /\b[0-9a-f]{64}\b/.exec(html);
-      return m ? m[0] : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   // --- Monitor loop: report sightings --
 
   let monitorBusy = false;
@@ -362,7 +384,7 @@
     }
   }
 
-  // --- Claim loop: accept in-page when the backend has a confirmed worker --
+  // --- Claim loop: accept in-page via native drawer flow when worker is confirmed ---
 
   let claimBusy = false;
 
@@ -394,65 +416,19 @@
     }
   }
 
-  async function reportClaim(settings, claim, ok, failureReason) {
+  async function reportClaim(settings, claim, ok, failureReason, pushed) {
     try {
       await request(settings, 'POST', '/claims/' + encodeURIComponent(claim.id) + '/result', {
         ok: !!ok,
         failureReason: failureReason || null,
+        pushed: pushed === true,
       });
     } catch (e) {
       console.log('[Auto Watcher] claim report failed:', e && e.message);
     }
   }
 
-  async function processClaim(settings, claim) {
-    const subTaskId = Number(claim.externalTaskId);
-    if (!subTaskId) {
-      await reportClaim(settings, claim, false, 'Invalid task id in claim.');
-      return;
-    }
-
-    const nextAction = findNextAction();
-    if (!nextAction) {
-      await reportClaim(settings, claim, false, 'Next-Action id not found on page; reload /tasks.');
-      return;
-    }
-
-    // In-page accept: same request the manual Accept button makes.
-    let acceptText = '';
-    try {
-      const res = await fetch('/tasks', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          Accept: 'text/x-component',
-          'Content-Type': 'text/plain;charset=UTF-8',
-          'Next-Action': nextAction,
-        },
-        body: JSON.stringify([{ sub_task_id: subTaskId }]),
-      });
-      acceptText = await res.text();
-    } catch (e) {
-      await reportClaim(settings, claim, false, 'Accept request failed: ' + (e && e.message));
-      return;
-    }
-
-    if (!/"success":\s*true/.test(acceptText)) {
-      await reportClaim(settings, claim, false, 'GoPartTime did not confirm (task may be taken).');
-      return;
-    }
-
-    // Accept recorded - now attempt the full detail push to the ticket.
-    try {
-      const pushed = await pushTaskToTicket(settings, claim, subTaskId);
-      console.log('[Auto Watcher] claim ' + claim.id + ' accepted, detail push: ' + (pushed ? 'sent' : 'manual needed'));
-    } catch (e) {
-      console.log('[Auto Watcher] detail push failed (accept stands, push manually):', e && e.message);
-    }
-    await reportClaim(settings, claim, true, null);
-  }
-
-  // --- Detail push: open the task dialog, extract, send via /assign --
+  // --- DOM helpers for Task Detail Drawer ---
 
   function findTaskRoot() {
     const dialog = document.querySelector('[role="dialog"]');
@@ -468,6 +444,29 @@
       }
     }
     return document;
+  }
+
+  function findOpenDrawer() {
+    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"]'));
+    return dialogs.find((d) => d.getAttribute('data-state') === 'open' || d.querySelector('div.prose')) || null;
+  }
+
+  function isDrawerOpen() {
+    const d = findOpenDrawer();
+    return !!d && d.getAttribute('data-state') !== 'closed';
+  }
+
+  function closeOpenDrawer() {
+    const drawer = findOpenDrawer();
+    if (drawer) {
+      const cancelBtn = drawer.querySelector('button[data-slot="drawer-close"]') ||
+        Array.from(drawer.querySelectorAll('button')).find((b) => (b.textContent || '').trim().toLowerCase() === 'cancel');
+      if (cancelBtn) {
+        cancelBtn.click();
+        return;
+      }
+    }
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   }
 
   function findField(labelText, root) {
@@ -499,17 +498,17 @@
     }));
   }
 
-  function extractTaskDetail() {
-    const root = findTaskRoot();
-    if (!root) throw new Error('No task detail open.');
-    const taskIdText = findField('Task ID', root);
+  function extractTaskDetail(root) {
+    const targetRoot = root || findTaskRoot();
+    if (!targetRoot) throw new Error('No task detail open.');
+    const taskIdText = findField('Task ID', targetRoot);
     if (!taskIdText || !/^\d+$/.test(taskIdText)) throw new Error('Could not detect task ID.');
-    const typeText = (findField('Task Type', root) || '').toLowerCase();
+    const typeText = (findField('Task Type', targetRoot) || '').toLowerCase();
     const type = typeText === 'post' ? 'post' : 'comment';
-    const deadline = findField('Deadline', root) || null;
-    const payment = findField('Payment', root) || null;
-    const images = extractImages(root);
-    const contentEl = root.querySelector('div.prose');
+    const deadline = findField('Deadline', targetRoot) || null;
+    const payment = findField('Payment', targetRoot) || null;
+    const images = extractImages(targetRoot);
+    const contentEl = targetRoot.querySelector('div.prose');
     const contentHtml = contentEl ? contentEl.innerHTML : '';
     if (!contentHtml.trim() && images.length === 0) throw new Error('Could not extract task content.');
 
@@ -520,17 +519,17 @@
     let postLink = null;
     let commentLink = null;
     if (type === 'post') {
-      const subInput = root.querySelector('input[name="subreddit"]');
+      const subInput = targetRoot.querySelector('input[name="subreddit"]');
       subreddit = subInput ? (subInput.value || '').trim() || null : null;
       if (subreddit) subredditUrl = 'https://www.reddit.com/r/' + subreddit.replace(/^r\//, '') + '/';
-      const flairInput = root.querySelector('input[name="flair"]');
+      const flairInput = targetRoot.querySelector('input[name="flair"]');
       flair = flairInput ? (flairInput.value || '').trim() || null : null;
-      const titleInput = root.querySelector('input[name="title"]');
+      const titleInput = targetRoot.querySelector('input[name="title"]');
       title = titleInput ? (titleInput.value || '').trim() || null : null;
     } else {
-      const postLinkInput = root.querySelector('input[name="post_link"]');
+      const postLinkInput = targetRoot.querySelector('input[name="post_link"]');
       postLink = postLinkInput ? (postLinkInput.value || '').trim() || null : null;
-      const commentLinkInput = root.querySelector('input[name="comment_link"]');
+      const commentLinkInput = targetRoot.querySelector('input[name="comment_link"]');
       commentLink = commentLinkInput ? (commentLinkInput.value || '').trim() || null : null;
     }
 
@@ -541,52 +540,220 @@
     };
   }
 
-  function findCardForTask(subTaskId) {
-    const cards = Array.from(document.querySelectorAll('div[data-slot="card"]'));
-    const needle = String(subTaskId);
-    for (const card of cards) {
-      const text = card.textContent || '';
-      if (text.includes('#' + needle) || text.includes('Task ID') && text.includes(needle)) return card;
+  function findCardAcceptButton(card) {
+    if (!card) return null;
+    const btns = Array.from(card.querySelectorAll('button'));
+    return btns.find((b) => (b.textContent || '').trim().toLowerCase() === 'accept task') || null;
+  }
+
+  async function openTaskDrawer(subTaskId) {
+    // Check if drawer is already open with this task
+    let currentDrawer = findOpenDrawer();
+    if (currentDrawer) {
+      const openId = findField('Task ID', currentDrawer);
+      if (Number(openId) === Number(subTaskId)) return currentDrawer;
+      closeOpenDrawer();
+      await sleep(250);
     }
+
+    const cards = Array.from(document.querySelectorAll('div[data-slot="card"]'));
+    if (cards.length === 0) return null;
+
+    // Strategy 1: Find candidate card index from flight tasks array
+    let candidateCard = null;
+    try {
+      const tasks = parseAvailableTasks(domHtml() || '');
+      const idx = tasks.findIndex((t) => Number(t.subTaskId) === Number(subTaskId));
+      if (idx !== -1 && cards[idx]) {
+        candidateCard = cards[idx];
+      }
+    } catch (e) { /* ignore */ }
+
+    // Strategy 2: Check React Fiber key/props if Strategy 1 did not find card
+    if (!candidateCard) {
+      const needle = String(subTaskId);
+      for (const card of cards) {
+        for (const k of Object.keys(card)) {
+          if (k.startsWith('__reactFiber$')) {
+            const fiber = card[k];
+            if (fiber && (String(fiber.key).includes(needle) || JSON.stringify(fiber.memoizedProps || {}).includes(needle))) {
+              candidateCard = card;
+              break;
+            }
+          }
+        }
+        if (candidateCard) break;
+      }
+    }
+
+    // Try candidate card first
+    if (candidateCard) {
+      const btn = findCardAcceptButton(candidateCard);
+      if (btn && !btn.disabled) {
+        candidateCard.scrollIntoView({ block: 'center' });
+        await sleep(150);
+        btn.click();
+        for (let i = 0; i < 20; i++) {
+          await sleep(150);
+          const d = findOpenDrawer();
+          if (d && isDrawerOpen()) {
+            const openId = findField('Task ID', d);
+            if (Number(openId) === Number(subTaskId)) return d;
+            closeOpenDrawer();
+            await sleep(200);
+            break;
+          }
+        }
+      }
+    }
+
+    // Strategy 3: Iterate through cards on the page
+    for (const card of cards) {
+      if (card === candidateCard) continue;
+      const btn = findCardAcceptButton(card);
+      if (!btn || btn.disabled) continue;
+      card.scrollIntoView({ block: 'center' });
+      await sleep(100);
+      btn.click();
+
+      let opened = null;
+      for (let i = 0; i < 15; i++) {
+        await sleep(150);
+        opened = findOpenDrawer();
+        if (opened && isDrawerOpen()) break;
+      }
+
+      if (opened) {
+        const openId = findField('Task ID', opened);
+        if (Number(openId) === Number(subTaskId)) {
+          return opened;
+        }
+        closeOpenDrawer();
+        await sleep(200);
+      }
+    }
+
     return null;
   }
 
-  function closeDialog() {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  }
+  // --- Process Claim: In-page acceptance flow ---
 
-  async function pushTaskToTicket(settings, claim, subTaskId) {
-    // Must be on the list page to find the card.
-    if (!/^\/tasks\/?$/.test(window.location.pathname)) return false;
-    const card = findCardForTask(subTaskId);
-    if (!card) return false;
-    card.scrollIntoView({ block: 'center' });
-    await sleep(500);
-    card.click();
-    // Wait for the detail dialog.
-    let root = null;
-    for (let i = 0; i < 30; i++) {
-      await sleep(300);
-      root = findTaskRoot();
-      if (root && root !== document) break;
-      root = null;
+  async function processClaim(settings, claim) {
+    const subTaskId = Number(claim.externalTaskId);
+    if (!subTaskId) {
+      await reportClaim(settings, claim, false, 'Invalid task id in claim.');
+      return;
     }
-    if (!root) return false;
+
+    // Must be on /tasks to accept.
+    if (!/^\/tasks\/?$/.test(window.location.pathname)) {
+      console.log('[Auto Watcher] Pending claim ' + claim.id + ' waiting for manager to be on /tasks (current: ' + window.location.pathname + ')');
+      window.location.href = '/tasks';
+      return;
+    }
+
+    setStatus(true, 'claiming #' + subTaskId + '...');
+    lastServerActionResponse = null;
+
+    // 1. Open the drawer for this task
+    let drawer = null;
     try {
-      const detail = extractTaskDetail();
-      if (Number(detail.taskId) !== Number(subTaskId)) return false;
+      drawer = await openTaskDrawer(subTaskId);
+    } catch (e) {
+      await reportClaim(settings, claim, false, 'Failed to open task drawer: ' + (e && e.message));
+      return;
+    }
+
+    if (!drawer) {
+      await reportClaim(settings, claim, false, 'Task #' + subTaskId + ' not found on /tasks (may already be taken or expired).');
+      return;
+    }
+
+    // 2. Extract full task details while the drawer is open
+    let detail = null;
+    try {
+      detail = extractTaskDetail(drawer);
+      if (Number(detail.taskId) !== subTaskId) {
+        throw new Error('Opened drawer ID ' + detail.taskId + ' does not match expected ' + subTaskId);
+      }
       detail.ticket = claim.channelId;
-      // The assign endpoint lives under /goparttime (existing pipeline).
+    } catch (e) {
+      closeOpenDrawer();
+      await reportClaim(settings, claim, false, 'Failed to extract task details: ' + (e && e.message));
+      return;
+    }
+
+    // 3. Find the "Confirm acceptance" button
+    const confirmBtn = Array.from(drawer.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').trim().toLowerCase().includes('confirm acceptance')
+    );
+
+    if (!confirmBtn) {
+      closeOpenDrawer();
+      await reportClaim(settings, claim, false, 'Confirm acceptance button not found in drawer.');
+      return;
+    }
+
+    // 4. Click "Confirm acceptance"
+    const acceptStartTime = Date.now();
+    confirmBtn.click();
+
+    // 5. Wait for GoPartTime confirmation (either via intercepted response or drawer closing)
+    let accepted = false;
+    let acceptError = null;
+
+    for (let i = 0; i < 40; i++) { // up to 6 seconds
+      await sleep(150);
+
+      // Check intercepted response
+      if (lastServerActionResponse && lastServerActionResponse.timestamp >= acceptStartTime) {
+        const text = lastServerActionResponse.text || '';
+        if (/"success":\s*true/.test(text)) {
+          accepted = true;
+          break;
+        }
+        if (/"success":\s*false/.test(text) || lastServerActionResponse.status >= 400) {
+          const m = /"message":\s*"([^"]+)"/.exec(text);
+          acceptError = m ? m[1] : 'GoPartTime rejected acceptance.';
+          break;
+        }
+      }
+
+      // Fallback: drawer closed indicates acceptance completed
+      if (!isDrawerOpen()) {
+        accepted = true;
+        break;
+      }
+    }
+
+    if (!accepted) {
+      closeOpenDrawer();
+      const failReason = acceptError || 'GoPartTime acceptance timed out or drawer did not close.';
+      await reportClaim(settings, claim, false, failReason);
+      setStatus(false, 'accept #' + subTaskId + ' failed: ' + failReason);
+      return;
+    }
+
+    // 6. Push full task details to the Discord ticket
+    let pushed = false;
+    try {
       const assignSettings = {
         apiUrl: settings.apiUrl.replace(/\/automation\/?$/, '/goparttime'),
         apiKey: settings.apiKey,
       };
       await request(assignSettings, 'POST', '/assign', detail, null);
-      return true;
-    } finally {
-      try {
-        closeDialog();
-      } catch (e) { /* ignore */ }
+      pushed = true;
+      console.log('[Auto Watcher] task #' + subTaskId + ' assigned to ticket ' + claim.channelId);
+    } catch (e) {
+      console.log('[Auto Watcher] assign to ticket failed (task accepted, push manually):', e && e.message);
+    }
+
+    // 7. Report successful claim verdict (with push outcome for NEEDS_PUSH tracking)
+    await reportClaim(settings, claim, true, null, pushed);
+    if (pushed) {
+      setStatus(true, 'accepted #' + subTaskId + ' & pushed');
+    } else {
+      setStatus(false, 'accepted #' + subTaskId + ' - PUSH MANUALLY via Send Task');
     }
   }
 

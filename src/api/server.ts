@@ -49,7 +49,9 @@ export function createApiServer(discordClient: Client): express.Application {
   // ─── Rate Limiting ─────────────────────────────────────────
   // The manager-browser companion polls claims/pending ~2/min from the same
   // home IP as the dashboard; those extension-key endpoints are exempt (the
-  // shared secret is the gate — rate limiting adds nothing there).
+  // shared secret is the gate — rate limiting adds nothing there). The assign
+  // endpoint is likewise key-gated and low-frequency (a few pushes/hour max,
+  // manual or companion-driven).
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100,
@@ -58,7 +60,8 @@ export function createApiServer(discordClient: Client): express.Application {
     message: { success: false, message: 'Too many requests. Please try again later.' },
     skip: (req) =>
       req.path === '/api/v1/automation/claims/pending' ||
-      req.path === '/api/v1/automation/sightings',
+      req.path === '/api/v1/automation/sightings' ||
+      req.path === '/api/v1/goparttime/assign',
   });
   app.use('/api/', limiter);
 
