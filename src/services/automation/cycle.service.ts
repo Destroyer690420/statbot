@@ -41,10 +41,14 @@ export interface CycleOpts {
 /**
  * Eligible-gated iterative cycle (user spec v3):
  *  poll -> count eligible x -> ping exactly x workers -> 5-min window
- *  -> accept min(eligible, confirmed) -> re-poll remaining -> repeat
+ *  -> accept min(eligible,confirmed) -> re-poll remaining -> repeat
  *  until no eligible remains or no workers left.
  * Dry-run (default) logs WOULD_ACCEPT and never accepts.
  * With opts.tasks, runs a SINGLE batch over the injected tasks (sighting flow).
+ *
+ * RETIRED from automatic use (burst-only everywhere): no scheduler or queue
+ * tick calls this anymore. Kept for manual `POST /automation/start` and the
+ * test endpoints.
  */
 export async function runCycle(discordClient: Client, opts: CycleOpts = {}): Promise<string | null> {
   if (running) {

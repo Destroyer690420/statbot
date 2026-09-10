@@ -1,9 +1,9 @@
 import { Client } from 'discord.js';
 import { automationRepository } from '../../database/repositories';
 import { auditLogService } from '../audit.service';
-import { AuditAction, DetectedGoPartTimeTask } from '../../types';
+import { AuditAction } from '../../types';
 import { logger } from '../../utils/logger';
-import { runCycle } from './cycle.service';
+import { createBurstFlow } from './burst.service';
 
 /** Sightings older than this are treated as gone from the listing. */
 export const SIGHTING_TTL_MS = 15 * 60 * 1000;
@@ -13,9 +13,12 @@ export function isSightingFresh(lastSeenAt: Date, nowMs: number = Date.now(), tt
 }
 
 /**
- * Sighting-driven automation tick (hybrid companion flow):
+ * Sighting-driven automation tick (burst-only):
  *  expire stale claims (releasing workers) -> take fresh NEW sightings ->
- *  run one companion-strategy cycle over them.
+ *  run them through the burst flow (validate -> auto-blast -> reply-claims).
+ * The 5-minute confirm-then-accept cycle path is retired from automatic use
+ * (kept only for manual `POST /automation/start` + test endpoints) — every
+ * detection, in or out of the burst window, takes the same instant path.
  * The companion browser does all GoPartTime I/O; the server never fetches.
  */
 export async function processSightingQueue(discordClient: Client): Promise<string | null> {
@@ -62,23 +65,18 @@ export async function processSightingQueue(discordClient: Client): Promise<strin
   }
   if (usable.length === 0) return null;
 
-  const tasks: DetectedGoPartTimeTask[] = usable.map((s) => ({
+  const tasks = usable.map((s) => ({
     subTaskId: s.externalTaskId,
-    taskId: s.externalTaskId,
     type: s.taskType as 'post' | 'comment',
     subreddit: s.subreddit,
     title: s.title,
-    postLink: null,
-    contentHtml: '',
-    images: [],
-    payment: null,
-    deadline: null,
-    karmaLimit: null,
-    earnings: null,
   }));
 
   await automationRepository.markSightings(usable.map((s) => s.id), 'CONTACTING').catch(() => undefined);
-  const cycleId = await runCycle(discordClient, { forced: true, tasks, strategy: 'companion' });
+  const result = await createBurstFlow(discordClient, tasks, 'burst:queue').catch((error) => {
+    logger.warn('Sighting burst failed', { error });
+    return null;
+  });
   await automationRepository.markSightings(usable.map((s) => s.id), 'DONE').catch(() => undefined);
-  return cycleId;
+  return result ? result.cycleId : null;
 }

@@ -238,6 +238,14 @@ export class AutomationRepository {
     return getDb().automationBurst.findUnique({ where: { blastId } });
   }
 
+  /** Bursts of one cycle, newest first (normally exactly one). */
+  async listBurstsByCycle(cycleId: string) {
+    return getDb().automationBurst.findMany({
+      where: { cycleId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   /** Still-open bursts — a new scan merges their unheld tasks instead of orphaning them. */
   async listOpenBursts() {
     return getDb().automationBurst.findMany({

@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Client, TextChannel } from 'discord.js';
 import { z } from 'zod';
-import { automationRepository, taskRepository } from '../../database/repositories';
+import { automationRepository, outreachRepository, taskRepository } from '../../database/repositories';
 import { sessionService } from '../../services/automation/session.service';
 import { normalizeSubreddit } from '../../services/automation/subreddit';
 import { validateDetectedTask } from '../../services/automation/validator.service';
@@ -222,7 +222,27 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       }
       const contacts = await automationRepository.listCycleContacts(cycle.id);
       const logs = await automationRepository.listCycleLogs(cycle.id);
-      res.json({ success: true, data: { cycle, contacts, logs } });
+      // Burst linkage (burst-only flow): newest burst + live blast fill so
+      // the panel shows eligible -> blast slots -> accepted in one view.
+      const bursts = await automationRepository.listBurstsByCycle(cycle.id).catch(() => []);
+      const burstViews = [];
+      for (const b of bursts) {
+        const blast = await outreachRepository.getBlast(b.blastId).catch(() => null);
+        const filled = blast
+          ? await outreachRepository.countReplies(blast.id).catch(() => blast.slotsFilled)
+          : 0;
+        burstViews.push({
+          id: b.id,
+          blastId: b.blastId,
+          taskIds: b.taskIds,
+          status: b.status,
+          createdAt: b.createdAt,
+          blast: blast
+            ? { slotsTotal: blast.slotsTotal, slotsFilled: filled, status: blast.status }
+            : null,
+        });
+      }
+      res.json({ success: true, data: { cycle, contacts, logs, bursts: burstViews } });
     } catch (error) {
       res.status(500).json({ success: false, message: 'Internal server error.' });
     }
