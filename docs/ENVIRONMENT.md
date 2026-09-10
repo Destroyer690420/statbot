@@ -11,6 +11,7 @@
 | `GUILD_ID` | Server where commands are registered & tasks live | Yes | — | deploy-commands, task queries |
 | `ADMIN_USER_IDS` | Comma-separated Discord user IDs (full access) | Yes | — | `src/utils/permissions.ts` |
 | `MANAGER_USER_IDS` | Comma-separated Discord user IDs (limited admin) | No | `''` | permissions.ts (`isAdminOrManager`, pings, worker detection) |
+| `MODERATOR_USER_IDS` | Comma-separated Discord user IDs (ticket helpers; excluded from worker detection, no command access) | No | `''` | permissions.ts (`isModerator`, `getAllAdminIds`) |
 | `DATABASE_URL` | PostgreSQL connection string (Prisma adapter) | Yes | — | `src/database/db.ts`, `prisma.config.ts` |
 | `REDIS_URL` | Redis connection for BullMQ (e.g. `redis://...`) | Yes | — | `src/scheduler/queue.ts`, `worker.ts` |
 | `JWT_SECRET` | HS256 secret for dashboard JWTs | Yes (min 16 chars) | — | `src/api/routes/auth.ts`, `middleware/auth.ts` |

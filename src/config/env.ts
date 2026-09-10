@@ -13,6 +13,10 @@ const envSchema = z.object({
   ADMIN_USER_IDS: z.string().min(1, 'ADMIN_USER_IDS is required (comma-separated)'),
   // Manager — comma-separated list of Discord user IDs with limited admin access
   MANAGER_USER_IDS: z.string().default(''),
+  // Moderators — comma-separated list of Discord user IDs that help run ticket
+  // operations. Excluded from worker detection everywhere (never treated as
+  // the ticket worker); no slash-command privileges.
+  MODERATOR_USER_IDS: z.string().default(''),
 
   // Database
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
