@@ -47,8 +47,13 @@ export function DailyOutreach() {
   const tickets: OutreachTicket[] = statusQuery.data?.data?.tickets || [];
   const blast: { id: string; slotsTotal: number; slotsFilled: number; status: string } | null =
     statusQuery.data?.data?.blast || null;
+  // Channels that replied in the current burst (resets on the next burst).
+  const replied = new Set<string>(statusQuery.data?.data?.blastReplied || []);
   const selectedCount = tickets.filter((t) => t.selected).length;
-  const visibleTickets = tickets.filter((t) => t.selected);
+  // Winners float to the top (stable within groups) so only green rows need opening.
+  const visibleTickets = tickets
+    .filter((t) => t.selected)
+    .sort((a, b) => Number(replied.has(b.channelId)) - Number(replied.has(a.channelId)));
 
   const openSelect = () => {
     setDraft(new Map(tickets.map((t) => [t.channelId, t.selected])));
@@ -253,7 +258,14 @@ export function DailyOutreach() {
                 </tr>
               ) : (
                 visibleTickets.map((t) => (
-                  <tr key={t.channelId} className="hover:bg-dark-800/30 transition-colors">
+                  <tr
+                    key={t.channelId}
+                    className={
+                      replied.has(t.channelId)
+                        ? 'bg-green-900/10 hover:bg-green-900/20 transition-colors'
+                        : 'hover:bg-dark-800/30 transition-colors'
+                    }
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm text-dark-100">
@@ -286,7 +298,14 @@ export function DailyOutreach() {
           <p className="text-center text-dark-400 py-10">No tickets selected yet — open Select Tickets to add.</p>
         ) : (
           visibleTickets.map((t) => (
-            <div key={t.channelId} className="glass-card border border-dark-700/50 overflow-hidden">
+            <div
+              key={t.channelId}
+              className={
+                replied.has(t.channelId)
+                  ? 'glass-card border-green-500/30 bg-green-900/15 overflow-hidden'
+                  : 'glass-card border border-dark-700/50 overflow-hidden'
+              }
+            >
               <div className="px-4 pt-4 pb-2 flex items-center justify-between">
                 <div className="min-w-0">
                   <p className="font-mono text-sm text-dark-100 truncate">#{t.channelName || t.channelId}</p>

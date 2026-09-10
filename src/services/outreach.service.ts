@@ -16,6 +16,8 @@ export interface OutreachStatus {
   message: string;
   tickets: OutreachRow[];
   blast: { id: string; slotsTotal: number; slotsFilled: number; status: string } | null;
+  /** Channels that replied in the current burst (open blast, else last closed). */
+  blastReplied: string[];
 }
 
 export interface SendResult {
@@ -94,7 +96,21 @@ class OutreachService {
       message: await this.getMessage(),
       tickets: buildOutreachRows(inputs),
       blast: await this.getOpenBlastState(),
+      blastReplied: await this.getBlastRepliedChannelIds(),
     };
+  }
+
+  /**
+   * Reply channel IDs for the current burst: the open blast's replies, or —
+   * once closed — the most recently closed blast's winners, until a new burst
+   * starts. Pure read; never mutates blast state.
+   */
+  async getBlastRepliedChannelIds(): Promise<string[]> {
+    const blast =
+      (await outreachRepository.getOpenBlast().catch(() => null)) ||
+      (await outreachRepository.latestBlast().catch(() => null));
+    if (!blast) return [];
+    return outreachRepository.listReplyChannelIds(blast.id).catch(() => []);
   }
 
   /** Live open-blast state for the dashboard banner (null when none open). */

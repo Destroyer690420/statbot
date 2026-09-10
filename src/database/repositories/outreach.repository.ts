@@ -74,6 +74,13 @@ export class OutreachRepository {
     });
   }
 
+  /** Most recent blast regardless of status (green persists after close). */
+  async latestBlast() {
+    return getDb().outreachBlast.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async closeBlast(id: string, slotsFilled: number) {
     return getDb().outreachBlast.update({
       where: { id },
