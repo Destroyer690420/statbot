@@ -250,7 +250,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-11**: **IMPLEMENTED one-blast-per-hour anti-spam (NOT yet deployed)**. Fixes repeated availability messages: hour's first eligible report opens the blast (one message per worker); later reports append new task ids with grown slots, no re-message; no-change reports silent; post-fill leaks wait for next hour. Watcher v1.1.2. Verified: typecheck + build clean, 242/242 jest (3 new). No DB migration.
+- **2026-09-11**: **DEPLOYED one-blast-per-hour anti-spam** (`161.118.164.85`) at commit `e50d2f6` (app + dashboard rebuild; pushed to GitHub; no DB migration — schema unchanged; no slash-command redeploy; host + local bundles/scratch cleaned). One message per worker per hour; later reports merge silently; watcher v1.1.2 served. Verified: health healthy, boot "All systems online!", merge code in live `dist/`, 242/242 jest.
 
 - **2026-09-11**: **DEPLOYED burst-only everywhere + automation panel** (`161.118.164.85`) at commit `5b6e883` (app + dashboard rebuild; backup `rtm-backup-20260910-203727-pre-panel.tar.gz`; pushed to GitHub; no DB migration — schema unchanged; no slash-command redeploy; host + local bundles/scratch cleaned). Verified live: health healthy (DB+Redis), boot "All systems online!", `/automation` 200 with served bundle `index-Br9Nq6Xz.js` (hash matches local build), `createBurstFlow` in live queue `dist/`, typecheck + both builds clean, 239/239 jest. Next: rehearse one post from the panel, then dry-run a drop.
 
