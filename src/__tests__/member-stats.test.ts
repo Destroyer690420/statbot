@@ -7,6 +7,8 @@ import {
   StatsRates,
   StatsWeek,
 } from '../utils/member-stats';
+import { workerStatsEmbed, inviterStatsEmbed } from '../bot/embeds';
+import { InviterStats } from '../services/member-stats.service';
 
 const rates: StatsRates = { postRate: 20, commentRate: 10 };
 const week: StatsWeek = { startMs: 1000, endMs: 2000, label: '1 Jan — 7 Jan' };
@@ -139,5 +141,74 @@ describe('buildWorkerStats', () => {
     expect(stats.allTime.completed).toBe(0);
     expect(stats.allTime.paid.amount).toBe(0);
     expect(stats.week.completed).toBe(0);
+  });
+});
+
+describe('workerStatsEmbed', () => {
+  it('shows only the This Week section (no All Time)', () => {
+    const stats = buildWorkerStats([row({ id: 'p1' })], [], rates, week);
+    const json = workerStatsEmbed('tester', stats).toJSON();
+    expect(json.fields).toHaveLength(1);
+    expect(json.fields![0].name).toContain('This Week');
+    expect(JSON.stringify(json.fields)).not.toContain('All Time');
+  });
+});
+
+describe('inviterStatsEmbed ticket display', () => {
+  function inviterStatsWith(ticketId: string | null): InviterStats {
+    return {
+      inviterId: 'inv1',
+      inviterName: 'inviter',
+      inviterType: 'normal',
+      totals: {
+        invited: 1,
+        ticketsCreated: ticketId ? 1 : 0,
+        qualified: 0,
+        bonusPaid: 0,
+        bonusPending: 0,
+        perTaskPaid: 0,
+        perTaskPending: 0,
+      },
+      invitees: [
+        {
+          inviteeId: '111111111111111111',
+          inviteeName: 'invitee',
+          ticketId,
+          tasks: 2,
+          posts: 1,
+          comments: 1,
+          threshold: 2,
+          thresholdMet: true,
+          bonusPaid: 0,
+          bonusPending: 100,
+        },
+      ],
+    };
+  }
+
+  it('renders a stored <#channelId> mention without backticks', () => {
+    const desc = inviterStatsEmbed(inviterStatsWith('<#1545535525447736212>')).toJSON().description!;
+    expect(desc).toContain('🎟 <#1545535525447736212>');
+    expect(desc).not.toContain('`<#1545535525447736212>`');
+  });
+
+  it('converts a raw channel id into a channel mention', () => {
+    const desc = inviterStatsEmbed(inviterStatsWith('1545535525447736212')).toJSON().description!;
+    expect(desc).toContain('🎟 <#1545535525447736212>');
+  });
+
+  it('renders a plain ticket name as #name', () => {
+    const desc = inviterStatsEmbed(inviterStatsWith('ticket-0036')).toJSON().description!;
+    expect(desc).toContain('🎟 #ticket-0036');
+  });
+
+  it('shows a fallback when there is no ticket yet', () => {
+    const desc = inviterStatsEmbed(inviterStatsWith(null)).toJSON().description!;
+    expect(desc).toContain('🎟 no ticket yet');
+  });
+
+  it('shows the capped 2/2 progress', () => {
+    const desc = inviterStatsEmbed(inviterStatsWith('ticket-0001')).toJSON().description!;
+    expect(desc).toContain('tasks **2/2**');
   });
 });

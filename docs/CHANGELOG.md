@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## Unreleased (implemented 2026-09-10, NOT yet deployed)
+### Changed
+- **/mystats week-only + /myinvites ticket + capped progress**: `/mystats` card drops the All Time section (This Week only — done posts/comments, paid ₹, pending ~₹). `/myinvites` per-invitee ticket now renders as a clickable `#ticket-name` channel mention (stored `<#channelId>`/raw id/name all normalized; `no ticket yet` when null) instead of a backticked raw id, and the tasks counter caps at the threshold (2/2 stays 2/2 for normal, 1/1 for special). Implementation: `workerStatsEmbed` (All Time field removed), `formatInviteTicket` helper + `inviterStatsEmbed` in `src/bot/embeds/index.ts`, `Math.min(taskCount, threshold)` in `member-stats.service.ts`, help text updated. Tests: 6 new embed cases (15/15 member-stats file, 230/230 total); typecheck + build clean. No DB migration, dashboard untouched.
+
 ## 2026-09-09
 ### Deployed
 - **Moderators excluded from worker detection live** (`161.118.164.85`) at commit `dd95aeb` (app rebuild, backup `rtm-backup-20260910-pre-dd95aeb.tar.gz`; pushed to GitHub; `MODERATOR_USER_IDS` appended to server `.env`). All task/outreach/assignment flows filter them via `getAllAdminIds()`; no command privileges. Verified: health healthy, live IDs resolve as moderators, 224/224 jest.

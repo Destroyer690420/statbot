@@ -167,7 +167,9 @@ class MemberStatsService {
         inviteeId: ref.inviteeId,
         inviteeName: ref.inviteeName,
         ticketId: ref.ticketId,
-        tasks: status.taskCount,
+        // Cap the displayed count at the threshold (e.g. 2/2 stays 2/2 even
+        // if the invitee goes on to complete more tasks).
+        tasks: Math.min(status.taskCount, threshold),
         posts: status.posts,
         comments: status.comments,
         threshold,

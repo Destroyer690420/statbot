@@ -152,11 +152,10 @@ function formatMoneySplit(split: TaskMoneySplit, pending: boolean): string {
 }
 
 /**
- * Build a worker's personal stats embed (week + all-time sections).
+ * Build a worker's personal stats embed (this week only).
  */
 export function workerStatsEmbed(displayName: string, stats: WorkerStats): EmbedBuilder {
   const w = stats.week;
-  const a = stats.allTime;
   return new EmbedBuilder()
     .setTitle(`📊 Stats — ${displayName}`)
     .setColor(COLORS.INFO)
@@ -170,19 +169,23 @@ export function workerStatsEmbed(displayName: string, stats: WorkerStats): Embed
         ].join('\n'),
         inline: false,
       },
-      {
-        name: '📊 All Time',
-        value: [
-          `🗂️ ${a.total} tasks (📝 ${a.posts} · 💬 ${a.comments})`,
-          `✅ ${a.completed} completed · 🔄 ${a.inProgress} in progress`,
-          `💰 Paid: ${formatMoneySplit(a.paid, false)}`,
-          `⏳ Pending: ${formatMoneySplit(a.pending, true)}`,
-        ].join('\n'),
-        inline: false,
-      },
     )
     .setFooter({ text: 'Pending = all insights received, awaiting payout • Reddit Task Manager' })
     .setTimestamp();
+}
+
+/**
+ * Format a stored referral ticket for Discord display.
+ * Stored values vary: `<#channelId>` (auto-detection), a raw channel id,
+ * or a plain channel name (manual `/referral add`). A bare `<#id>` mention
+ * lets Discord render the clickable #ticket-name; names render as #name.
+ */
+function formatInviteTicket(ticketId: string | null): string {
+  if (!ticketId) return '🎟 no ticket yet';
+  const mention = ticketId.match(/^<#(\d+)>$/);
+  if (mention) return `🎟 <#${mention[1]}>`;
+  if (/^\d{17,20}$/.test(ticketId)) return `🎟 <#${ticketId}>`;
+  return `🎟 #${ticketId.replace(/^#/, '')}`;
 }
 
 /**
@@ -191,7 +194,7 @@ export function workerStatsEmbed(displayName: string, stats: WorkerStats): Embed
 export function inviterStatsEmbed(stats: InviterStats): EmbedBuilder {
   const t = stats.totals;
   const lines = stats.invitees.slice(0, 15).map((inv) => {
-    const ticket = inv.ticketId ? `🎟 \`${inv.ticketId}\`` : '🎟 no ticket yet';
+    const ticket = formatInviteTicket(inv.ticketId);
     const progress = inv.thresholdMet ? '✅' : '⏳';
     const bonus = inv.bonusPaid > 0
       ? `${formatRs(inv.bonusPaid)} paid`
@@ -310,7 +313,7 @@ export function helpEmbed(): EmbedBuilder {
       },
       {
         name: '📊 /mystats',
-        value: 'Check your task stats: done, paid and pending (week + all time).\n`/mystats [user]` (user = admins only)',
+        value: 'Check your task stats: done, paid and pending (this week).\n`/mystats [user]` (user = admins only)',
       },
       {
         name: '🔗 /myinvites',
