@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-10 — Pending Invites section removal implemented (232/232 jest, backend + dashboard builds clean; NOT yet deployed). Previous: Invite auto-approve DEPLOYED (`161.118.164.85`, git HEAD `13823d6`).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-10 — Pending Invites removal DEPLOYED (`161.118.164.85`, git HEAD `bcab738`, app + dashboard rebuild; backup `rtm-backup-20260910-bcab738.tar.gz`; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200, `Pending Invites` absent from served bundle, unknown-skip code in live `dist/`, 232/232 jest). Previous: Invite auto-approve (`13823d6`).
 
 ---
 
@@ -249,7 +249,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-10**: **Pending Invites section removal implemented (NOT yet deployed)**. Dashboard Referrals page drops the Pending Invites card + edit modal (Approve/Reject/Edit UI gone; `client.ts` detection helpers now unused by UI, backend routes kept for the sweep script). Backend `recordJoin()` skips unknown-inviter joins entirely (log + `INVITE_DETECTED` audit, no row) instead of staging them. Implementation: `dashboard/src/pages/Referrals.tsx`, `src/services/invite-detection.service.ts`, `src/__tests__/invite-detection.test.ts` (232/232 jest, backend typecheck + build and dashboard build clean). Docs: PROJECT_CONTEXT/REFERRAL_SYSTEM/FRONTEND/DISCORD_BOT/CHANGELOG updated. No DB migration; needs app + dashboard rebuild on deploy.
+- **2026-09-10**: **DEPLOYED Pending Invites removal** (`161.118.164.85`) at commit `bcab738` (app + dashboard rebuild; backup `rtm-backup-20260910-bcab738.tar.gz`; no DB migration — schema unchanged; no slash-command redeploy; pushed to GitHub; host + local bundles/scratch cleaned). Verified live: health healthy (DB+Redis), boot "All systems online!", dashboard 200, `Pending Invites` absent from the served JS bundle, unknown-inviter skip in live `dist/`, 232/232 jest, backend + dashboard builds clean.
 
 - **2026-09-10**: **DEPLOYED invite auto-approve** (`161.118.164.85`) at commit `13823d6` (app-only rebuild; backup `rtm-backup-20260910-13823d6.tar.gz`; no DB migration — schema unchanged; dashboard untouched; no slash-command redeploy; pushed to GitHub; host + local bundles/scratch cleaned). Backlog sweep (`scripts/approve-pending-detections.ts`, host-side `prisma generate` first) dry-run found **0 pending rows** — no live approval run needed. Verified live: health healthy (DB+Redis), boot "All systems online!", `AUTO_APPROVE_BY` in `dist/`, 232/232 jest, typecheck + build clean.
 

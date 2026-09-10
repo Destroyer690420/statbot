@@ -2,11 +2,9 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
-## Unreleased (implemented 2026-09-10, NOT yet deployed)
-### Removed
-- **Pending Invites section gone from the Referrals dashboard**: detected joins auto-approve server-side, so the approval queue card + Edit Pending Invite modal are removed (`dashboard/src/pages/Referrals.tsx`). Backend `recordJoin()` now skips unknown-inviter joins entirely (log + audit, no staged row) instead of queueing them; detection API routes stay for the sweep script. Tests: unknown-skip case (22/22 invite-detection file, 232/232 total); backend typecheck + build and dashboard build clean. No DB migration. Deploy needs app + dashboard rebuild.
-
 ## 2026-09-10
+### Deployed
+- **Pending Invites section removed (live)** (`161.118.164.85`) at commit `bcab738` (app + dashboard rebuild, backup `rtm-backup-20260910-bcab738.tar.gz`; pushed to GitHub; no DB migration, no slash-command redeploy). Referrals dashboard drops the approval queue card + edit modal; unknown-inviter joins are skipped server-side (log + audit, no row). Verified: health healthy (DB+Redis), boot "All systems online!", dashboard 200, `Pending Invites` absent from the served bundle, 232/232 jest. Host + local bundles/scratch cleaned.
 ### Deployed
 - **Invite auto-approve live (no more manual verification)** (`161.118.164.85`) at commit `13823d6` (app-only rebuild, backup `rtm-backup-20260910-13823d6.tar.gz`; pushed to GitHub; no DB migration, dashboard untouched, no slash-command redeploy). `recordJoin()` approves immediately when the inviter is known (audited by `system`); unknown-inviter rows stay pending. Backlog sweep dry-run found 0 pending rows — no live approval run needed. Verified: health healthy (DB+Redis), boot "All systems online!", auto-approve code in `dist/`, 232/232 jest (22/22 invite-detection file). Host + local bundles/scratch cleaned.
 

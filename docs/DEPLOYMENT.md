@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — Invite auto-approve live at git HEAD `13823d6`** (app rebuild, backup `rtm-backup-20260910-13823d6.tar.gz`; pushed to GitHub; backlog sweep dry-run: 0 pending rows; verified: health healthy, boot clean, auto-approve code in `dist/`, 232/232 jest). Previous: /mystats week-only + /myinvites ticket-mention (`126a05a`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — Pending Invites removal live at git HEAD `bcab738`** (app + dashboard rebuild, backup `rtm-backup-20260910-bcab738.tar.gz`; pushed to GitHub; verified: health healthy, boot clean, dashboard 200 with no Pending Invites in the served bundle, 232/232 jest). Previous: Invite auto-approve (`13823d6`).
 
 ---
 
