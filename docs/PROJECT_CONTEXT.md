@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-10 — Outreach green burst highlight **DEPLOYED** (`161.118.164.85`, git HEAD `2d10aa1`, app + dashboard rebuild; pushed to GitHub; health healthy, 221/221 jest). Previous: Outreach Blast (`d3153f3`).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-10 — Moderators live (`161.118.164.85`, git HEAD `dd95aeb`, app rebuild; `MODERATOR_USER_IDS` set for 3 IDs; verified excluded from worker detection, 224/224 jest). Previous: Outreach green highlight (`2d10aa1`).
 
 ---
 
@@ -248,6 +248,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-09-10**: **DEPLOYED moderator exclusion** (`161.118.164.85`) at commit `dd95aeb` (app rebuild; pushed to GitHub). `MODERATOR_USER_IDS` env + `isModerator()`; included in `getAllAdminIds()` so every worker-detection site ignores them; no slash-command access. Verified live, 224/224 jest.
 
 - **2026-09-10**: **DEPLOYED Outreach green burst highlight** (`161.118.164.85`) at commit `2d10aa1` (app + dashboard rebuild; pushed to GitHub). Burst repliers render green + sort to top; reset on next burst. Verified: health healthy, 221/221 jest.
 

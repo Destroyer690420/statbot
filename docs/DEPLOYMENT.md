@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — Outreach green highlight live at git HEAD `2d10aa1`** (app + dashboard rebuild, backup `rtm-backup-20260909-pre-2d10aa1.tar.gz`; pushed to GitHub; no migration; verified: health healthy, 221/221 jest). Previous: Outreach Blast (`d3153f3`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — Moderators live at git HEAD `dd95aeb`** (app rebuild, backup `rtm-backup-20260910-pre-dd95aeb.tar.gz`; `MODERATOR_USER_IDS` in server `.env`; pushed to GitHub; verified: health healthy, IDs resolve as moderators, 224/224 jest). Previous: Outreach green highlight (`2d10aa1`).
 
 ---
 
