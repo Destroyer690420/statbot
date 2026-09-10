@@ -22,6 +22,7 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 | `/tasks` | Tasks | |
 | `/accepted` | AcceptedTasks | |
 | `/outreach` | DailyOutreach | Daily Worker Outreach page (see below) |
+| `/automation` | Automation | Auto-accept panel: status/switches, cycles + drill-down, rehearse, blocked editor (see below) |
 | `/tasks/:id` | TaskDetails | |
 | `/analytics` | Analytics | |
 | `/archives` | Archives | |
@@ -43,7 +44,7 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 ## 4. API Client (`src/api/client.ts`)
 
 baseURL `/api/v1`. All functions used by pages (see `docs/API.md` for endpoint semantics):
-`login`, `getTasks`, `getTask`, `deleteTask`, `updateTask`, `doneTask`, `reassignTask`, `retryAssignment`, `submitTaskUrl`, `getTickets`, `getReminders`, `getStats`, `getDailyStats`, `getTypeDistribution`, `getEmployeePerformance`, `downloadCsv`, `getOutreach`, `getOutreachSettings`, `updateOutreachSettings`, `saveOutreachSelection`, `sendOutreachMessage`, `getPayoutWeek/Summary/Eligible/WorkerDetail`, `payWorker`, `payAll`, `getBatchHistory/Detail`, `downloadPayoutCsv`, `get/updatePayoutRates`, `getCommissionSummary/Breakdown/InviterDetail`, `getReferrals`, `createReferral` (**unused by UI**), `deleteReferral`, `updateReferral`, `payInviter`, `payAllCommissions`, `get/updateCommissionRates`, `getCommissionBatchHistory/Detail`, `getInviteDetections`, `approveInviteDetection`, `rejectInviteDetection`, `updateInviteDetection`, `downloadCommissionCsv`, `restoreUnpaidArchived`, `verifyOwnerPin`, `getDailyEarnings`, `getDailyEarningsHistory`, `getWeeklyEarnings`.
+`login`, `getTasks`, `getTask`, `deleteTask`, `updateTask`, `doneTask`, `reassignTask`, `retryAssignment`, `submitTaskUrl`, `getTickets`, `getReminders`, `getStats`, `getDailyStats`, `getTypeDistribution`, `getEmployeePerformance`, `downloadCsv`, `getOutreach`, `getOutreachSettings`, `updateOutreachSettings`, `saveOutreachSelection`, `sendOutreachMessage`, `getAutomationStatus`, `updateAutomationSettings`, `startAutomationCycle`, `stopAutomation`, `getAutomationCycles`, `getAutomationCycle`, `getBlockedSubreddits`, `addBlockedSubreddit`, `removeBlockedSubreddit`, `saveAutomationSession`, `sendTestContact`, `sendTestAccept`, `sendRehearse`, `getAutomationCompanion`, `getAutomationClaims`, `getPayoutWeek/Summary/Eligible/WorkerDetail`, `payWorker`, `payAll`, `getBatchHistory/Detail`, `downloadPayoutCsv`, `get/updatePayoutRates`, `getCommissionSummary/Breakdown/InviterDetail`, `getReferrals`, `createReferral` (**unused by UI**), `deleteReferral`, `updateReferral`, `payInviter`, `payAllCommissions`, `get/updateCommissionRates`, `getCommissionBatchHistory/Detail`, `getInviteDetections`, `approveInviteDetection`, `rejectInviteDetection`, `updateInviteDetection`, `downloadCommissionCsv`, `restoreUnpaidArchived`, `verifyOwnerPin`, `getDailyEarnings`, `getDailyEarningsHistory`, `getWeeklyEarnings`.
 Unused API functions: `getUpcomingReminders`, `getExportCsvUrl`, `getHealth`, `createReferral`.
 
 ## 5. Pages
@@ -83,12 +84,15 @@ List with search + pagination (15/page); **no create UI** (empty state directs t
 ### Daily Outreach
 `/outreach` — table Ticket | Worker | Available | Post | Comment. **Shows only selected tickets** (rows = `tickets.filter(t => t.selected)`); empty state prompts opening Select Tickets. Page top (no heading — top bar shows "Daily Outreach"): toolbar row `flex-col md:flex-row md:items-center md:justify-between` — info block left on desktop / first on mobile (selected-count `status-badge` pill + "They will receive the daily message.", or "No tickets selected yet — open Select Tickets to add." when 0), buttons right: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; lists **all** tickets with their current state, draft until Save Selection → `PUT /outreach/selection` — newly checked tickets appear on the page after save, unchecked ones disappear), `Send Message` (confirm dialog → `POST /outreach/send`, disabled with 0 selected; inline ✅/❌ result with per-channel failures), Refresh (fixed icon square). Select Tickets / Send Message are `flex-1 md:flex-none` — full-width split on mobile, with compact mobile sizing (`text-[13px] md:text-sm`, `py-2 md:py-2.5`, `px-3 md:px-6`, smaller icons; desktop unchanged). Auto-refresh every 30s (`refetchInterval`). Desktop table + mobile cards (Tasks.tsx pattern). Status: `Available` = `Check` green / `X` dark; `Post`/`Comment` = count number in green when `>0`, `X` dark when `0` (counts of tasks created today IST, any status).
 
+### Automation
+`/automation` — auto-accept control panel. Status badge (Live/Dry run/Stopped) + Run Cycle Now / Stop / Refresh; stat cards (last cycle eligible/confirmed/accepted, blocked count); Browser Watcher card (online pill, last-seen/version, fresh sightings, pending claims with task→ticket rows); Switches (enabled/dry-run/server-polling-dormant checkboxes → `PUT /automation/settings`); Manual Single-Task Test card (test-contact/test-accept, 3-step); **Rehearse card** (task ID + ticket + optional subreddit + Live checkbox with confirm → `POST /automation/rehearse`); Blocked Subreddits editor (add with optional reason, per-row remove; exact match); GoPartTime Session paste (encrypted vault); Recent Cycles desktop table (detected/eligible/confirmed/**accepted**) + mobile cards, row click → drill-down (worker contacts, per-task decisions, **linked blasts with slots filled/total + task IDs**). Auto-refresh 30–60s per query (`refetchInterval`).
+
 ### Settings
 Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payout Rates editor; static Reminder Delays + Retry Configuration cards; Commission Rates editor; **Daily Outreach Message editor** (textarea ≤2000 chars → `PUT /outreach/settings`; hint notes `{user}` tags the ticket's worker); Danger Zone PIN modal → OwnerEarnings.
 
 ## 6. Components
 
-- `Layout.tsx`: sidebar (9 nav items, no admin gating), mobile off-canvas drawer + hamburger, auto-hiding header on scroll, PWA install button (`beforeinstallprompt`), logout.
+- `Layout.tsx`: sidebar (10 nav items, no admin gating), mobile off-canvas drawer + hamburger, auto-hiding header on scroll, PWA install button (`beforeinstallprompt`), logout.
 - `CopyButton.tsx`: clipboard with execCommand fallback, "Copied!" 1.5s.
 - `ProtectedRoute.tsx`: auth gate.
 

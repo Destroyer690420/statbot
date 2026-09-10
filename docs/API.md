@@ -100,7 +100,7 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 | POST | `/automation/start?forced=1` | Run one cycle now | — | 400 |
 | POST | `/automation/stop` | Mark running cycle STOPPED (no new accepts) | — | 500 |
 | GET | `/automation/cycles` | Last 20 cycles | — | 500 |
-| GET | `/automation/cycles/:id` | Cycle + contacts + task logs | — | 404; 500 |
+| GET | `/automation/cycles/:id` | Cycle + contacts + task logs + linked bursts (blast slots filled/total, task ids) | — | 404; 500 |
 | GET | `/automation/blocked` | Blocked subreddit list | — | 500 |
 | PUT | `/automation/blocked` | Add (normalized exact match) | `{ subreddit, reason? }` | 400; 500 |
 | DELETE | `/automation/blocked/:subreddit` | Remove | — | 500 |
