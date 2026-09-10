@@ -105,14 +105,17 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 | PUT | `/automation/blocked` | Add (normalized exact match) | `{ subreddit, reason? }` | 400; 500 |
 | DELETE | `/automation/blocked/:subreddit` | Remove | — | 500 |
 | POST | `/automation/session` | Save cookies to encrypted vault | `{ sessionToken ≥50ch, csrfToken, callbackUrl?, nextAction 64-hex?, userAgent? }` | 400 vault unconfigured/invalid |
+| POST | `/automation/rehearse` | Single-task live-fire rehearsal: pre-flight checks + optional real claim | `{ externalTaskId, channelId, taskType?, subreddit?, title?, live? }` — real claim ONLY when `live:true` + dryRun off + `GOPARTTIME_AUTO_ACCEPT=true`, else `wouldAccept` dry check | 400 ticket/worker/busy/cap/validation/gate |
 
 ---
 
-## 7c. Automation Companion — `src/api/routes/automation-companion.ts` (extension Bearer key)
+## 7c. Automation Companion — `src/api/routes/automation.ts` (extension Bearer key)
 
 | Method | Path | Purpose | Body | Errors |
 |---|---|---|---|---|
 | POST | `/automation/sightings` | Watcher task-list snapshot (upserts + heartbeat) | `{ companionId?, version?, tasks: [{ subTaskId, type: post\|comment, subreddit?, title? }] ≤100 }` | 400 |
+| GET | `/automation/eligibility-bundle` | Cached in-page filter data (blocked + recent accepted ids) | — | 500 |
+| POST | `/automation/burst` | Eligible scan report → server re-validates → auto-blast (slots = eligible); dry-run validates only | `{ companionId?, version?, tasks: [{ subTaskId, type, subreddit?, title? }] ≤20 }` | 400 |
 | GET | `/automation/claims/pending?companionId&version` | Oldest actionable claim (also heartbeat) | — | 500 |
 | POST | `/automation/claims/:id/result` | In-page accept verdict | `{ ok, failureReason? }` | 404 resolved; 410 expired; 500 |
 

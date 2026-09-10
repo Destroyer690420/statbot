@@ -288,6 +288,15 @@ erDiagram
         string version "nullable"
         timestamp updatedAt
     }
+    AutomationBurst {
+        string id PK "cuid"
+        string blastId UNIQUE "OutreachBlast id"
+        string cycleId "burst cycle"
+        string[] taskIds "ordered eligible externalTaskIds"
+        string status "OPEN|CLOSED"
+        timestamp createdAt
+        timestamp updatedAt
+    }
 ```
 
 ### Enums (7)
