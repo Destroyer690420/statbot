@@ -36,7 +36,24 @@ export interface SkippedTicket {
 /** Posts assigned per worker per IST day before outreach skips them. */
 export const DAILY_POST_CAP = 2;
 
+export interface BlastHooks {
+  /** A blast reply won a slot (after dedupe + cap checks). */
+  onReply?: (blastId: string, channelId: string, workerId: string) => Promise<unknown>;
+  /** A blast just closed (filled or superseded). */
+  onClosed?: (blastId: string) => Promise<unknown>;
+}
+
 class OutreachService {
+  private blastHooks: BlastHooks = {};
+
+  /**
+   * Registers automation hooks for blast events. Set once at boot (see
+   * src/index.ts). Kept as injection (not an import) so outreach never
+   * depends on the automation layer — manual blasts simply have no hooks.
+   */
+  setBlastHooks(hooks: BlastHooks): void {
+    this.blastHooks = hooks;
+  }
   /**
    * Full page state: every ticket channel + its daily outreach state.
    * Stale cycles (messageSentAt from a previous IST day) are lazily reset so
@@ -159,6 +176,11 @@ class OutreachService {
     if (previous) {
       const filled = await outreachRepository.countReplies(previous.id).catch(() => 0);
       await outreachRepository.closeBlast(previous.id, filled).catch(() => undefined);
+      try {
+        await this.blastHooks.onClosed?.(previous.id);
+      } catch (error) {
+        logger.warn('Blast closed hook failed', { blastId: previous.id, error });
+      }
     }
 
     const blast = await outreachRepository.createBlast(slotsTotal, senderId);
@@ -279,10 +301,24 @@ class OutreachService {
 
       const filled = await outreachRepository.countReplies(blast.id);
       logger.info('Blast reply recorded', { blastId: blast.id, channelId, userId, filled, slots: blast.slotsTotal });
+
+      // Burst automation: convert the win into an accept claim (best-effort;
+      // a missing hook means a manual blast — nothing happens).
+      try {
+        await this.blastHooks.onReply?.(blast.id, channelId, userId);
+      } catch (error) {
+        logger.warn('Blast reply hook failed', { blastId: blast.id, channelId, error });
+      }
+
       if (!isBlastFull(filled, blast.slotsTotal)) return;
 
       // Slots full: close the blast and remove our message everywhere else.
       await outreachRepository.closeBlast(blast.id, filled);
+      try {
+        await this.blastHooks.onClosed?.(blast.id);
+      } catch (error) {
+        logger.warn('Blast closed hook failed', { blastId: blast.id, error });
+      }
       const winners = new Set(await outreachRepository.listReplyChannelIds(blast.id));
       const cleaned = await this.deleteBlastMessages(discordClient, blast.id, winners);
       await auditLogService.log(

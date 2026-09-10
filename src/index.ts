@@ -132,6 +132,19 @@ async function main(): Promise<void> {
       logger.error('Automation scheduler failed to start', { error });
     }
 
+    // 8. Burst reply hooks: blast wins convert to accept claims (lazy accept).
+    // Manual blasts have no burst row — the hook resolves to null for them.
+    try {
+      const { outreachService } = await import('./services/outreach.service');
+      const { handleBurstReply, closeBurstForBlast } = await import('./services/automation/burst.service');
+      outreachService.setBlastHooks({
+        onReply: (blastId, channelId, workerId) => handleBurstReply(blastId, channelId, workerId),
+        onClosed: (blastId) => closeBurstForBlast(blastId),
+      });
+    } catch (error) {
+      logger.error('Burst hooks failed to register', { error });
+    }
+
     logger.info('═══════════════════════════════════════════');
     logger.info('  ✅ All systems online!');
     logger.info('═══════════════════════════════════════════');

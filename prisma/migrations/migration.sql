@@ -599,3 +599,24 @@ CREATE TABLE IF NOT EXISTS "OutreachReply" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "OutreachReply_blastId_channelId_key" ON "OutreachReply"("blastId", "channelId");
 CREATE INDEX IF NOT EXISTS "OutreachReply_blastId_idx" ON "OutreachReply"("blastId");
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Burst auto-accept (eligible scan -> auto-blast -> reply-to-claim)
+-- ──────────────────────────────────────────────────────────────
+-- The watcher reports browser-filtered eligible posts; the server opens an
+-- OutreachBlast with slots = eligible count and converts each blast reply
+-- into one AutomationClaim (lazy accept — nothing is ever accepted without
+-- a named winner holding it). The burst row links blast <-> cycle and holds
+-- the ordered eligible externalTaskIds. Schema-only, no data statements.
+CREATE TABLE IF NOT EXISTS "AutomationBurst" (
+  "id" TEXT NOT NULL,
+  "blastId" TEXT NOT NULL,
+  "cycleId" TEXT NOT NULL,
+  "taskIds" TEXT[] NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'OPEN',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "AutomationBurst_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "AutomationBurst_blastId_key" ON "AutomationBurst"("blastId");
+CREATE INDEX IF NOT EXISTS "AutomationBurst_status_idx" ON "AutomationBurst"("status");

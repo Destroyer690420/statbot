@@ -7,6 +7,11 @@ import { normalizeSubreddit } from '../../services/automation/subreddit';
 import { validateDetectedTask } from '../../services/automation/validator.service';
 import { scanTasks, acceptTask } from '../../services/automation/poller.service';
 import { runCycle } from '../../services/automation/cycle.service';
+import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
+import { createBurstFlow } from '../../services/automation/burst.service';
+import { outreachService, DAILY_POST_CAP } from '../../services/outreach.service';
+import { isAtDailyCap } from '../../utils/outreach-blast';
+import { getIstDayBoundaries } from '../../utils/ist-time';
 import { authMiddleware, AuthRequest, requireDashboardAdmin } from '../middleware/auth';
 import { extensionAuth } from '../middleware/extensionAuth';
 import { validateBody } from '../middleware/validate';
@@ -80,6 +85,29 @@ const claimResultSchema = z.object({
   pushed: z.boolean().optional().default(false),
 });
 
+const rehearseSchema = z.object({
+  externalTaskId: z.string().regex(/^\d+$/),
+  channelId: z.string().min(5).max(32),
+  taskType: z.enum(['post', 'comment']).optional().default('post'),
+  subreddit: z.string().max(64).optional().nullable(),
+  title: z.string().max(300).optional().nullable(),
+  /** Explicit live-fire confirmation — a created claim REALLY accepts on GoPartTime. */
+  live: z.boolean().optional().default(false),
+});
+
+const burstTaskSchema = z.object({
+  subTaskId: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).transform(String),
+  type: z.enum(['post', 'comment']),
+  subreddit: z.string().max(64).optional().nullable(),
+  title: z.string().max(300).optional().nullable(),
+});
+
+const burstSchema = z.object({
+  companionId: z.string().max(64).optional().nullable(),
+  version: z.string().max(16).optional().nullable(),
+  tasks: z.array(burstTaskSchema).max(20),
+});
+
 export default function createAutomationRoutes(discordClient: Client): Router {
   const router = Router();
 
@@ -90,7 +118,13 @@ export default function createAutomationRoutes(discordClient: Client): Router {
   // they ever reach their own router.
   router.use((req: Request, res: Response, next: NextFunction): void => {
     const p = req.path;
-    if (p === '/sightings' || p === '/claims/pending' || /^\/claims\/[^/]+\/result$/.test(p)) {
+    if (
+      p === '/sightings' ||
+      p === '/burst' ||
+      p === '/eligibility-bundle' ||
+      p === '/claims/pending' ||
+      /^\/claims\/[^/]+\/result$/.test(p)
+    ) {
       extensionAuth(req as AuthRequest, res, next);
       return;
     }
@@ -486,6 +520,144 @@ export default function createAutomationRoutes(discordClient: Client): Router {
     }
   });
 
+  /**
+   * POST /api/v1/automation/rehearse — single-task live-fire rehearsal.
+   * Runs every pre-flight check (ticket, worker, busy, daily cap, validator)
+   * and, ONLY when body.live=true AND settings dryRun=false AND the server
+   * flag GOPARTTIME_AUTO_ACCEPT=true, queues one claim for the companion
+   * browser (which really accepts on GoPartTime + pushes to the ticket).
+   * Otherwise returns wouldAccept:true with the check results and creates
+   * nothing — safe to probe with at any time.
+   */
+  router.post('/rehearse', validateBody(rehearseSchema), async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      const userId = (req as unknown as { userId: string }).userId;
+      const { externalTaskId, channelId } = req.body;
+
+      const channel = await discordClient.channels.fetch(channelId).catch(() => null);
+      if (!channel || !(channel instanceof TextChannel)) {
+        res.status(400).json({ success: false, message: 'Ticket channel not found.' });
+        return;
+      }
+      await channel.guild.members.fetch().catch(() => undefined);
+      const candidates = channel.members.filter((m) => !m.user.bot && !getAllAdminIds().includes(m.id));
+      if (candidates.size !== 1) {
+        res.status(400).json({
+          success: false,
+          message:
+            candidates.size === 0
+              ? 'No worker found in this ticket.'
+              : 'Multiple workers in this ticket — rehearsal needs exactly one.',
+        });
+        return;
+      }
+      const worker = candidates.first()!;
+      const busy = await taskRepository.findAwaitingSubmissionInChannel(channel.id);
+      if (busy) {
+        res.status(400).json({ success: false, message: 'Worker already has an active task in this ticket.' });
+        return;
+      }
+
+      const { dayStart, dayEnd } = getIstDayBoundaries();
+      const assignedToday = await outreachService.countPostsAssignedToday(worker.id, dayStart, dayEnd);
+      if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+        res.status(400).json({
+          success: false,
+          message: `Worker at daily cap (${assignedToday}/${DAILY_POST_CAP}).`,
+        });
+        return;
+      }
+
+      const detected = {
+        subTaskId: externalTaskId as string,
+        taskId: externalTaskId as string,
+        type: req.body.taskType as 'post' | 'comment',
+        subreddit: (req.body.subreddit as string | null) || null,
+        title: (req.body.title as string | null) || null,
+        postLink: null,
+        contentHtml: '',
+        images: [],
+        payment: null,
+        deadline: null,
+        karmaLimit: null,
+        earnings: null,
+      };
+      const v = await validateDetectedTask(detected);
+
+      const settings = await automationRepository.getSettings();
+      const dryRun = settings?.dryRun ?? true;
+      const liveFire = req.body.live === true && !dryRun && env.GOPARTTIME_AUTO_ACCEPT;
+      const gateReason = !v.eligible
+        ? `Task rejected: ${v.reason}${v.detail ? ` — ${v.detail}` : ''}`
+        : req.body.live !== true
+          ? 'Pass live:true to queue the real claim.'
+          : dryRun
+            ? 'Settings dryRun is on.'
+            : !env.GOPARTTIME_AUTO_ACCEPT
+              ? 'Server flag GOPARTTIME_AUTO_ACCEPT is false.'
+              : null;
+
+      const cycleId = `rehearse-${Date.now().toString(36)}`;
+      await automationRepository.createCycle({ id: cycleId, dryRun: !liveFire });
+      await automationRepository.logTask({
+        cycleId,
+        externalTaskId,
+        taskType: detected.type,
+        subreddit: detected.subreddit,
+        status: v.eligible ? (liveFire ? 'ELIGIBLE' : 'WOULD_ACCEPT') : v.reason,
+        workerId: worker.id,
+        failureReason: v.eligible ? null : v.detail || v.reason,
+      });
+
+      if (!liveFire) {
+        await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date() });
+        res.json({
+          success: true,
+          data: {
+            wouldAccept: v.eligible,
+            reason: gateReason,
+            task: { subTaskId: detected.subTaskId, type: detected.type, subreddit: detected.subreddit, title: detected.title },
+            worker: { id: worker.id, name: worker.displayName || worker.user.username },
+            channel: { id: channel.id, name: channel.name },
+          },
+        });
+        return;
+      }
+
+      const claim = await automationRepository.createClaim({
+        cycleId,
+        externalTaskId,
+        channelId: channel.id,
+        workerId: worker.id,
+        expiresAt: new Date(Date.now() + CLAIM_TTL_MS),
+      });
+      await auditLogService.log(
+        AuditAction.AUTOMATION_CYCLE_STARTED,
+        null,
+        userId,
+        `Rehearsal claim queued: task ${externalTaskId} for <@${worker.id}> in #${channel.name}`,
+      );
+      res.json({
+        success: true,
+        data: {
+          accepted: false,
+          claimQueued: true,
+          claim,
+          cycleId,
+          task: { subTaskId: detected.subTaskId, type: detected.type, subreddit: detected.subreddit, title: detected.title },
+          worker: { id: worker.id, name: worker.displayName || worker.user.username },
+          channel: { id: channel.id, name: channel.name },
+          next: 'The companion browser picks up the claim within ~30s, accepts in-page, and pushes to the ticket.',
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      logger.warn('POST /automation/rehearse failed', { message });
+      res.status(400).json({ success: false, message });
+    }
+  });
+
   // ─── Companion endpoints (extension key via the dispatcher above) ───
 
   /** POST /api/v1/automation/sightings — task list snapshot from the watcher. */
@@ -509,6 +681,73 @@ export default function createAutomationRoutes(discordClient: Client): Router {
     } catch (error) {
       logger.warn('POST /automation/sightings failed', { error });
       res.status(400).json({ success: false, message: 'Invalid sightings payload.' });
+    }
+  });
+
+  /**
+   * GET /api/v1/automation/eligibility-bundle — cached eligibility data for
+   * the watcher's in-page filter (blocked subreddits + recently accepted
+   * external ids). The server re-validates everything on /burst; this bundle
+   * only lets the browser skip the obvious rejects in milliseconds.
+   */
+  router.get('/eligibility-bundle', async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const blocked = await automationRepository.listBlocked();
+      const recentIds = await taskRepository.findRecentExternalIds(GOPARTTIME_SOURCE, 200);
+      res.json({
+        success: true,
+        data: {
+          version: 1,
+          blocked: blocked.map((b) => b.subreddit),
+          recentIds,
+        },
+      });
+    } catch (error) {
+      logger.warn('GET /automation/eligibility-bundle failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /**
+   * POST /api/v1/automation/burst — watcher-reported eligible scan.
+   * Server re-validates every task (Post/duplicate/blocked), then opens an
+   * OutreachBlast with slots = eligible count. Each blast reply becomes one
+   * claim (lazy accept). In dry-run: validates + logs only, no blast.
+   */
+  router.post('/burst', validateBody(burstSchema), async (req: Request, res: Response): Promise<void> => {
+    try {
+      const companionId = req.body.companionId || null;
+      await automationRepository.heartbeat(companionId, req.body.version || null);
+      const tasks = req.body.tasks.map(
+        (t: { subTaskId: string; type: 'post' | 'comment'; subreddit?: string | null; title?: string | null }) => ({
+          subTaskId: t.subTaskId,
+          type: t.type,
+          subreddit: t.subreddit || null,
+          title: t.title || null,
+        }),
+      );
+      const result = await createBurstFlow(discordClient, tasks, 'burst');
+      res.json({
+        success: true,
+        data: {
+          cycleId: result.cycleId,
+          eligible: result.eligible.map((t) => ({
+            subTaskId: t.subTaskId,
+            subreddit: t.subreddit,
+            title: t.title,
+          })),
+          blocked: result.blocked,
+          duplicates: result.duplicates,
+          commentsSkipped: result.commentsSkipped,
+          blast: result.blast,
+          sent: result.sent,
+          skipped: result.skipped,
+          dryRun: result.dryRun,
+        },
+      });
+    } catch (error) {
+      logger.warn('POST /automation/burst failed', { error });
+      res.status(400).json({ success: false, message: 'Invalid burst payload.' });
     }
   });
 

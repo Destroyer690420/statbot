@@ -205,6 +205,14 @@ export class AutomationRepository {
     });
   }
 
+  /** All claims of a cycle — used to compute burst tasks already held. */
+  async listCycleClaims(cycleId: string) {
+    return getDb().automationClaim.findMany({
+      where: { cycleId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async resolveClaim(id: string, status: 'CLAIMED' | 'FAILED' | 'EXPIRED', failureReason?: string | null) {
     return getDb().automationClaim.update({
       where: { id },
@@ -217,6 +225,29 @@ export class AutomationRepository {
       where: { status: 'PENDING', expiresAt: { lte: now } },
       data: { status: 'EXPIRED', respondedAt: now },
     });
+  }
+
+  // ─── Bursts (eligible scan -> auto-blast -> reply-to-claim) ───
+  async createBurst(data: { blastId: string; cycleId: string; taskIds: string[] }) {
+    return getDb().automationBurst.create({
+      data: { blastId: data.blastId, cycleId: data.cycleId, taskIds: data.taskIds, status: 'OPEN' },
+    });
+  }
+
+  async getBurstByBlast(blastId: string) {
+    return getDb().automationBurst.findUnique({ where: { blastId } });
+  }
+
+  /** Still-open bursts — a new scan merges their unheld tasks instead of orphaning them. */
+  async listOpenBursts() {
+    return getDb().automationBurst.findMany({
+      where: { status: 'OPEN' },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async closeBurst(id: string) {
+    return getDb().automationBurst.update({ where: { id }, data: { status: 'CLOSED' } });
   }
 
   // ─── Companion heartbeat ───

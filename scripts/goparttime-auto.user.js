@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.0.9
+// @version      1.1.1
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,21 +18,30 @@
 // ==/UserScript==
 
 /**
- * v1.0.9 - Hybrid companion for StatBot automation.
+ * v1.1.1 - Hybrid companion for StatBot automation.
+ * Adds an on-page gear button (bottom-right of every goparttime.net page)
+ * that opens the API URL/key settings directly - configuration no longer
+ * depends on the Tampermonkey popup menu (which hides script commands on
+ * tabs the script does not run on). Otherwise identical to v1.0.0 below.
+ *
+ * v1.1.0 - Hybrid companion for StatBot automation.
  *
  * Two loops, both best-effort and fully unattended:
- *  1. Monitor (every ~60s on /tasks): parses the page's embedded flight data
- *     for available sub-tasks and POSTs sightings to the backend. The backend
- *     validates (Post/duplicate/blocked), pings workers on Discord, and waits
- *     for confirmation - exactly like the manual flow.
- *  2. Claim (every ~30s, everywhere on goparttime.net): asks the backend for a
- *     pending claim. When the backend has a CONFIRMED worker, it performs the
- *     genuine in-page acceptance on /tasks via the task drawer:
- *       - Opens the task detail drawer by clicking "Accept Task" on the matching card
- *       - Extracts full task details (Task ID, subreddit, title, content, flair, etc.)
- *       - Clicks "Confirm acceptance" inside the drawer (fires native Server Action)
+ *  1. Monitor: routine 60s sightings on /tasks. During the burst window
+ *     (:09:50-:15 local, covering the :10/:11 drops + :14/:15 leaks) it
+ *     switches to a 2-3s tight loop over the live DOM, filters eligible
+ *     posts in-page (Post-only, not recently accepted, subreddit not
+ *     blocked - bundle cached from /eligibility-bundle), and POSTs only
+ *     changed eligible sets to /burst, which auto-opens an outreach blast
+ *     (slots = eligible count). Sightings are NOT posted in the window.
+ *  2. Claim (30s routine, 5s in-window, everywhere on goparttime.net):
+ *     asks the backend for a pending claim. When the backend has a CONFIRMED
+ *     worker (rehearsal, burst reply, or cycle), it accepts in-page:
+ *       - Opens the task detail drawer, extracts full task details
+ *       - Fast path: direct Server Action POST (~300ms); fallback: click
+ *         "Confirm acceptance" in the drawer (native Server Action)
  *       - Observes the response and reports the verdict
- *       - Automatically pushes the extracted details to the worker's Discord ticket
+ *       - Automatically pushes the extracted details to the worker's ticket
  *
  * Auth/session never leave this browser. No passwords, no pasted cookies.
  * Always on: the watcher starts with every goparttime.net page load.
@@ -41,7 +50,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.9';
+  const VERSION = '1.1.1';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -49,7 +58,16 @@
   const MONITOR_MS = 60 * 1000;
   const CLAIM_MS = 30 * 1000;
   const JITTER_MS = 10 * 1000;
+  // Burst window (drop minutes): tight loops while tasks rain, idle otherwise.
+  const BURST_MONITOR_MS = 2500;
+  const BURST_MONITOR_JITTER_MS = 1500;
+  const BURST_CLAIM_MS = 5000;
+  const BUNDLE_TTL_MS = 60 * 60 * 1000;
   const RATE_LIMIT_PAUSE_MS = 60 * 1000;
+  // Signature of the last eligible set reported via /burst (change-triggered
+  // POSTs only - no spam while the listing sits still).
+  let lastBurstSig = '';
+  let bundleCache = null;
 
   // Set when the server rate-limits us: loops idle until this time.
   let rateLimitedUntil = 0;
@@ -221,7 +239,6 @@
 
   let statusEl = null;
   let lastOkAt = 0;
-
   function timeNow() {
     try {
       return new Date().toLocaleTimeString();
@@ -253,8 +270,142 @@
     } catch (e) { /* never break loops for status UI */ }
   }
 
+  // --- On-page settings gear (menu-independent configuration) ---
+  // The Tampermonkey popup only lists a script's menu commands on tabs the
+  // script runs on, which hides "Configure Watcher..." for some users. This
+  // tiny gear lives on every goparttime.net page and opens the same settings
+  // prompts directly - configuration never depends on the popup menu.
+
+  let gearEl = null;
+
+  function ensureSettingsGear() {
+    try {
+      if (gearEl || !document.body) return;
+      gearEl = document.createElement('button');
+      gearEl.id = 'gpt-watcher-gear';
+      gearEl.type = 'button';
+      gearEl.title = 'Watcher settings (API URL + key)';
+      gearEl.textContent = '\u2699';
+      gearEl.style.position = 'fixed';
+      gearEl.style.right = '16px';
+      gearEl.style.bottom = '16px';
+      gearEl.style.zIndex = '2147483647';
+      gearEl.style.width = '30px';
+      gearEl.style.height = '30px';
+      gearEl.style.borderRadius = '8px';
+      gearEl.style.border = 'none';
+      gearEl.style.background = 'rgba(30, 30, 30, 0.85)';
+      gearEl.style.color = '#fff';
+      gearEl.style.fontSize = '16px';
+      gearEl.style.lineHeight = '1';
+      gearEl.style.cursor = 'pointer';
+      const open = (ev) => {
+        try {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          if (ev && ev.preventDefault) ev.preventDefault();
+        } catch (e) { /* ignore */ }
+        openSettings();
+      };
+      if (gearEl.addEventListener) gearEl.addEventListener('click', open, true);
+      else gearEl.onclick = open;
+      document.body.appendChild(gearEl);
+    } catch (e) { /* never break loops for settings UI */ }
+  }
+
   function withJitter(ms) {
     return ms + Math.floor(Math.random() * JITTER_MS);
+  }
+
+  function withBurstJitter(ms) {
+    return ms + Math.floor(Math.random() * BURST_MONITOR_JITTER_MS);
+  }
+
+  /**
+   * Burst scan window in this browser's LOCAL time (the drop schedule is
+   * observed here): minute :09 from second 50 through minute :15 inclusive.
+   * JS mirror of src/services/automation/eligibility.ts isBurstActive.
+   */
+  function isBurstWindow(now) {
+    const d = now || new Date();
+    const m = d.getMinutes();
+    if (m === 9) return d.getSeconds() >= 50;
+    return m >= 10 && m <= 15;
+  }
+
+  /**
+   * JS mirror of normalizeSubreddit (src/services/automation/subreddit.ts):
+   * trim/lowercase, reddit-URL extract, r/-strip, charset gate.
+   */
+  function normalizeSub(raw) {
+    if (!raw) return null;
+    let s = String(raw).trim().toLowerCase();
+    if (!s) return null;
+    const um = s.match(/reddit\.com\/r\/([a-z0-9_]+)/);
+    if (um) return um[1];
+    s = s.replace(/^r\//, '').replace(/^[@/]+/, '').replace(/\/+$/, '');
+    if (!/^[a-z0-9_]{1,32}$/.test(s)) return null;
+    return s;
+  }
+
+  /**
+   * In-page eligibility mirror of filterEligibleIds
+   * (src/services/automation/eligibility.ts): Post-only, not recently
+   * accepted, subreddit not blocked. The server re-validates on /burst -
+   * this only skips the obvious rejects in milliseconds.
+   */
+  function filterEligible(tasks, bundle) {
+    const blocked = {};
+    const recent = {};
+    ((bundle && bundle.blocked) || []).forEach((b) => { blocked[b] = true; });
+    ((bundle && bundle.recentIds) || []).forEach((id) => { recent[String(id)] = true; });
+    const out = [];
+    const seen = {};
+    for (const t of tasks || []) {
+      if (!t || t.subTaskId === undefined || t.subTaskId === null || seen[t.subTaskId]) continue;
+      seen[t.subTaskId] = true;
+      if (t.type !== 'post') continue;
+      if (recent[String(t.subTaskId)]) continue;
+      const n = normalizeSub(t.subreddit);
+      if (n && blocked[n]) continue;
+      out.push({
+        subTaskId: Number(t.subTaskId),
+        type: t.type,
+        subreddit: t.subreddit || null,
+        title: t.title || null,
+      });
+    }
+    return out.slice(0, 20);
+  }
+
+  /**
+   * Eligibility bundle (blocked subreddits + recent accepted ids), cached
+   * for an hour in memory + GM storage. Failures fall back to cache, then
+   * to an empty bundle (server still validates - fail-open, never blocks).
+   */
+  async function getBundle(settings) {
+    const now = Date.now();
+    if (bundleCache && now - bundleCache.at < BUNDLE_TTL_MS) return bundleCache;
+    try {
+      const stored = storageGet('gpt_bundle_json');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && now - (parsed.at || 0) < BUNDLE_TTL_MS) {
+          bundleCache = parsed;
+          return parsed;
+        }
+      }
+    } catch (e) { /* fall through to fetch */ }
+    try {
+      const res = await request(settings, 'GET', '/eligibility-bundle');
+      const data = (res && res.data) || {};
+      bundleCache = { blocked: data.blocked || [], recentIds: data.recentIds || [], at: now };
+      storageSet('gpt_bundle_json', JSON.stringify(bundleCache));
+      return bundleCache;
+    } catch (e) {
+      console.log('[Auto Watcher] bundle fetch failed, using cache:', e && e.message);
+      if (bundleCache) return bundleCache;
+      return { blocked: [], recentIds: [], at: 0 };
+    }
   }
 
   // --- Task-list parsing (page flight data, same shape the backend parses) --
@@ -340,22 +491,68 @@
     if (monitorBusy || !watcherEnabled() || isRateLimited()) return;
     const settings = getSettings();
     if (!settings.apiKey) {
-      setStatus(false, 'no API key - use Configure Sender');
+      setStatus(false, 'no API key - click the watcher gear (bottom-right)');
       return;
     }
     // Only the /tasks page carries the listing.
     if (!/^\/tasks\/?$/.test(window.location.pathname)) return;
     monitorBusy = true;
     try {
-      // Fresh SSR HTML always embeds the flight scripts; the live DOM may
-      // have them stripped after hydration, so fetch first, DOM as fallback.
-      let html = await fetchPageHtml();
+      const burst = isBurstWindow();
+      if (!burst) lastBurstSig = '';
+      // Burst mode reads the live DOM first (instant - no extra page load);
+      // routine mode keeps the proven fetch-first order. Sightings are NOT
+      // posted during the burst: the /burst report replaces them (posting
+      // both would double-process via the sighting queue's 5-min cycles).
+      let html = null;
       let source = 'fetch';
-      if (!html) {
+      if (burst) {
         html = domHtml();
         source = 'dom';
+        if (!html || parseAvailableTasks(html).length === 0) {
+          const fresh = await fetchPageHtml();
+          if (fresh) {
+            html = fresh;
+            source = 'fetch';
+          }
+        }
+      } else {
+        // Fresh SSR HTML always embeds the flight scripts; the live DOM may
+        // have them stripped after hydration, so fetch first, DOM as fallback.
+        html = await fetchPageHtml();
+        if (!html) {
+          html = domHtml();
+          source = 'dom';
+        }
       }
       const tasks = parseAvailableTasks(html || '');
+      if (burst) {
+        const bundle = await getBundle(settings);
+        const eligible = filterEligible(tasks, bundle);
+        if (eligible.length === 0) {
+          setStatus(true, 'BURST scanning (' + source + ')...');
+          return;
+        }
+        const sig = eligible
+          .map((t) => String(t.subTaskId))
+          .sort()
+          .join(',');
+        if (sig === lastBurstSig) {
+          setStatus(true, 'BURST ' + eligible.length + ' eligible (reported)');
+          return;
+        }
+        lastBurstSig = sig;
+        const res = await request(settings, 'POST', '/burst', {
+          companionId: getCompanionId(),
+          version: VERSION,
+          tasks: eligible,
+        });
+        const confirmed = res && res.data && res.data.eligible ? res.data.eligible.length : eligible.length;
+        const blast = res && res.data && res.data.blast ? ' -> blast ' + res.data.sent + '/' + res.data.blast.slotsTotal : '';
+        const dry = res && res.data && res.data.dryRun ? ' (dry-run)' : '';
+        setStatus(true, 'BURST ' + confirmed + ' eligible' + blast + dry);
+        return;
+      }
       if (tasks.length === 0) {
         await request(settings, 'POST', '/sightings', {
           companionId: getCompanionId(),
@@ -392,7 +589,7 @@
     if (claimBusy || !watcherEnabled() || isRateLimited()) return;
     const settings = getSettings();
     if (!settings.apiKey) {
-      setStatus(false, 'no API key - use Configure Sender');
+      setStatus(false, 'no API key - click the watcher gear (bottom-right)');
       return;
     }
     claimBusy = true;
@@ -636,6 +833,71 @@
     return null;
   }
 
+  // --- Fast accept: direct Server Action POST (burst fast path) ---
+
+  function findNextActionCandidates() {
+    const out = [];
+    const seen = {};
+    try {
+      const chunks = Array.from(document.querySelectorAll('script')).map((s) => s.textContent || '');
+      if (document.documentElement) chunks.push(document.documentElement.innerHTML.slice(-200000));
+      const re = /\b[0-9a-f]{64}\b/g;
+      for (const chunk of chunks) {
+        let m = null;
+        while ((m = re.exec(chunk)) !== null) {
+          if (!seen[m[0]]) {
+            seen[m[0]] = true;
+            out.push(m[0]);
+          }
+          if (out.length >= 5) return out;
+        }
+      }
+    } catch (e) { /* ignore */ }
+    return out;
+  }
+
+  /**
+   * Tries the native accept Server Action directly (same shape the backend
+   * poller used, but from this genuine session - no checkpoint). Only a
+   * definitive verdict ends the flow: {ok:true} on "success":true,
+   * {ok:false} on "success":false; anything else is inconclusive ({ok:null})
+   * and the caller falls back to the drawer Confirm flow. Never throws.
+   */
+  async function tryFastAccept(subTaskId) {
+    const candidates = findNextActionCandidates();
+    if (candidates.length === 0) return { ok: null };
+    for (const action of candidates.slice(0, 3)) {
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 8000);
+        let text = '';
+        try {
+          const res = await fetch('/tasks', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              Accept: 'text/x-component',
+              'Content-Type': 'text/plain;charset=UTF-8',
+              'Next-Action': action,
+            },
+            body: JSON.stringify([{ sub_task_id: subTaskId }]),
+            signal: ctrl.signal,
+          });
+          text = await res.text().catch(() => '');
+        } finally {
+          clearTimeout(timer);
+        }
+        if (/"success":\s*true/.test(text)) return { ok: true };
+        if (/"success":\s*false/.test(text)) {
+          const m = /"message":\s*"([^"]+)"/.exec(text);
+          return { ok: false, error: m ? m[1] : 'GoPartTime rejected acceptance.' };
+        }
+        // Inconclusive (wrong action id / error page) - try next candidate.
+      } catch (e) { /* try next candidate */ }
+    }
+    return { ok: null };
+  }
+
   // --- Process Claim: In-page acceptance flow ---
 
   async function processClaim(settings, claim) {
@@ -683,46 +945,60 @@
       return;
     }
 
-    // 3. Find the "Confirm acceptance" button
-    const confirmBtn = Array.from(drawer.querySelectorAll('button')).find((b) =>
-      (b.textContent || '').trim().toLowerCase().includes('confirm acceptance')
-    );
-
-    if (!confirmBtn) {
-      closeOpenDrawer();
-      await reportClaim(settings, claim, false, 'Confirm acceptance button not found in drawer.');
-      return;
-    }
-
-    // 4. Click "Confirm acceptance"
-    const acceptStartTime = Date.now();
-    confirmBtn.click();
-
-    // 5. Wait for GoPartTime confirmation (either via intercepted response or drawer closing)
+    // 3. Accept: fast Server Action POST first, drawer Confirm as fallback.
+    // The detail is already extracted above, so a fast accept needs no drawer.
     let accepted = false;
     let acceptError = null;
+    try {
+      const fast = await tryFastAccept(subTaskId);
+      if (fast.ok === true) {
+        accepted = true;
+        closeOpenDrawer();
+        console.log('[Auto Watcher] task #' + subTaskId + ' accepted via fast path');
+      } else if (fast.ok === false) {
+        acceptError = fast.error;
+      }
+    } catch (e) { /* fall through to drawer flow */ }
 
-    for (let i = 0; i < 40; i++) { // up to 6 seconds
-      await sleep(150);
+    if (!accepted && !acceptError) {
+      // Find the "Confirm acceptance" button
+      const confirmBtn = Array.from(drawer.querySelectorAll('button')).find((b) =>
+        (b.textContent || '').trim().toLowerCase().includes('confirm acceptance')
+      );
 
-      // Check intercepted response
-      if (lastServerActionResponse && lastServerActionResponse.timestamp >= acceptStartTime) {
-        const text = lastServerActionResponse.text || '';
-        if (/"success":\s*true/.test(text)) {
+      if (!confirmBtn) {
+        closeOpenDrawer();
+        await reportClaim(settings, claim, false, 'Confirm acceptance button not found in drawer.');
+        return;
+      }
+
+      // Click "Confirm acceptance"
+      const acceptStartTime = Date.now();
+      confirmBtn.click();
+
+      // Wait for GoPartTime confirmation (either via intercepted response or drawer closing)
+      for (let i = 0; i < 40; i++) { // up to 6 seconds
+        await sleep(150);
+
+        // Check intercepted response
+        if (lastServerActionResponse && lastServerActionResponse.timestamp >= acceptStartTime) {
+          const text = lastServerActionResponse.text || '';
+          if (/"success":\s*true/.test(text)) {
+            accepted = true;
+            break;
+          }
+          if (/"success":\s*false/.test(text) || lastServerActionResponse.status >= 400) {
+            const m = /"message":\s*"([^"]+)"/.exec(text);
+            acceptError = m ? m[1] : 'GoPartTime rejected acceptance.';
+            break;
+          }
+        }
+
+        // Fallback: drawer closed indicates acceptance completed
+        if (!isDrawerOpen()) {
           accepted = true;
           break;
         }
-        if (/"success":\s*false/.test(text) || lastServerActionResponse.status >= 400) {
-          const m = /"message":\s*"([^"]+)"/.exec(text);
-          acceptError = m ? m[1] : 'GoPartTime rejected acceptance.';
-          break;
-        }
-      }
-
-      // Fallback: drawer closed indicates acceptance completed
-      if (!isDrawerOpen()) {
-        accepted = true;
-        break;
       }
     }
 
@@ -764,7 +1040,7 @@
       try {
         await monitorTick();
       } catch (e) { /* never break the loop */ }
-      await sleep(withJitter(MONITOR_MS));
+      await sleep(isBurstWindow() ? withBurstJitter(BURST_MONITOR_MS) : withJitter(MONITOR_MS));
     }
   }
 
@@ -774,11 +1050,12 @@
       try {
         await claimTick();
       } catch (e) { /* never break the loop */ }
-      await sleep(withJitter(CLAIM_MS));
+      await sleep(isBurstWindow() ? withBurstJitter(BURST_CLAIM_MS) : withJitter(CLAIM_MS));
     }
   }
 
   if (watcherEnabled()) {
+    ensureSettingsGear();
     monitorLoop();
     claimLoop();
   }
