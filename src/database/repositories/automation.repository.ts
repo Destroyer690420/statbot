@@ -254,6 +254,23 @@ export class AutomationRepository {
     });
   }
 
+  /** Bursts created since an instant — the one-blast-per-hour guard. */
+  async listBurstsSince(since: Date) {
+    return getDb().automationBurst.findMany({
+      where: { createdAt: { gte: since } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /** Appends task ids to a burst pool (leak merge — no re-messaging). */
+  async appendBurstTasks(id: string, taskIds: string[]) {
+    if (taskIds.length === 0) return null;
+    return getDb().automationBurst.update({
+      where: { id },
+      data: { taskIds: { push: taskIds } },
+    });
+  }
+
   async closeBurst(id: string) {
     return getDb().automationBurst.update({ where: { id }, data: { status: 'CLOSED' } });
   }

@@ -42,3 +42,16 @@ export function getIstDayBoundaries(now: Date = new Date()): IstDayBoundaries {
 export function isStaleDailyCycle(messageSentAt: Date | null, dayStart: Date): boolean {
   return messageSentAt !== null && messageSentAt < dayStart;
 }
+
+/**
+ * Start of the current IST hour as a UTC instant. Burst gating is hourly in
+ * the manager's timezone (drops land at :10/:11 IST): one blast per IST hour,
+ * later reports in the same hour merge silently instead of re-messaging.
+ */
+export function getIstHourStart(now: Date = new Date()): Date {
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  const hourStartIST = new Date(
+    Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), istNow.getUTCHours(), 0, 0, 0),
+  );
+  return new Date(hourStartIST.getTime() - IST_OFFSET_MS);
+}

@@ -763,6 +763,8 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           sent: result.sent,
           skipped: result.skipped,
           dryRun: result.dryRun,
+          merged: result.merged,
+          added: result.added,
         },
       });
     } catch (error) {

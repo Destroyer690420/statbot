@@ -58,3 +58,25 @@ export function pickNextTask(taskIds: readonly string[], claimedIds: ReadonlySet
   }
   return null;
 }
+
+/**
+ * New-task diff for the one-blast-per-hour rule: eligible ids minus tasks
+ * already pooled in the hour's burst minus tasks already held by live claims.
+ * Empty result means the report changes nothing (silent no-op, no re-blast).
+ */
+export function diffNewTasks(
+  eligibleIds: readonly string[],
+  pooledIds: ReadonlySet<string> | readonly string[],
+  heldIds: ReadonlySet<string> | readonly string[],
+): string[] {
+  const pooled = pooledIds instanceof Set ? pooledIds : new Set(pooledIds);
+  const held = heldIds instanceof Set ? heldIds : new Set(heldIds);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of eligibleIds) {
+    if (seen.has(id) || pooled.has(id) || held.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}

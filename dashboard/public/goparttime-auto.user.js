@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.1
+// @version      1.1.2
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,9 @@
 // ==/UserScript==
 
 /**
+ * v1.1.2 - Status pill reports hour-blast merges ("+N, no re-message").
+ * Otherwise identical to v1.1.1 below.
+ *
  * v1.1.1 - Hybrid companion for StatBot automation.
  * Adds an on-page gear button (bottom-right of every goparttime.net page)
  * that opens the API URL/key settings directly - configuration no longer
@@ -50,7 +53,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.1';
+  const VERSION = '1.1.2';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -548,8 +551,13 @@
           tasks: eligible,
         });
         const confirmed = res && res.data && res.data.eligible ? res.data.eligible.length : eligible.length;
-        const blast = res && res.data && res.data.blast ? ' -> blast ' + res.data.sent + '/' + res.data.blast.slotsTotal : '';
-        const dry = res && res.data && res.data.dryRun ? ' (dry-run)' : '';
+        const dd = (res && res.data) || {};
+        const blast = dd.blast
+          ? (dd.merged
+            ? ' -> hour blast +' + ((dd.added && dd.added.length) || 0) + ' (no re-message)'
+            : ' -> blast ' + dd.sent + '/' + dd.blast.slotsTotal)
+          : '';
+        const dry = dd.dryRun ? ' (dry-run)' : '';
         setStatus(true, 'BURST ' + confirmed + ' eligible' + blast + dry);
         return;
       }

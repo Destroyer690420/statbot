@@ -2,7 +2,8 @@
  * Burst eligibility helpers: scan window, in-page filter mirror, lazy-accept
  * picker. Pure module — no env or DB needed.
  */
-import { isBurstActive, filterEligibleIds, pickNextTask } from '../services/automation/eligibility';
+import { isBurstActive, filterEligibleIds, pickNextTask, diffNewTasks } from '../services/automation/eligibility';
+import { getIstHourStart } from '../utils/ist-time';
 
 describe('isBurstActive', () => {
   function at(minute: number, second = 0): Date {
@@ -73,5 +74,25 @@ describe('pickNextTask', () => {
   it('returns null when everything is held or empty', () => {
     expect(pickNextTask(['a', 'b'], ['a', 'b'])).toBeNull();
     expect(pickNextTask([], [])).toBeNull();
+  });
+});
+
+describe('diffNewTasks', () => {
+  it('returns ids neither pooled nor held, deduped', () => {
+    expect(diffNewTasks(['a', 'b', 'c', 'b'], ['a'], ['c'])).toEqual(['b']);
+    expect(diffNewTasks(['a'], ['a'], [])).toEqual([]);
+    expect(diffNewTasks([], [], [])).toEqual([]);
+  });
+});
+
+describe('getIstHourStart', () => {
+  it('truncates to the IST hour start', () => {
+    // 10:07 UTC = 15:37 IST -> 15:00 IST = 09:30 UTC.
+    expect(getIstHourStart(new Date('2026-09-11T10:07:00.000Z'))).toEqual(new Date('2026-09-11T09:30:00.000Z'));
+  });
+
+  it('handles the IST midnight crossover', () => {
+    // 18:31 UTC = 00:01 IST next day -> 00:00 IST = 18:30 UTC same day.
+    expect(getIstHourStart(new Date('2026-09-11T18:31:00.000Z'))).toEqual(new Date('2026-09-11T18:30:00.000Z'));
   });
 });
