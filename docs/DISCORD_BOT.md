@@ -52,7 +52,7 @@ All commands audit `COMMAND_USED` (user, `/<command>`) before executing; failure
 
 Member join welcome — fires on `GuildMemberAdd` (every join, bots skipped, immediate, no dedup). Resolves `#invites` channel by ID `1520616800063328437`; sends `MEMBER_WELCOME_MESSAGE` (`src/config/constants.ts` — `hey {user} please create your ticket in <#{verification}> then we can get started` with `{user}` → `<@joiner>` and `{verification}` → `1520483343018496104` as `<#1520483343018496104>`) via `channel.send`. Requires **Server Members Intent** (`GuildMembers` already enabled via `src/bot/index.ts:17`) and **Send Messages** in `#invites`. Skips `member.user.bot`.
 
-After the welcome (best-effort, never throws): resolves the used invite via `resolveUsedInvite()` (invite-use diff vs the `ready`-time snapshot) and records an `InviteDetection` staging row (`recordJoin()` — keep-first per invitee) which **auto-approves immediately when the inviter is known** (real referral created, no manual step; unknown-inviter rows stay pending). See `docs/REFERRAL_SYSTEM.md` §3b.
+After the welcome (best-effort, never throws): resolves the used invite via `resolveUsedInvite()` (invite-use diff vs the `ready`-time snapshot) and records an `InviteDetection` staging row (`recordJoin()` — keep-first per invitee) which **auto-approves immediately when the inviter is known** (real referral created, no manual step; unknown-inviter joins are skipped with a log + audit). See `docs/REFERRAL_SYSTEM.md` §3b.
 
 ## 4b. Invite Cache Events (`src/bot/events/invites.ts`)
 

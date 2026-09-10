@@ -54,14 +54,14 @@ class InviteDetectionService {
    * Record a guild join as a staging row. Keep-first policy:
    * - a pending row for this invitee already exists → skip (return it)
    * - a Referral already exists for (invitee, inviter) → skip
-   * Unknown inviters (vanity/OAuth/diff miss) are still recorded with
-   * null inviter so the admin can see and reject them.
+   * Joins with an unknown inviter (vanity/OAuth/diff miss) are skipped
+   * entirely (logged + audited, no row) — a referral cannot exist without
+   * an inviter and there is no manual queue anymore.
    *
    * Auto-approve: when the inviter is known, the row is approved
-   * immediately (real referral created, no manual verification). Rows
-   * with an unknown inviter stay pending — a referral cannot exist
-   * without an inviter. Never throws (join flow is best-effort); an
-   * auto-approve failure leaves the row pending for manual approval.
+   * immediately (real referral created, no manual verification). Never
+   * throws (join flow is best-effort); an auto-approve failure leaves the
+   * row pending for manual approval via the API.
    */
   async recordJoin(data: {
     inviteeId: string;
@@ -87,6 +87,21 @@ class InviteDetectionService {
         });
         return null;
       }
+    } else {
+      logger.info('Invite detection: unknown inviter, skipping (no manual queue)', {
+        inviteeId: data.inviteeId,
+        inviteeName: data.inviteeName ?? null,
+        inviteCode: data.inviteCode ?? null,
+      });
+      await auditLogService.log(
+        AuditAction.INVITE_DETECTED,
+        null,
+        'system',
+        `Invite detected — unknown → ${data.inviteeName ?? data.inviteeId}` +
+          (data.inviteCode ? ` (code ${data.inviteCode})` : '') +
+          ' (skipped: inviter unknown)',
+      );
+      return null;
     }
 
     const now = new Date();
@@ -114,22 +129,20 @@ class InviteDetectionService {
     );
     logger.info('Invite detection recorded', { id: row.id, ...data });
 
-    if (row.inviterId) {
-      try {
-        const { detection } = await this.approve(row.id, AUTO_APPROVE_BY);
-        logger.info('Invite detection: auto-approved', {
-          id: row.id,
-          inviteeId: row.inviteeId,
-          inviterId: row.inviterId,
-        });
-        return detection;
-      } catch (error) {
-        logger.warn('Invite detection: auto-approve failed, row stays pending', {
-          id: row.id,
-          inviteeId: row.inviteeId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+    try {
+      const { detection } = await this.approve(row.id, AUTO_APPROVE_BY);
+      logger.info('Invite detection: auto-approved', {
+        id: row.id,
+        inviteeId: row.inviteeId,
+        inviterId: row.inviterId,
+      });
+      return detection;
+    } catch (error) {
+      logger.warn('Invite detection: auto-approve failed, row stays pending', {
+        id: row.id,
+        inviteeId: row.inviteeId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
     return row;
   }

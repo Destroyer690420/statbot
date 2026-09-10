@@ -123,16 +123,16 @@ describe('inviteDetectionService.recordJoin', () => {
     );
   });
 
-  it('leaves unknown-inviter rows pending (no referral possible)', async () => {
+  it('skips unknown-inviter joins entirely (no row, no referral)', async () => {
     (inviteDetectionRepository.findPendingByInviteeId as jest.Mock).mockResolvedValue([]);
-    (inviteDetectionRepository.create as jest.Mock).mockImplementation(async (d) => d);
 
     const row = await inviteDetectionService.recordJoin({
       inviteeId: 'invitee-1',
       inviteeName: 'worker',
     });
 
-    expect(row?.status).toBe('pending');
+    expect(row).toBeNull();
+    expect(inviteDetectionRepository.create).not.toHaveBeenCalled();
     expect(commissionService.createReferral).not.toHaveBeenCalled();
   });
 
