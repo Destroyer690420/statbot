@@ -42,7 +42,7 @@ export async function handleGuildMemberAdd(member: GuildMember): Promise<void> {
     });
   }
 
-  // Best-effort invite detection → approval queue (never blocks/thows).
+  // Best-effort invite detection → auto-approved referral (never blocks/throws).
   try {
     const used = await resolveUsedInvite(member.guild);
     await inviteDetectionService.recordJoin({

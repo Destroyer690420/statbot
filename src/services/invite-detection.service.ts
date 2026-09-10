@@ -15,6 +15,9 @@ function resolveInviterType(inviterId: string | null): 'normal' | 'special' {
   return inviterId && SPECIAL_INVITER_IDS.includes(inviterId) ? 'special' : 'normal';
 }
 
+/** Audit actor for automatic approvals (no human involved). */
+const AUTO_APPROVE_BY = 'system';
+
 /**
  * Best-effort Discord display-name lookup (REST, no gateway client needed).
  * Returns the global display name (falling back to the username), or null
@@ -53,6 +56,12 @@ class InviteDetectionService {
    * - a Referral already exists for (invitee, inviter) → skip
    * Unknown inviters (vanity/OAuth/diff miss) are still recorded with
    * null inviter so the admin can see and reject them.
+   *
+   * Auto-approve: when the inviter is known, the row is approved
+   * immediately (real referral created, no manual verification). Rows
+   * with an unknown inviter stay pending — a referral cannot exist
+   * without an inviter. Never throws (join flow is best-effort); an
+   * auto-approve failure leaves the row pending for manual approval.
    */
   async recordJoin(data: {
     inviteeId: string;
@@ -104,6 +113,24 @@ class InviteDetectionService {
         (row.inviteCode ? ` (code ${row.inviteCode})` : ''),
     );
     logger.info('Invite detection recorded', { id: row.id, ...data });
+
+    if (row.inviterId) {
+      try {
+        const { detection } = await this.approve(row.id, AUTO_APPROVE_BY);
+        logger.info('Invite detection: auto-approved', {
+          id: row.id,
+          inviteeId: row.inviteeId,
+          inviterId: row.inviterId,
+        });
+        return detection;
+      } catch (error) {
+        logger.warn('Invite detection: auto-approve failed, row stays pending', {
+          id: row.id,
+          inviteeId: row.inviteeId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     return row;
   }
 

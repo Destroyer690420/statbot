@@ -73,10 +73,37 @@ describe('findIncreasedInvite', () => {
 describe('inviteDetectionService.recordJoin', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('creates a staging row for a fresh invitee', async () => {
+  it('auto-approves immediately when the inviter is known', async () => {
     (inviteDetectionRepository.findPendingByInviteeId as jest.Mock).mockResolvedValue([]);
     (referralRepository.findByInviteeAndInviter as jest.Mock).mockResolvedValue(null);
     (inviteDetectionRepository.create as jest.Mock).mockImplementation(async (d) => d);
+    (inviteDetectionRepository.findById as jest.Mock).mockImplementation(async (id: string) => ({
+      id,
+      inviterId: 'inviter-1',
+      inviterName: 'boss',
+      inviteeId: 'invitee-1',
+      inviteeName: 'worker',
+      inviteCode: 'abc',
+      ticketChannelId: null,
+      ticketName: null,
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    (commissionService.createReferral as jest.Mock).mockResolvedValue({ id: 'REF-9' });
+    (inviteDetectionRepository.update as jest.Mock).mockImplementation(async (id: string, d: any) => ({
+      id,
+      inviterId: 'inviter-1',
+      inviterName: 'boss',
+      inviteeId: 'invitee-1',
+      inviteeName: 'worker',
+      inviteCode: 'abc',
+      ticketChannelId: null,
+      ticketName: null,
+      status: 'pending',
+      createdAt: new Date(),
+      ...d,
+    }));
 
     const row = await inviteDetectionService.recordJoin({
       inviteeId: 'invitee-1',
@@ -88,8 +115,55 @@ describe('inviteDetectionService.recordJoin', () => {
 
     expect(row?.inviteeId).toBe('invitee-1');
     expect(row?.ticketChannelId).toBeNull();
-    expect(row?.status).toBe('pending');
+    expect(row?.status).toBe('approved');
     expect(inviteDetectionRepository.create).toHaveBeenCalledTimes(1);
+    expect(commissionService.createReferral).toHaveBeenCalledWith(
+      expect.objectContaining({ inviterId: 'inviter-1', inviteeId: 'invitee-1' }),
+      'system',
+    );
+  });
+
+  it('leaves unknown-inviter rows pending (no referral possible)', async () => {
+    (inviteDetectionRepository.findPendingByInviteeId as jest.Mock).mockResolvedValue([]);
+    (inviteDetectionRepository.create as jest.Mock).mockImplementation(async (d) => d);
+
+    const row = await inviteDetectionService.recordJoin({
+      inviteeId: 'invitee-1',
+      inviteeName: 'worker',
+    });
+
+    expect(row?.status).toBe('pending');
+    expect(commissionService.createReferral).not.toHaveBeenCalled();
+  });
+
+  it('stays pending (never throws) when auto-approve fails', async () => {
+    (inviteDetectionRepository.findPendingByInviteeId as jest.Mock).mockResolvedValue([]);
+    (referralRepository.findByInviteeAndInviter as jest.Mock).mockResolvedValue(null);
+    (inviteDetectionRepository.create as jest.Mock).mockImplementation(async (d) => d);
+    (inviteDetectionRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'INV-1',
+      inviterId: 'inviter-1',
+      inviterName: 'boss',
+      inviteeId: 'invitee-1',
+      inviteeName: 'worker',
+      inviteCode: 'abc',
+      ticketChannelId: null,
+      ticketName: null,
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    (commissionService.createReferral as jest.Mock).mockRejectedValue(new Error('DB down'));
+
+    const row = await inviteDetectionService.recordJoin({
+      inviteeId: 'invitee-1',
+      inviteeName: 'worker',
+      inviterId: 'inviter-1',
+      inviterName: 'boss',
+      inviteCode: 'abc',
+    });
+
+    expect(row?.status).toBe('pending');
   });
 
   it('keep-first: skips when a pending row already exists', async () => {

@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## Unreleased (implemented 2026-09-10, NOT yet deployed)
+### Changed
+- **Invite auto-approve (no more manual verification)**: `recordJoin()` approves immediately when the inviter is known — the referral is created at join time (audited by `system`) and the ticket backfills on `channelCreate` as before. Unknown-inviter rows (vanity/OAuth/diff miss) stay pending for manual set-inviter + Approve; auto-approve failures only warn, never break the join flow. Tests: auto-approve + unknown-stays-pending + failure-stays-pending (22/22 invite-detection file, 232/232 total); typecheck + build clean. No DB migration, dashboard untouched.
+
 ## 2026-09-10
 ### Deployed
 - **/mystats week-only + /myinvites ticket-mention + capped progress live** (`161.118.164.85`) at commit `126a05a` (app-only rebuild, backup `rtm-backup-20260910-126a05a.tar.gz`; pushed to GitHub; no DB migration, dashboard untouched, no slash-command redeploy). `/mystats` drops All Time (This Week only); `/myinvites` tickets render as clickable `#ticket-name` mentions and tasks cap at the threshold (2/2 stays 2/2). Verified: health healthy (DB+Redis), boot "All systems online!", compiled `formatInviteTicket` + cap live in `dist/`, 230/230 jest pass (6 new). Host + local bundles cleaned.
