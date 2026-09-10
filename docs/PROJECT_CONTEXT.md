@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-09 — Outreach Blast **DEPLOYED** (`161.118.164.85`, git HEAD `d3153f3`, app + dashboard rebuild; pushed to GitHub; migration excerpt applied; health healthy, boot clean, 221/221 jest). Previous: hybrid companion flow (`47b79f1`).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-10 — Outreach green burst highlight **DEPLOYED** (`161.118.164.85`, git HEAD `2d10aa1`, app + dashboard rebuild; pushed to GitHub; health healthy, 221/221 jest). Previous: Outreach Blast (`d3153f3`).
 
 ---
 
@@ -248,6 +248,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-09-10**: **DEPLOYED Outreach green burst highlight** (`161.118.164.85`) at commit `2d10aa1` (app + dashboard rebuild; pushed to GitHub). Burst repliers render green + sort to top; reset on next burst. Verified: health healthy, 221/221 jest.
 
 - **2026-09-09**: **DEPLOYED Outreach Blast** (`161.118.164.85`) at commit `d3153f3` (app + dashboard rebuild; pushed to GitHub; backup `rtm-backup-20260909-pre-d3153f3.tar.gz`). Send asks posts-available `n`; first-n repliers win and the message is deleted from all other tickets; 2-post/day IST cap at send + reply; repeatable anytime. Verified: health healthy, tables exist, 221/221 jest.
 

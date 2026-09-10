@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-09 — Outreach Blast live at git HEAD `d3153f3`** (app + dashboard rebuild, backup `rtm-backup-20260909-pre-d3153f3.tar.gz`; migration excerpt applied: `OutreachBlast`/`OutreachBlastMessage`/`OutreachReply`; pushed to GitHub `de90191..d3153f3`; verified: compose all Up, health healthy DB+Redis, boot clean, tables exist, dashboard 200. Previous: hybrid companion flow (`47b79f1`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — Outreach green highlight live at git HEAD `2d10aa1`** (app + dashboard rebuild, backup `rtm-backup-20260909-pre-2d10aa1.tar.gz`; pushed to GitHub; no migration; verified: health healthy, 221/221 jest). Previous: Outreach Blast (`d3153f3`).
 
 ---
 

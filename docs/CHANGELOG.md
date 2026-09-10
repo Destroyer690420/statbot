@@ -4,6 +4,7 @@
 
 ## 2026-09-09
 ### Deployed
+- **Outreach Blast green highlight live** (`161.118.164.85`) at commit `2d10aa1` (app + dashboard rebuild, backup `rtm-backup-20260909-pre-2d10aa1.tar.gz`; pushed to GitHub). Tickets that replied in the current burst render green (Tasks tint language) and sort to the top, desktop + mobile; greens reset on the next burst. Verified: health healthy, 221/221 jest.
 - **Outreach Blast live** (`161.118.164.85`) at commit `d3153f3` (app + dashboard rebuild, backup `rtm-backup-20260909-pre-d3153f3.tar.gz`; migration excerpt applied: `OutreachBlast`/`OutreachBlastMessage`/`OutreachReply`; pushed to GitHub `de90191..d3153f3`). Send now asks posts-available `n`; first-n repliers win and the message is deleted from all other tickets; 2-post/day IST cap enforced at send + reply; repeatable anytime. Verified: health healthy, boot clean, 221/221 jest, tables exist.
 
 
