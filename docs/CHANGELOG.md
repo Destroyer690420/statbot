@@ -2,9 +2,9 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
-## Unreleased (implemented 2026-09-10, NOT yet deployed)
-### Changed
-- **Invite auto-approve (no more manual verification)**: `recordJoin()` approves immediately when the inviter is known — the referral is created at join time (audited by `system`) and the ticket backfills on `channelCreate` as before. Unknown-inviter rows (vanity/OAuth/diff miss) stay pending for manual set-inviter + Approve; auto-approve failures only warn, never break the join flow. Tests: auto-approve + unknown-stays-pending + failure-stays-pending (22/22 invite-detection file, 232/232 total); typecheck + build clean. No DB migration, dashboard untouched.
+## 2026-09-10
+### Deployed
+- **Invite auto-approve live (no more manual verification)** (`161.118.164.85`) at commit `13823d6` (app-only rebuild, backup `rtm-backup-20260910-13823d6.tar.gz`; pushed to GitHub; no DB migration, dashboard untouched, no slash-command redeploy). `recordJoin()` approves immediately when the inviter is known (audited by `system`); unknown-inviter rows stay pending. Backlog sweep dry-run found 0 pending rows — no live approval run needed. Verified: health healthy (DB+Redis), boot "All systems online!", auto-approve code in `dist/`, 232/232 jest (22/22 invite-detection file). Host + local bundles/scratch cleaned.
 
 ## 2026-09-10
 ### Deployed

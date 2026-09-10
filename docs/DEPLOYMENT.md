@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — /mystats week-only + /myinvites ticket-mention + capped progress live at git HEAD `126a05a`** (app rebuild, backup `rtm-backup-20260910-126a05a.tar.gz`; pushed to GitHub; verified: health healthy, compiled fix live in `dist/`, 230/230 jest). Previous: Moderators (`dd95aeb`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — Invite auto-approve live at git HEAD `13823d6`** (app rebuild, backup `rtm-backup-20260910-13823d6.tar.gz`; pushed to GitHub; backlog sweep dry-run: 0 pending rows; verified: health healthy, boot clean, auto-approve code in `dist/`, 232/232 jest). Previous: /mystats week-only + /myinvites ticket-mention (`126a05a`).
 
 ---
 
