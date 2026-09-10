@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — Moderators live at git HEAD `dd95aeb`** (app rebuild, backup `rtm-backup-20260910-pre-dd95aeb.tar.gz`; `MODERATOR_USER_IDS` in server `.env`; pushed to GitHub; verified: health healthy, IDs resolve as moderators, 224/224 jest). Previous: Outreach green highlight (`2d10aa1`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — /mystats week-only + /myinvites ticket-mention + capped progress live at git HEAD `126a05a`** (app rebuild, backup `rtm-backup-20260910-126a05a.tar.gz`; pushed to GitHub; verified: health healthy, compiled fix live in `dist/`, 230/230 jest). Previous: Moderators (`dd95aeb`).
 
 ---
 

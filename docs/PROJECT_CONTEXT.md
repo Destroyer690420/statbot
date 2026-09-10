@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-10 — /mystats week-only + /myinvites ticket-mention + capped progress implemented (230/230 jest, typecheck + build clean; NOT yet deployed). Previous: Moderators live (`161.118.164.85`, git HEAD `dd95aeb`, app rebuild; `MODERATOR_USER_IDS` set for 3 IDs; verified excluded from worker detection, 224/224 jest).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-10 — /mystats week-only + /myinvites ticket-mention + capped progress DEPLOYED (`161.118.164.85`, git HEAD `126a05a`, app rebuild; backup `rtm-backup-20260910-126a05a.tar.gz`; pushed to GitHub; verified: health healthy, compiled `formatInviteTicket` + `Math.min` cap live, zero `All Time` in embeds, 230/230 jest). Previous: Moderators live (`dd95aeb`).
 
 ---
 
@@ -249,7 +249,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-10**: **/mystats week-only + /myinvites ticket-mention + capped progress implemented (NOT yet deployed)**. `/mystats` card drops the All Time section (This Week only); `/myinvites` per-invitee ticket renders as a clickable `#ticket-name` channel mention (stored `<#id>`/raw id/plain name normalized, `no ticket yet` when null) and tasks cap at the threshold (2/2 stays 2/2 normal, 1/1 special). Implementation: `src/bot/embeds/index.ts` (`workerStatsEmbed`, `formatInviteTicket`, `inviterStatsEmbed`, help text), `src/services/member-stats.service.ts` (`Math.min`), 6 new tests in `src/__tests__/member-stats.test.ts` (230/230 jest, typecheck + build clean). Docs: PROJECT_CONTEXT/DISCORD_BOT/CHANGELOG updated. No DB migration, dashboard untouched, no slash-command redeploy needed (no command signatures changed).
+- **2026-09-10**: **DEPLOYED /mystats week-only + /myinvites ticket-mention + capped progress** (`161.118.164.85`) at commit `126a05a` (app-only rebuild; backup `rtm-backup-20260910-126a05a.tar.gz`; no DB migration — schema unchanged; dashboard untouched; no slash-command redeploy — no command signatures changed; pushed to GitHub; host + local bundles cleaned). `/mystats` card drops the All Time section (This Week only); `/myinvites` per-invitee ticket renders as a clickable `#ticket-name` channel mention and tasks cap at the threshold (2/2 stays 2/2 normal, 1/1 special). Verified live: health healthy (DB+Redis), boot "All systems online!", compiled `formatInviteTicket` + `Math.min(status.taskCount` in `dist/`, zero `All Time` in embeds, 230/230 jest, typecheck + build clean.
 
 - **2026-09-10**: **DEPLOYED moderator exclusion** (`161.118.164.85`) at commit `dd95aeb` (app rebuild; pushed to GitHub). `MODERATOR_USER_IDS` env + `isModerator()`; included in `getAllAdminIds()` so every worker-detection site ignores them; no slash-command access. Verified live, 224/224 jest.
 
