@@ -22,8 +22,9 @@ export function isBurstActive(now: Date = new Date()): boolean {
  * as the safety net; the DB duplicate check there is authoritative).
  *  - Post-only (comments never burst)
  *  - subTaskId not in the recent-accepted set (duplicate)
- *  - normalized subreddit not in the blocked set (null subreddit passes,
- *    exactly like the server validator)
+ *  - subreddit must be readable (null-subreddit tasks are rejected server-side
+ *    too — they can never be checked against the blocked list)
+ *  - normalized subreddit not in the blocked set
  */
 export function filterEligibleIds(
   tasks: BurstCandidate[],
@@ -41,7 +42,8 @@ export function filterEligibleIds(
     if (t.type !== 'post') continue;
     if (recentSet.has(t.subTaskId)) continue;
     const normalized = normalizeSubreddit(t.subreddit);
-    if (normalized && blockedSet.has(normalized)) continue;
+    if (!normalized) continue;
+    if (blockedSet.has(normalized)) continue;
     out.push(t.subTaskId);
   }
   return out;
@@ -79,4 +81,54 @@ export function diffNewTasks(
     out.push(id);
   }
   return out;
+}
+
+export interface PooledTask {
+  id: string;
+  subreddit: string | null;
+  title: string | null;
+}
+
+/**
+ * Serializes pooled burst tasks (id + subreddit survive in the DB row, so
+ * leftover re-validation keeps its blocked-list teeth).
+ */
+export function serializePooledTasks(tasks: PooledTask[]): string {
+  return JSON.stringify(
+    tasks.map((t) => ({ id: t.id, subreddit: t.subreddit, title: t.title })),
+  );
+}
+
+/**
+ * Parses stored pooled tasks. Falls back to bare ids (unknown subreddit —
+ * the validator rejects those for safety) when the JSON is missing/legacy.
+ */
+export function parsePooledTasks(json: string | null | undefined, fallbackIds: readonly string[]): PooledTask[] {
+  if (json) {
+    try {
+      const parsed: unknown = JSON.parse(json);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter(
+            (p): p is { id: unknown; subreddit: unknown; title: unknown } =>
+              !!p && typeof p === 'object',
+          )
+          .map((p) => ({
+            id: String((p as { id: unknown }).id ?? ''),
+            subreddit:
+              typeof (p as { subreddit: unknown }).subreddit === 'string'
+                ? ((p as { subreddit: string }).subreddit as string)
+                : null,
+            title:
+              typeof (p as { title: unknown }).title === 'string'
+                ? ((p as { title: string }).title as string)
+                : null,
+          }))
+          .filter((p) => p.id.length > 0);
+      }
+    } catch {
+      // fall through to id fallback
+    }
+  }
+  return fallbackIds.map((id) => ({ id, subreddit: null, title: null }));
 }

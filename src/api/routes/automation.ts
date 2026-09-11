@@ -815,6 +815,35 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       }
       if (claim.expiresAt <= new Date()) {
         await automationRepository.resolveClaim(claim.id, 'EXPIRED', 'Reported after expiry');
+        if (req.body.ok) {
+          // The browser DID accept on GoPartTime but reported too late: the
+          // task is claimed over there, so record it instead of dropping it
+          // silently. Push state is unknown — the manager verifies the ticket.
+          await automationRepository.logTask({
+            cycleId: claim.cycleId,
+            externalTaskId: claim.externalTaskId,
+            taskType: 'post',
+            subreddit: null,
+            status: 'ACCEPTED',
+            workerId: claim.workerId,
+            failureReason: 'Reported after expiry — verify the ticket push manually',
+          });
+          await auditLogService.log(
+            AuditAction.AUTOMATION_TASK_ACCEPTED, null, 'companion',
+            `Task ${claim.externalTaskId} accepted late via companion for channel ${claim.channelId} (claim had expired)`,
+          );
+          res.json({ success: true, data: { recorded: true, late: true } });
+          return;
+        }
+        await automationRepository.logTask({
+          cycleId: claim.cycleId,
+          externalTaskId: claim.externalTaskId,
+          taskType: 'post',
+          subreddit: null,
+          status: 'FAILED',
+          workerId: claim.workerId,
+          failureReason: req.body.failureReason || 'Companion reported failure after expiry',
+        });
         res.status(410).json({ success: false, message: 'Claim expired.' });
         return;
       }

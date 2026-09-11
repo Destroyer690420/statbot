@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.2
+// @version      1.1.3
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,12 @@
 // ==/UserScript==
 
 /**
+ * v1.1.3 - Blocked-list enforcement: posts with no readable subreddit are
+ * never reported as eligible (server rejects them too); wider subreddit
+ * extraction window + post_link fallback for all types; bundle refreshes
+ * every 15 min so new blocks take effect fast. Otherwise identical to v1.1.1
+ * below (v1.1.2 was status-pill wording only).
+ *
  * v1.1.2 - Status pill reports hour-blast merges ("+N, no re-message").
  * Otherwise identical to v1.1.1 below.
  *
@@ -53,7 +59,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.2';
+  const VERSION = '1.1.3';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -65,7 +71,7 @@
   const BURST_MONITOR_MS = 2500;
   const BURST_MONITOR_JITTER_MS = 1500;
   const BURST_CLAIM_MS = 5000;
-  const BUNDLE_TTL_MS = 60 * 60 * 1000;
+  const BUNDLE_TTL_MS = 15 * 60 * 1000;
   const RATE_LIMIT_PAUSE_MS = 60 * 1000;
   // Signature of the last eligible set reported via /burst (change-triggered
   // POSTs only - no spam while the listing sits still).
@@ -368,8 +374,11 @@
       seen[t.subTaskId] = true;
       if (t.type !== 'post') continue;
       if (recent[String(t.subTaskId)]) continue;
+      // Mirror of the server validator: a post with no readable subreddit
+      // can never be block-checked, so it is never reported as eligible.
       const n = normalizeSub(t.subreddit);
-      if (n && blocked[n]) continue;
+      if (!n) continue;
+      if (blocked[n]) continue;
       out.push({
         subTaskId: Number(t.subTaskId),
         type: t.type,
@@ -464,15 +473,16 @@
       let title = null;
       try {
         const qb = '\\\\{1,2}"';
-        const taskRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,4000}?' + qb + 'subreddit_name' + qb + ':' + qb + '([A-Za-z0-9_ ]*?)' + qb);
+        const taskRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,8000}?' + qb + 'subreddit_name' + qb + ':' + qb + '([A-Za-z0-9_ ]*?)' + qb);
         const tb = taskRe.exec(html);
         if (tb) {
           subreddit = tb[1] || null;
           const titleRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,6000}?' + qb + 'title' + qb + ':' + qb + '((?:[^\\\\]|\\\\.)*?)' + qb);
           const tt = titleRe.exec(html);
           if (tt) title = tt[1].replace(/\\u003c/gi, '<').replace(/\\u003e/gi, '>').slice(0, 300) || null;
-        } else {
-          const linkRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,4000}?' + qb + 'post_link' + qb + ':' + qb + '(.*?)' + qb);
+        }
+        if (!subreddit) {
+          const linkRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,8000}?' + qb + 'post_link' + qb + ':' + qb + '(.*?)' + qb);
           const lb = linkRe.exec(html);
           if (lb) {
             const sm = /reddit\.com\/r\/([A-Za-z0-9_]+)/i.exec(lb[1]);

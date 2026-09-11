@@ -53,9 +53,10 @@ export const AUTOMATION = {
   ACCEPT_DELAY_MAX_MS: 8000,
   /** Backoff on 429 / checkpoint (keep browser context alive) */
   BACKOFF_MS: [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000] as const,
-  /** Burst-flow claim TTL: winner replies convert to an accept within minutes,
-   *  so unclaimed burst claims recycle fast instead of holding slots. */
-  BURST_CLAIM_TTL_MS: 3 * 60 * 1000,
+  /** Burst-flow claim TTL (10 min, same as companion claims): the browser
+   *  processes winners serially (~1-2 min each with drawer + push), so short
+   *  TTLs expire claims that are still queued and lose the accept. */
+  BURST_CLAIM_TTL_MS: 10 * 60 * 1000,
 } as const;
 
 /** Task ID validation pattern (alphanumeric, spaces, hash, hyphens, underscores, 1-32 chars) */

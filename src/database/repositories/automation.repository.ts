@@ -228,9 +228,15 @@ export class AutomationRepository {
   }
 
   // ─── Bursts (eligible scan -> auto-blast -> reply-to-claim) ───
-  async createBurst(data: { blastId: string; cycleId: string; taskIds: string[] }) {
+  async createBurst(data: { blastId: string; cycleId: string; taskIds: string[]; taskDetails?: string | null }) {
     return getDb().automationBurst.create({
-      data: { blastId: data.blastId, cycleId: data.cycleId, taskIds: data.taskIds, status: 'OPEN' },
+      data: {
+        blastId: data.blastId,
+        cycleId: data.cycleId,
+        taskIds: data.taskIds,
+        taskDetails: data.taskDetails ?? null,
+        status: 'OPEN',
+      },
     });
   }
 
@@ -268,6 +274,14 @@ export class AutomationRepository {
     return getDb().automationBurst.update({
       where: { id },
       data: { taskIds: { push: taskIds } },
+    });
+  }
+
+  /** Replaces the pooled task details JSON (append-merged by the caller). */
+  async setBurstDetails(id: string, taskDetails: string) {
+    return getDb().automationBurst.update({
+      where: { id },
+      data: { taskDetails },
     });
   }
 

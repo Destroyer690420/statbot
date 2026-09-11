@@ -2,7 +2,7 @@
  * Burst eligibility helpers: scan window, in-page filter mirror, lazy-accept
  * picker. Pure module — no env or DB needed.
  */
-import { isBurstActive, filterEligibleIds, pickNextTask, diffNewTasks } from '../services/automation/eligibility';
+import { isBurstActive, filterEligibleIds, pickNextTask, diffNewTasks, serializePooledTasks, parsePooledTasks } from '../services/automation/eligibility';
 import { getIstHourStart } from '../utils/ist-time';
 
 describe('isBurstActive', () => {
@@ -37,9 +37,18 @@ describe('filterEligibleIds', () => {
   it('keeps eligible posts in order', () => {
     const tasks = [
       { subTaskId: '1', type: 'post', subreddit: 'cute' },
-      { subTaskId: '2', type: 'post', subreddit: null },
+      { subTaskId: '2', type: 'post', subreddit: 'alsocute' },
     ];
     expect(filterEligibleIds(tasks, blocked, recent)).toEqual(['1', '2']);
+  });
+
+  it('drops posts with no readable subreddit (unblockable)', () => {
+    const tasks = [
+      { subTaskId: '1', type: 'post', subreddit: null },
+      { subTaskId: '2', type: 'post', subreddit: '   ' },
+      { subTaskId: '3', type: 'post', subreddit: 'ok' },
+    ];
+    expect(filterEligibleIds(tasks, blocked, recent)).toEqual(['3']);
   });
 
   it('drops comments, duplicates, and blocked subreddits', () => {
@@ -82,6 +91,26 @@ describe('diffNewTasks', () => {
     expect(diffNewTasks(['a', 'b', 'c', 'b'], ['a'], ['c'])).toEqual(['b']);
     expect(diffNewTasks(['a'], ['a'], [])).toEqual([]);
     expect(diffNewTasks([], [], [])).toEqual([]);
+  });
+});
+
+describe('serializePooledTasks / parsePooledTasks', () => {
+  it('round-trips id + subreddit + title', () => {
+    const tasks = [
+      { id: '1', subreddit: 'cute', title: 'hello' },
+      { id: '2', subreddit: null, title: null },
+    ];
+    const parsed = parsePooledTasks(serializePooledTasks(tasks), []);
+    expect(parsed).toEqual(tasks);
+  });
+
+  it('falls back to bare ids on missing or corrupt JSON', () => {
+    expect(parsePooledTasks(null, ['a', 'b'])).toEqual([
+      { id: 'a', subreddit: null, title: null },
+      { id: 'b', subreddit: null, title: null },
+    ]);
+    expect(parsePooledTasks('not-json{{{', ['a'])).toEqual([{ id: 'a', subreddit: null, title: null }]);
+    expect(parsePooledTasks('[{"id":"x"}]', [])).toEqual([{ id: 'x', subreddit: null, title: null }]);
   });
 });
 

@@ -6,7 +6,7 @@ import { AUTOMATION } from '../../config/constants';
 import { getIstDayBoundaries, getIstHourStart } from '../../utils/ist-time';
 import { logger } from '../../utils/logger';
 import { validateDetectedTask } from './validator.service';
-import { diffNewTasks, pickNextTask } from './eligibility';
+import { diffNewTasks, parsePooledTasks, pickNextTask, serializePooledTasks } from './eligibility';
 import { outreachService, DAILY_POST_CAP } from '../outreach.service';
 
 export interface BurstTaskInput {
@@ -140,9 +140,11 @@ export async function createBurstFlow(
       const openBursts = await automationRepository.listOpenBursts();
       for (const b of openBursts) {
         const held = await liveHeldIds(b.cycleId);
-        for (const id of b.taskIds) {
-          if (!held.has(id)) {
-            merged.push({ subTaskId: id, type: 'post', subreddit: null, title: null });
+        // Stored per-task subreddits keep the blocked-list check working on
+        // leftovers (never fall back to null-subreddit re-validation).
+        for (const p of parsePooledTasks(b.taskDetails, b.taskIds)) {
+          if (!held.has(p.id)) {
+            merged.push({ subTaskId: p.id, type: 'post', subreddit: p.subreddit, title: p.title });
           }
         }
         await automationRepository.closeBurst(b.id).catch(() => undefined);
@@ -200,6 +202,9 @@ export async function createBurstFlow(
     blastId: blast.id,
     cycleId,
     taskIds: eligible.map((t) => t.subTaskId),
+    taskDetails: serializePooledTasks(
+      eligible.map((t) => ({ id: t.subTaskId, subreddit: t.subreddit, title: t.title })),
+    ),
   });
   await automationRepository.updateCycle(cycleId, { workersContacted: sent.filter((s) => s.ok).length });
   logger.info('Burst blast opened', { cycleId, blastId: blast.id, slots: eligible.length });
@@ -255,9 +260,9 @@ async function mergeIntoHourBurst(
     const others = (await automationRepository.listOpenBursts()).filter((b) => b.id !== burst.id);
     for (const o of others) {
       const held = await liveHeldIds(o.cycleId);
-      for (const id of o.taskIds) {
-        if (!held.has(id)) {
-          extras.push({ subTaskId: id, type: 'post', subreddit: null, title: null });
+      for (const p of parsePooledTasks(o.taskDetails, o.taskIds)) {
+        if (!held.has(p.id)) {
+          extras.push({ subTaskId: p.id, type: 'post', subreddit: p.subreddit, title: p.title });
         }
       }
       await automationRepository.closeBurst(o.id).catch(() => undefined);
@@ -294,6 +299,17 @@ async function mergeIntoHourBurst(
 
   if (added.length > 0) {
     await automationRepository.appendBurstTasks(burst.id, added);
+    const byId = new Map(eligible.map((t) => [t.subTaskId, t]));
+    const storedDetails = current ? current.taskDetails : burst.taskDetails;
+    const details = [
+      ...parsePooledTasks(storedDetails, pooled),
+      ...added.map((id) => ({
+        id,
+        subreddit: byId.get(id)?.subreddit ?? null,
+        title: byId.get(id)?.title ?? null,
+      })),
+    ];
+    await automationRepository.setBurstDetails(burst.id, serializePooledTasks(details)).catch(() => undefined);
     const updated = await outreachRepository.bumpBlastSlots(blast.id, added.length).catch(() => null);
     const cycle = await automationRepository.getCycle(burst.cycleId).catch(() => null);
     if (cycle) {

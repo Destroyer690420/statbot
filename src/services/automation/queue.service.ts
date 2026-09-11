@@ -52,6 +52,31 @@ export async function processSightingQueue(discordClient: Client): Promise<strin
     logger.warn('Claim sweep failed', { error });
   }
 
+  // 1b. Sweep orphaned burst claims: PENDING claims whose burst already
+  // closed can never convert to a served task (their blast is over), but
+  // they still occupy the browser's serial claim queue ahead of live work.
+  // Companion-cycle claims have no burst row and are never touched here.
+  try {
+    const pending = await automationRepository.listPendingClaims();
+    const byCycle = new Map<string, { id: string; externalTaskId: string }[]>();
+    for (const claim of pending) {
+      const list = byCycle.get(claim.cycleId) || [];
+      list.push({ id: claim.id, externalTaskId: claim.externalTaskId });
+      byCycle.set(claim.cycleId, list);
+    }
+    for (const [cycleId, claims] of byCycle) {
+      const bursts = await automationRepository.listBurstsByCycle(cycleId).catch(() => []);
+      if (bursts.length === 0) continue;
+      if (bursts.some((b) => b.status === 'OPEN')) continue;
+      for (const claim of claims) {
+        await automationRepository.resolveClaim(claim.id, 'EXPIRED', 'Burst closed before the companion processed it');
+        logger.info('Orphaned burst claim expired', { claimId: claim.id, task: claim.externalTaskId });
+      }
+    }
+  } catch (error) {
+    logger.warn('Orphan claim sweep failed', { error });
+  }
+
   // 2. Fresh NEW sightings -> DetectedGoPartTimeTask.
   const freshSince = new Date(now.getTime() - SIGHTING_TTL_MS);
   const sightings = await automationRepository.listNewSightings(freshSince).catch(() => []);

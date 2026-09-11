@@ -620,3 +620,12 @@ CREATE TABLE IF NOT EXISTS "AutomationBurst" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "AutomationBurst_blastId_key" ON "AutomationBurst"("blastId");
 CREATE INDEX IF NOT EXISTS "AutomationBurst_status_idx" ON "AutomationBurst"("status");
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Burst pooled task details (per-task subreddit)
+-- ──────────────────────────────────────────────────────────────
+-- Leftover re-validation needs each pooled task's subreddit, otherwise
+-- tasks validated with a null subreddit slip past the blocked list.
+-- Nullable JSON array [{id, subreddit, title}]; old rows fall back to
+-- bare taskIds (unknown subreddit, rejected for safety by the validator).
+ALTER TABLE "AutomationBurst" ADD COLUMN IF NOT EXISTS "taskDetails" TEXT;

@@ -474,13 +474,14 @@ model CompanionStatus {
 }
 
 model AutomationBurst {
-  id        String   @id @default(cuid())
-  blastId   String   @unique
-  cycleId   String
-  taskIds   String[]
-  status    String   @default("OPEN")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  blastId     String   @unique
+  cycleId     String
+  taskIds     String[]
+  taskDetails String?
+  status      String   @default("OPEN")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([status])
 }
