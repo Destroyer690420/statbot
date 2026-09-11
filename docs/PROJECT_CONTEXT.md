@@ -250,7 +250,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-11**: **IMPLEMENTED 17:10 hardening (NOT yet deployed)**. :10–:16 window + adaptive countdown; `/burst` + bundle rate-limit exempt. Watcher v1.1.9. Verified: typecheck + build clean, 247/247 jest. No DB migration.
+- **2026-09-11**: **DEPLOYED 17:10 hardening** (`161.118.164.85`) at commit `05c0cfa` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). :10–:16 window, adaptive countdown, limiter exemptions. Watcher v1.1.9 served. Verified: health healthy, boot clean, 247/247 jest.
 
 - **2026-09-11**: **DEPLOYED deadlock-proof reporting + merge grace** (`161.118.164.85`) at commit `e2b7e76` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Fixed 45s report, hourly retry, 5-min append grace. Watcher v1.1.8 served. Verified: health healthy, boot clean, 247/247 jest (19 suites).
 
