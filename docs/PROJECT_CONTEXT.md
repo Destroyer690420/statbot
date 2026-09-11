@@ -250,6 +250,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-11**: **DEPLOYED settle-deadlock fix** (`161.118.164.85`) at commit `c0bedbf` (dashboard-only rebuild; pushed to GitHub; host + local bundles/scratch cleaned). Fixes silent 11:10/12:10 rounds (churning drops never settled). Watcher v1.1.6 served. Verified: node --check, ASCII/hash/harness clean.
+
 - **2026-09-11**: **DEPLOYED whole-page count + winner visibility** (`161.118.164.85`) at commit `832f138` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). All eligible listed count; dead code pruned; winners visible. Verified: health healthy, boot clean, 245/245 jest (19 suites).
 
 - **2026-09-11**: **DEPLOYED true freeze semantics** (`161.118.164.85`) at commit `b26942a` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Disabled/dry-run now blocks blasts, burst writes, and new claims. Verified: health healthy, boot clean, 250/250 jest.
