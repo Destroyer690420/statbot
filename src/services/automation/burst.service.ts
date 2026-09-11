@@ -192,7 +192,10 @@ export async function createBurstFlow(
     };
   }
 
-  const { blast, sent, skipped } = await outreachService.sendBlast(discordClient, eligible.length, senderId || 'burst');
+  const { blast, sent, skipped } = await outreachService.sendBlast(discordClient, eligible.length, senderId || 'burst').catch(async (error) => {
+    await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date(), failures: 1 }).catch(() => undefined);
+    throw error;
+  });
   await automationRepository.createBurst({
     blastId: blast.id,
     cycleId,
