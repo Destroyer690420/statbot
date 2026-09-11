@@ -8,19 +8,20 @@ import { AUTOMATION } from '../config/constants';
 
 describe('isBurstActive', () => {
   // Absolute UTC instants (IST = UTC+5:30) — TZ-independent.
-  it('is inactive outside :10–:15 IST', () => {
+  it('is inactive outside :10–:16 IST', () => {
     expect(isBurstActive(new Date('2026-09-11T04:09:59.000Z'))).toBe(false); // 09:39 IST
     expect(isBurstActive(new Date('2026-09-11T04:09:50.000Z'))).toBe(false); // 09:39 IST
     expect(isBurstActive(new Date('2026-09-11T03:59:00.000Z'))).toBe(false); // 09:29 IST
-    expect(isBurstActive(new Date('2026-09-11T04:46:00.000Z'))).toBe(false); // 10:16 IST
+    expect(isBurstActive(new Date('2026-09-11T04:47:00.000Z'))).toBe(false); // 10:17 IST
     expect(isBurstActive(new Date('2026-09-11T04:30:00.000Z'))).toBe(false); // 10:00 IST
   });
 
-  it('is active from :10:00 through :15:59 IST', () => {
+  it('is active from :10:00 through :16:59 IST', () => {
     expect(isBurstActive(new Date('2026-09-11T04:40:00.000Z'))).toBe(true); // 10:10 IST
     expect(isBurstActive(new Date('2026-09-11T04:41:30.000Z'))).toBe(true); // 10:11 IST
     expect(isBurstActive(new Date('2026-09-11T04:44:00.000Z'))).toBe(true); // 10:14 IST
     expect(isBurstActive(new Date('2026-09-11T04:45:59.000Z'))).toBe(true); // 10:15 IST
+    expect(isBurstActive(new Date('2026-09-11T04:46:30.000Z'))).toBe(true); // 10:16 IST
   });
 });
 

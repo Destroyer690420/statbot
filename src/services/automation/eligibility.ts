@@ -10,12 +10,13 @@ export interface BurstCandidate {
 
 /**
  * Burst scan window in IST (the drop schedule is IST-based): minutes :10
- * through :15 inclusive, every hour. Blasts may ONLY open inside this
- * window — the scan runs at exactly xx:10, nowhere else, no other time.
+ * through :16 inclusive, every hour. Blasts may ONLY open inside this
+ * window — the scan runs at xx:10, and the :16 tail absorbs delayed reports
+ * (settle countdown + retries); nothing may message outside it.
  */
 export function isBurstActive(now: Date = new Date()): boolean {
   const istMinutes = new Date(now.getTime() + IST_OFFSET_MS).getUTCMinutes();
-  return istMinutes >= 10 && istMinutes <= 15;
+  return istMinutes >= 10 && istMinutes <= 16;
 }
 
 /**

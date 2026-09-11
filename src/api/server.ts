@@ -61,6 +61,8 @@ export function createApiServer(discordClient: Client): express.Application {
     skip: (req) =>
       req.path === '/api/v1/automation/claims/pending' ||
       req.path === '/api/v1/automation/sightings' ||
+      req.path === '/api/v1/automation/burst' ||
+      req.path === '/api/v1/automation/eligibility-bundle' ||
       req.path === '/api/v1/goparttime/assign',
   });
   app.use('/api/', limiter);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.8
+// @version      1.1.9
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,9 @@
 // ==/UserScript==
 
 /**
+ * v1.1.9 - Window :10-:16 + adaptive countdown (45s early, 10s near the
+ * tail). Otherwise identical to v1.1.8 below.
+ *
  * v1.1.8 - Deadlock-proof reporting: first eligible sighting starts a fixed
  * 45s countdown, then the CURRENT set reports once (churn can never stall
  * it); server grows the pool within its merge grace. Otherwise identical to
@@ -82,7 +85,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.8';
+  const VERSION = '1.1.9';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -366,15 +369,15 @@
 
   /**
    * Burst scan window in this browser's LOCAL time (the drop schedule is
-   * observed here): minutes :10 through :15 inclusive, every hour.
-   * Scanning + blasting happen at exactly xx:10 - no other time.
+   * observed here): minutes :10 through :16 inclusive, every hour.
+   * The :16 tail absorbs delayed reports; nothing scans outside it.
    * JS mirror of server isBurstActive (which uses IST; identical when this
    * browser runs on IST).
    */
   function isBurstWindow(now) {
     const d = now || new Date();
     const m = d.getMinutes();
-    return m >= 10 && m <= 15;
+    return m >= 10 && m <= 16;
   }
 
   /**
@@ -616,11 +619,15 @@
         }
         const nowMs = Date.now();
         if (!firstSeenAt) firstSeenAt = nowMs;
-        const waitMs = BURST_REPORT_DELAY_MS - (nowMs - firstSeenAt);
+        // Adaptive countdown: full delay early in the window (let the drop
+        // finish streaming so the single report carries the full number),
+        // fast near the tail so delayed reports still land inside it.
+        // Fixed countdowns only - churn can never stall this.
+        const delayMs = new Date().getMinutes() >= 15 ? 10000 : BURST_REPORT_DELAY_MS;
+        const waitMs = delayMs - (nowMs - firstSeenAt);
         if (waitMs > 0) {
-          // Count first, blast after: let the drop finish streaming so the
-          // single report carries the full number - never partial, never
-          // repeated. Churn cannot stall this (fixed countdown, not sig).
+          // Count first, blast after: the single report carries the full
+          // number - never partial, never repeated.
           setStatus(true, 'BURST ' + eligible.length + ' found, sending in ' + Math.ceil(waitMs / 1000) + 's...');
           return;
         }
