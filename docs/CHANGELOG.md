@@ -3,7 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-11
-### Deployed
+### Implemented (anti-wedge hardening — awaiting verification + deploy)
+- **Monitor wedge fixed**: a stalled page load hung `fetchPageHtml` forever (`monitorBusy` stuck, pill frozen, zero reports). All page fetches now have hard timeouts (15s page, 20s API fallback) + a claim-loop watchdog force-recovers any tick unfinished after 90s. Watcher v1.1.10. Verified: node --check, ASCII/hash/harness (incl. live abort proof). No backend change, no DB migration.
 - **17:10 hardening live** (`161.118.164.85`) at commit `05c0cfa` (app + dashboard rebuild; pre-1710 backup; pushed to GitHub; no DB migration — schema unchanged; no slash-command redeploy; host + local bundles/scratch cleaned). :10–:16 window + adaptive countdown; `/burst` + bundle rate-limit exempt. Watcher v1.1.9 served (pre-flight found v1.1.7 still running). Verified: health healthy (DB+Redis), boot clean, 247/247 jest, backend build clean.
 - **:10–:16 window + adaptive countdown + limiter exemptions**: blast window gains a :16 tail for delayed reports (watcher reports fast near the tail); `/burst` + `/eligibility-bundle` join the rate-limit exempt list (dashboard polling can no longer 429 them mid-drop). Watcher v1.1.9. Verified: typecheck + build clean, 247/247 jest. No DB migration.
 - **Deadlock-proof reporting + merge grace live** (`161.118.164.85`) at commit `e2b7e76` (app + dashboard rebuild; pre-grace backup; pushed to GitHub; no DB migration — schema unchanged; no slash-command redeploy; host + local bundles/scratch cleaned). Fixed 45s report, hourly retry, 5-min append grace, frozen after. Watcher v1.1.8 served. Verified: health healthy (DB+Redis), boot clean, 247/247 jest (19 suites), both builds clean.

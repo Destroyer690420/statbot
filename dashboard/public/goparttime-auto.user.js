@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.9
+// @version      1.1.10
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,10 @@
 // ==/UserScript==
 
 /**
+ * v1.1.10 - Anti-wedge: hard timeouts on all page fetches (a stalled load
+ * froze the monitor with the pill stuck) + claim-loop watchdog that force
+ * recovers a tick unfinished after 90s. Otherwise identical to v1.1.9 below.
+ *
  * v1.1.9 - Window :10-:16 + adaptive countdown (45s early, 10s near the
  * tail). Otherwise identical to v1.1.8 below.
  *
@@ -85,7 +89,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.9';
+  const VERSION = '1.1.10';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -273,13 +277,34 @@
       });
     }
 
-    return fetch(url, { method, headers, body: payload, credentials: 'omit' })
+    return fetchWithTimeout(url, { method, headers, body: payload, credentials: 'omit' }, 20000)
       .then(async (res) => parseStatus(res.status, await res.text()))
       .catch(() => { throw new Error('Server is unavailable.'); });
   }
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // fetch with a hard timeout: a stalled connection must NEVER hang a loop
+  // forever (that wedged the monitor with monitorBusy stuck + pill frozen).
+  function fetchWithTimeout(url, opts, ms) {
+    try {
+      if (typeof AbortController === 'undefined') return fetch(url, opts);
+    } catch (e) {
+      return fetch(url, opts);
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, ms);
+    const o = {};
+    try {
+      for (const k in opts) o[k] = opts[k];
+    } catch (e) { /* use bare opts below */ }
+    o.signal = ctrl.signal;
+    return fetch(url, o).then(
+      (res) => { clearTimeout(timer); return res; },
+      (err) => { clearTimeout(timer); throw err; },
+    );
   }
 
   // --- On-page status pill (display-only, never intercepts clicks) ---
@@ -462,7 +487,7 @@
 
   function fetchPageHtml() {
     try {
-      return fetch(window.location.pathname, { credentials: 'include' })
+      return fetchWithTimeout(window.location.pathname, { credentials: 'include' }, 15000)
         .then((res) => (res.ok ? res.text() : null))
         .catch(() => null);
     } catch (e) {
@@ -559,6 +584,9 @@
   // --- Monitor loop: report sightings --
 
   let monitorBusy = false;
+  // Watchdog timestamp: the claim loop force-clears a monitor tick that
+  // hasn't finished in 90s (hung promise defense in depth).
+  let lastMonitorDoneAt = Date.now();
 
   async function monitorTick() {
     if (monitorBusy || !watcherEnabled() || isRateLimited()) return;
@@ -692,6 +720,7 @@
       }
       console.log('[Auto Watcher] sightings failed:', e && e.message);
     } finally {
+      lastMonitorDoneAt = Date.now();
       monitorBusy = false;
     }
   }
@@ -702,6 +731,13 @@
 
   async function claimTick() {
     if (claimBusy || !watcherEnabled() || isRateLimited()) return;
+    // Watchdog: recover a wedged monitor tick so one stalled page load can
+    // never freeze scanning again (claim loop ticks prove timers are alive).
+    if (monitorBusy && Date.now() - lastMonitorDoneAt > 90000) {
+      monitorBusy = false;
+      setStatus(false, 'monitor stuck - recovered, resuming');
+      console.log('[Auto Watcher] monitor watchdog recovered stuck tick');
+    }
     const settings = getSettings();
     if (!settings.apiKey) {
       setStatus(false, 'no API key - click the watcher gear (bottom-right)');
