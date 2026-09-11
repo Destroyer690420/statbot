@@ -250,7 +250,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-11**: **IMPLEMENTED exact-:10 contract (NOT yet deployed)**. Settle-once reporting; :10–:15-only blasts; freshness gate + STALE; frozen pools; non-expiring claims; reply-order delivery; sweeps-only queue. Watcher v1.1.5. Verified: typecheck + build clean, 250/250 jest. No DB migration.
+- **2026-09-11**: **DEPLOYED exact-:10 contract** (`161.118.164.85`) at commit `67ac39d` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Settle-once; :10–:15-only blasts; freshness + STALE; frozen pools; non-expiring claims; reply-order delivery. Watcher v1.1.5 served. Verified: health healthy, boot clean, 250/250 jest.
 
 - **2026-09-11**: **DEPLOYED subreddit reader fix + newest-first** (`161.118.164.85`) at commit `b811592` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Windowed association (neighbor-safe); drawer abort on mismatch; newest-first everywhere. Watcher v1.1.4 served. Verified: health healthy, boot clean, 249/249 jest.
 
