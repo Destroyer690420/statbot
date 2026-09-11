@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.4
+// @version      1.1.5
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+ * v1.1.5 - Settle-once-per-hour reporting + :10 sharp window: waits for two
+ * consecutive identical scans, POSTs once per hour, retries the same set
+ * until the server confirms the blast (retries are server no-ops). Window
+ * is minutes :10-:15 local. Otherwise identical to v1.1.4 below.
+ *
  * v1.1.4 - Subreddit reader fix + newest-first: windowed parent association
  * (bounded by the next task, no parent-key guessing), newest eligible first
  * in burst reports, drawer ground-truth check aborts on subreddit mismatch.
@@ -64,7 +69,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.4';
+  const VERSION = '1.1.5';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -81,6 +86,19 @@
   // Signature of the last eligible set reported via /burst (change-triggered
   // POSTs only - no spam while the listing sits still).
   let lastBurstSig = '';
+  // Settle-once-per-hour reporting: the hour's FIRST settled scan (two
+  // consecutive identical scans) is the single report. Retries re-send the
+  // same set until the server confirms the blast (same set = server no-op).
+  let prevBurstSig = '';
+  let reportedHour = '';
+  let burstConfirmed = false;
+  let lastBurstPostAt = 0;
+  const BURST_RETRY_MS = 30000;
+
+  function burstHourKey(now) {
+    const d = now || new Date();
+    return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate() + '-' + d.getHours();
+  }
   let bundleCache = null;
 
   // Set when the server rate-limits us: loops idle until this time.
@@ -336,13 +354,14 @@
 
   /**
    * Burst scan window in this browser's LOCAL time (the drop schedule is
-   * observed here): minute :09 from second 50 through minute :15 inclusive.
-   * JS mirror of src/services/automation/eligibility.ts isBurstActive.
+   * observed here): minutes :10 through :15 inclusive, every hour.
+   * Scanning + blasting happen at exactly xx:10 - no other time.
+   * JS mirror of server isBurstActive (which uses IST; identical when this
+   * browser runs on IST).
    */
   function isBurstWindow(now) {
     const d = now || new Date();
     const m = d.getMinutes();
-    if (m === 9) return d.getSeconds() >= 50;
     return m >= 10 && m <= 15;
   }
 
@@ -543,8 +562,8 @@
       if (!burst) lastBurstSig = '';
       // Burst mode reads the live DOM first (instant - no extra page load);
       // routine mode keeps the proven fetch-first order. Sightings are NOT
-      // posted during the burst: the /burst report replaces them (posting
-      // both would double-process via the sighting queue's 5-min cycles).
+      // posted during the burst: the settled /burst report replaces them
+      // (posting both would double-process via the sighting queue).
       let html = null;
       let source = 'fetch';
       if (burst) {
@@ -568,9 +587,22 @@
       }
       const tasks = parseAvailableTasks(html || '');
       if (burst) {
+        const hourKey = burstHourKey();
+        if (reportedHour !== hourKey) {
+          // New hour: reset the once-per-hour report state.
+          reportedHour = '';
+          burstConfirmed = false;
+          prevBurstSig = '';
+          lastBurstSig = '';
+        }
+        if (reportedHour === hourKey && burstConfirmed) {
+          setStatus(true, 'BURST reported this hour');
+          return;
+        }
         const bundle = await getBundle(settings);
         const eligible = filterEligible(tasks, bundle);
         if (eligible.length === 0) {
+          prevBurstSig = '';
           setStatus(true, 'BURST scanning (' + source + ')...');
           return;
         }
@@ -578,28 +610,50 @@
           .map((t) => String(t.subTaskId))
           .sort()
           .join(',');
-        if (sig === lastBurstSig) {
-          setStatus(true, 'BURST ' + eligible.length + ' eligible (reported)');
+        if (sig !== prevBurstSig) {
+          // Listing still settling (or first sighting) - wait for two
+          // consecutive identical scans before the single hourly report.
+          prevBurstSig = sig;
+          setStatus(true, 'BURST ' + eligible.length + ' found, confirming...');
           return;
         }
+        if (Date.now() - lastBurstPostAt < BURST_RETRY_MS) {
+          setStatus(true, 'BURST send failed, retrying...');
+          return;
+        }
+        // Settled: report once (newest-first). Retries re-send the same set;
+        // the server no-ops when the hour's blast already exists.
         lastBurstSig = sig;
+        lastBurstPostAt = Date.now();
         // Newest-first: page bottom carries the newest drop, so the first
         // replier wins the newest eligible post (sig above is order-free).
         const ordered = eligible.slice().reverse();
-        const res = await request(settings, 'POST', '/burst', {
-          companionId: getCompanionId(),
-          version: VERSION,
-          tasks: ordered,
-        });
-        const confirmed = res && res.data && res.data.eligible ? res.data.eligible.length : eligible.length;
+        let res = null;
+        try {
+          res = await request(settings, 'POST', '/burst', {
+            companionId: getCompanionId(),
+            version: VERSION,
+            tasks: ordered,
+          });
+        } catch (e) {
+          setStatus(false, 'BURST send failed - retrying');
+          console.log('[Auto Watcher] burst report failed:', e && e.message);
+          return;
+        }
         const dd = (res && res.data) || {};
+        if (res && res.success) {
+          reportedHour = hourKey;
+          burstConfirmed = true;
+        }
+        const confirmed = dd.eligible ? dd.eligible.length : eligible.length;
         const blast = dd.blast
           ? (dd.merged
             ? ' -> hour blast +' + ((dd.added && dd.added.length) || 0) + ' (no re-message)'
             : ' -> blast ' + dd.sent + '/' + dd.blast.slotsTotal)
           : '';
         const dry = dd.dryRun ? ' (dry-run)' : '';
-        setStatus(true, 'BURST ' + confirmed + ' eligible' + blast + dry);
+        const stale = dd.stale ? ' (' + dd.stale + ' stale skipped)' : '';
+        setStatus(true, 'BURST ' + confirmed + ' eligible' + blast + dry + stale);
         return;
       }
       if (tasks.length === 0) {

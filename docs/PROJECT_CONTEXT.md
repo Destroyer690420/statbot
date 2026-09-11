@@ -250,6 +250,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-11**: **IMPLEMENTED exact-:10 contract (NOT yet deployed)**. Settle-once reporting; :10–:15-only blasts; freshness gate + STALE; frozen pools; non-expiring claims; reply-order delivery; sweeps-only queue. Watcher v1.1.5. Verified: typecheck + build clean, 250/250 jest. No DB migration.
+
 - **2026-09-11**: **DEPLOYED subreddit reader fix + newest-first** (`161.118.164.85`) at commit `b811592` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Windowed association (neighbor-safe); drawer abort on mismatch; newest-first everywhere. Watcher v1.1.4 served. Verified: health healthy, boot clean, 249/249 jest.
 
 - **2026-09-11**: **DEPLOYED blocked enforcement + claim throughput** (`161.118.164.85`) at commit `fd0f86d` (app + dashboard rebuild; pushed to GitHub; migration excerpt applied: `taskDetails`; no slash-command redeploy; host + local bundles/scratch cleaned). Fail-closed null-subreddit rejection; pooled subreddits; 10-min TTL; orphan sweep; late verdicts. Watcher v1.1.3 served. Verified: health healthy, boot clean, 245/245 jest.

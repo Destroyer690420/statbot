@@ -2,31 +2,25 @@
  * Burst eligibility helpers: scan window, in-page filter mirror, lazy-accept
  * picker. Pure module — no env or DB needed.
  */
-import { isBurstActive, filterEligibleIds, pickNextTask, diffNewTasks, serializePooledTasks, parsePooledTasks } from '../services/automation/eligibility';
+import { isBurstActive, filterEligibleIds, pickNextTask, isFreshArrival, serializePooledTasks, parsePooledTasks } from '../services/automation/eligibility';
 import { getIstHourStart } from '../utils/ist-time';
+import { AUTOMATION } from '../config/constants';
 
 describe('isBurstActive', () => {
-  function at(minute: number, second = 0): Date {
-    const d = new Date('2026-09-11T10:00:00');
-    d.setMinutes(minute, second, 0);
-    return d;
-  }
-
-  it('is inactive outside the window', () => {
-    expect(isBurstActive(at(8, 0))).toBe(false);
-    expect(isBurstActive(at(9, 0))).toBe(false);
-    expect(isBurstActive(at(9, 49))).toBe(false);
-    expect(isBurstActive(at(16, 0))).toBe(false);
-    expect(isBurstActive(at(30, 0))).toBe(false);
+  // Absolute UTC instants (IST = UTC+5:30) — TZ-independent.
+  it('is inactive outside :10–:15 IST', () => {
+    expect(isBurstActive(new Date('2026-09-11T04:09:59.000Z'))).toBe(false); // 09:39 IST
+    expect(isBurstActive(new Date('2026-09-11T04:09:50.000Z'))).toBe(false); // 09:39 IST
+    expect(isBurstActive(new Date('2026-09-11T03:59:00.000Z'))).toBe(false); // 09:29 IST
+    expect(isBurstActive(new Date('2026-09-11T04:46:00.000Z'))).toBe(false); // 10:16 IST
+    expect(isBurstActive(new Date('2026-09-11T04:30:00.000Z'))).toBe(false); // 10:00 IST
   });
 
-  it('is active from :09:50 through :15', () => {
-    expect(isBurstActive(at(9, 50))).toBe(true);
-    expect(isBurstActive(at(9, 59))).toBe(true);
-    expect(isBurstActive(at(10, 0))).toBe(true);
-    expect(isBurstActive(at(11, 30))).toBe(true);
-    expect(isBurstActive(at(14, 15))).toBe(true);
-    expect(isBurstActive(at(15, 59))).toBe(true);
+  it('is active from :10:00 through :15:59 IST', () => {
+    expect(isBurstActive(new Date('2026-09-11T04:40:00.000Z'))).toBe(true); // 10:10 IST
+    expect(isBurstActive(new Date('2026-09-11T04:41:30.000Z'))).toBe(true); // 10:11 IST
+    expect(isBurstActive(new Date('2026-09-11T04:44:00.000Z'))).toBe(true); // 10:14 IST
+    expect(isBurstActive(new Date('2026-09-11T04:45:59.000Z'))).toBe(true); // 10:15 IST
   });
 });
 
@@ -86,11 +80,18 @@ describe('pickNextTask', () => {
   });
 });
 
-describe('diffNewTasks', () => {
-  it('returns ids neither pooled nor held, deduped', () => {
-    expect(diffNewTasks(['a', 'b', 'c', 'b'], ['a'], ['c'])).toEqual(['b']);
-    expect(diffNewTasks(['a'], ['a'], [])).toEqual([]);
-    expect(diffNewTasks([], [], [])).toEqual([]);
+describe('isFreshArrival', () => {
+  const now = new Date('2026-09-11T04:40:00.000Z').getTime();
+  it('accepts first-seen within the TTL, rejects older', () => {
+    expect(isFreshArrival(new Date(now - 60 * 1000), now)).toBe(true);
+    expect(isFreshArrival(new Date(now - AUTOMATION.BURST_FRESH_MS + 1000), now)).toBe(true);
+    expect(isFreshArrival(new Date(now - AUTOMATION.BURST_FRESH_MS - 1000), now)).toBe(false);
+    expect(isFreshArrival(new Date(now - 3 * 60 * 60 * 1000), now)).toBe(false);
+  });
+
+  it('treats never-seen as fresh (first report)', () => {
+    expect(isFreshArrival(null, now)).toBe(true);
+    expect(isFreshArrival(undefined, now)).toBe(true);
   });
 });
 

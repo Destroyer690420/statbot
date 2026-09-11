@@ -730,10 +730,12 @@ export default function createAutomationRoutes(discordClient: Client): Router {
   });
 
   /**
-   * POST /api/v1/automation/burst — watcher-reported eligible scan.
-   * Server re-validates every task (Post/duplicate/blocked), then opens an
-   * OutreachBlast with slots = eligible count. Each blast reply becomes one
-   * claim (lazy accept). In dry-run: validates + logs only, no blast.
+   * POST /api/v1/automation/burst — watcher's settled hourly scan report.
+   * Every report upserts sightings first (first-seen tracks feed the
+   * freshness gate: only new arrivals blast, stale listings never do).
+   * Server re-validates every task (Post/duplicate/blocked + freshness),
+   * then opens the hour's single blast — or acknowledges an existing one
+   * without messaging. In dry-run: validates + logs only, no blast.
    */
   router.post('/burst', validateBody(burstSchema), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -747,6 +749,17 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           title: t.title || null,
         }),
       );
+      for (const t of tasks) {
+        await automationRepository
+          .upsertSighting({
+            externalTaskId: t.subTaskId,
+            taskType: t.type,
+            subreddit: t.subreddit,
+            title: t.title,
+            companionId,
+          })
+          .catch(() => undefined);
+      }
       const result = await createBurstFlow(discordClient, tasks, 'burst');
       res.json({
         success: true,
@@ -760,6 +773,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           blocked: result.blocked,
           duplicates: result.duplicates,
           commentsSkipped: result.commentsSkipped,
+          stale: result.stale,
           blast: result.blast,
           sent: result.sent,
           skipped: result.skipped,

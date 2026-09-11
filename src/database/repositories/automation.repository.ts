@@ -174,6 +174,14 @@ export class AutomationRepository {
     });
   }
 
+  /** First-seen tracks for a batch of ids — the burst freshness gate. */
+  async findSightingsByIds(externalTaskIds: string[]) {
+    if (externalTaskIds.length === 0) return [];
+    return getDb().automationSighting.findMany({
+      where: { externalTaskId: { in: externalTaskIds } },
+    });
+  }
+
   async markSightings(ids: string[], status: string) {
     if (ids.length === 0) return { count: 0 };
     return getDb().automationSighting.updateMany({ where: { id: { in: ids } }, data: { status } });
@@ -244,6 +252,10 @@ export class AutomationRepository {
     return getDb().automationBurst.findUnique({ where: { blastId } });
   }
 
+  async closeBurst(id: string) {
+    return getDb().automationBurst.update({ where: { id }, data: { status: 'CLOSED' } });
+  }
+
   /** Bursts of one cycle, newest first (normally exactly one). */
   async listBurstsByCycle(cycleId: string) {
     return getDb().automationBurst.findMany({
@@ -266,27 +278,6 @@ export class AutomationRepository {
       where: { createdAt: { gte: since } },
       orderBy: { createdAt: 'asc' },
     });
-  }
-
-  /** Appends task ids to a burst pool (leak merge — no re-messaging). */
-  async appendBurstTasks(id: string, taskIds: string[]) {
-    if (taskIds.length === 0) return null;
-    return getDb().automationBurst.update({
-      where: { id },
-      data: { taskIds: { push: taskIds } },
-    });
-  }
-
-  /** Replaces the pooled task details JSON (append-merged by the caller). */
-  async setBurstDetails(id: string, taskDetails: string) {
-    return getDb().automationBurst.update({
-      where: { id },
-      data: { taskDetails },
-    });
-  }
-
-  async closeBurst(id: string) {
-    return getDb().automationBurst.update({ where: { id }, data: { status: 'CLOSED' } });
   }
 
   // ─── Companion heartbeat ───

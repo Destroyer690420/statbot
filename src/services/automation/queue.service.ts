@@ -3,7 +3,6 @@ import { automationRepository } from '../../database/repositories';
 import { auditLogService } from '../audit.service';
 import { AuditAction } from '../../types';
 import { logger } from '../../utils/logger';
-import { createBurstFlow } from './burst.service';
 
 /** Sightings older than this are treated as gone from the listing. */
 export const SIGHTING_TTL_MS = 15 * 60 * 1000;
@@ -13,15 +12,15 @@ export function isSightingFresh(lastSeenAt: Date, nowMs: number = Date.now(), tt
 }
 
 /**
- * Sighting-driven automation tick (burst-only):
- *  expire stale claims (releasing workers) -> take fresh NEW sightings ->
- *  run them through the burst flow (validate -> auto-blast -> reply-claims).
- * The 5-minute confirm-then-accept cycle path is retired from automatic use
- * (kept only for manual `POST /automation/start` + test endpoints) — every
- * detection, in or out of the burst window, takes the same instant path.
- * The companion browser does all GoPartTime I/O; the server never fetches.
+ * Automation hygiene tick (60s). ONLY sweeps:
+ *  - expired claims (releasing workers),
+ *  - orphaned burst claims (burst closed before the companion processed).
+ * It NEVER opens blasts: detection blasts fire solely from the watcher's
+ * settled in-window report (plus manual rehearse), exactly at xx:10 — no
+ * other time. Sightings are still recorded by the watcher (first-seen
+ * tracks feed the burst freshness gate); this tick just doesn't consume them.
  */
-export async function processSightingQueue(discordClient: Client): Promise<string | null> {
+export async function processSightingQueue(_discordClient: Client): Promise<string | null> {
   const settings = await automationRepository.getSettings().catch(() => null);
   if (!settings?.enabled) return null;
 
@@ -78,34 +77,10 @@ export async function processSightingQueue(discordClient: Client): Promise<strin
   }
 
   // 2. Fresh NEW sightings -> DetectedGoPartTimeTask.
-  const freshSince = new Date(now.getTime() - SIGHTING_TTL_MS);
-  const sightings = await automationRepository.listNewSightings(freshSince).catch(() => []);
-  const usable = sightings
-    .filter((s) => (s.taskType === 'post' || s.taskType === 'comment') && /^\d+$/.test(s.externalTaskId))
-    // Newest-first: sightings arrive oldest-first; the pool must prioritize
-    // the newest drop (page bottom), newest 20 win the slice.
-    .slice()
-    .reverse()
-    .slice(0, 20);
-  // Park malformed rows so they are never retried.
-  const malformed = sightings.filter((s) => !usable.includes(s)).map((s) => s.id);
-  if (malformed.length > 0) {
-    await automationRepository.markSightings(malformed, 'DONE').catch(() => undefined);
-  }
-  if (usable.length === 0) return null;
-
-  const tasks = usable.map((s) => ({
-    subTaskId: s.externalTaskId,
-    type: s.taskType as 'post' | 'comment',
-    subreddit: s.subreddit,
-    title: s.title,
-  }));
-
-  await automationRepository.markSightings(usable.map((s) => s.id), 'CONTACTING').catch(() => undefined);
-  const result = await createBurstFlow(discordClient, tasks, 'burst:queue').catch((error) => {
-    logger.warn('Sighting burst failed', { error });
-    return null;
-  });
-  await automationRepository.markSightings(usable.map((s) => s.id), 'DONE').catch(() => undefined);
-  return result ? result.cycleId : null;
+  // 2. Sightings are intentionally NOT consumed here. Fresh arrivals blast
+  // solely via the watcher's settled :10 report (see burst.service); any
+  // other trigger would message workers outside xx:10. Sightings rows stay
+  // as first-seen tracks for the freshness gate.
+  void now;
+  return null;
 }

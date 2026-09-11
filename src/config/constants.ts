@@ -53,10 +53,14 @@ export const AUTOMATION = {
   ACCEPT_DELAY_MAX_MS: 8000,
   /** Backoff on 429 / checkpoint (keep browser context alive) */
   BACKOFF_MS: [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000] as const,
-  /** Burst-flow claim TTL (10 min, same as companion claims): the browser
-   *  processes winners serially (~1-2 min each with drawer + push), so short
-   *  TTLs expire claims that are still queued and lose the accept. */
-  BURST_CLAIM_TTL_MS: 10 * 60 * 1000,
+  /** Burst-flow claim TTL: winners are served however long it takes — claims
+   *  never expire while their burst is open. Closed-burst orphans are swept
+   *  by the queue tick, so this is only a backstop, not a deadline. */
+  BURST_CLAIM_TTL_MS: 24 * 60 * 60 * 1000,
+  /** Burst freshness window: only tasks first seen within the last 25 min
+   *  count as new arrivals. Older listings are logged STALE and excluded,
+   *  so blasts fire for fresh drops, never for stale leftovers. */
+  BURST_FRESH_MS: 25 * 60 * 1000,
 } as const;
 
 /** Task ID validation pattern (alphanumeric, spaces, hash, hyphens, underscores, 1-32 chars) */

@@ -6,7 +6,7 @@ import { AUTOMATION } from '../../config/constants';
 import { getIstDayBoundaries, getIstHourStart } from '../../utils/ist-time';
 import { logger } from '../../utils/logger';
 import { validateDetectedTask } from './validator.service';
-import { diffNewTasks, parsePooledTasks, pickNextTask, serializePooledTasks } from './eligibility';
+import { isBurstActive, isFreshArrival, pickNextTask, serializePooledTasks } from './eligibility';
 import { outreachService, DAILY_POST_CAP } from '../outreach.service';
 
 export interface BurstTaskInput {
@@ -22,11 +22,13 @@ export interface BurstResult {
   blocked: number;
   duplicates: number;
   commentsSkipped: number;
+  /** Fresh arrivals excluded as stale listings (logged STALE, never blasted). */
+  stale: number;
   blast: { id: string; slotsTotal: number } | null;
   sent: number;
   skipped: { channelId: string; reason: string }[];
   dryRun: boolean;
-  /** True when the report merged into (or hit) this hour's existing burst. */
+  /** True when the report hit this hour's existing burst (pool frozen). */
   merged: boolean;
   /** Task ids actually added to the pool by this report. */
   added: string[];
@@ -100,14 +102,20 @@ function dedupeInputs(tasks: BurstTaskInput[]): BurstTaskInput[] {
 }
 
 /**
- * Burst auto-accept flow (lazy accept), one blast per IST hour:
- *   eligible scan -> validate -> auto-blast (slots = eligible count) ->
+ * Burst auto-accept flow — the exact hourly contract:
+ *   :10 scan -> validate -> freshness gate -> auto-blast (slots = fresh N) ->
  *   each blast reply -> one AutomationClaim for the next unheld task.
- * The hour's FIRST eligible report opens the blast (workers messaged once).
- * Later reports in the same hour only APPEND brand-new task ids to the pool
- * (slots bumped, zero new messages); reports with nothing new are silent
- * no-ops. Nothing is ever accepted on GoPartTime without a named winner
- * holding it (accepted-but-unclaimed tasks cannot be returned there).
+ * - Blasts open ONLY inside the :10–:15 IST window (isBurstActive). Off-window
+ *   reports validate + log for observability but never message.
+ * - One blast per IST hour: the settled report opens it; later reports hit
+ *   the frozen pool and change nothing (late arrivals wait for next hour).
+ * - Only fresh arrivals blast (first-seen within BURST_FRESH_MS); older
+ *   listings are logged STALE and excluded — blasts fire for drops, never
+ *   for stale leftovers.
+ * - Winners are served however long it takes: claims never expire while the
+ *   burst is open (24h TTL backstop; closed-burst orphans are swept).
+ * - Nothing is ever accepted on GoPartTime without a named winner holding it
+ *   (accepted-but-unclaimed tasks cannot be returned there).
  */
 export async function createBurstFlow(
   discordClient: Client,
@@ -117,55 +125,66 @@ export async function createBurstFlow(
   const settings = await automationRepository.getSettings();
   const dryRun = settings ? settings.dryRun : true;
   const inputs = dedupeInputs(tasks);
+  const inWindow = isBurstActive();
 
-  // One-blast-per-hour guard (live mode only): an earlier report this IST
-  // hour already opened the blast — merge, never re-message.
+  // One-blast-per-hour guard (live mode only): the settled report already
+  // opened the blast — acknowledge it, never re-message, never grow the pool.
   if (!dryRun) {
     const hourBursts = await automationRepository.listBurstsSince(getIstHourStart()).catch(() => []);
     const hourOpen = [...hourBursts].reverse().find((b) => b.status === 'OPEN');
     if (hourOpen) {
-      return mergeIntoHourBurst(hourOpen.id, inputs, senderId);
+      return hourBurstStatus(hourOpen.id);
     }
   }
 
   const cycleId = `burst-${new Date().toISOString().slice(0, 16).replace('T', '-')}-${Date.now().toString(36)}`;
   await automationRepository.createCycle({ id: cycleId, dryRun });
 
-  // Merge leftovers from still-open bursts of PREVIOUS hours (e.g. unfilled
-  // tasks carried into a new hour): unheld tasks carry over so the new blast
-  // still serves them. Skipped entirely in dry-run (real rows stay untouched).
-  const merged: BurstTaskInput[] = [];
+  // Close previous-hour strays WITHOUT unioning (pools freeze; late sets
+  // wait for next hour). Skipped entirely in dry-run (real rows untouched).
   if (!dryRun) {
     try {
       const openBursts = await automationRepository.listOpenBursts();
       for (const b of openBursts) {
-        const held = await liveHeldIds(b.cycleId);
-        // Stored per-task subreddits keep the blocked-list check working on
-        // leftovers (never fall back to null-subreddit re-validation).
-        for (const p of parsePooledTasks(b.taskDetails, b.taskIds)) {
-          if (!held.has(p.id)) {
-            merged.push({ subTaskId: p.id, type: 'post', subreddit: p.subreddit, title: p.title });
-          }
-        }
         await automationRepository.closeBurst(b.id).catch(() => undefined);
         await automationRepository.updateCycle(b.cycleId, { status: 'DONE', endedAt: new Date() }).catch(() => undefined);
       }
     } catch (error) {
-      logger.warn('Burst leftover merge failed (continuing with fresh scan)', { error });
+      logger.warn('Burst stray close failed (continuing with fresh scan)', { error });
     }
   }
-  const mergedSeen = new Set<string>();
-  const candidates: BurstTaskInput[] = [];
-  for (const t of [...merged, ...inputs]) {
-    if (mergedSeen.has(t.subTaskId)) continue;
-    mergedSeen.add(t.subTaskId);
-    candidates.push(t);
-  }
+  const candidates: BurstTaskInput[] = [...inputs];
 
   const { eligible, blocked, duplicates, commentsSkipped } = await validateInputs(candidates, cycleId);
+
+  // Freshness gate: only new arrivals blast. Missing sighting rows mean
+  // first report ever — fail open (they just appeared).
+  const nowMs = Date.now();
+  const seenRows = await automationRepository
+    .findSightingsByIds(eligible.map((t) => t.subTaskId))
+    .catch(() => []);
+  const firstSeen = new Map(seenRows.map((s) => [s.externalTaskId, s.firstSeenAt]));
+  const fresh: DetectedGoPartTimeTask[] = [];
+  let stale = 0;
+  for (const t of eligible) {
+    if (isFreshArrival(firstSeen.get(t.subTaskId) ?? null, nowMs, AUTOMATION.BURST_FRESH_MS)) {
+      fresh.push(t);
+      continue;
+    }
+    stale++;
+    await automationRepository.logTask({
+      cycleId,
+      externalTaskId: t.subTaskId,
+      taskType: t.type,
+      subreddit: t.subreddit,
+      status: 'STALE',
+      failureReason: 'Listed too long — not a fresh arrival',
+    });
+  }
+
   await automationRepository.updateCycle(cycleId, {
     tasksDetected: candidates.length,
-    eligiblePosts: eligible.length,
+    eligiblePosts: fresh.length,
     blocked,
     duplicates,
     commentsSkipped: commentsSkipped,
@@ -174,17 +193,18 @@ export async function createBurstFlow(
     AuditAction.AUTOMATION_CYCLE_STARTED,
     null,
     senderId,
-    `Burst ${cycleId} scanned ${candidates.length} task(s): ${eligible.length} eligible (dryRun=${dryRun})`,
+    `Burst ${cycleId} scanned ${candidates.length} task(s): ${fresh.length} fresh eligible, ${stale} stale (dryRun=${dryRun}, inWindow=${inWindow})`,
   );
 
-  if (eligible.length === 0 || dryRun) {
+  if (fresh.length === 0 || dryRun || !inWindow) {
     await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date() });
     return {
       cycleId,
-      eligible,
+      eligible: fresh,
       blocked,
       duplicates,
       commentsSkipped,
+      stale,
       blast: null,
       sent: 0,
       skipped: [],
@@ -194,54 +214,50 @@ export async function createBurstFlow(
     };
   }
 
-  const { blast, sent, skipped } = await outreachService.sendBlast(discordClient, eligible.length, senderId || 'burst').catch(async (error) => {
+  const { blast, sent, skipped } = await outreachService.sendBlast(discordClient, fresh.length, senderId || 'burst').catch(async (error) => {
     await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date(), failures: 1 }).catch(() => undefined);
     throw error;
   });
   await automationRepository.createBurst({
     blastId: blast.id,
     cycleId,
-    taskIds: eligible.map((t) => t.subTaskId),
+    taskIds: fresh.map((t) => t.subTaskId),
     taskDetails: serializePooledTasks(
-      eligible.map((t) => ({ id: t.subTaskId, subreddit: t.subreddit, title: t.title })),
+      fresh.map((t) => ({ id: t.subTaskId, subreddit: t.subreddit, title: t.title })),
     ),
   });
   await automationRepository.updateCycle(cycleId, { workersContacted: sent.filter((s) => s.ok).length });
-  logger.info('Burst blast opened', { cycleId, blastId: blast.id, slots: eligible.length });
+  logger.info('Burst blast opened', { cycleId, blastId: blast.id, slots: fresh.length });
   return {
     cycleId,
-    eligible,
+    eligible: fresh,
     blocked,
     duplicates,
     commentsSkipped,
+    stale,
     blast,
     sent: sent.filter((s) => s.ok).length,
     skipped: skipped.map((s) => ({ channelId: s.channelId, reason: s.reason })),
     dryRun,
     merged: false,
-    added: eligible.map((t) => t.subTaskId),
+    added: fresh.map((t) => t.subTaskId),
   };
 }
 
 /**
- * One-blast-per-hour merge: a later report in the same IST hour joins the
- * hour's existing burst instead of opening a new blast. Brand-new task ids
- * are appended to the pool and the blast's slots grow — zero new Discord
- * messages. Reports with nothing new are silent no-ops (no cycle row, no
- * logs). When the hour's blast already closed (slots filled), late tasks
- * wait for the next hour's scan (still-listed tasks are re-detected there).
+ * Hour-burst status: a later report in the same IST hour changes nothing —
+ * the pool froze with the settled report (late arrivals wait for next hour).
+ * Returns the open blast info (or null when it already filled) so retries
+ * confirm delivery without ever re-messaging.
  */
-async function mergeIntoHourBurst(
-  burstId: string,
-  inputs: BurstTaskInput[],
-  senderId: string | null,
-): Promise<BurstResult> {
+async function hourBurstStatus(burstId: string): Promise<BurstResult> {
   const empty: BurstResult = {
     cycleId: '',
     eligible: [],
     blocked: 0,
     duplicates: 0,
     commentsSkipped: 0,
+    stale: 0,
     blast: null,
     sent: 0,
     skipped: [],
@@ -253,98 +269,12 @@ async function mergeIntoHourBurst(
   const allBursts = await automationRepository.listBurstsSince(new Date(0)).catch(() => []);
   const burst = allBursts.find((b) => b.id === burstId);
   if (!burst || burst.status !== 'OPEN') return empty;
-
-  // Close previous-hour strays and union their unheld tasks (same pool).
-  const extras: BurstTaskInput[] = [];
-  try {
-    const others = (await automationRepository.listOpenBursts()).filter((b) => b.id !== burst.id);
-    for (const o of others) {
-      const held = await liveHeldIds(o.cycleId);
-      for (const p of parsePooledTasks(o.taskDetails, o.taskIds)) {
-        if (!held.has(p.id)) {
-          extras.push({ subTaskId: p.id, type: 'post', subreddit: p.subreddit, title: p.title });
-        }
-      }
-      await automationRepository.closeBurst(o.id).catch(() => undefined);
-      const ob = await outreachRepository.getBlast(o.blastId).catch(() => null);
-      if (ob && ob.status === 'OPEN') {
-        const filled = await outreachRepository.countReplies(ob.id).catch(() => 0);
-        await outreachRepository.closeBlast(ob.id, filled).catch(() => undefined);
-      }
-      await automationRepository.updateCycle(o.cycleId, { status: 'DONE', endedAt: new Date() }).catch(() => undefined);
-    }
-  } catch (error) {
-    logger.warn('Hour-burst stray close failed (continuing)', { error });
-  }
-
   const blast = await outreachRepository.getBlast(burst.blastId).catch(() => null);
-  if (!blast || blast.status !== 'OPEN') {
-    // Filled already: first-N won, losers cleaned. Late tasks ride next hour.
-    logger.info('Hour blast already closed, report ignored', { blastId: burst.blastId });
-    return { ...empty, cycleId: burst.cycleId };
-  }
-
-  const candidates = dedupeInputs([...extras, ...inputs]);
-  const { eligible, blocked, duplicates, commentsSkipped } = await validateInputs(candidates, burst.cycleId);
-
-  const held = await liveHeldIds(burst.cycleId);
-  const fresh = await automationRepository.listBurstsSince(new Date(0)).catch(() => []);
-  const current = fresh.find((b) => b.id === burst.id);
-  const pooled: string[] = current ? current.taskIds : burst.taskIds;
-  const added = diffNewTasks(
-    eligible.map((t) => t.subTaskId),
-    pooled,
-    held,
-  );
-
-  if (added.length > 0) {
-    await automationRepository.appendBurstTasks(burst.id, added);
-    const byId = new Map(eligible.map((t) => [t.subTaskId, t]));
-    const storedDetails = current ? current.taskDetails : burst.taskDetails;
-    const details = [
-      ...parsePooledTasks(storedDetails, pooled),
-      ...added.map((id) => ({
-        id,
-        subreddit: byId.get(id)?.subreddit ?? null,
-        title: byId.get(id)?.title ?? null,
-      })),
-    ];
-    await automationRepository.setBurstDetails(burst.id, serializePooledTasks(details)).catch(() => undefined);
-    const updated = await outreachRepository.bumpBlastSlots(blast.id, added.length).catch(() => null);
-    const cycle = await automationRepository.getCycle(burst.cycleId).catch(() => null);
-    if (cycle) {
-      await automationRepository
-        .updateCycle(burst.cycleId, {
-          tasksDetected: cycle.tasksDetected + candidates.length,
-          eligiblePosts: cycle.eligiblePosts + eligible.length,
-          blocked: cycle.blocked + blocked,
-          duplicates: cycle.duplicates + duplicates,
-          commentsSkipped: cycle.commentsSkipped + commentsSkipped,
-        })
-        .catch(() => undefined);
-    }
-    await auditLogService.log(
-      AuditAction.AUTOMATION_CYCLE_STARTED,
-      null,
-      senderId,
-      `Burst hour merge: +${added.length} task(s) into blast ${blast.id} (slots now ${updated ? updated.slotsTotal : blast.slotsTotal + added.length}), no re-message`,
-    );
-    logger.info('Burst hour merge', { blastId: blast.id, added });
-  }
-
-  const live = await outreachRepository.getBlast(blast.id).catch(() => null);
+  if (!blast || blast.status !== 'OPEN') return { ...empty, cycleId: burst.cycleId };
   return {
+    ...empty,
     cycleId: burst.cycleId,
-    eligible: eligible.filter((t) => added.includes(t.subTaskId)),
-    blocked,
-    duplicates,
-    commentsSkipped,
-    blast: live ? { id: live.id, slotsTotal: live.slotsTotal } : { id: blast.id, slotsTotal: blast.slotsTotal },
-    sent: 0,
-    skipped: [],
-    dryRun: false,
-    merged: true,
-    added,
+    blast: { id: blast.id, slotsTotal: blast.slotsTotal },
   };
 }
 
@@ -371,12 +301,7 @@ export async function handleBurstReply(blastId: string, channelId: string, worke
       const burst = await automationRepository.getBurstByBlast(blastId).catch(() => null);
       if (!burst || burst.status !== 'OPEN') return null;
 
-      const claims = await automationRepository.listCycleClaims(burst.cycleId).catch(() => []);
-      const held = new Set(
-        claims
-          .filter((c) => c.status === 'PENDING' || c.status === 'CLAIMED')
-          .map((c) => c.externalTaskId),
-      );
+      const held = await liveHeldIds(burst.cycleId);
       const next = pickNextTask(burst.taskIds, held);
       if (!next) {
         logger.info('Burst reply: all tasks already held', { blastId, channelId });

@@ -1,4 +1,6 @@
 import { normalizeSubreddit } from './subreddit';
+import { AUTOMATION } from '../../config/constants';
+import { IST_OFFSET_MS } from '../../utils/ist-time';
 
 export interface BurstCandidate {
   subTaskId: string;
@@ -7,14 +9,13 @@ export interface BurstCandidate {
 }
 
 /**
- * Burst scan window in the manager browser's LOCAL time (the drop schedule
- * is observed in that timezone): minute :09 from second 50 through minute
- * :15 inclusive. Covers the :10/:11 drops plus :14/:15 leaks.
+ * Burst scan window in IST (the drop schedule is IST-based): minutes :10
+ * through :15 inclusive, every hour. Blasts may ONLY open inside this
+ * window — the scan runs at exactly xx:10, nowhere else, no other time.
  */
 export function isBurstActive(now: Date = new Date()): boolean {
-  const m = now.getMinutes();
-  if (m === 9) return now.getSeconds() >= 50;
-  return m >= 10 && m <= 15;
+  const istMinutes = new Date(now.getTime() + IST_OFFSET_MS).getUTCMinutes();
+  return istMinutes >= 10 && istMinutes <= 15;
 }
 
 /**
@@ -62,25 +63,16 @@ export function pickNextTask(taskIds: readonly string[], claimedIds: ReadonlySet
 }
 
 /**
- * New-task diff for the one-blast-per-hour rule: eligible ids minus tasks
- * already pooled in the hour's burst minus tasks already held by live claims.
- * Empty result means the report changes nothing (silent no-op, no re-blast).
+ * Fresh-arrival test for the burst gate: a task counts as new only when first
+ * seen within the TTL. Stale listings (seen longer ago) never open blasts.
  */
-export function diffNewTasks(
-  eligibleIds: readonly string[],
-  pooledIds: ReadonlySet<string> | readonly string[],
-  heldIds: ReadonlySet<string> | readonly string[],
-): string[] {
-  const pooled = pooledIds instanceof Set ? pooledIds : new Set(pooledIds);
-  const held = heldIds instanceof Set ? heldIds : new Set(heldIds);
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const id of eligibleIds) {
-    if (seen.has(id) || pooled.has(id) || held.has(id)) continue;
-    seen.add(id);
-    out.push(id);
-  }
-  return out;
+export function isFreshArrival(
+  firstSeenAt: Date | null | undefined,
+  nowMs: number = Date.now(),
+  ttlMs: number = AUTOMATION.BURST_FRESH_MS,
+): boolean {
+  if (!firstSeenAt) return true;
+  return firstSeenAt.getTime() >= nowMs - ttlMs;
 }
 
 export interface PooledTask {
