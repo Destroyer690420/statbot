@@ -3,7 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-11
-### Deployed
+### Implemented (rate-limit relief — awaiting verification + deploy)
+- **Rate limit 100 → 300 + slower automation polls**: one home IP (dashboard auto-polling + watcher + manual use) tripped the 15-min cap and blanked every data view with 429s. Automation status poll 30s → 60s. Verified: typechecks + dashboard build clean. No DB migration.
 - **Blast Now + no-blast reasons live** (`161.118.164.85`) at commit `a96807f` (app + dashboard rebuild; pre-blastnow backup; pushed to GitHub; no DB migration — schema unchanged; no slash-command redeploy; host + local bundles/scratch cleaned). On-demand button (v1.2.0 served) with force-window path; every no-blast explains itself. Verified: health healthy (DB+Redis), boot clean, 247/247 jest (19 suites), both builds clean.
 - **On-demand Blast Now + no-blast reasons**: orange button on `/tasks` runs a full immediate round (`POST /burst` with `force:true` bypasses only the window gate); every no-blast outcome now explains itself (`reason`: no eligible / dry-run / disabled / outside window / already closed). Watcher v1.2.0. Verified: typecheck + build clean, 247/247 jest (19 suites). No DB migration.
 - **Monitor anti-wedge live** (`161.118.164.85`) at commit `4a44bfc` (dashboard-only rebuild — backend untouched; pre-wedge backup; pushed to GitHub; host + local bundles/scratch cleaned). Hard timeouts on page/API fetches + 90s stuck-tick watchdog. Watcher v1.1.10 served. Verified: node --check, ASCII/hash/harness with live abort proof.

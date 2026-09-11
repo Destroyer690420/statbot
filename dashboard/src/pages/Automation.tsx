@@ -47,7 +47,7 @@ export function Automation() {
   const [rehearseLive, setRehearseLive] = useState(false);
   const [rehearseResult, setRehearseResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 30000 });
+  const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 60000 });
   const cyclesQuery = useQuery({ queryKey: ['automation-cycles'], queryFn: getAutomationCycles, refetchInterval: 60000 });
   const blockedQuery = useQuery({ queryKey: ['automation-blocked'], queryFn: getBlockedSubreddits });
   const companionQuery = useQuery({ queryKey: ['automation-companion'], queryFn: getAutomationCompanion, refetchInterval: 60000 });

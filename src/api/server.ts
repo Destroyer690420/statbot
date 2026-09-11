@@ -54,7 +54,11 @@ export function createApiServer(discordClient: Client): express.Application {
   // manual or companion-driven).
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,
+    // One home IP carries the dashboard (several auto-polling pages), the
+    // watcher companion, and manual use at once — 100 was tripping normal
+    // operation (dashboard alone polls ~7/min with the automation panel
+    // open). Key-gated companion endpoints stay fully exempt below.
+    max: 300,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Too many requests. Please try again later.' },
