@@ -126,6 +126,14 @@ export class OutreachRepository {
     });
     return rows.map((r) => r.channelId);
   }
+
+  /** Winning replies with worker + time — the cycle drill-down shows them. */
+  async listBlastReplies(blastId: string) {
+    return getDb().outreachReply.findMany({
+      where: { blastId },
+      orderBy: { repliedAt: 'asc' },
+    });
+  }
 }
 
 export const outreachRepository = new OutreachRepository();

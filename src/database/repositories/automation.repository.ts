@@ -174,14 +174,6 @@ export class AutomationRepository {
     });
   }
 
-  /** First-seen tracks for a batch of ids — the burst freshness gate. */
-  async findSightingsByIds(externalTaskIds: string[]) {
-    if (externalTaskIds.length === 0) return [];
-    return getDb().automationSighting.findMany({
-      where: { externalTaskId: { in: externalTaskIds } },
-    });
-  }
-
   async markSightings(ids: string[], status: string) {
     if (ids.length === 0) return { count: 0 };
     return getDb().automationSighting.updateMany({ where: { id: { in: ids } }, data: { status } });

@@ -184,7 +184,9 @@ The exact hourly contract (all server-enforced): scan at exactly xx:10 → valid
 
 **Freeze semantics.** `enabled=false` or dry-run on means validate + log only: no blasts, no burst-row writes, and no new claims from replies (in-flight rounds halt at the next reply). The switches mean what they say.
 
-**Freshness gate.** Only tasks first-seen within `BURST_FRESH_MS` (25 min) blast; older listings are logged `STALE` and excluded; `/burst` upserts sightings so tracks exist. Off-window ticks only sweep claims — blasts open solely in :10–:15 IST.
+**Whole-page count.** Every validated-eligible listed post counts toward the blast — blocked / duplicate / unreadable-subreddit / comment rules still exclude, but there is no freshness filter: stale leftovers re-blast hourly, capped at one message per worker per hour by the one-blast dedupe. Accepted tasks never re-blast (duplicate detection).
+
+**Winner visibility.** `GET /cycles/:id` returns per-blast `replies[]` (channel, worker, time); the panel drill-down lists winners under each blast (worker contacts stay empty for bursts — wins live in blast replies).
 
 **One blast per IST hour (anti-spam rule).** The hour's FIRST eligible report opens the blast — each worker is messaged exactly once. Later reports in the same hour only APPEND brand-new task ids to the pool (slots grow, zero new messages); reports with nothing new are silent no-ops (no cycle row). Previous hours' still-open bursts close and union their unheld tasks. If the hour's blast already filled (first-N won, losers' messages deleted), late tasks wait for the next hour's scan. Hour boundaries use IST (`getIstHourStart`), matching the drop schedule. Dry-run never touches real burst rows (validate + log only).
 

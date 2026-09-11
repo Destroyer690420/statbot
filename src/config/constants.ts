@@ -57,10 +57,6 @@ export const AUTOMATION = {
    *  never expire while their burst is open. Closed-burst orphans are swept
    *  by the queue tick, so this is only a backstop, not a deadline. */
   BURST_CLAIM_TTL_MS: 24 * 60 * 60 * 1000,
-  /** Burst freshness window: only tasks first seen within the last 25 min
-   *  count as new arrivals. Older listings are logged STALE and excluded,
-   *  so blasts fire for fresh drops, never for stale leftovers. */
-  BURST_FRESH_MS: 25 * 60 * 1000,
 } as const;
 
 /** Task ID validation pattern (alphanumeric, spaces, hash, hyphens, underscores, 1-32 chars) */

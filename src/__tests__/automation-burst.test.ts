@@ -2,9 +2,8 @@
  * Burst eligibility helpers: scan window, in-page filter mirror, lazy-accept
  * picker. Pure module — no env or DB needed.
  */
-import { isBurstActive, filterEligibleIds, pickNextTask, isFreshArrival, serializePooledTasks, parsePooledTasks } from '../services/automation/eligibility';
+import { isBurstActive, filterEligibleIds, pickNextTask, serializePooledTasks, parsePooledTasks } from '../services/automation/eligibility';
 import { getIstHourStart } from '../utils/ist-time';
-import { AUTOMATION } from '../config/constants';
 
 describe('isBurstActive', () => {
   // Absolute UTC instants (IST = UTC+5:30) — TZ-independent.
@@ -77,21 +76,6 @@ describe('pickNextTask', () => {
   it('returns null when everything is held or empty', () => {
     expect(pickNextTask(['a', 'b'], ['a', 'b'])).toBeNull();
     expect(pickNextTask([], [])).toBeNull();
-  });
-});
-
-describe('isFreshArrival', () => {
-  const now = new Date('2026-09-11T04:40:00.000Z').getTime();
-  it('accepts first-seen within the TTL, rejects older', () => {
-    expect(isFreshArrival(new Date(now - 60 * 1000), now)).toBe(true);
-    expect(isFreshArrival(new Date(now - AUTOMATION.BURST_FRESH_MS + 1000), now)).toBe(true);
-    expect(isFreshArrival(new Date(now - AUTOMATION.BURST_FRESH_MS - 1000), now)).toBe(false);
-    expect(isFreshArrival(new Date(now - 3 * 60 * 60 * 1000), now)).toBe(false);
-  });
-
-  it('treats never-seen as fresh (first report)', () => {
-    expect(isFreshArrival(null, now)).toBe(true);
-    expect(isFreshArrival(undefined, now)).toBe(true);
   });
 });
 

@@ -535,7 +535,7 @@ export function Automation() {
               <div className="grid md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider mb-2">Worker contacts</p>
-                  {(detail.contacts || []).length === 0 && <p className="text-dark-400">None.</p>}
+                  {(detail.contacts || []).length === 0 && <p className="text-dark-400">None — burst wins appear as blast replies below, not contacts.</p>}
                   {(detail.contacts || []).map((ct: Record<string, unknown>) => (
                     <p key={String(ct.id)} className="font-mono text-xs text-dark-200 py-1">
                       {String(ct.status)} · {String(ct.channelId).slice(-4)} · {ct.respondedAt ? 'replied' : 'no reply'}
@@ -557,11 +557,19 @@ export function Automation() {
                   {(detail.bursts || []).map((b: Record<string, unknown>) => {
                     const blast = (b.blast || {}) as Record<string, unknown>;
                     const taskIds = (b.taskIds || []) as string[];
+                    const replies = (b.replies || []) as Record<string, unknown>[];
                     return (
-                      <p key={String(b.id)} className="font-mono text-xs text-dark-200 py-1">
-                        {String(blast.slotsFilled ?? 0)}/{String(blast.slotsTotal ?? taskIds.length)} slots · {String(blast.status || b.status)}
-                        {taskIds.length > 0 ? ` · #${taskIds.join(' #')}` : ''}
-                      </p>
+                      <div key={String(b.id)} className="py-1">
+                        <p className="font-mono text-xs text-dark-200">
+                          {String(blast.slotsFilled ?? 0)}/{String(blast.slotsTotal ?? taskIds.length)} slots · {String(blast.status || b.status)}
+                          {taskIds.length > 0 ? ` · #${taskIds.join(' #')}` : ''}
+                        </p>
+                        {replies.map((r, i) => (
+                          <p key={String(r.channelId)} className="font-mono text-xs text-green-400 py-0.5 pl-4">
+                            #{i + 1} winner: {String(r.channelId).slice(-4)} · {r.repliedAt ? new Date(String(r.repliedAt)).toLocaleTimeString() : ''}
+                          </p>
+                        ))}
+                      </div>
                     );
                   })}
                 </div>

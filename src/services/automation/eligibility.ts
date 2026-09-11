@@ -1,5 +1,4 @@
 import { normalizeSubreddit } from './subreddit';
-import { AUTOMATION } from '../../config/constants';
 import { IST_OFFSET_MS } from '../../utils/ist-time';
 
 export interface BurstCandidate {
@@ -60,19 +59,6 @@ export function pickNextTask(taskIds: readonly string[], claimedIds: ReadonlySet
     if (!claimed.has(id)) return id;
   }
   return null;
-}
-
-/**
- * Fresh-arrival test for the burst gate: a task counts as new only when first
- * seen within the TTL. Stale listings (seen longer ago) never open blasts.
- */
-export function isFreshArrival(
-  firstSeenAt: Date | null | undefined,
-  nowMs: number = Date.now(),
-  ttlMs: number = AUTOMATION.BURST_FRESH_MS,
-): boolean {
-  if (!firstSeenAt) return true;
-  return firstSeenAt.getTime() >= nowMs - ttlMs;
 }
 
 export interface PooledTask {

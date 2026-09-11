@@ -376,8 +376,7 @@ export type AutomationTaskStatus =
   | 'WOULD_ACCEPT'
   | 'ACCEPTED'
   | 'FAILED'
-  | 'NO_SUBREDDIT'
-  | 'STALE';
+  | 'NO_SUBREDDIT';
 
 export interface DetectedGoPartTimeTask {
   subTaskId: string;

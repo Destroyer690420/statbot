@@ -232,6 +232,9 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         const filled = blast
           ? await outreachRepository.countReplies(blast.id).catch(() => blast.slotsFilled)
           : 0;
+        const replies = blast
+          ? await outreachRepository.listBlastReplies(blast.id).catch(() => [])
+          : [];
         burstViews.push({
           id: b.id,
           blastId: b.blastId,
@@ -241,6 +244,11 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           blast: blast
             ? { slotsTotal: blast.slotsTotal, slotsFilled: filled, status: blast.status }
             : null,
+          replies: replies.map((r) => ({
+            channelId: r.channelId,
+            workerId: r.workerId,
+            repliedAt: r.repliedAt,
+          })),
         });
       }
       res.json({ success: true, data: { cycle, contacts, logs, bursts: burstViews } });
@@ -731,11 +739,10 @@ export default function createAutomationRoutes(discordClient: Client): Router {
 
   /**
    * POST /api/v1/automation/burst — watcher's settled hourly scan report.
-   * Every report upserts sightings first (first-seen tracks feed the
-   * freshness gate: only new arrivals blast, stale listings never do).
-   * Server re-validates every task (Post/duplicate/blocked + freshness),
-   * then opens the hour's single blast — or acknowledges an existing one
-   * without messaging. In dry-run: validates + logs only, no blast.
+   * Server re-validates every task (Post/duplicate/blocked + readable
+   * subreddit), then opens the hour's single blast — or acknowledges an
+   * existing one without messaging. Every validated-eligible listed post
+   * counts toward the blast. In dry-run: validates + logs only, no blast.
    */
   router.post('/burst', validateBody(burstSchema), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -749,17 +756,6 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           title: t.title || null,
         }),
       );
-      for (const t of tasks) {
-        await automationRepository
-          .upsertSighting({
-            externalTaskId: t.subTaskId,
-            taskType: t.type,
-            subreddit: t.subreddit,
-            title: t.title,
-            companionId,
-          })
-          .catch(() => undefined);
-      }
       const result = await createBurstFlow(discordClient, tasks, 'burst');
       res.json({
         success: true,
@@ -773,7 +769,6 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           blocked: result.blocked,
           duplicates: result.duplicates,
           commentsSkipped: result.commentsSkipped,
-          stale: result.stale,
           blast: result.blast,
           sent: result.sent,
           skipped: result.skipped,
