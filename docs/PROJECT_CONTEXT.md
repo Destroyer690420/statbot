@@ -250,7 +250,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-11**: **IMPLEMENTED subreddit reader fix + newest-first (NOT yet deployed)**. Windowed parent association (probe-shaped fixtures, neighbor-safe); claim drawer ground-truth abort; newest-first pools everywhere. Watcher v1.1.4. Verified: typecheck + build clean, 249/249 jest. No DB migration.
+- **2026-09-11**: **DEPLOYED subreddit reader fix + newest-first** (`161.118.164.85`) at commit `b811592` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Windowed association (neighbor-safe); drawer abort on mismatch; newest-first everywhere. Watcher v1.1.4 served. Verified: health healthy, boot clean, 249/249 jest.
 
 - **2026-09-11**: **DEPLOYED blocked enforcement + claim throughput** (`161.118.164.85`) at commit `fd0f86d` (app + dashboard rebuild; pushed to GitHub; migration excerpt applied: `taskDetails`; no slash-command redeploy; host + local bundles/scratch cleaned). Fail-closed null-subreddit rejection; pooled subreddits; 10-min TTL; orphan sweep; late verdicts. Watcher v1.1.3 served. Verified: health healthy, boot clean, 245/245 jest.
 
