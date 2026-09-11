@@ -250,6 +250,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-11**: **DEPLOYED rate-limit relief** (`161.118.164.85`) at commit `ac7b4bf` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). One home IP tripped the 100/15min cap (429s blanked all data views); now 300 + slower automation polls. Verified: health healthy, boot clean.
+
 - **2026-09-11**: **DEPLOYED Blast Now + no-blast reasons** (`161.118.164.85`) at commit `a96807f` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). On-demand button v1.2.0 served; force path; reasons surfaced. Verified: health healthy, boot clean, 247/247 jest (19 suites).
 
 - **2026-09-11**: **DEPLOYED monitor anti-wedge** (`161.118.164.85`) at commit `4a44bfc` (dashboard-only rebuild; pushed to GitHub; host + local bundles/scratch cleaned). Fixed frozen-pill wedge (stalled fetch, stuck tick). Watcher v1.1.10 served. Verified: node --check, ASCII/hash/harness clean.
