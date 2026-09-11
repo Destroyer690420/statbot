@@ -248,6 +248,23 @@ export class AutomationRepository {
     return getDb().automationBurst.update({ where: { id }, data: { status: 'CLOSED' } });
   }
 
+  /** Appends task ids to a burst pool (grace-window streaming completions). */
+  async appendBurstTasks(id: string, taskIds: string[]) {
+    if (taskIds.length === 0) return null;
+    return getDb().automationBurst.update({
+      where: { id },
+      data: { taskIds: { push: taskIds } },
+    });
+  }
+
+  /** Replaces the pooled task details JSON (append-merged by the caller). */
+  async setBurstDetails(id: string, taskDetails: string) {
+    return getDb().automationBurst.update({
+      where: { id },
+      data: { taskDetails },
+    });
+  }
+
   /** Bursts of one cycle, newest first (normally exactly one). */
   async listBurstsByCycle(cycleId: string) {
     return getDb().automationBurst.findMany({

@@ -180,7 +180,7 @@ Server-side loop that monitors GoPartTime without the manager's PC. Verified fin
 
 The exact hourly contract (all server-enforced): scan at exactly xx:10 → validate → freshness gate → one auto-blast (slots = fresh N) → each blast reply becomes one claim → accept all N, delivered one-by-one in reply order however long it takes (claims never expire while the burst is open) → fill deletes losers' messages immediately → next :10 supersedes. Lazy accept throughout: nothing is ever accepted on GoPartTime without a named winner (accepted tasks cannot be returned there). No worker-facing time limit: the blast stays open until slots fill (late replies within the hour still convert); the 24h claim TTL is only a backstop and closed-burst orphans are swept.
 
-**Settle-once reporting.** The watcher waits for two consecutive identical scans, POSTs once per hour, and retries the same set until the server confirms the blast (retries are server no-ops). Late sets (e.g. :12–:15 leaks) wait for next hour — pools freeze after the settled report.
+**Settle-once reporting.** The watcher waits a fixed 45s after first eligible sighting, then POSTs the current set once per hour and retries until the server confirms the blast (retries are server no-ops). No signature comparison (churn-proof). Streaming completions that arrive within the 5-min merge grace join the pool silently (slots grow, zero new messages); later arrivals wait for next hour — pools freeze.
 
 **Freeze semantics.** `enabled=false` or dry-run on means validate + log only: no blasts, no burst-row writes, and no new claims from replies (in-flight rounds halt at the next reply). The switches mean what they say.
 

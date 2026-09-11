@@ -88,6 +88,15 @@ export class OutreachRepository {
     });
   }
 
+  /** Grows an open blast's slots (grace-window streaming completions). */
+  async bumpBlastSlots(id: string, add: number) {
+    if (add <= 0) return this.getBlast(id);
+    return getDb().outreachBlast.update({
+      where: { id },
+      data: { slotsTotal: { increment: add } },
+    });
+  }
+
   async recordBlastMessage(blastId: string, channelId: string, messageId: string) {
     return getDb().outreachBlastMessage.upsert({
       where: { blastId_channelId: { blastId, channelId } },

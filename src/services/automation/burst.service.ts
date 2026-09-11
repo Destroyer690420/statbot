@@ -6,7 +6,7 @@ import { AUTOMATION } from '../../config/constants';
 import { getIstDayBoundaries, getIstHourStart } from '../../utils/ist-time';
 import { logger } from '../../utils/logger';
 import { validateDetectedTask } from './validator.service';
-import { isBurstActive, pickNextTask, serializePooledTasks } from './eligibility';
+import { diffNewTasks, isBurstActive, isMergeAllowed, parsePooledTasks, pickNextTask, serializePooledTasks } from './eligibility';
 import { outreachService, DAILY_POST_CAP } from '../outreach.service';
 
 export interface BurstTaskInput {
@@ -30,6 +30,14 @@ export interface BurstResult {
   merged: boolean;
   /** Task ids actually added to the pool by this report. */
   added: string[];
+}
+
+/** Live-held external ids of a cycle (PENDING/CLAIMED claims). */
+async function liveHeldIds(cycleId: string): Promise<Set<string>> {
+  const claims = await automationRepository.listCycleClaims(cycleId).catch(() => []);
+  return new Set(
+    claims.filter((c) => c.status === 'PENDING' || c.status === 'CLAIMED').map((c) => c.externalTaskId),
+  );
 }
 
 function toDetected(t: BurstTaskInput): DetectedGoPartTimeTask {
@@ -123,12 +131,12 @@ export async function createBurstFlow(
   const inWindow = isBurstActive();
 
   // One-blast-per-hour guard (live mode only): the settled report already
-  // opened the blast — acknowledge it, never re-message, never grow the pool.
+  // opened the blast — join it only inside the merge grace, never re-message.
   if (live) {
     const hourBursts = await automationRepository.listBurstsSince(getIstHourStart()).catch(() => []);
     const hourOpen = [...hourBursts].reverse().find((b) => b.status === 'OPEN');
     if (hourOpen) {
-      return hourBurstStatus(hourOpen.id);
+      return mergeIntoHourBurst(hourOpen.id, inputs, senderId);
     }
   }
 
@@ -213,12 +221,17 @@ export async function createBurstFlow(
 }
 
 /**
- * Hour-burst status: a later report in the same IST hour changes nothing —
- * the pool froze with the settled report (late arrivals wait for next hour).
- * Returns the open blast info (or null when it already filled) so retries
- * confirm delivery without ever re-messaging.
+ * Hour-burst merge: a later report in the same IST hour joins the pool ONLY
+ * inside the merge grace after blast creation (streaming completion: slots
+ * grow, zero new messages). Past grace the pool is frozen (late arrivals
+ * wait for next hour). Always returns the open blast info (or null when it
+ * already filled) so retries confirm delivery without ever re-messaging.
  */
-async function hourBurstStatus(burstId: string): Promise<BurstResult> {
+async function mergeIntoHourBurst(
+  burstId: string,
+  inputs: BurstTaskInput[],
+  senderId: string | null,
+): Promise<BurstResult> {
   const empty: BurstResult = {
     cycleId: '',
     eligible: [],
@@ -238,10 +251,74 @@ async function hourBurstStatus(burstId: string): Promise<BurstResult> {
   if (!burst || burst.status !== 'OPEN') return empty;
   const blast = await outreachRepository.getBlast(burst.blastId).catch(() => null);
   if (!blast || blast.status !== 'OPEN') return { ...empty, cycleId: burst.cycleId };
+
+  // Grace-boxed append: streaming completions only.
+  if (!isMergeAllowed(burst.createdAt, Date.now(), AUTOMATION.BURST_MERGE_GRACE_MS)) {
+    logger.info('Hour pool frozen, report ignored', { blastId: burst.blastId });
+    return { ...empty, cycleId: burst.cycleId, blast: { id: blast.id, slotsTotal: blast.slotsTotal } };
+  }
+
+  const candidates = dedupeInputs(inputs);
+  const { eligible, blocked, duplicates, commentsSkipped } = await validateInputs(candidates, burst.cycleId);
+
+  const held = await liveHeldIds(burst.cycleId);
+  const stored = await automationRepository.listBurstsSince(new Date(0)).catch(() => []);
+  const current = stored.find((b) => b.id === burst.id);
+  const pooled: string[] = current ? current.taskIds : burst.taskIds;
+  const added = diffNewTasks(
+    eligible.map((t) => t.subTaskId),
+    pooled,
+    held,
+  );
+
+  if (added.length > 0) {
+    await automationRepository.appendBurstTasks(burst.id, added);
+    const byId = new Map(eligible.map((t) => [t.subTaskId, t]));
+    const storedDetails = current ? current.taskDetails : burst.taskDetails;
+    const details = [
+      ...parsePooledTasks(storedDetails, pooled),
+      ...added.map((id) => ({
+        id,
+        subreddit: byId.get(id)?.subreddit ?? null,
+        title: byId.get(id)?.title ?? null,
+      })),
+    ];
+    await automationRepository.setBurstDetails(burst.id, serializePooledTasks(details)).catch(() => undefined);
+    const updated = await outreachRepository.bumpBlastSlots(blast.id, added.length).catch(() => null);
+    const cycle = await automationRepository.getCycle(burst.cycleId).catch(() => null);
+    if (cycle) {
+      await automationRepository
+        .updateCycle(burst.cycleId, {
+          tasksDetected: cycle.tasksDetected + candidates.length,
+          eligiblePosts: cycle.eligiblePosts + eligible.length,
+          blocked: cycle.blocked + blocked,
+          duplicates: cycle.duplicates + duplicates,
+          commentsSkipped: cycle.commentsSkipped + commentsSkipped,
+        })
+        .catch(() => undefined);
+    }
+    await auditLogService.log(
+      AuditAction.AUTOMATION_CYCLE_STARTED,
+      null,
+      senderId,
+      `Burst grace merge: +${added.length} task(s) into blast ${blast.id} (slots now ${updated ? updated.slotsTotal : blast.slotsTotal + added.length}), no re-message`,
+    );
+    logger.info('Burst grace merge', { blastId: blast.id, added });
+  }
+
+  const live = await outreachRepository.getBlast(blast.id).catch(() => null);
   return {
-    ...empty,
     cycleId: burst.cycleId,
-    blast: { id: blast.id, slotsTotal: blast.slotsTotal },
+    eligible: eligible.filter((t) => added.includes(t.subTaskId)),
+    blocked,
+    duplicates,
+    commentsSkipped,
+    blast: live ? { id: live.id, slotsTotal: live.slotsTotal } : { id: blast.id, slotsTotal: blast.slotsTotal },
+    sent: 0,
+    skipped: [],
+    dryRun: false,
+    merged: true,
+    added,
   };
 }
 

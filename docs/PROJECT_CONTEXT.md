@@ -250,6 +250,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-11**: **IMPLEMENTED deadlock-proof reporting + merge grace (NOT yet deployed)**. Fixed 45s report, hourly retry, 5-min append grace, frozen after. Watcher v1.1.8. Verified: typecheck + build clean, 247/247 jest (19 suites). No DB migration.
+
 - **2026-09-11**: **DEPLOYED listed-takeable + move-on retry** (`161.118.164.85`) at commit `9bcf135` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Listed+available always counts; failed claims retry same worker; FAILED never re-queued. Watcher v1.1.7 served. Verified: health healthy, boot clean, 245/245 jest (19 suites).
 
 - **2026-09-11**: **DEPLOYED settle-deadlock fix** (`161.118.164.85`) at commit `c0bedbf` (dashboard-only rebuild; pushed to GitHub; host + local bundles/scratch cleaned). Fixes silent 11:10/12:10 rounds (churning drops never settled). Watcher v1.1.6 served. Verified: node --check, ASCII/hash/harness clean.

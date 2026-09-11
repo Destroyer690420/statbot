@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.7
+// @version      1.1.8
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+ * v1.1.8 - Deadlock-proof reporting: first eligible sighting starts a fixed
+ * 45s countdown, then the CURRENT set reports once (churn can never stall
+ * it); server grows the pool within its merge grace. Otherwise identical to
+ * v1.1.7 below.
+ *
  * v1.1.7 - No history filter: every readable non-blocked post is reported
  * (listed + available means takeable; the server skips duplicates the same
  * way). Otherwise identical to v1.1.6 below.
@@ -77,7 +82,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.7';
+  const VERSION = '1.1.8';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -91,22 +96,16 @@
   const BURST_CLAIM_MS = 5000;
   const BUNDLE_TTL_MS = 15 * 60 * 1000;
   const RATE_LIMIT_PAUSE_MS = 60 * 1000;
-  // Signature of the last eligible set reported via /burst (change-triggered
-  // POSTs only - no spam while the listing sits still).
-  let lastBurstSig = '';
-  // Settle-once-per-hour reporting: the hour's FIRST settled scan (two
-  // consecutive identical scans) is the single report. Retries re-send the
-  // same set until the server confirms the blast (same set = server no-op).
-  let prevBurstSig = '';
+  // Once-per-hour reporting: the first scan with eligible posts starts a
+  // fixed countdown; when it lapses the CURRENT set is reported once.
+  // No signature comparison (churn-proof - a live drop never sits still).
+  // Retries re-send until the server confirms the blast.
   let reportedHour = '';
   let burstConfirmed = false;
   let lastBurstPostAt = 0;
   const BURST_RETRY_MS = 30000;
-  // Settle grace: a live drop churns constantly, so two identical scans may
-  // never happen back-to-back. Report the current set once eligible tasks
-  // have been continuously present for this long (deadlock-proof).
-  const BURST_SETTLE_MS = 20000;
-  let firstEligibleAt = 0;
+  const BURST_REPORT_DELAY_MS = 45000;
+  let firstSeenAt = 0;
 
   function burstHourKey(now) {
     const d = now || new Date();
@@ -570,7 +569,6 @@
     monitorBusy = true;
     try {
       const burst = isBurstWindow();
-      if (!burst) lastBurstSig = '';
       // Burst mode reads the live DOM first (instant - no extra page load);
       // routine mode keeps the proven fetch-first order. Sightings are NOT
       // posted during the burst: the settled /burst report replaces them
@@ -603,9 +601,7 @@
           // New hour: reset the once-per-hour report state.
           reportedHour = '';
           burstConfirmed = false;
-          prevBurstSig = '';
-          lastBurstSig = '';
-          firstEligibleAt = 0;
+          firstSeenAt = 0;
         }
         if (reportedHour === hourKey && burstConfirmed) {
           setStatus(true, 'BURST reported this hour');
@@ -614,39 +610,29 @@
         const bundle = await getBundle(settings);
         const eligible = filterEligible(tasks, bundle);
         if (eligible.length === 0) {
-          prevBurstSig = '';
-          firstEligibleAt = 0;
+          firstSeenAt = 0;
           setStatus(true, 'BURST scanning (' + source + ')...');
           return;
         }
-        const sig = eligible
-          .map((t) => String(t.subTaskId))
-          .sort()
-          .join(',');
-        if (sig !== prevBurstSig) {
-          prevBurstSig = sig;
-          if (!firstEligibleAt) firstEligibleAt = Date.now();
-          if (Date.now() - firstEligibleAt < BURST_SETTLE_MS) {
-            // Listing still settling (or first sighting) and grace not
-            // exceeded - wait for two consecutive identical scans before the
-            // single hourly report.
-            setStatus(true, 'BURST ' + eligible.length + ' found, confirming...');
-            return;
-          }
-          // Grace exceeded on a churning listing: report the current set
-          // anyway instead of deadlocking (server dedupes + freezes pool).
+        const nowMs = Date.now();
+        if (!firstSeenAt) firstSeenAt = nowMs;
+        const waitMs = BURST_REPORT_DELAY_MS - (nowMs - firstSeenAt);
+        if (waitMs > 0) {
+          // Count first, blast after: let the drop finish streaming so the
+          // single report carries the full number - never partial, never
+          // repeated. Churn cannot stall this (fixed countdown, not sig).
+          setStatus(true, 'BURST ' + eligible.length + ' found, sending in ' + Math.ceil(waitMs / 1000) + 's...');
+          return;
         }
-        // Settled (two identical scans) or grace exceeded: report once.
-        if (Date.now() - lastBurstPostAt < BURST_RETRY_MS) {
+        if (nowMs - lastBurstPostAt < BURST_RETRY_MS) {
           setStatus(true, 'BURST send failed, retrying...');
           return;
         }
-        // Settled: report once (newest-first). Retries re-send the same set;
-        // the server no-ops when the hour's blast already exists.
-        lastBurstSig = sig;
-        lastBurstPostAt = Date.now();
+        // Report once (newest-first). Retries re-send until the server
+        // confirms; the server dedupes by hour (no re-message ever).
+        lastBurstPostAt = nowMs;
         // Newest-first: page bottom carries the newest drop, so the first
-        // replier wins the newest eligible post (sig above is order-free).
+        // replier wins the newest eligible post.
         const ordered = eligible.slice().reverse();
         let res = null;
         try {
@@ -672,8 +658,7 @@
             : ' -> blast ' + dd.sent + '/' + dd.blast.slotsTotal)
           : '';
         const dry = dd.dryRun ? ' (dry-run)' : '';
-        const stale = dd.stale ? ' (' + dd.stale + ' stale skipped)' : '';
-        setStatus(true, 'BURST ' + confirmed + ' eligible' + blast + dry + stale);
+        setStatus(true, 'BURST ' + confirmed + ' eligible' + blast + dry);
         return;
       }
       if (tasks.length === 0) {

@@ -2,8 +2,9 @@
  * Burst eligibility helpers: scan window, in-page filter mirror, lazy-accept
  * picker. Pure module — no env or DB needed.
  */
-import { isBurstActive, filterEligibleIds, pickNextTask, serializePooledTasks, parsePooledTasks } from '../services/automation/eligibility';
+import { isBurstActive, filterEligibleIds, pickNextTask, isMergeAllowed, serializePooledTasks, parsePooledTasks } from '../services/automation/eligibility';
 import { getIstHourStart } from '../utils/ist-time';
+import { AUTOMATION } from '../config/constants';
 
 describe('isBurstActive', () => {
   // Absolute UTC instants (IST = UTC+5:30) — TZ-independent.
@@ -75,6 +76,21 @@ describe('pickNextTask', () => {
   it('returns null when everything is held or empty', () => {
     expect(pickNextTask(['a', 'b'], ['a', 'b'])).toBeNull();
     expect(pickNextTask([], [])).toBeNull();
+  });
+});
+
+describe('isMergeAllowed', () => {
+  const now = new Date('2026-09-11T04:41:00.000Z').getTime();
+  it('allows appends inside the grace, freezes after', () => {
+    expect(isMergeAllowed(new Date(now - 60 * 1000), now)).toBe(true);
+    expect(isMergeAllowed(new Date(now - AUTOMATION.BURST_MERGE_GRACE_MS + 1000), now)).toBe(true);
+    expect(isMergeAllowed(new Date(now - AUTOMATION.BURST_MERGE_GRACE_MS - 1000), now)).toBe(false);
+    expect(isMergeAllowed(new Date(now - 60 * 60 * 1000), now)).toBe(false);
+  });
+
+  it('rejects missing timestamps', () => {
+    expect(isMergeAllowed(null, now)).toBe(false);
+    expect(isMergeAllowed(undefined, now)).toBe(false);
   });
 });
 

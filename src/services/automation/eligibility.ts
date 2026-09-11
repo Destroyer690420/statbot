@@ -1,4 +1,5 @@
 import { normalizeSubreddit } from './subreddit';
+import { AUTOMATION } from '../../config/constants';
 import { IST_OFFSET_MS } from '../../utils/ist-time';
 
 export interface BurstCandidate {
@@ -46,6 +47,41 @@ export function filterEligibleIds(
     out.push(t.subTaskId);
   }
   return out;
+}
+
+/**
+ * New-task diff: eligible ids minus tasks already pooled minus tasks already
+ * held by live claims. Used when growing a blast pool without re-messaging.
+ */
+export function diffNewTasks(
+  eligibleIds: readonly string[],
+  pooledIds: ReadonlySet<string> | readonly string[],
+  heldIds: ReadonlySet<string> | readonly string[],
+): string[] {
+  const pooled = pooledIds instanceof Set ? pooledIds : new Set(pooledIds);
+  const held = heldIds instanceof Set ? heldIds : new Set(heldIds);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of eligibleIds) {
+    if (seen.has(id) || pooled.has(id) || held.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/**
+ * Merge-grace check: streaming completions may join the pool shortly after
+ * the blast opens (same messages, grown slots); later arrivals wait for
+ * next hour. Pure time comparison on the burst's creation instant.
+ */
+export function isMergeAllowed(
+  burstCreatedAt: Date | null | undefined,
+  nowMs: number = Date.now(),
+  graceMs: number = AUTOMATION.BURST_MERGE_GRACE_MS,
+): boolean {
+  if (!burstCreatedAt) return false;
+  return nowMs - burstCreatedAt.getTime() <= graceMs;
 }
 
 /**
