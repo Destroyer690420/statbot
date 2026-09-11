@@ -124,12 +124,16 @@ export async function createBurstFlow(
 ): Promise<BurstResult> {
   const settings = await automationRepository.getSettings();
   const dryRun = settings ? settings.dryRun : true;
+  // Freeze semantics: disabled means disabled — validate + log for
+  // observability, but never blast, never touch real burst rows.
+  const enabled = settings?.enabled ?? false;
+  const live = enabled && !dryRun;
   const inputs = dedupeInputs(tasks);
   const inWindow = isBurstActive();
 
   // One-blast-per-hour guard (live mode only): the settled report already
   // opened the blast — acknowledge it, never re-message, never grow the pool.
-  if (!dryRun) {
+  if (live) {
     const hourBursts = await automationRepository.listBurstsSince(getIstHourStart()).catch(() => []);
     const hourOpen = [...hourBursts].reverse().find((b) => b.status === 'OPEN');
     if (hourOpen) {
@@ -138,11 +142,11 @@ export async function createBurstFlow(
   }
 
   const cycleId = `burst-${new Date().toISOString().slice(0, 16).replace('T', '-')}-${Date.now().toString(36)}`;
-  await automationRepository.createCycle({ id: cycleId, dryRun });
+  await automationRepository.createCycle({ id: cycleId, dryRun: !live });
 
   // Close previous-hour strays WITHOUT unioning (pools freeze; late sets
-  // wait for next hour). Skipped entirely in dry-run (real rows untouched).
-  if (!dryRun) {
+  // wait for next hour). Live mode only — a frozen system touches nothing.
+  if (live) {
     try {
       const openBursts = await automationRepository.listOpenBursts();
       for (const b of openBursts) {
@@ -193,10 +197,10 @@ export async function createBurstFlow(
     AuditAction.AUTOMATION_CYCLE_STARTED,
     null,
     senderId,
-    `Burst ${cycleId} scanned ${candidates.length} task(s): ${fresh.length} fresh eligible, ${stale} stale (dryRun=${dryRun}, inWindow=${inWindow})`,
+    `Burst ${cycleId} scanned ${candidates.length} task(s): ${fresh.length} fresh eligible, ${stale} stale (live=${live}, inWindow=${inWindow})`,
   );
 
-  if (fresh.length === 0 || dryRun || !inWindow) {
+  if (fresh.length === 0 || !live || !inWindow) {
     await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date() });
     return {
       cycleId,
@@ -298,6 +302,13 @@ function serialized<T>(fn: () => Promise<T>): Promise<T> {
 export async function handleBurstReply(blastId: string, channelId: string, workerId: string): Promise<string | null> {
   try {
     return await serialized(async () => {
+      // Freeze semantics: no new claims unless the automation is live
+      // (enabled + dry-run off). In-flight rounds halt at the next reply.
+      const settings = await automationRepository.getSettings().catch(() => null);
+      if (!settings?.enabled || settings.dryRun) {
+        logger.info('Burst reply ignored: automation not live (frozen)', { blastId, channelId });
+        return null;
+      }
       const burst = await automationRepository.getBurstByBlast(blastId).catch(() => null);
       if (!burst || burst.status !== 'OPEN') return null;
 

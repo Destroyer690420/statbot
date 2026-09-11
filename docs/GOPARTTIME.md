@@ -182,6 +182,8 @@ The exact hourly contract (all server-enforced): scan at exactly xx:10 → valid
 
 **Settle-once reporting.** The watcher waits for two consecutive identical scans, POSTs once per hour, and retries the same set until the server confirms the blast (retries are server no-ops). Late sets (e.g. :12–:15 leaks) wait for next hour — pools freeze after the settled report.
 
+**Freeze semantics.** `enabled=false` or dry-run on means validate + log only: no blasts, no burst-row writes, and no new claims from replies (in-flight rounds halt at the next reply). The switches mean what they say.
+
 **Freshness gate.** Only tasks first-seen within `BURST_FRESH_MS` (25 min) blast; older listings are logged `STALE` and excluded; `/burst` upserts sightings so tracks exist. Off-window ticks only sweep claims — blasts open solely in :10–:15 IST.
 
 **One blast per IST hour (anti-spam rule).** The hour's FIRST eligible report opens the blast — each worker is messaged exactly once. Later reports in the same hour only APPEND brand-new task ids to the pool (slots grow, zero new messages); reports with nothing new are silent no-ops (no cycle row). Previous hours' still-open bursts close and union their unheld tasks. If the hour's blast already filled (first-N won, losers' messages deleted), late tasks wait for the next hour's scan. Hour boundaries use IST (`getIstHourStart`), matching the drop schedule. Dry-run never touches real burst rows (validate + log only).
