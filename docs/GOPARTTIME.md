@@ -184,7 +184,7 @@ The exact hourly contract (all server-enforced): scan at exactly xx:10 → valid
 
 **Freeze semantics.** `enabled=false` or dry-run on means validate + log only: no blasts, no burst-row writes, and no new claims from replies (in-flight rounds halt at the next reply). The switches mean what they say.
 
-**Whole-page count.** Every validated-eligible listed post counts toward the blast — blocked / duplicate / unreadable-subreddit / comment rules still exclude, but there is no freshness filter: stale leftovers re-blast hourly, capped at one message per worker per hour by the one-blast dedupe. Accepted tasks never re-blast (duplicate detection).
+**Whole-page count.** Every validated-eligible listed post counts toward the blast — blocked / unreadable-subreddit / comment rules still exclude, but there is deliberately NO duplicate/history filter: listed + available means takeable (an accepted task vanishes from the listing, so history never disqualifies a listed task). The `/assign` 409 backstop still guards double delivery. Leftovers re-blast hourly, capped at one message per worker per hour by the one-blast dedupe.
 
 **Winner visibility.** `GET /cycles/:id` returns per-blast `replies[]` (channel, worker, time); the panel drill-down lists winners under each blast (worker contacts stay empty for bursts — wins live in blast replies).
 

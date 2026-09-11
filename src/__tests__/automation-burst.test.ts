@@ -25,14 +25,13 @@ describe('isBurstActive', () => {
 
 describe('filterEligibleIds', () => {
   const blocked = ['nsfwfun', 'banned_sub'];
-  const recent = ['111'];
 
   it('keeps eligible posts in order', () => {
     const tasks = [
       { subTaskId: '1', type: 'post', subreddit: 'cute' },
       { subTaskId: '2', type: 'post', subreddit: 'alsocute' },
     ];
-    expect(filterEligibleIds(tasks, blocked, recent)).toEqual(['1', '2']);
+    expect(filterEligibleIds(tasks, blocked)).toEqual(['1', '2']);
   });
 
   it('drops posts with no readable subreddit (unblockable)', () => {
@@ -41,10 +40,10 @@ describe('filterEligibleIds', () => {
       { subTaskId: '2', type: 'post', subreddit: '   ' },
       { subTaskId: '3', type: 'post', subreddit: 'ok' },
     ];
-    expect(filterEligibleIds(tasks, blocked, recent)).toEqual(['3']);
+    expect(filterEligibleIds(tasks, blocked)).toEqual(['3']);
   });
 
-  it('drops comments, duplicates, and blocked subreddits', () => {
+  it('drops comments and blocked subreddits but keeps listed tasks regardless of history', () => {
     const tasks = [
       { subTaskId: '10', type: 'comment', subreddit: 'cute' },
       { subTaskId: '111', type: 'post', subreddit: 'cute' },
@@ -52,7 +51,7 @@ describe('filterEligibleIds', () => {
       { subTaskId: '13', type: 'post', subreddit: 'https://www.reddit.com/r/banned_sub/' },
       { subTaskId: '14', type: 'post', subreddit: 'banned_sub2' },
     ];
-    expect(filterEligibleIds(tasks, blocked, recent)).toEqual(['14']);
+    expect(filterEligibleIds(tasks, blocked)).toEqual(['111', '14']);
   });
 
   it('dedupes repeated ids and skips malformed entries', () => {
@@ -63,7 +62,7 @@ describe('filterEligibleIds', () => {
       null,
       undefined,
     ] as never[];
-    expect(filterEligibleIds(tasks, blocked, recent)).toEqual(['5']);
+    expect(filterEligibleIds(tasks, blocked)).toEqual(['5']);
   });
 });
 

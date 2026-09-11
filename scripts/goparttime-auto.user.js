@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.6
+// @version      1.1.7
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,10 @@
 // ==/UserScript==
 
 /**
+ * v1.1.7 - No history filter: every readable non-blocked post is reported
+ * (listed + available means takeable; the server skips duplicates the same
+ * way). Otherwise identical to v1.1.6 below.
+ *
  * v1.1.6 - Settle-deadlock fix: report after two identical scans OR 20s of
  * continuous eligible presence (a churning drop no longer waits forever).
  * Otherwise identical to v1.1.5 below.
@@ -73,7 +77,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.6';
+  const VERSION = '1.1.7';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -396,19 +400,17 @@
    * this only skips the obvious rejects in milliseconds.
    */
   function filterEligible(tasks, bundle) {
+    // JS mirror of server filterEligibleIds: Post-only, readable subreddit,
+    // not blocked. Deliberately NO history check: listed + available means
+    // takeable (an accepted task vanishes from the listing).
     const blocked = {};
-    const recent = {};
     ((bundle && bundle.blocked) || []).forEach((b) => { blocked[b] = true; });
-    ((bundle && bundle.recentIds) || []).forEach((id) => { recent[String(id)] = true; });
     const out = [];
     const seen = {};
     for (const t of tasks || []) {
       if (!t || t.subTaskId === undefined || t.subTaskId === null || seen[t.subTaskId]) continue;
       seen[t.subTaskId] = true;
       if (t.type !== 'post') continue;
-      if (recent[String(t.subTaskId)]) continue;
-      // Mirror of the server validator: a post with no readable subreddit
-      // can never be block-checked, so it is never reported as eligible.
       const n = normalizeSub(t.subreddit);
       if (!n) continue;
       if (blocked[n]) continue;
@@ -443,13 +445,13 @@
     try {
       const res = await request(settings, 'GET', '/eligibility-bundle');
       const data = (res && res.data) || {};
-      bundleCache = { blocked: data.blocked || [], recentIds: data.recentIds || [], at: now };
+      bundleCache = { blocked: data.blocked || [], at: now };
       storageSet('gpt_bundle_json', JSON.stringify(bundleCache));
       return bundleCache;
     } catch (e) {
       console.log('[Auto Watcher] bundle fetch failed, using cache:', e && e.message);
       if (bundleCache) return bundleCache;
-      return { blocked: [], recentIds: [], at: 0 };
+      return { blocked: [], at: 0 };
     }
   }
 

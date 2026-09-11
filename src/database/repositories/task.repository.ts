@@ -121,17 +121,6 @@ export class TaskRepository {
     });
   }
 
-  /** Recent external ids for a source — the eligibility bundle's duplicate filter. */
-  async findRecentExternalIds(source: string, limit = 200): Promise<string[]> {
-    const rows = await getDb().task.findMany({
-      where: { source },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      select: { externalTaskId: true },
-    });
-    return rows.map((r) => r.externalTaskId).filter((id): id is string => !!id);
-  }
-
   async findBySubmittedRedditUrl(url: string) {
     return getDb().task.findFirst({
       where: { submittedRedditUrl: url },

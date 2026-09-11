@@ -32,14 +32,6 @@ export interface BurstResult {
   added: string[];
 }
 
-/** Live-held external ids of a cycle (PENDING/CLAIMED claims). */
-async function liveHeldIds(cycleId: string): Promise<Set<string>> {
-  const claims = await automationRepository.listCycleClaims(cycleId).catch(() => []);
-  return new Set(
-    claims.filter((c) => c.status === 'PENDING' || c.status === 'CLAIMED').map((c) => c.externalTaskId),
-  );
-}
-
 function toDetected(t: BurstTaskInput): DetectedGoPartTimeTask {
   return {
     subTaskId: t.subTaskId,
@@ -72,7 +64,9 @@ async function validateInputs(inputs: BurstTaskInput[], cycleId: string): Promis
   let commentsSkipped = 0;
   for (const t of inputs) {
     const detected = toDetected(t);
-    const v = await validateDetectedTask(detected);
+    // Listed + available means takeable: an accepted task vanishes from the
+    // listing, so history never disqualifies a listed task here.
+    const v = await validateDetectedTask(detected, { skipDuplicate: true });
     await automationRepository.logTask({
       cycleId,
       externalTaskId: detected.subTaskId,
@@ -281,8 +275,13 @@ export async function handleBurstReply(blastId: string, channelId: string, worke
       const burst = await automationRepository.getBurstByBlast(blastId).catch(() => null);
       if (!burst || burst.status !== 'OPEN') return null;
 
-      const held = await liveHeldIds(burst.cycleId);
-      const next = pickNextTask(burst.taskIds, held);
+      // PENDING/CLAIMED are in flight; FAILED was attempted and missed (move
+      // on — never re-queue it). EXPIRED was never attempted: still fair game.
+      const cycleClaims = await automationRepository.listCycleClaims(burst.cycleId).catch(() => []);
+      const taken = new Set(
+        cycleClaims.filter((c) => c.status !== 'EXPIRED').map((c) => c.externalTaskId),
+      );
+      const next = pickNextTask(burst.taskIds, taken);
       if (!next) {
         logger.info('Burst reply: all tasks already held', { blastId, channelId });
         return null;

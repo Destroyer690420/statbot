@@ -19,20 +19,20 @@ export function isBurstActive(now: Date = new Date()): boolean {
 
 /**
  * In-page eligibility mirror of `validateDetectedTask` (server re-validates
- * as the safety net; the DB duplicate check there is authoritative).
+ * as the safety net).
  *  - Post-only (comments never burst)
- *  - subTaskId not in the recent-accepted set (duplicate)
  *  - subreddit must be readable (null-subreddit tasks are rejected server-side
  *    too — they can never be checked against the blocked list)
  *  - normalized subreddit not in the blocked set
+ * Deliberately NO duplicate/history check: listed + available means takeable
+ * (an accepted task vanishes from the listing, so history never disqualifies
+ * a listed task); the /assign 409 backstop still guards double delivery.
  */
 export function filterEligibleIds(
   tasks: BurstCandidate[],
   blocked: ReadonlySet<string> | readonly string[],
-  recentIds: ReadonlySet<string> | readonly string[],
 ): string[] {
   const blockedSet = blocked instanceof Set ? blocked : new Set(blocked);
-  const recentSet = recentIds instanceof Set ? recentIds : new Set(recentIds);
   const out: string[] = [];
   const seen = new Set<string>();
   for (const t of tasks) {
@@ -40,7 +40,6 @@ export function filterEligibleIds(
     if (seen.has(t.subTaskId)) continue;
     seen.add(t.subTaskId);
     if (t.type !== 'post') continue;
-    if (recentSet.has(t.subTaskId)) continue;
     const normalized = normalizeSubreddit(t.subreddit);
     if (!normalized) continue;
     if (blockedSet.has(normalized)) continue;

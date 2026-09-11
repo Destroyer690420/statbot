@@ -9,7 +9,7 @@ import { scanTasks, acceptTask } from '../../services/automation/poller.service'
 import { runCycle } from '../../services/automation/cycle.service';
 import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
 import { createBurstFlow } from '../../services/automation/burst.service';
-import { parsePooledTasks } from '../../services/automation/eligibility';
+import { parsePooledTasks, pickNextTask } from '../../services/automation/eligibility';
 import { outreachService, DAILY_POST_CAP } from '../../services/outreach.service';
 import { isAtDailyCap } from '../../utils/outreach-blast';
 import { getIstDayBoundaries } from '../../utils/ist-time';
@@ -18,7 +18,7 @@ import { extensionAuth } from '../middleware/extensionAuth';
 import { validateBody } from '../middleware/validate';
 import { auditLogService } from '../../services/audit.service';
 import { AuditAction } from '../../types';
-import { GOPARTTIME_SOURCE } from '../../config/constants';
+import { GOPARTTIME_SOURCE, AUTOMATION } from '../../config/constants';
 import { getAllAdminIds } from '../../utils/permissions';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
@@ -715,20 +715,19 @@ export default function createAutomationRoutes(discordClient: Client): Router {
 
   /**
    * GET /api/v1/automation/eligibility-bundle — cached eligibility data for
-   * the watcher's in-page filter (blocked subreddits + recently accepted
-   * external ids). The server re-validates everything on /burst; this bundle
-   * only lets the browser skip the obvious rejects in milliseconds.
+   * the watcher's in-page filter (blocked subreddits). The server re-validates
+   * everything on /burst; this bundle only lets the browser skip the obvious
+   * rejects in milliseconds. No history is shipped: listed + available means
+   * takeable, so the browser reports everything readable.
    */
   router.get('/eligibility-bundle', async (_req: Request, res: Response): Promise<void> => {
     try {
       const blocked = await automationRepository.listBlocked();
-      const recentIds = await taskRepository.findRecentExternalIds(GOPARTTIME_SOURCE, 200);
       res.json({
         success: true,
         data: {
           version: 1,
           blocked: blocked.map((b) => b.subreddit),
-          recentIds,
         },
       });
     } catch (error) {
@@ -921,8 +920,53 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           AuditAction.AUTOMATION_TASK_FAILED, null, 'companion',
           `Task ${claim.externalTaskId} failed via companion: ${reason}`,
         );
+        // Move on: the worker replied but this task failed — queue them for
+        // the next unheld task instead of abandoning a willing winner. Each
+        // iteration excludes one more task id, so this chain terminates.
+        let retried: { claimId: string; externalTaskId: string } | null = null;
+        try {
+          const workerId = claim.workerId;
+          const bursts = await automationRepository.listBurstsByCycle(claim.cycleId);
+          const open = bursts.find((b) => b.status === 'OPEN');
+          if (open && workerId && claim.channelId) {
+            const cycleClaims = await automationRepository.listCycleClaims(claim.cycleId).catch(() => []);
+            const taken = new Set(
+              cycleClaims.filter((c) => c.status !== 'EXPIRED').map((c) => c.externalTaskId),
+            );
+            const next = pickNextTask(open.taskIds, taken);
+            if (next) {
+              const busy = await taskRepository.findAwaitingSubmissionInChannel(claim.channelId).catch(() => null);
+              const { dayStart, dayEnd } = getIstDayBoundaries();
+              const assignedToday = await outreachService
+                .countPostsAssignedToday(workerId, dayStart, dayEnd)
+                .catch(() => DAILY_POST_CAP);
+              if (!busy && !isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+                const follow = await automationRepository.createClaim({
+                  cycleId: claim.cycleId,
+                  externalTaskId: next,
+                  channelId: claim.channelId,
+                  workerId,
+                  expiresAt: new Date(Date.now() + AUTOMATION.BURST_CLAIM_TTL_MS),
+                });
+                await automationRepository.logTask({
+                  cycleId: claim.cycleId,
+                  externalTaskId: next,
+                  taskType: 'post',
+                  subreddit: null,
+                  status: 'ELIGIBLE',
+                  workerId,
+                  failureReason: `Retry for ${workerId} after ${claim.externalTaskId} failed: ${reason}`,
+                });
+                logger.info('Burst retry claim queued', { claimId: follow.id, task: next, channelId: claim.channelId });
+                retried = { claimId: follow.id, externalTaskId: next };
+              }
+            }
+          }
+        } catch {
+          // best-effort; the failure itself is already recorded above
+        }
+        res.json({ success: true, data: { recorded: true, retried: retried !== null, ...(retried || {}) } });
       }
-      res.json({ success: true, data: { recorded: true } });
     } catch (error) {
       logger.warn('POST /automation/claims/:id/result failed', { error });
       res.status(500).json({ success: false, message: 'Internal server error.' });
