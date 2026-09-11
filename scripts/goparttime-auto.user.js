@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.5
+// @version      1.1.6
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,10 @@
 // ==/UserScript==
 
 /**
+ * v1.1.6 - Settle-deadlock fix: report after two identical scans OR 20s of
+ * continuous eligible presence (a churning drop no longer waits forever).
+ * Otherwise identical to v1.1.5 below.
+ *
  * v1.1.5 - Settle-once-per-hour reporting + :10 sharp window: waits for two
  * consecutive identical scans, POSTs once per hour, retries the same set
  * until the server confirms the blast (retries are server no-ops). Window
@@ -69,7 +73,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.5';
+  const VERSION = '1.1.6';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -94,6 +98,11 @@
   let burstConfirmed = false;
   let lastBurstPostAt = 0;
   const BURST_RETRY_MS = 30000;
+  // Settle grace: a live drop churns constantly, so two identical scans may
+  // never happen back-to-back. Report the current set once eligible tasks
+  // have been continuously present for this long (deadlock-proof).
+  const BURST_SETTLE_MS = 20000;
+  let firstEligibleAt = 0;
 
   function burstHourKey(now) {
     const d = now || new Date();
@@ -594,6 +603,7 @@
           burstConfirmed = false;
           prevBurstSig = '';
           lastBurstSig = '';
+          firstEligibleAt = 0;
         }
         if (reportedHour === hourKey && burstConfirmed) {
           setStatus(true, 'BURST reported this hour');
@@ -603,6 +613,7 @@
         const eligible = filterEligible(tasks, bundle);
         if (eligible.length === 0) {
           prevBurstSig = '';
+          firstEligibleAt = 0;
           setStatus(true, 'BURST scanning (' + source + ')...');
           return;
         }
@@ -611,12 +622,19 @@
           .sort()
           .join(',');
         if (sig !== prevBurstSig) {
-          // Listing still settling (or first sighting) - wait for two
-          // consecutive identical scans before the single hourly report.
           prevBurstSig = sig;
-          setStatus(true, 'BURST ' + eligible.length + ' found, confirming...');
-          return;
+          if (!firstEligibleAt) firstEligibleAt = Date.now();
+          if (Date.now() - firstEligibleAt < BURST_SETTLE_MS) {
+            // Listing still settling (or first sighting) and grace not
+            // exceeded - wait for two consecutive identical scans before the
+            // single hourly report.
+            setStatus(true, 'BURST ' + eligible.length + ' found, confirming...');
+            return;
+          }
+          // Grace exceeded on a churning listing: report the current set
+          // anyway instead of deadlocking (server dedupes + freezes pool).
         }
+        // Settled (two identical scans) or grace exceeded: report once.
         if (Date.now() - lastBurstPostAt < BURST_RETRY_MS) {
           setStatus(true, 'BURST send failed, retrying...');
           return;
