@@ -250,6 +250,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-11**: **DEPLOYED monitor anti-wedge** (`161.118.164.85`) at commit `4a44bfc` (dashboard-only rebuild; pushed to GitHub; host + local bundles/scratch cleaned). Fixed frozen-pill wedge (stalled fetch, stuck tick). Watcher v1.1.10 served. Verified: node --check, ASCII/hash/harness clean.
+
 - **2026-09-11**: **DEPLOYED 17:10 hardening** (`161.118.164.85`) at commit `05c0cfa` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). :10–:16 window, adaptive countdown, limiter exemptions. Watcher v1.1.9 served. Verified: health healthy, boot clean, 247/247 jest.
 
 - **2026-09-11**: **DEPLOYED deadlock-proof reporting + merge grace** (`161.118.164.85`) at commit `e2b7e76` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Fixed 45s report, hourly retry, 5-min append grace. Watcher v1.1.8 served. Verified: health healthy, boot clean, 247/247 jest (19 suites).
