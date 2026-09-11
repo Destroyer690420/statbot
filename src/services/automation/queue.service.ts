@@ -82,6 +82,10 @@ export async function processSightingQueue(discordClient: Client): Promise<strin
   const sightings = await automationRepository.listNewSightings(freshSince).catch(() => []);
   const usable = sightings
     .filter((s) => (s.taskType === 'post' || s.taskType === 'comment') && /^\d+$/.test(s.externalTaskId))
+    // Newest-first: sightings arrive oldest-first; the pool must prioritize
+    // the newest drop (page bottom), newest 20 win the slice.
+    .slice()
+    .reverse()
     .slice(0, 20);
   // Park malformed rows so they are never retried.
   const malformed = sightings.filter((s) => !usable.includes(s)).map((s) => s.id);

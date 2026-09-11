@@ -9,6 +9,7 @@ import { scanTasks, acceptTask } from '../../services/automation/poller.service'
 import { runCycle } from '../../services/automation/cycle.service';
 import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
 import { createBurstFlow } from '../../services/automation/burst.service';
+import { parsePooledTasks } from '../../services/automation/eligibility';
 import { outreachService, DAILY_POST_CAP } from '../../services/outreach.service';
 import { isAtDailyCap } from '../../utils/outreach-blast';
 import { getIstDayBoundaries } from '../../utils/ist-time';
@@ -784,6 +785,19 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         res.json({ success: true, data: { claim: null } });
         return;
       }
+      // Expected subreddit for the browser's drawer ground-truth check
+      // (aborts the accept on mismatch — never accept on a heuristic miss).
+      let claimSubreddit: string | null = null;
+      try {
+        const bursts = await automationRepository.listBurstsByCycle(claim.cycleId);
+        const latest = bursts[bursts.length - 1];
+        if (latest) {
+          const details = parsePooledTasks(latest.taskDetails, latest.taskIds);
+          claimSubreddit = details.find((d) => d.id === claim.externalTaskId)?.subreddit ?? null;
+        }
+      } catch {
+        // leave null — the browser skips the check without an expectation
+      }
       res.json({
         success: true,
         data: {
@@ -794,6 +808,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
             channelId: claim.channelId,
             ticket: claim.channelId,
             workerId: claim.workerId,
+            subreddit: claimSubreddit,
             createdAt: claim.createdAt,
             expiresAt: claim.expiresAt,
           },

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.3
+// @version      1.1.4
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+ * v1.1.4 - Subreddit reader fix + newest-first: windowed parent association
+ * (bounded by the next task, no parent-key guessing), newest eligible first
+ * in burst reports, drawer ground-truth check aborts on subreddit mismatch.
+ * Otherwise identical to v1.1.3 below.
+ *
  * v1.1.3 - Blocked-list enforcement: posts with no readable subreddit are
  * never reported as eligible (server rejects them too); wider subreddit
  * extraction window + post_link fallback for all types; bundle refreshes
@@ -59,7 +64,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.3';
+  const VERSION = '1.1.4';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -453,44 +458,67 @@
     }
   }
 
+  // Windowed field readers (mirror of server parser.ts): search only near the
+  // matched sub_task, bounded by the next task so dense lists never mix up
+  // neighbors. Never search by parent key name (it varies: task/detail/...).
+
+  function extractSubWindow(window) {
+    try {
+      const nm = /\\{1,2}"subreddit(?:_name)?\\{1,2}":\s*\\{1,2}"([A-Za-z0-9_ ]+?)\\{1,2}"/.exec(window);
+      if (nm && nm[1].trim()) return nm[1].trim();
+      const lb = /\\{1,2}"(?:post_link|reddit_url)\\{1,2}":\s*\\{1,2}"(.*?)\\{1,2}"/.exec(window);
+      if (lb) {
+        const sm = /reddit\.com\/r\/([A-Za-z0-9_]+)/i.exec(lb[1]);
+        if (sm) return sm[1];
+      }
+    } catch (e) { /* keep null */ }
+    return null;
+  }
+
+  function extractTitleWindow(window) {
+    try {
+      const tm = /\\{1,2}"title\\{1,2}":\s*\\{1,2}"((?:[^\\]|\\.)*?)\\{1,2}"/.exec(window);
+      if (tm) return tm[1].replace(/\\u003c/gi, '<').replace(/\\u003e/gi, '>').slice(0, 300) || null;
+    } catch (e) { /* keep null */ }
+    return null;
+  }
+
   function parseAvailableTasks(html) {
+    // Returns DOM order (top = oldest). Callers reverse for newest-first
+    // priority; index-matching here must stay in DOM order.
     const out = [];
     const seen = {};
     // sub_task blocks use backslash-escaped quotes inside script payloads.
     const re = /\\{1,2}"sub_task\\{1,2}":\{\\{1,2}"id\\{1,2}":(\d+),\\{1,2}"type\\{1,2}":\\{1,2}"(post|comment)\\{1,2}",\\{1,2}"status\\{1,2}":(\d+),\\{1,2}"task_id\\{1,2}":(\d+)[\s\S]{0,2000}?\\{1,2}"grab_user_id\\{1,2}":(\d+)/g;
+    const hits = [];
     let m = null;
     while ((m = re.exec(html)) !== null) {
-      const subId = m[1];
-      const type = m[2];
-      const status = Number(m[3]);
-      const taskId = m[4];
-      const grab = Number(m[5]);
-      if (seen[subId]) continue;
-      seen[subId] = true;
+      if (seen[m[1]]) continue;
+      seen[m[1]] = true;
+      hits.push({ m: m, index: m.index });
+    }
+    const markerRe = /\\{1,2}"sub_task\\{1,2}":\{/g;
+    const starts = [];
+    let sm = null;
+    while ((sm = markerRe.exec(html)) !== null) starts.push(sm.index);
+    for (const hit of hits) {
+      const subId = hit.m[1];
+      const type = hit.m[2];
+      const status = Number(hit.m[3]);
+      const grab = Number(hit.m[5]);
       if (status !== 0 || grab !== 0) continue; // only unclaimed, available tasks
-
-      let subreddit = null;
-      let title = null;
-      try {
-        const qb = '\\\\{1,2}"';
-        const taskRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,8000}?' + qb + 'subreddit_name' + qb + ':' + qb + '([A-Za-z0-9_ ]*?)' + qb);
-        const tb = taskRe.exec(html);
-        if (tb) {
-          subreddit = tb[1] || null;
-          const titleRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,6000}?' + qb + 'title' + qb + ':' + qb + '((?:[^\\\\]|\\\\.)*?)' + qb);
-          const tt = titleRe.exec(html);
-          if (tt) title = tt[1].replace(/\\u003c/gi, '<').replace(/\\u003e/gi, '>').slice(0, 300) || null;
+      const idx = hit.index;
+      let nextStart = idx + 12000;
+      for (const s of starts) {
+        if (s > idx) {
+          nextStart = s;
+          break;
         }
-        if (!subreddit) {
-          const linkRe = new RegExp(qb + 'task' + qb + ':\\{' + qb + 'id' + qb + ':' + taskId + ',[\\s\\S]{0,8000}?' + qb + 'post_link' + qb + ':' + qb + '(.*?)' + qb);
-          const lb = linkRe.exec(html);
-          if (lb) {
-            const sm = /reddit\.com\/r\/([A-Za-z0-9_]+)/i.exec(lb[1]);
-            if (sm) subreddit = sm[1];
-          }
-        }
-      } catch (e) { /* keep nulls */ }
-
+      }
+      const after = html.slice(idx, Math.min(nextStart, idx + 12000));
+      const before = html.slice(Math.max(0, idx - 4000), idx);
+      const subreddit = extractSubWindow(after) || extractSubWindow(before);
+      const title = extractTitleWindow(after) || extractTitleWindow(before);
       out.push({ subTaskId: Number(subId), type, subreddit, title });
     }
     return out;
@@ -555,10 +583,13 @@
           return;
         }
         lastBurstSig = sig;
+        // Newest-first: page bottom carries the newest drop, so the first
+        // replier wins the newest eligible post (sig above is order-free).
+        const ordered = eligible.slice().reverse();
         const res = await request(settings, 'POST', '/burst', {
           companionId: getCompanionId(),
           version: VERSION,
-          tasks: eligible,
+          tasks: ordered,
         });
         const confirmed = res && res.data && res.data.eligible ? res.data.eligible.length : eligible.length;
         const dd = (res && res.data) || {};
@@ -963,7 +994,21 @@
       return;
     }
 
-    // 3. Accept: fast Server Action POST first, drawer Confirm as fallback.
+    // 3. Ground-truth check: the open drawer shows the REAL subreddit. If it
+    // disagrees with the claim's expected subreddit, abort - never accept a
+    // possibly-blocked task on a heuristic mismatch.
+    try {
+      const expectedSub = normalizeSub(claim.subreddit);
+      const gotSub = normalizeSub(detail.subreddit);
+      if (expectedSub && gotSub && expectedSub !== gotSub) {
+        closeOpenDrawer();
+        await reportClaim(settings, claim, false, 'Subreddit mismatch (expected r/' + expectedSub + ', drawer shows r/' + gotSub + ') - aborted for safety.');
+        setStatus(false, 'claim #' + subTaskId + ' aborted: subreddit mismatch');
+        return;
+      }
+    } catch (e) { /* fall through to accept on check failure */ }
+
+    // 4. Accept: fast Server Action POST first, drawer Confirm as fallback.
     // The detail is already extracted above, so a fast accept needs no drawer.
     let accepted = false;
     let acceptError = null;
