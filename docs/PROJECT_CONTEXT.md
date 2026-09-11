@@ -250,7 +250,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-11**: **IMPLEMENTED blocked enforcement + claim throughput (NOT yet deployed)**. Fail-closed: null-subreddit posts never eligible; pooled bursts persist per-task subreddits (`taskDetails` DDL — apply at deploy); watcher parse hardened + 15-min bundle; 10-min claim TTL; orphan-claim sweep; late verdicts recorded. Watcher v1.1.3. Verified: typecheck + build clean, 245/245 jest.
+- **2026-09-11**: **DEPLOYED blocked enforcement + claim throughput** (`161.118.164.85`) at commit `fd0f86d` (app + dashboard rebuild; pushed to GitHub; migration excerpt applied: `taskDetails`; no slash-command redeploy; host + local bundles/scratch cleaned). Fail-closed null-subreddit rejection; pooled subreddits; 10-min TTL; orphan sweep; late verdicts. Watcher v1.1.3 served. Verified: health healthy, boot clean, 245/245 jest.
 
 - **2026-09-11**: **DEPLOYED one-blast-per-hour anti-spam** (`161.118.164.85`) at commit `e50d2f6` (app + dashboard rebuild; pushed to GitHub; no DB migration — schema unchanged; no slash-command redeploy; host + local bundles/scratch cleaned). One message per worker per hour; later reports merge silently; watcher v1.1.2 served. Verified: health healthy, boot "All systems online!", merge code in live `dist/`, 242/242 jest.
 
