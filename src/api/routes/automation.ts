@@ -107,6 +107,8 @@ const burstSchema = z.object({
   companionId: z.string().max(64).optional().nullable(),
   version: z.string().max(16).optional().nullable(),
   tasks: z.array(burstTaskSchema).max(20),
+  /** Manual Blast Now: explicit human intent — bypasses the window gate only. */
+  force: z.boolean().optional().default(false),
 });
 
 export default function createAutomationRoutes(discordClient: Client): Router {
@@ -737,11 +739,13 @@ export default function createAutomationRoutes(discordClient: Client): Router {
   });
 
   /**
-   * POST /api/v1/automation/burst — watcher's settled hourly scan report.
-   * Server re-validates every task (Post/duplicate/blocked + readable
-   * subreddit), then opens the hour's single blast — or acknowledges an
-   * existing one without messaging. Every validated-eligible listed post
-   * counts toward the blast. In dry-run: validates + logs only, no blast.
+   * POST /api/v1/automation/burst — watcher's settled hourly scan report, or
+   * a manual Blast Now (force:true bypasses the window gate only — the live
+   * gate, validation, and one-blast-per-hour dedupe still apply).
+   * Server re-validates every task (Post/blocked + readable subreddit; listed
+   * means takeable, no history filter), then opens the hour's single blast —
+   * or acknowledges an existing one without messaging. In dry-run: validates
+   * + logs only, no blast. Always explains itself via `reason` when no blast.
    */
   router.post('/burst', validateBody(burstSchema), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -755,7 +759,9 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           title: t.title || null,
         }),
       );
-      const result = await createBurstFlow(discordClient, tasks, 'burst');
+      const result = await createBurstFlow(discordClient, tasks, 'burst', {
+        forceWindow: req.body.force === true,
+      });
       res.json({
         success: true,
         data: {
@@ -774,6 +780,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           dryRun: result.dryRun,
           merged: result.merged,
           added: result.added,
+          reason: result.reason,
         },
       });
     } catch (error) {

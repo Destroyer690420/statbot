@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.1.10
+// @version      1.2.0
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+ * v1.2.0 - Blast Now button (bottom-right, above the gear): manual immediate
+ * round on /tasks - scans, blasts for the eligible count (server force
+ * bypasses only the window gate), winners served exactly like hourly rounds.
+ * Otherwise identical to v1.1.10 below.
+ *
  * v1.1.10 - Anti-wedge: hard timeouts on all page fetches (a stalled load
  * froze the monitor with the pill stuck) + claim-loop watchdog that force
  * recovers a tick unfinished after 90s. Otherwise identical to v1.1.9 below.
@@ -89,7 +94,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.10';
+  const VERSION = '1.2.0';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -382,6 +387,103 @@
       else gearEl.onclick = open;
       document.body.appendChild(gearEl);
     } catch (e) { /* never break loops for settings UI */ }
+  }
+
+  // --- On-page Blast Now button (manual immediate round) ---
+  // Scans the whole listing, blasts for the eligible count, and serves
+  // winners exactly like the hourly round (server force-bypasses only the
+  // window gate). One click = one decision; double-clicks are ignored while
+  // a manual round is in flight, and the hourly dedupe prevents doubles.
+
+  let blastEl = null;
+  let manualBusy = false;
+
+  function ensureBlastButton() {
+    try {
+      if (blastEl || !document.body) return;
+      blastEl = document.createElement('button');
+      blastEl.id = 'gpt-blast-now';
+      blastEl.type = 'button';
+      blastEl.title = 'Scan now + blast eligible posts to workers';
+      blastEl.textContent = '\u26A1 Blast Now';
+      blastEl.style.position = 'fixed';
+      blastEl.style.right = '16px';
+      blastEl.style.bottom = '54px';
+      blastEl.style.zIndex = '2147483647';
+      blastEl.style.height = '30px';
+      blastEl.style.padding = '0 12px';
+      blastEl.style.borderRadius = '8px';
+      blastEl.style.border = 'none';
+      blastEl.style.background = 'rgba(180, 60, 10, 0.92)';
+      blastEl.style.color = '#fff';
+      blastEl.style.fontSize = '13px';
+      blastEl.style.fontWeight = 'bold';
+      blastEl.style.lineHeight = '1';
+      blastEl.style.cursor = 'pointer';
+      const fire = (ev) => {
+        try {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          if (ev && ev.preventDefault) ev.preventDefault();
+        } catch (e) { /* ignore */ }
+        manualBurst();
+      };
+      if (blastEl.addEventListener) blastEl.addEventListener('click', fire, true);
+      else blastEl.onclick = fire;
+      document.body.appendChild(blastEl);
+    } catch (e) { /* never break loops for settings UI */ }
+  }
+
+  async function manualBurst() {
+    if (manualBusy) return;
+    const settings = getSettings();
+    if (!settings.apiKey) {
+      try { alert('Set the API key first (gear icon, bottom-right).'); } catch (e) {}
+      return;
+    }
+    if (!/^\/tasks\/?$/.test(window.location.pathname)) {
+      try { alert('Open /tasks first, then press Blast Now.'); } catch (e) {}
+      return;
+    }
+    manualBusy = true;
+    try {
+      setStatus(true, 'manual scan...');
+      let html = await fetchPageHtml();
+      let source = 'fetch';
+      if (!html) {
+        html = domHtml();
+        source = 'dom';
+      }
+      const tasks = parseAvailableTasks(html || '');
+      if (tasks.length === 0) {
+        setStatus(false, 'manual: no tasks parsed (' + source + ')');
+        return;
+      }
+      const bundle = await getBundle(settings);
+      const eligible = filterEligible(tasks, bundle);
+      if (eligible.length === 0) {
+        setStatus(false, 'manual: 0 eligible (blocked / taken / unreadable)');
+        return;
+      }
+      const ordered = eligible.slice().reverse();
+      const res = await request(settings, 'POST', '/burst', {
+        companionId: getCompanionId(),
+        version: VERSION,
+        tasks: ordered,
+        force: true,
+      });
+      const dd = (res && res.data) || {};
+      if (!res || !res.success) throw new Error((dd && dd.message) || 'burst failed');
+      if (dd.blast) {
+        setStatus(true, 'manual blast ' + dd.sent + '/' + dd.blast.slotsTotal + ' - winners reply to claim');
+      } else {
+        setStatus(false, 'manual: ' + (dd.reason || 'no blast opened'));
+      }
+    } catch (e) {
+      setStatus(false, String((e && e.message) || e).slice(0, 80));
+      console.log('[Auto Watcher] manual burst failed:', e && e.message);
+    } finally {
+      manualBusy = false;
+    }
   }
 
   function withJitter(ms) {
@@ -1221,6 +1323,7 @@
 
   if (watcherEnabled()) {
     ensureSettingsGear();
+    ensureBlastButton();
     monitorLoop();
     claimLoop();
   }

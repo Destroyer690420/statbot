@@ -115,7 +115,7 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 |---|---|---|---|---|
 | POST | `/automation/sightings` | Watcher task-list snapshot (upserts + heartbeat) | `{ companionId?, version?, tasks: [{ subTaskId, type: post\|comment, subreddit?, title? }] ≤100 }` | 400 |
 | GET | `/automation/eligibility-bundle` | Cached in-page filter data (blocked subreddits) | — | 500 |
-| POST | `/automation/burst` | Eligible scan report → server re-validates → auto-blast (slots = eligible); dry-run validates only | `{ companionId?, version?, tasks: [{ subTaskId, type, subreddit?, title? }] ≤20 }` | 400 |
+| POST | `/automation/burst` | Settled scan report → validate → open/merge hour blast (or explain via `reason`) | `{ companionId?, version?, tasks ≤20, force? }` — force bypasses the window gate only | 400 |
 | GET | `/automation/claims/pending?companionId&version` | Oldest actionable claim (also heartbeat) | — | 500 |
 | POST | `/automation/claims/:id/result` | In-page accept verdict | `{ ok, failureReason? }` | 404 resolved; 410 expired; 500 |
 

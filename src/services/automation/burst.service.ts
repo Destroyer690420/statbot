@@ -30,6 +30,8 @@ export interface BurstResult {
   merged: boolean;
   /** Task ids actually added to the pool by this report. */
   added: string[];
+  /** Human-readable why-no-blast (null when a blast opened). */
+  reason: string | null;
 }
 
 /** Live-held external ids of a cycle (PENDING/CLAIMED claims). */
@@ -120,15 +122,18 @@ export async function createBurstFlow(
   discordClient: Client,
   tasks: BurstTaskInput[],
   senderId: string | null,
+  opts: { forceWindow?: boolean } = {},
 ): Promise<BurstResult> {
   const settings = await automationRepository.getSettings();
   const dryRun = settings ? settings.dryRun : true;
   // Freeze semantics: disabled means disabled — validate + log for
   // observability, but never blast, never touch real burst rows.
+  // Manual Blast Now (forceWindow) is explicit human intent: it bypasses the
+  // window gate, never the live gate.
   const enabled = settings?.enabled ?? false;
   const live = enabled && !dryRun;
   const inputs = dedupeInputs(tasks);
-  const inWindow = isBurstActive();
+  const inWindow = isBurstActive() || !!opts.forceWindow;
 
   // One-blast-per-hour guard (live mode only): the settled report already
   // opened the blast — join it only inside the merge grace, never re-message.
@@ -171,10 +176,14 @@ export async function createBurstFlow(
     AuditAction.AUTOMATION_CYCLE_STARTED,
     null,
     senderId,
-    `Burst ${cycleId} scanned ${candidates.length} task(s): ${eligible.length} eligible (live=${live}, inWindow=${inWindow})`,
+    `Burst ${cycleId} scanned ${candidates.length} task(s): ${eligible.length} eligible (live=${live}, inWindow=${inWindow}${opts.forceWindow ? ', forced' : ''})`,
   );
 
-  if (eligible.length === 0 || !live || !inWindow) {
+  let reason: string | null = null;
+  if (eligible.length === 0) reason = 'no eligible tasks found';
+  else if (!live) reason = dryRun ? 'dry-run is on' : 'automation disabled';
+  else if (!inWindow) reason = 'outside the blast window';
+  if (reason) {
     await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date() });
     return {
       cycleId,
@@ -188,6 +197,7 @@ export async function createBurstFlow(
       dryRun,
       merged: false,
       added: [],
+      reason,
     };
   }
 
@@ -217,6 +227,7 @@ export async function createBurstFlow(
     dryRun,
     merged: false,
     added: eligible.map((t) => t.subTaskId),
+    reason: null,
   };
 }
 
@@ -244,13 +255,16 @@ async function mergeIntoHourBurst(
     dryRun: false,
     merged: true,
     added: [],
+    reason: null,
   };
 
   const allBursts = await automationRepository.listBurstsSince(new Date(0)).catch(() => []);
   const burst = allBursts.find((b) => b.id === burstId);
   if (!burst || burst.status !== 'OPEN') return empty;
   const blast = await outreachRepository.getBlast(burst.blastId).catch(() => null);
-  if (!blast || blast.status !== 'OPEN') return { ...empty, cycleId: burst.cycleId };
+  if (!blast || blast.status !== 'OPEN') {
+    return { ...empty, cycleId: burst.cycleId, reason: 'hour blast already closed' };
+  }
 
   // Grace-boxed append: streaming completions only.
   if (!isMergeAllowed(burst.createdAt, Date.now(), AUTOMATION.BURST_MERGE_GRACE_MS)) {
@@ -319,6 +333,7 @@ async function mergeIntoHourBurst(
     dryRun: false,
     merged: true,
     added,
+    reason: null,
   };
 }
 
