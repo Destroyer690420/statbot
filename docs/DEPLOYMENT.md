@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-10 — Pending Invites removal live at git HEAD `bcab738`** (app + dashboard rebuild, backup `rtm-backup-20260910-bcab738.tar.gz`; pushed to GitHub; verified: health healthy, boot clean, dashboard 200 with no Pending Invites in the served bundle, 232/232 jest). Previous: Invite auto-approve (`13823d6`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-12 — Format auto-check live at git HEAD `4d8cd87`** (app + dashboard rebuild, backup `rtm-backup-20260912-formatchk.tar.gz`; migration excerpt applied: `formatCheckStatus/Detail/CheckedAt`; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200 with served bundle `index-D8JG9sSP.js` (hash matches local build, `recheck-format` present), `formatSubmissionReply` + `recheck-format` in live `dist/`, 9/9 new jest locally). Previous: Pending Invites removal (`bcab738`).
 
 ---
 
