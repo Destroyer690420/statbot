@@ -4,6 +4,7 @@ import { auditLogService } from './audit.service';
 import { getIstDayBoundaries, isStaleDailyCycle } from '../utils/ist-time';
 import { buildOutreachRows, formatOutreachMessage, OutreachRowInput, OutreachRow, TicketTaskStatus } from '../utils/outreach-rows';
 import { isBlastFull, isAtDailyCap } from '../utils/outreach-blast';
+import { createSerialQueue } from '../utils/serial-queue';
 import { DEFAULT_OUTREACH_MESSAGE } from '../config/constants';
 import { AuditAction } from '../types';
 import { getAllAdminIds } from '../utils/permissions';
@@ -45,6 +46,13 @@ export interface BlastHooks {
 
 class OutreachService {
   private blastHooks: BlastHooks = {};
+  /**
+   * Serializes worker-message handling in Discord-arrival order. The chain
+   * link happens synchronously here (no awaits before it), so near-simultaneous
+   * blast replies are recorded — and claimed — strictly first-reply-first,
+   * never in DB-race order.
+   */
+  private workerMessageQueue = createSerialQueue();
 
   /**
    * Registers automation hooks for blast events. Set once at boot (see
@@ -263,12 +271,18 @@ class OutreachService {
 
   /**
    * Bot hook: a worker messaged their ticket. Always maintains the daily
-   * Available flag; when a blast is open, the first `slotsTotal` repliers
-   * (under the daily cap) win, and on fill the blast closes with its message
-   * deleted from every other contacted ticket. Manager and bot messages never
-   * count. Best-effort — never throws into message handling.
+   * Available flag; when a blast is open, replies are served strictly in
+   * arrival order (one win per worker per blast) and the first `slotsTotal`
+   * distinct repliers win, each taking exactly one claim. On fill the blast
+   * closes with its message deleted from every other contacted ticket.
+   * Manager and bot messages never count. Best-effort — never throws into
+   * message handling.
    */
   async onWorkerMessage(channelId: string, userId: string, discordClient?: Client): Promise<void> {
+    return this.workerMessageQueue(() => this.processWorkerMessage(channelId, userId, discordClient));
+  }
+
+  private async processWorkerMessage(channelId: string, userId: string, discordClient?: Client): Promise<void> {
     try {
       if (getAllAdminIds().includes(userId)) return;
 
@@ -293,6 +307,21 @@ class OutreachService {
       const assignedToday = await this.countPostsAssignedToday(userId, dayStart, dayEnd);
       if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
         logger.info('Blast reply ignored: worker at daily cap', { channelId, userId, blastId: blast.id });
+        return;
+      }
+
+      // Busy tickets never consume slots: recording first and skipping the
+      // claim later burns a slot with no task (ghost win). Same for workers
+      // that already won in this blast — one win each, so a worker with two
+      // tickets can never take two tasks from one burst.
+      const awaiting = await taskRepository.findAwaitingSubmissionInChannel(channelId).catch(() => null);
+      if (awaiting) {
+        logger.info('Blast reply ignored: ticket busy', { channelId, userId, blastId: blast.id });
+        return;
+      }
+      const alreadyWon = await outreachRepository.hasWorkerReplied(blast.id, userId).catch(() => false);
+      if (alreadyWon) {
+        logger.info('Blast reply ignored: worker already won this blast', { channelId, userId, blastId: blast.id });
         return;
       }
 

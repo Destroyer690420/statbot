@@ -370,6 +370,17 @@ export async function handleBurstReply(blastId: string, channelId: string, worke
       // PENDING/CLAIMED are in flight; FAILED was attempted and missed (move
       // on — never re-queue it). EXPIRED was never attempted: still fair game.
       const cycleClaims = await automationRepository.listCycleClaims(burst.cycleId).catch(() => []);
+      // One task per winner per burst: intake already enforces one win each,
+      // but a second reply reaching here directly must never double-claim.
+      // A new burst is a new cycle, so second tasks only ever come from a
+      // later burst — never twice from the same one.
+      const alreadyHeld = cycleClaims.some(
+        (c) => c.workerId === workerId && (c.status === 'PENDING' || c.status === 'CLAIMED'),
+      );
+      if (alreadyHeld) {
+        logger.info('Burst reply ignored: worker already holds a task in this burst', { blastId, channelId, workerId });
+        return null;
+      }
       const taken = new Set(
         cycleClaims.filter((c) => c.status !== 'EXPIRED').map((c) => c.externalTaskId),
       );

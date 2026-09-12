@@ -128,6 +128,12 @@ export class OutreachRepository {
     return getDb().outreachReply.count({ where: { blastId } });
   }
 
+  /** True when this worker already won a slot in this blast — one win each. */
+  async hasWorkerReplied(blastId: string, workerId: string) {
+    const row = await getDb().outreachReply.findFirst({ where: { blastId, workerId } });
+    return row !== null;
+  }
+
   async listReplyChannelIds(blastId: string) {
     const rows = await getDb().outreachReply.findMany({
       where: { blastId },
