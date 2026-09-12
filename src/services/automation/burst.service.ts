@@ -104,12 +104,13 @@ function dedupeInputs(tasks: BurstTaskInput[]): BurstTaskInput[] {
 }
 
 /**
- * Burst auto-accept flow — the exact hourly contract:
- *   :10 scan -> validate -> auto-blast (slots = eligible N, whole page) ->
+ * Burst auto-accept flow — the exact contract:
+ *   manual Blast Now (force) -> validate -> blast (slots = eligible N) ->
  *   each blast reply -> one AutomationClaim for the next unheld task.
- * - Blasts open ONLY inside the :10–:15 IST window (isBurstActive). Off-window
- *   reports validate + log for observability but never message.
- * - One blast per IST hour: the settled report opens it; later reports hit
+ * - Blasts open ONLY from an explicit manual start (Blast Now button,
+ *   forceWindow). Automatic hourly bursts are paused: settled :10 reports
+ *   still validate + log for observability but never message.
+ * - One blast per IST hour: the manual report opens it; later reports hit
  *   the frozen pool and change nothing (late arrivals wait for next hour).
  * - Every validated-eligible listed post counts (blocked / duplicate /
  *   unreadable-subreddit / comment rules still exclude).
@@ -183,6 +184,10 @@ export async function createBurstFlow(
   if (eligible.length === 0) reason = 'no eligible tasks found';
   else if (!live) reason = dryRun ? 'dry-run is on' : 'automation disabled';
   else if (!inWindow) reason = 'outside the blast window';
+  // Automatic hourly bursts are paused — only an explicit manual start
+  // (Blast Now, forceWindow) may open a blast. Auto reports still validated
+  // + logged above; they just never message.
+  else if (!opts.forceWindow) reason = 'auto bursts paused — use Blast Now';
   if (reason) {
     await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date() });
     return {

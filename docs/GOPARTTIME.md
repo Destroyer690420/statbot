@@ -186,7 +186,7 @@ The exact hourly contract (all server-enforced): scan at exactly xx:10 → valid
 
 **Manual Blast Now (watcher v1.2.0).** An orange button on `/tasks` (above the gear) runs an immediate round on click: full scan → eligible count → `POST /burst` with `force:true`, which bypasses ONLY the window gate (live gate, validation, one-blast dedupe all still apply; the pill shows the server's `reason` when no blast opens). Winners are served exactly like hourly rounds. Double-clicks ignored while a manual round is in flight.
 
-**Blast window :10–:16 IST.** The :16 tail absorbs delayed reports; nothing may message outside it. The companion `/burst` + `/eligibility-bundle` endpoints are rate-limit exempt (shared extension key is the gate, same as the other companion endpoints).
+**Blast window :10–:16 IST.** The :16 tail absorbs delayed reports; nothing may message outside it. **Automatic hourly bursts are currently paused**: settled :10 reports still validate + log (watcher pill shows `auto bursts paused — use Blast Now`) but never message — every round starts only from the manual Blast Now button, then runs exactly as before. The companion `/burst` + `/eligibility-bundle` endpoints are rate-limit exempt (shared extension key is the gate, same as the other companion endpoints).
 
 **Freeze semantics.** `enabled=false` or dry-run on means validate + log only: no blasts, no burst-row writes, and no new claims from replies (in-flight rounds halt at the next reply). The switches mean what they say.
 

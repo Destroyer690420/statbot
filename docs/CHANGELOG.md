@@ -3,7 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-11
-### Deployed
+### Implemented (auto bursts paused — awaiting verification + deploy)
+- **Automatic hourly bursts paused**: blasts now open only from the manual Blast Now button (`force:true`); settled :10 auto-reports still validate + log but never message (pill shows `auto bursts paused — use Blast Now`). Nothing else changed — manual rounds run exactly as before. Verified: typecheck + build clean, 249/249 jest (20 suites). No DB migration.
 - **Serial winner serving live** (`161.118.164.85`) at commit `c503367` (app + dashboard rebuild; pre-serialwin backup; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). FIFO arrival-order replies, one win per worker, pre-record guards, claim-gate backstop. Verified: health healthy (DB+Redis), boot clean, 249/249 jest (20 suites).
 - **Strict reply-order serving + one win per worker**: blast replies now process through a FIFO queue in Discord-arrival order (first replier claims first, no DB-race inversions); each worker wins at most once per blast even with two tickets; busy-ticket/capped/duplicate replies are filtered before consuming a slot (no more ghost wins); claim gate re-checks one-task-per-burst as backstop. Second tasks only from later bursts. New `serial-queue` util + tests. Verified: 249/249 jest (20 suites), typecheck + build clean. No DB migration.
 - **Rate-limit relief live** (`161.118.164.85`) at commit `ac7b4bf` (app + dashboard rebuild; pre-ratelimit backup; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). 100 → 300 req/15min; automation status poll 60s. Verified: health healthy again from the throttled IP (restart reset counters), boot clean, served bundle `index-DQ8pR8SJ.js`.
