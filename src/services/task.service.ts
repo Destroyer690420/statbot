@@ -76,6 +76,9 @@ class TaskService {
       submittedBy: null,
       reviewedAt: null,
       reviewedBy: null,
+      formatCheckStatus: null,
+      formatCheckDetail: null,
+      formatCheckedAt: null,
       createdAt: now,
       updatedAt: now,
     };

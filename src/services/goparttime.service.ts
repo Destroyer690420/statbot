@@ -196,13 +196,82 @@ class GoPartTimeService {
 
     const previousUrl = task.submittedRedditUrl;
     await taskRepository.markSubmitted(task.id, url, submittedBy);
+
+    // Auto format-check: fetch the live Reddit post and compare its
+    // title/paragraph structure against the delivered content (POST only).
+    // Never fails the submission — failures persist as FETCH_ERROR.
+    let checkSuffix = '';
+    try {
+      const { checkPostFormat } = await import('./reddit-check.service');
+      const outcome = await checkPostFormat({
+        taskType: task.type,
+        expectedTitle: task.title,
+        expectedContent: task.formattedContent,
+        redditUrl: url,
+      });
+      const detail =
+        outcome.status === 'SKIPPED'
+          ? null
+          : JSON.stringify({
+              expectedParas: outcome.expectedParas,
+              actualParas: outcome.actualParas,
+              titleMatch: outcome.titleMatch,
+              ...(outcome.error ? { error: outcome.error } : {}),
+            });
+      await taskRepository.saveFormatCheck(task.id, { status: outcome.status, detail });
+      checkSuffix =
+        outcome.status === 'SKIPPED'
+          ? ''
+          : outcome.status === 'MATCH'
+            ? ` Format check: MATCH (${outcome.actualParas}/${outcome.expectedParas} paras).`
+            : ` Format check: ${outcome.status} (${outcome.actualParas}/${outcome.expectedParas} paras${outcome.error ? ` — ${outcome.error}` : ''}).`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await taskRepository.saveFormatCheck(task.id, {
+        status: 'FETCH_ERROR',
+        detail: JSON.stringify({ expectedParas: 0, actualParas: 0, titleMatch: false, error: message }),
+      });
+      checkSuffix = ` Format check failed: ${message}`;
+      logger.warn('Format auto-check failed (non-fatal)', { taskId: task.id, error: message });
+    }
+
     await auditLogService.log(
       AuditAction.URL_SUBMITTED,
       task.id,
       submittedBy,
-      previousUrl && previousUrl !== url ? `URL replaced: ${previousUrl} -> ${url}` : `URL submitted: ${url}`,
+      (previousUrl && previousUrl !== url ? `URL replaced: ${previousUrl} -> ${url}` : `URL submitted: ${url}`) +
+        checkSuffix,
     );
 
+    const updated = await taskService.findById(task.id);
+    if (!updated) throw new Error('Task not found.');
+    return updated;
+  }
+
+  /**
+   * Re-runs the format check for a task that already has a submitted URL
+   * (dashboard Recheck button — fresh posts can 404 for ~30s after publish).
+   */
+  async recheckFormat(taskId: string): Promise<Task> {
+    const task = await this.requireGoPartTimeTask(taskId);
+    if (!task.submittedRedditUrl) throw new Error('No submitted URL to check yet.');
+    const { checkPostFormat } = await import('./reddit-check.service');
+    const outcome = await checkPostFormat({
+      taskType: task.type,
+      expectedTitle: task.title,
+      expectedContent: task.formattedContent,
+      redditUrl: task.submittedRedditUrl,
+    });
+    const detail =
+      outcome.status === 'SKIPPED'
+        ? null
+        : JSON.stringify({
+            expectedParas: outcome.expectedParas,
+            actualParas: outcome.actualParas,
+            titleMatch: outcome.titleMatch,
+            ...(outcome.error ? { error: outcome.error } : {}),
+          });
+    await taskRepository.saveFormatCheck(task.id, { status: outcome.status, detail });
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
     return updated;

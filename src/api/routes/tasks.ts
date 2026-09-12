@@ -153,6 +153,21 @@ export default function createTaskRoutes(discordClient: Client): Router {
   });
 
   /**
+   * POST /api/v1/tasks/:id/recheck-format
+   * Re-runs the Reddit format check for a task with a submitted URL
+   * (fresh posts can 404 for ~30s after publish; Reddit 429s also recover).
+   */
+  router.post('/:id/recheck-format', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const task = await goparttimeService.recheckFormat(String(req.params.id));
+      res.json({ success: true, data: task });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      res.status(400).json({ success: false, message });
+    }
+  });
+
+  /**
    * POST /api/v1/tasks/:id/done
    * Accept an ACCEPTED task into the active workflow (status → PENDING,
    * bind submitted URL, schedule insight reminders).

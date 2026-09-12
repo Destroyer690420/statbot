@@ -2,6 +2,9 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## Unreleased (implemented 2026-09-12, NOT deployed)
+- **Reddit format auto-check on submission**: worker's submitted post link is auto-verified server-side (`checkPostFormat` — live `.json` title/selftext vs delivered `title`/`formattedContent`, normalized comparison, paragraph structure strict); bot replies ✅ Post matches or 🔴 mismatch instantly; verdict stored (`formatCheckStatus/Detail/CheckedAt`, additive DDL in `migration.sql` — apply manually on deploy); Accepted Tasks + TaskDetails show status badges with a one-click side-by-side diff modal (browser-direct live fetch, server Recheck endpoint). COMMENT tasks skipped. Verified: 9/9 new jest, dashboard build clean, typecheck adds zero new errors (107 pre-existing, stale-client). Needs: apply DDL excerpt + `npx prisma generate`, rebuild app + dashboard, deploy.
+
 ## 2026-09-11
 ### Deployed
 - **Burst-round survival live** (`161.118.164.85`) at commit `407a9a7` (app + dashboard rebuild; pre-roundfix backup; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Pool-before-send + winners survive fill-close. Verified: health healthy (DB+Redis), boot clean, 249/249 jest (20 suites).

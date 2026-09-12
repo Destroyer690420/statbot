@@ -158,8 +158,8 @@ messageCreate → handleInsightUpload
 ```
 reply to the instruction delivery message → taskRepository.findByDeliveryMessageId(channelId, repliedToId)
 → guard author/source/status/assignmentStatus → extract exactly one valid Reddit URL
-→ goparttimeService.recordSubmission (latest-wins replacement) → react ✅
-→ manager activates via dashboard (POST /tasks/:id/done) → reminders scheduled
+→ goparttimeService.recordSubmission (latest-wins replacement + auto format check for POSTs, verdict in `formatCheckStatus/Detail/CheckedAt`) → react ✅ + verdict reply
+→ manager reviews format badge/diff in dashboard (POST /tasks/:id/recheck-format on demand) → activates via dashboard (POST /tasks/:id/done) → reminders scheduled
 ```
 
 ### 6.3 Payout

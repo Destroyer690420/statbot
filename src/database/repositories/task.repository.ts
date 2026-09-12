@@ -189,6 +189,18 @@ export class TaskRepository {
     });
   }
 
+  async saveFormatCheck(taskId: string, data: { status: string; detail: string | null }) {
+    return getDb().task.update({
+      where: { id: taskId },
+      data: {
+        formatCheckStatus: data.status,
+        formatCheckDetail: data.detail,
+        formatCheckedAt: new Date(),
+        updatedAt: new Date(),
+      } as any,
+    });
+  }
+
   async markReviewed(taskId: string, reviewedBy: string) {
     return getDb().task.update({
       where: { id: taskId },

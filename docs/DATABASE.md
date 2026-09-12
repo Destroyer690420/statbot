@@ -72,6 +72,9 @@ erDiagram
         string submittedBy "nullable"
         timestamp reviewedAt "nullable"
         string reviewedBy "nullable"
+        string formatCheckStatus "nullable: MATCH|PARA_MISMATCH|TITLE_MISMATCH|TEXT_MISMATCH|FETCH_ERROR|DELETED|SKIPPED"
+        string formatCheckDetail "nullable: JSON {expectedParas,actualParas,titleMatch,error?}"
+        timestamp formatCheckedAt "nullable"
         timestamp createdAt
         timestamp updatedAt
     }

@@ -69,6 +69,9 @@ export interface Task {
   submittedBy: string | null;
   reviewedAt: Date | null;
   reviewedBy: string | null;
+  formatCheckStatus: string | null;
+  formatCheckDetail: string | null;
+  formatCheckedAt: Date | null;
 
   createdAt: Date;
   updatedAt: Date;

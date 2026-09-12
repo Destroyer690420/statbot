@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getTask, getReminders, doneTask, retryAssignment, submitTaskUrl } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
+import { FormatBadge } from '../components/FormatBadge';
+import { FormatDiffModal } from '../components/FormatDiffModal';
 import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Download, Image, RotateCcw, Link2, Send, Edit3 } from 'lucide-react';
 
 export function TaskDetails() {
@@ -24,6 +26,7 @@ export function TaskDetails() {
   const queryClient = useQueryClient();
   const [submitUrl, setSubmitUrl] = useState('');
   const [replacing, setReplacing] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(false);
 
   const doneMutation = useMutation({
     mutationFn: () => doneTask(id!),
@@ -435,6 +438,30 @@ export function TaskDetails() {
                     <p className="text-xs text-dark-500">
                       Submitted by {task.submittedBy || 'unknown'} · {task.submittedAt ? new Date(task.submittedAt).toLocaleString() : ''}
                     </p>
+                    <div className="flex items-center gap-2">
+                      <FormatBadge
+                        status={task.formatCheckStatus}
+                        detail={task.formatCheckDetail}
+                        taskType={task.type}
+                        hasUrl={!!task.submittedRedditUrl}
+                        onOpenDiff={() => setDiffOpen(true)}
+                      />
+                      {task.formatCheckedAt && (
+                        <span className="text-[11px] text-dark-500">
+                          checked {new Date(task.formatCheckedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    {diffOpen && (
+                      <FormatDiffModal
+                        task={task}
+                        onClose={() => setDiffOpen(false)}
+                        onRechecked={() => {
+                          setDiffOpen(false);
+                          queryClient.invalidateQueries({ queryKey: ['task', id] });
+                        }}
+                      />
+                    )}
                     {replacing ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">

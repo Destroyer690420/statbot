@@ -121,6 +121,9 @@ model Task {
   submittedBy      String?
   reviewedAt       DateTime?
   reviewedBy       String?
+  formatCheckStatus String?
+  formatCheckDetail String?
+  formatCheckedAt  DateTime?
 
   createdAt        DateTime
   updatedAt        DateTime

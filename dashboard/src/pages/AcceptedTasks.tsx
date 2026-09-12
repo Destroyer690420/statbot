@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { getTasks, doneTask, reassignTask, deleteTask, getTickets } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
+import { FormatBadge } from '../components/FormatBadge';
+import { FormatDiffModal } from '../components/FormatDiffModal';
 import { Loader2, CheckCircle2, Repeat, Trash2, Eye, ExternalLink, X } from 'lucide-react';
 
 const PAGE_SIZE = 15;
@@ -11,6 +13,7 @@ const PAGE_SIZE = 15;
 export function AcceptedTasks() {
   const [ticketFor, setTicketFor] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [diffFor, setDiffFor] = useState<any | null>(null);
 
   const { data: tasksData, isLoading, refetch } = useQuery({
     queryKey: ['tasks', 'ACCEPTED'],
@@ -69,6 +72,7 @@ export function AcceptedTasks() {
                 <th className="px-6 py-4 font-semibold text-dark-200">Type</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Ticket</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Submission</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Format</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Created</th>
                 <th className="px-6 py-4 font-semibold text-dark-200 text-right">Actions</th>
               </tr>
@@ -76,13 +80,13 @@ export function AcceptedTasks() {
             <tbody className="divide-y divide-dark-700/50">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
+                  <td colSpan={7} className="px-6 py-12 text-center">
                     <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : paginatedTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-dark-400">
+                  <td colSpan={7} className="px-6 py-12 text-center text-dark-400">
                     No tasks awaiting activation.
                   </td>
                 </tr>
@@ -116,6 +120,15 @@ export function AcceptedTasks() {
                       ) : (
                         <span className="text-dark-500 text-sm italic">Waiting</span>
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <FormatBadge
+                        status={task.formatCheckStatus}
+                        detail={task.formatCheckDetail}
+                        taskType={task.type}
+                        hasUrl={!!task.submittedRedditUrl}
+                        onOpenDiff={() => setDiffFor(task)}
+                      />
                     </td>
                     <td className="px-6 py-4 text-sm text-dark-300">
                       {new Date(task.createdAt).toLocaleDateString()}
@@ -200,13 +213,13 @@ export function AcceptedTasks() {
                   </p>
                 </div>
               </div>
-              <div className="px-4 py-2">
+              <div className="px-4 py-2 flex items-center justify-between gap-2">
                 {task.submittedRedditUrl ? (
                   <a
                     href={task.submittedRedditUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-primary-400 text-xs flex items-center gap-1 truncate"
+                    className="text-primary-400 text-xs flex items-center gap-1 truncate min-w-0"
                   >
                     <ExternalLink className="w-3 h-3 shrink-0" />
                     <span className="truncate">{task.submittedRedditUrl}</span>
@@ -214,6 +227,13 @@ export function AcceptedTasks() {
                 ) : (
                   <span className="text-dark-500 text-xs italic">Awaiting submission</span>
                 )}
+                <FormatBadge
+                  status={task.formatCheckStatus}
+                  detail={task.formatCheckDetail}
+                  taskType={task.type}
+                  hasUrl={!!task.submittedRedditUrl}
+                  onOpenDiff={() => setDiffFor(task)}
+                />
               </div>
               <div className="flex items-center justify-between px-4 py-3 border-t border-dark-700/30 bg-dark-800/30">
                 <button
@@ -279,6 +299,10 @@ export function AcceptedTasks() {
             </button>
           </div>
         </div>
+      )}
+
+      {diffFor && (
+        <FormatDiffModal task={diffFor} onClose={() => setDiffFor(null)} onRechecked={() => { refetch(); setDiffFor(null); }} />
       )}
 
       {/* Reassign ticket picker (modal — works on mobile; native <select> + onBlur unmount broke on phones) */}

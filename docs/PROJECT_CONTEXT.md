@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — Reddit Task Manager
 
 > **Persistent project memory.** Future OpenCode sessions MUST read this file first.
-> Repository: `reddit-task-manager` · Last verified: 2026-09-10 — Pending Invites removal DEPLOYED (`161.118.164.85`, git HEAD `bcab738`, app + dashboard rebuild; backup `rtm-backup-20260910-bcab738.tar.gz`; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200, `Pending Invites` absent from served bundle, unknown-skip code in live `dist/`, 232/232 jest). Previous: Invite auto-approve (`13823d6`).
+> Repository: `reddit-task-manager` · Last verified: 2026-09-12 — Format auto-check IMPLEMENTED (not deployed; needs DDL + rebuild); last deploy 2026-09-10 Pending Invites removal DEPLOYED (`161.118.164.85`, git HEAD `bcab738`, app + dashboard rebuild; backup `rtm-backup-20260910-bcab738.tar.gz`; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200, `Pending Invites` absent from served bundle, unknown-skip code in live `dist/`, 232/232 jest). Previous: Invite auto-approve (`13823d6`).
 
 ---
 
@@ -154,7 +154,8 @@ goPartTime.net → userscript extracts {taskId,type,ticket,title,subreddit,flair
 → detect single non-admin worker in channel → create Task (status ACCEPTED, assignmentStatus PENDING)
 → deliver metadata/content/images/instruction messages into the ticket → assignmentStatus SENT
 → worker replies to instruction message with Reddit URL (exactly 1, validated)
-→ recordSubmission → manager clicks Done (POST /tasks/:id/done) → ACCEPTED→PENDING + reminders scheduled
+→ recordSubmission (+ automatic format check for POSTs → bot verdict reply; verdict in `formatCheckStatus/Detail/CheckedAt`)
+→ manager reviews format badge/diff (Recheck if needed) → clicks Done (POST /tasks/:id/done) → ACCEPTED→PENDING + reminders scheduled
 ```
 
 ### GoPartTime view-data submission (Submit View, userscript v1.4.0; see docs/BROWSER_EXTENSION.md)
@@ -249,6 +250,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-09-12**: **IMPLEMENTED Reddit format auto-check (NOT deployed)** — worker submission auto-verified server-side (live post title/selftext vs delivered content, normalized text + strict paragraphs); bot replies MATCH/MISMATCH instantly; verdict persisted (`Task.formatCheckStatus/Detail/CheckedAt`, additive `IF NOT EXISTS` DDL in `migration.sql` — must be applied manually on deploy + `prisma generate`); Accepted Tasks Format badges + side-by-side diff modal (browser-direct live fetch, server Recheck `POST /tasks/:id/recheck-format`); COMMENTs skipped. Verified: 9/9 new jest (`reddit-format.test.ts`), dashboard `tsc+vite` clean, backend typecheck 107 errors before = 107 after (all pre-existing stale-client). Full jest: 235 pass, 8 fail — both failing suites pre-existing stale-client compile errors (`commission-indirect`, `automation-cookies`), untouched by this change.
 
 - **2026-09-12**: **DEPLOYED burst-round survival** (`161.118.164.85`) at commit `407a9a7` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Diagnosed dead round: early replies arrived before the burst pool existed (slots burned, no claims) + orphan sweep executed winners' claims 40s after fill-close; refresh was incidental. Fixed pool-before-send + sweep spares fill-closed winners. Verified: health healthy, boot clean, 249/249 jest (20 suites).
 

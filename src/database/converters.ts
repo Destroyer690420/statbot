@@ -26,6 +26,8 @@ type PrismaTask = {
   submittedRedditUrl: string | null;
   submittedAt: Date | null; submittedBy: string | null;
   reviewedAt: Date | null; reviewedBy: string | null;
+  formatCheckStatus?: string | null; formatCheckDetail?: string | null;
+  formatCheckedAt?: Date | null;
   createdAt: Date; updatedAt: Date;
 };
 
@@ -49,6 +51,9 @@ export function toTask(t: PrismaTask): Task {
     submittedRedditUrl: t.submittedRedditUrl,
     submittedAt: t.submittedAt, submittedBy: t.submittedBy,
     reviewedAt: t.reviewedAt, reviewedBy: t.reviewedBy,
+    formatCheckStatus: (t as any).formatCheckStatus ?? null,
+    formatCheckDetail: (t as any).formatCheckDetail ?? null,
+    formatCheckedAt: (t as any).formatCheckedAt ?? null,
     createdAt: t.createdAt, updatedAt: t.updatedAt,
   };
 }

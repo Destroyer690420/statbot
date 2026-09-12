@@ -79,15 +79,64 @@ async function handleInstructionReply(message: Message): Promise<boolean> {
   }
 
   try {
-    await goparttimeService.recordSubmission(task.id, urls[0], message.author.id);
+    const updated = await goparttimeService.recordSubmission(task.id, urls[0], message.author.id);
     await message.react('✅');
-    await message.reply('✅ Submission recorded. Waiting for manager review.');
+    await message.reply(formatSubmissionReply(updated));
   } catch (error) {
     const messageText = error instanceof Error ? error.message : 'Submission could not be recorded.';
     await message.react('❌');
     await message.reply(`⚠️ ${messageText}`);
   }
   return true;
+}
+
+/**
+ * Submission acknowledgement reflecting the automatic format check that
+ * `recordSubmission` just ran (POST tasks only). MATCH tells the worker the
+ * post looks right; anything else points at the dashboard diff.
+ */
+function formatSubmissionReply(task: { formatCheckStatus?: string | null; formatCheckDetail?: string | null }): string {
+  const status = task.formatCheckStatus;
+  if (!status || status === 'SKIPPED') return '✅ Submission recorded. Waiting for manager review.';
+  if (status === 'MATCH') {
+    const counts = parseParaCounts(task.formatCheckDetail);
+    return `✅ Submission recorded. ✅ Post matches${counts ? ` (${counts.actual}/${counts.expected} ¶, title OK)` : ''} — ready for review.`;
+  }
+  if (status === 'FETCH_ERROR' || status === 'DELETED') {
+    const detail = parseCheckDetail(task.formatCheckDetail);
+    return `✅ Submission recorded. ⚠️ Could not verify formatting yet${detail?.error ? `: ${detail.error}` : ''} — manager will recheck.`;
+  }
+  const counts = parseParaCounts(task.formatCheckDetail);
+  const countStr = counts ? ` (${counts.actual}/${counts.expected} ¶)` : '';
+  const hint =
+    status === 'PARA_MISMATCH'
+      ? ' Paragraphs look collapsed — make sure there is a blank line between each paragraph on Reddit.'
+      : status === 'TITLE_MISMATCH'
+        ? ' The title does not match — copy it exactly.'
+        : ' The text differs — check for missing or altered paragraphs.';
+  return `✅ Submission recorded. 🔴 Formatting mismatch${countStr}.${hint}`;
+}
+
+function parseCheckDetail(detail?: string | null): { error?: string } | null {
+  if (!detail) return null;
+  try {
+    return JSON.parse(detail);
+  } catch {
+    return null;
+  }
+}
+
+function parseParaCounts(detail?: string | null): { expected: number; actual: number } | null {
+  if (!detail) return null;
+  try {
+    const d = JSON.parse(detail);
+    if (typeof d.expectedParas === 'number' && typeof d.actualParas === 'number') {
+      return { expected: d.expectedParas, actual: d.actualParas };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function extractRedditUrls(content: string): string[] {

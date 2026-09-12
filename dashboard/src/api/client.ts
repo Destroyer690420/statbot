@@ -75,6 +75,11 @@ export async function submitTaskUrl(id: string, redditUrl: string) {
   return data;
 }
 
+export async function recheckFormat(id: string) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/recheck-format`);
+  return data;
+}
+
 export async function getTickets() {
   const { data } = await api.get('/discord/tickets');
   return data;

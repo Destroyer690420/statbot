@@ -13,7 +13,7 @@ Key fields (full list in `docs/DATABASE.md`):
 - `redditUrl` — required for manual tasks; optional for GoPartTime (until submission).
 - `type` — `POST|COMMENT`; `status`; `guildId`, `channelId` (ticket), `channelName`.
 - `assignedUserId`, `assignedUserName`, `createdById`, `notes`, `cancelledReason`.
-- GoPartTime delivery fields: `source='goparttime'`, `externalTaskId`, `sourceUrl`, `subreddit`, `subredditUrl`, `flair`, `title`, `postLink`, `contentHtml`, `formattedContent`, `payment`, `deadline`, `taskImages` (JSONB), `deliveryMessages` (JSONB), `assignmentStatus` (`PENDING|SENT|FAILED`), `assignmentError`, `submittedRedditUrl`, `submittedAt/By`, `reviewedAt/By` (reviewed columns currently unused by any flow beyond being stored).
+- GoPartTime delivery fields: `source='goparttime'`, `externalTaskId`, `sourceUrl`, `subreddit`, `subredditUrl`, `flair`, `title`, `postLink`, `contentHtml`, `formattedContent`, `payment`, `deadline`, `taskImages` (JSONB), `deliveryMessages` (JSONB), `assignmentStatus` (`PENDING|SENT|FAILED`), `assignmentError`, `submittedRedditUrl`, `submittedAt/By`, `reviewedAt/By` (reviewed columns currently unused by any flow beyond being stored), `formatCheckStatus/Detail/CheckedAt` (auto format-check verdict from `recordSubmission`/`recheckFormat`; POST only, COMMENT = SKIPPED).
 - `createdAt`, `updatedAt`.
 
 ## 2. Creation Paths

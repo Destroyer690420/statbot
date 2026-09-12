@@ -91,6 +91,10 @@ Every guild's TextChannels; `taskStatus`: `awaiting-submission` (a task awaiting
 ### `recordSubmission(taskId, url, submittedBy)`
 - Guards: source must be `goparttime`; `assignmentStatus === 'SENT'` (FAILED → "…use retry before submitting."); status `PENDING|ACCEPTED`; valid Reddit URL; not already submitted for a *different* task (→ 409).
 - **Latest-wins replacement**: `markSubmitted` sets `submittedRedditUrl`, `submittedBy`, `submittedAt`, and mirrors `redditUrl`; audit `URL_SUBMITTED` ("URL replaced: old → new" when changed).
+- **Automatic format check** (POST tasks only): fetches the live post's raw `title`/`selftext` via public `.json` (`src/services/reddit-check.service.ts`, `www` → `old` fallback, 12s timeout) and compares against delivered `title`/`formattedContent` with normalized comparison (`src/utils/reddit-format.ts` — case/whitespace/markdown-insensitive, paragraph structure strict). Verdict persisted via `saveFormatCheck` (`formatCheckStatus` MATCH|PARA_MISMATCH|TITLE_MISMATCH|TEXT_MISMATCH|FETCH_ERROR|DELETED, `formatCheckDetail` JSON counts, `formatCheckedAt`); never fails the submission. Audit detail appends `Format check: …`. COMMENT tasks persist `SKIPPED`.
+
+### `recheckFormat(taskId)` — dashboard Recheck
+- Re-runs the same check for a task that already has a `submittedRedditUrl` (fresh posts can 404 for ~30s; 429s recover). Backed by `POST /api/v1/tasks/:id/recheck-format`.
 
 ### `activateTask(taskId, by)` — the "Done" action
 - Guards: `assignmentStatus === 'SENT'`, status `ACCEPTED`.
@@ -109,7 +113,8 @@ Every guild's TextChannels; `taskStatus`: `awaiting-submission` (a task awaiting
 | `GET /api/v1/goparttime/insight/:externalTaskId` | extension key | **read-only**; the stored insight screenshot for a task's view-data step (`?step=1\|2`, default: resolve automatically); used by Submit View (v1.4.0) |
 | `GET /api/v1/discord/tickets` | JWT + admin username | same list for dashboard |
 | `POST /api/v1/tasks/assign-from-goparttime` | JWT | dashboard twin (same service) |
-| `POST /api/v1/tasks/:id/submit-url` | JWT | dashboard URL submission |
+| `POST /api/v1/tasks/:id/submit-url` | JWT | dashboard URL submission (also runs the auto format check) |
+| `POST /api/v1/tasks/:id/recheck-format` | JWT | re-run format check for a submitted URL |
 | `POST /api/v1/tasks/:id/done` | JWT | activation |
 | `POST /api/v1/tasks/:id/reassign` | JWT | reassign |
 | `POST /api/v1/tasks/:id/retry-assignment` | JWT | retry failed delivery |

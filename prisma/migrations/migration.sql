@@ -629,3 +629,15 @@ CREATE INDEX IF NOT EXISTS "AutomationBurst_status_idx" ON "AutomationBurst"("st
 -- Nullable JSON array [{id, subreddit, title}]; old rows fall back to
 -- bare taskIds (unknown subreddit, rejected for safety by the validator).
 ALTER TABLE "AutomationBurst" ADD COLUMN IF NOT EXISTS "taskDetails" TEXT;
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Reddit format auto-check on submission
+-- ──────────────────────────────────────────────────────────────
+-- The bot fetches the submitted Reddit post's raw selftext/title and
+-- compares paragraph structure + title against the delivered
+-- formattedContent. The verdict is stored here so the dashboard shows
+-- badges instantly without refetching. Detail is a small JSON string
+-- {expectedParas,actualParas,titleMatch,error?}. Schema-only.
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "formatCheckStatus" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "formatCheckDetail" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "formatCheckedAt" TIMESTAMP(3);

@@ -64,7 +64,8 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 ### GoPartTime flow
 - [ ] Userscript detects task, sends to `/goparttime/assign` → ticket receives metadata/content/images/instruction
 - [ ] Duplicate send → 409 (idempotent)
-- [ ] Worker replies with exactly one Reddit URL → ✅ recorded (`submittedRedditUrl`)
+- [ ] Worker replies with exactly one Reddit URL → ✅ recorded (`submittedRedditUrl`) + auto format-check verdict reply (MATCH / mismatch / verify-failed) and `formatCheckStatus` persisted
+- [ ] Accepted Tasks shows the Format badge; mismatch badge opens the side-by-side diff; Recheck re-runs the server check
 - [ ] Mark Done → status PENDING, reminders scheduled, `redditUrl` bound
 - [ ] Delivery failure → task FAILED → `retry-assignment` sends only missing tail
 - [ ] Reassign moves task to another ticket and re-delivers
