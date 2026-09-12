@@ -206,11 +206,11 @@ export async function createBurstFlow(
     };
   }
 
-  const { blast, sent, skipped } = await outreachService.sendBlast(discordClient, eligible.length, senderId || 'burst').catch(async (error) => {
-    await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date(), failures: 1 }).catch(() => undefined);
-    throw error;
-  });
-  await automationRepository.createBurst({
+  // The pool is registered BEFORE the first message goes out: replies
+  // arrive while sending is still in flight, and each must find an OPEN
+  // burst to claim from — otherwise early winners burn slots with no claim.
+  const blast = await outreachService.beginBlast(eligible.length, senderId || 'burst');
+  const burst = await automationRepository.createBurst({
     blastId: blast.id,
     cycleId,
     taskIds: eligible.map((t) => t.subTaskId),
@@ -218,6 +218,13 @@ export async function createBurstFlow(
       eligible.map((t) => ({ id: t.subTaskId, subreddit: t.subreddit, title: t.title })),
     ),
   });
+  const { sent, skipped } = await outreachService
+    .sendBlastMessages(discordClient, blast, senderId || 'burst')
+    .catch(async (error) => {
+      await automationRepository.closeBurst(burst.id).catch(() => undefined);
+      await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date(), failures: 1 }).catch(() => undefined);
+      throw error;
+    });
   await automationRepository.updateCycle(cycleId, { workersContacted: sent.filter((s) => s.ok).length });
   logger.info('Burst blast opened', { cycleId, blastId: blast.id, slots: eligible.length });
   return {

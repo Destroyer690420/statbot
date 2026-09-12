@@ -1,5 +1,5 @@
 import { Client } from 'discord.js';
-import { automationRepository } from '../../database/repositories';
+import { automationRepository, outreachRepository } from '../../database/repositories';
 import { auditLogService } from '../audit.service';
 import { AuditAction } from '../../types';
 import { logger } from '../../utils/logger';
@@ -52,8 +52,12 @@ export async function processSightingQueue(_discordClient: Client): Promise<stri
   }
 
   // 1b. Sweep orphaned burst claims: PENDING claims whose burst already
-  // closed can never convert to a served task (their blast is over), but
-  // they still occupy the browser's serial claim queue ahead of live work.
+  // closed can never convert to a served task — EXCEPT the winners of a
+  // fill-closed burst. Fill keeps winners' messages and their claims must
+  // live until the claim TTL so the companion can serve them however long
+  // each in-page accept takes. Only bursts whose blast never filled (cut
+  // short by supersede/close) leave true orphans: those claims die fast so
+  // they stop occupying the browser's serial claim queue ahead of live work.
   // Companion-cycle claims have no burst row and are never touched here.
   try {
     const pending = await automationRepository.listPendingClaims();
@@ -67,6 +71,15 @@ export async function processSightingQueue(_discordClient: Client): Promise<stri
       const bursts = await automationRepository.listBurstsByCycle(cycleId).catch(() => []);
       if (bursts.length === 0) continue;
       if (bursts.some((b) => b.status === 'OPEN')) continue;
+      let winnersStanding = false;
+      for (const b of bursts) {
+        const blast = await outreachRepository.getBlast(b.blastId).catch(() => null);
+        if (blast && blast.status === 'CLOSED' && blast.slotsFilled >= blast.slotsTotal) {
+          winnersStanding = true;
+          break;
+        }
+      }
+      if (winnersStanding) continue;
       for (const claim of claims) {
         await automationRepository.resolveClaim(claim.id, 'EXPIRED', 'Burst closed before the companion processed it');
         logger.info('Orphaned burst claim expired', { claimId: claim.id, task: claim.externalTaskId });

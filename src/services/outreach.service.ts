@@ -157,27 +157,15 @@ class OutreachService {
   }
 
   /**
-   * Sends a blast campaign: asks for worker availability in every selected
-   * ticket except workers already at the daily post cap. The first
-   * `slotsTotal` repliers win; on fill, the bot message is deleted from all
-   * other contacted tickets (winners keep theirs). Supersedes any open blast.
-   * Per-channel failures are non-fatal and surfaced in the response.
+   * Opens a blast row (superseding any still-open blast) WITHOUT messaging.
+   * Split out so automation can register its burst pool BEFORE the first
+   * message goes out — replies arriving mid-send must find a pool to claim
+   * from, otherwise early winners burn slots with no claim.
    */
-  async sendBlast(
-    discordClient: Client,
+  async beginBlast(
     slotsTotal: number,
     senderId: string | null,
-  ): Promise<{ blast: { id: string; slotsTotal: number }; sent: SendResult[]; skipped: SkippedTicket[] }> {
-    const { dayStart, dayEnd } = getIstDayBoundaries();
-    const message = await this.getMessage();
-
-    const rows = await outreachRepository.findAll();
-    for (const row of rows) {
-      if (isStaleDailyCycle(row.messageSentAt, dayStart)) {
-        await outreachRepository.resetCycle(row.channelId);
-      }
-    }
-
+  ): Promise<{ id: string; slotsTotal: number }> {
     // A new blast supersedes any still-open one (its un-won messages stay —
     // those workers already saw them; only the new blast auto-cleans).
     const previous = await outreachRepository.getOpenBlast().catch(() => null);
@@ -192,6 +180,27 @@ class OutreachService {
     }
 
     const blast = await outreachRepository.createBlast(slotsTotal, senderId);
+    return { id: blast.id, slotsTotal };
+  }
+
+  /**
+   * Delivers one blast's message to every selected ticket (skipping capped
+   * workers). Pair with beginBlast; sendBlast does both in one call.
+   */
+  async sendBlastMessages(
+    discordClient: Client,
+    blast: { id: string; slotsTotal: number },
+    senderId: string | null,
+  ): Promise<{ sent: SendResult[]; skipped: SkippedTicket[] }> {
+    const { dayStart, dayEnd } = getIstDayBoundaries();
+    const message = await this.getMessage();
+
+    const rows = await outreachRepository.findAll();
+    for (const row of rows) {
+      if (isStaleDailyCycle(row.messageSentAt, dayStart)) {
+        await outreachRepository.resetCycle(row.channelId);
+      }
+    }
 
     const freshRows = await outreachRepository.findAll();
     const selected = freshRows.filter((r) => r.selected);
@@ -242,10 +251,27 @@ class OutreachService {
       AuditAction.OUTREACH_MESSAGE_SENT,
       null,
       senderId,
-      `Outreach blast ${blast.id} (${slotsTotal} slots) sent to ${okChannels.length} ticket(s)${okChannels.length ? `: ${okChannels.join(', ')}` : ''}${failedChannels.length ? ` — failed: ${failedChannels.join(', ')}` : ''}${skipped.length ? ` — skipped ${skipped.length} (daily cap / no worker)` : ''}`,
+      `Outreach blast ${blast.id} (${blast.slotsTotal} slots) sent to ${okChannels.length} ticket(s)${okChannels.length ? `: ${okChannels.join(', ')}` : ''}${failedChannels.length ? ` — failed: ${failedChannels.join(', ')}` : ''}${skipped.length ? ` — skipped ${skipped.length} (daily cap / no worker)` : ''}`,
     );
 
-    return { blast: { id: blast.id, slotsTotal }, sent, skipped };
+    return { sent, skipped };
+  }
+
+  /**
+   * Sends a blast campaign: asks for worker availability in every selected
+   * ticket except workers already at the daily post cap. The first
+   * `slotsTotal` repliers win; on fill, the bot message is deleted from all
+   * other contacted tickets (winners keep theirs). Supersedes any open blast.
+   * Per-channel failures are non-fatal and surfaced in the response.
+   */
+  async sendBlast(
+    discordClient: Client,
+    slotsTotal: number,
+    senderId: string | null,
+  ): Promise<{ blast: { id: string; slotsTotal: number }; sent: SendResult[]; skipped: SkippedTicket[] }> {
+    const blast = await this.beginBlast(slotsTotal, senderId);
+    const { sent, skipped } = await this.sendBlastMessages(discordClient, blast, senderId);
+    return { blast, sent, skipped };
   }
 
   /**
