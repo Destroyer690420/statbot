@@ -250,6 +250,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-12**: **DEPLOYED burst-round survival** (`161.118.164.85`) at commit `407a9a7` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Diagnosed dead round: early replies arrived before the burst pool existed (slots burned, no claims) + orphan sweep executed winners' claims 40s after fill-close; refresh was incidental. Fixed pool-before-send + sweep spares fill-closed winners. Verified: health healthy, boot clean, 249/249 jest (20 suites).
+
 - **2026-09-12**: **DEPLOYED auto-burst pause** (`161.118.164.85`) at commit `7591625` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Automatic :10 bursts off — rounds start only from manual Blast Now; auto-reports validate + log only. Verified: health healthy, boot clean, 249/249 jest (20 suites).
 
 - **2026-09-12**: **DEPLOYED serial winner serving** (`161.118.164.85`) at commit `c503367` (app + dashboard rebuild; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Replies served strictly first-reply-first via FIFO; one win per worker per blast; busy/cap/duplicate filtered before slot use; one-task-per-burst backstop at claim gate. Verified: health healthy, boot clean, 249/249 jest (20 suites).

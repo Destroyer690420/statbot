@@ -3,7 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-11
-### Implemented (burst-round survival — awaiting verification + deploy)
+### Deployed
+- **Burst-round survival live** (`161.118.164.85`) at commit `407a9a7` (app + dashboard rebuild; pre-roundfix backup; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Pool-before-send + winners survive fill-close. Verified: health healthy (DB+Redis), boot clean, 249/249 jest (20 suites).
 - **Early replies get claims + winners survive fill-close**: burst pool is now registered before the first blast message goes out (replies arriving mid-send previously burned slots with no claim); the orphan sweep no longer expires winners' pending claims when their blast filled (only bursts cut short before filling leave true orphans). Verified: typecheck + build clean, 249/249 jest (20 suites). No DB migration.
 - **Auto bursts paused live** (`161.118.164.85`) at commit `7591625` (app + dashboard rebuild; pre-pauseauto backup; pushed to GitHub; no DB migration; host + local bundles/scratch cleaned). Blasts open only from manual Blast Now. Verified: health healthy (DB+Redis), boot clean, 249/249 jest (20 suites).
 - **Automatic hourly bursts paused**: blasts now open only from the manual Blast Now button (`force:true`); settled :10 auto-reports still validate + log but never message (pill shows `auto bursts paused — use Blast Now`). Nothing else changed — manual rounds run exactly as before. Verified: typecheck + build clean, 249/249 jest (20 suites). No DB migration.
