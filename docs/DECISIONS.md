@@ -123,3 +123,11 @@
 - **Reason**: zero Vercel exposure from the Oracle IP; genuine session/TLS/IP on every GoPartTime request; full task detail available from the DOM for the existing assign pipeline (no flight-data content resolution needed).
 - **Consequences**: requires the manager's browser open (not true 24/7); claim queue + heartbeat + expiry machinery; stale claims release workers; dashboard shows watcher online/offline.
 - **Status**: Implemented 2026-09-08 (`src/services/automation/queue.service.ts`, `src/api/routes/automation.ts` incl. companion endpoints, `scripts/goparttime-auto.user.js`). Single router with per-path auth dispatch (JWT vs extension key) — two routers on one prefix cannot work because the first router's `use(auth)` intercepts the other's paths.
+
+## Decision 16: Spare-account session vault for server-side Reddit fetch
+
+- **Context**: Reddit killed anonymous `.json` access (www → 403 for any client on any IP, old → login gate, Oracle ASN hard-blocked — probed locally and from the VPS 2026-09-13). The server format check therefore NEVER succeeded live; OAuth app registration was unavailable, so only a login session works.
+- **Decision**: A dedicated spare Reddit account's full Cookie header lives AES-256-GCM-encrypted in a new `RedditSession` singleton vault row (existing `GOPARTTIME_SESSION_KEY`, never logged); the server sends it verbatim with a browser UA. The manager pastes/refreshes it self-service (dashboard Settings card via JWT, or extension-key endpoint — no SSH). New `NO_SESSION` / `SESSION_EXPIRED` statuses make the failure mode explicit instead of a misleading FETCH_ERROR. Cookie belongs to a spare account so a VPS-IP flag never touches the manager's main account.
+- **Reason**: only working server-side path; matches the existing GoPartTime vault pattern; self-service refresh avoids SSH on every expiry.
+- **Consequences**: new table + audit value (additive DDL); cookie re-paste needed on expiry/password change; if Reddit ever gates cookie-auth from datacenter ASNs, the Tampermonkey session script remains the fallback.
+- **Status**: Implemented + deployed 2026-09-13 (`src/services/reddit-session.service.ts`, `src/services/reddit-check.service.ts`, `GET /tasks/:id/live-reddit`).

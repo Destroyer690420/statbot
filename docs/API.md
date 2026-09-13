@@ -63,6 +63,7 @@ Query params shared: `status`, `type`, `assignedUserId`, `channelId`, `redditUrl
 | POST | `/api/v1/tasks/assign-from-goparttime` | JWT twin of `/goparttime/assign` (dashboard) | `goPartTimePayloadSchema` | 201 `{ success, data: result.task, failed }` | **409** `'Task for task <id> already exists.'`; 400; 500 |
 | POST | `/api/v1/tasks/:id/submit-url` | Record worker's submitted Reddit URL (GoPartTime tasks); runs the auto format check and persists `formatCheckStatus/Detail/CheckedAt` | `{ redditUrl }` | `{ success, data: task }` | 400 invalid/wrong-state; **409 dup URL on another task** |
 | POST | `/api/v1/tasks/:id/recheck-format` | Re-run the Reddit format check for a submitted URL | — | `{ success, data: task }` | 400 no submitted URL / task not found |
+| GET | `/api/v1/tasks/:id/live-reddit` | **Read-only**: server-side (vault-session) snapshot of the submitted post for the diff modal. Never exposes the cookie | `{ success, data: { title, selftext, author, deleted } }` | 404 task not found; 400 `NO_URL` / `NO_SESSION` / `SESSION_EXPIRED`; 502 `FETCH_ERROR` |
 | POST | `/api/v1/tasks/:id/done` | Activate ACCEPTED task → PENDING + schedule reminders | — | `{ success, data: task }` | 404; 400 not SENT/not ACCEPTED |
 | POST | `/api/v1/tasks/:id/reassign` | Move ACCEPTED task to another ticket (delete old delivery, re-deliver) | `{ ticket }` | `{ success, data: task }` | 404; 400 not ACCEPTED/bad channel/multiple workers/same ticket |
 | POST | `/api/v1/tasks/:id/retry-assignment` | Re-deliver FAILED assignment (sends only missing tail) | — | `{ success, data: task }` | 400 not FAILED or already submitted |
@@ -82,6 +83,7 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 | POST | `/api/v1/goparttime/assign` | Create + deliver task from extension payload | 201 `{ success, data: task, failed: false }` or 200 `{ success, data, failed: true, error }` (delivery failure) | **409** already assigned; 400 validation; 503 key unconfigured |
 | GET | `/api/v1/goparttime/insight/:externalTaskId` | **Read-only** (v1.4.0 Submit View): the stored insight screenshot for the task's view-data step; `?step=1\|2`, optional (auto-resolve). Task resolved via `(source='goparttime', externalTaskId)`; falls back to manually-created tasks whose id embeds the number (`POST #688318` / `Comment #688318` / lowercase variants), accepting only tasks with no source | `{ success, data: { taskId, internalTaskId, type, reminderId, reminderType, step, completed, imageUrl } }`; no reminder → `reminderId: null` + `message` | 400 non-numeric id / invalid step / step-2-on-comment; 404 `'Task not found.'`; 500 |
 | GET | `/api/v1/goparttime/expected/:externalTaskId` | **Read-only** (session format-check script v1.0.0): exact text delivered to Discord (`title`, `formattedContent`, `type`, `subreddit`, `submittedRedditUrl`, `formatCheckStatus`). Same task resolution as insight | `{ success, data: { taskId, internalTaskId, type, title, formattedContent, subreddit, submittedRedditUrl, formatCheckStatus } }` | 400 non-numeric id; 404 `'Task not found.'` |
+| POST | `/api/v1/goparttime/reddit-session` | Paste/refresh the spare-account Reddit login cookie (self-service). Validated + AES-vaulted, never echoed | `{ success, data: { updated: true } }` | 400 validation/vault-disabled; 401 bad key |
 
 ---
 
@@ -107,6 +109,8 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 | PUT | `/automation/blocked` | Add (normalized exact match) | `{ subreddit, reason? }` | 400; 500 |
 | DELETE | `/automation/blocked/:subreddit` | Remove | — | 500 |
 | POST | `/automation/session` | Save cookies to encrypted vault | `{ sessionToken ≥50ch, csrfToken, callbackUrl?, nextAction 64-hex?, userAgent? }` | 400 vault unconfigured/invalid |
+| GET | `/automation/reddit-session` | Safe Reddit-session status (configured + updatedAt/By, never the secret) | `{ success, data: { configured, updatedAt, updatedBy } }` | 500 |
+| POST | `/automation/reddit-session` | Paste/refresh the spare-account Reddit login cookie (dashboard Settings) | `{ cookie: full Cookie header, userAgent? }` | 400 validation/vault-disabled |
 | POST | `/automation/rehearse` | Single-task live-fire rehearsal: pre-flight checks + optional real claim | `{ externalTaskId, channelId, taskType?, subreddit?, title?, live? }` — real claim ONLY when `live:true` + dryRun off + `GOPARTTIME_AUTO_ACCEPT=true`, else `wouldAccept` dry check | 400 ticket/worker/busy/cap/validation/gate |
 
 ---

@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — Session format pre-check live at git HEAD `004fea7`** (app + dashboard rebuild, backup `rtm-backup-20260913-sessionfmt.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200, `/reddit-format-check.user.js` v1.0.0 served 200, `expected` route in live `dist/`, endpoint 401-without-key). Previous: Format auto-check (`4d8cd87`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — Reddit session vault live at git HEAD `8b48f85`** (app + dashboard rebuild, backup `rtm-backup-20260913-redditsess.tar.gz`; migration excerpt applied: `RedditSession` + `REDDIT_SESSION_UPDATED`; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200 (`index-B9ciLHv5.js`, hash matches local build), new routes in live `dist/`, endpoints 401-gated, live `NO_SESSION` check green). Previous: Session format pre-check script (`004fea7`).
 
 ---
 
