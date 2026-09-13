@@ -56,6 +56,11 @@ export function isShareUrl(normalized: string): boolean {
  * Follows a share link to its canonical permalink (server follows the 302
  * chain; response.url is the final post URL). Auth statuses propagate as
  * session errors; anything else becomes a plain Error for the host loop.
+ *
+ * NOTE: the redirect chain is the source of truth, not the landing status
+ * — Reddit answers some share landings with 404 HTML while the resolved
+ * permalink's .json works fine. So: if the final URL is a post permalink,
+ * return it regardless of status; only otherwise interpret the status.
  */
 export async function resolveShareUrl(
   shareUrl: string,
@@ -67,18 +72,15 @@ export async function resolveShareUrl(
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (res.status === 401 || res.status === 403) throw new RedditSessionExpiredError();
+  await res.text().catch(() => '');
+  const canonical = res.url.split(/[?#]/)[0].replace(/\/+$/, '');
+  if (/^https?:\/\/(www\.|old\.|new\.|sh\.)?reddit\.com\/r\//i.test(canonical)) {
+    return canonical;
+  }
   if (res.status === 404) {
     throw new Error('Share link did not resolve (404 — ask the worker for the full post link).');
   }
-  if (!res.ok) {
-    throw new Error(`Share link did not resolve (Reddit returned ${res.status} — ask the worker for the full post link).`);
-  }
-  await res.text().catch(() => '');
-  const canonical = res.url.split(/[?#]/)[0].replace(/\/+$/, '');
-  if (!/^https?:\/\/(www\.|old\.|new\.|sh\.)?reddit\.com\/r\//i.test(canonical)) {
-    throw new Error('Share link did not resolve to a post (ask the worker for the full post link).');
-  }
-  return canonical;
+  throw new Error(`Share link did not resolve (Reddit returned ${res.status} — ask the worker for the full post link).`);
 }
 
 /** No Reddit session cookie stored — manager setup pending. */

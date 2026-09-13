@@ -124,4 +124,21 @@ describe('checkPostFormat with mocked fetch', () => {
       resolveShareUrl('https://www.reddit.com/r/Homesteading/s/zOepl3TQmZ', { Cookie: 'x' }),
     ).rejects.toThrow(/full post link/i);
   });
+
+  it('accepts a resolved permalink even when the landing status is 404', async () => {
+    const canonical = 'https://www.reddit.com/r/Homesteading/comments/1wf0jy8/is_heating_a_greenhouse_with_a_mini_split_overkill/';
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 404, url: canonical + '?share_id=x', text: async () => '<html>' })
+      .mockResolvedValueOnce(jsonResponse(postJson('T', 'para one\n\npara two')));
+    const r = await checkPostFormat({
+      taskType: 'POST',
+      expectedTitle: 'T',
+      expectedContent: 'para one\n\npara two',
+      redditUrl: 'https://www.reddit.com/r/Homesteading/s/zOepl3TQmZ',
+    });
+    expect(r.status).toBe('MATCH');
+    const calls = (global.fetch as jest.Mock).mock.calls.map((c) => String(c[0]));
+    expect(calls[1]).toBe(canonical + '.json?raw_json=1');
+  });
 });
