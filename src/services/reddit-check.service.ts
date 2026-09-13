@@ -35,9 +35,50 @@ function normalizeRedditUrl(url: string): string | null {
   return normalized.split(/[?#]/)[0].replace(/\/+$/, '');
 }
 
-function toJsonUrl(normalized: string, host: string): string {
-  const viaHost = normalized.replace(/^https?:\/\/[^/]+/, `https://${host}`);
-  return `${viaHost}/.json?raw_json=1`;
+/**
+ * Resolves a per-host base URL to its .json endpoint.
+ * (Share links are resolved separately via resolveShareUrl.)
+ */
+function toJsonUrl(canonical: string): string {
+  return `${canonical}/.json?raw_json=1`;
+}
+
+/**
+ * Mobile share links look like /r/<sub>/s/<id> and only resolve
+ * client-side — appending /.json returns the HTML app shell instead of
+ * post JSON. Detect them so we can follow the redirect first.
+ */
+export function isShareUrl(normalized: string): boolean {
+  return /\/s\/[^/?#]+\/?$/i.test(normalized);
+}
+
+/**
+ * Follows a share link to its canonical permalink (server follows the 302
+ * chain; response.url is the final post URL). Auth statuses propagate as
+ * session errors; anything else becomes a plain Error for the host loop.
+ */
+export async function resolveShareUrl(
+  shareUrl: string,
+  headers: Record<string, string>,
+): Promise<string> {
+  const res = await fetch(shareUrl, {
+    headers,
+    redirect: 'follow',
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (res.status === 401 || res.status === 403) throw new RedditSessionExpiredError();
+  if (res.status === 404) {
+    throw new Error('Share link did not resolve (404 — ask the worker for the full post link).');
+  }
+  if (!res.ok) {
+    throw new Error(`Share link did not resolve (Reddit returned ${res.status} — ask the worker for the full post link).`);
+  }
+  await res.text().catch(() => '');
+  const canonical = res.url.split(/[?#]/)[0].replace(/\/+$/, '');
+  if (!/^https?:\/\/(www\.|old\.|new\.|sh\.)?reddit\.com\/r\//i.test(canonical)) {
+    throw new Error('Share link did not resolve to a post (ask the worker for the full post link).');
+  }
+  return canonical;
 }
 
 /** No Reddit session cookie stored — manager setup pending. */
@@ -73,15 +114,20 @@ export async function fetchRedditPost(redditUrl: string): Promise<RedditPostSnap
   if (!cookie) throw new RedditSessionRequiredError();
 
   let lastError = 'Unknown fetch error.';
+  const headers: Record<string, string> = {
+    'User-Agent': SESSION_USER_AGENT,
+    Accept: 'application/json',
+    // Secret: full spare-account Cookie header, never logged.
+    Cookie: cookie,
+  };
   for (const host of HOSTS) {
     try {
-      const response = await fetch(toJsonUrl(normalized, host), {
-        headers: {
-          'User-Agent': SESSION_USER_AGENT,
-          Accept: 'application/json',
-          // Secret: full spare-account Cookie header, never logged.
-          Cookie: cookie,
-        },
+      const hostBase = normalized.replace(/^https?:\/\/[^/]+/, `https://${host}`);
+      // Share links (/s/<id>) serve HTML even with auth — resolve to the
+      // canonical permalink first, per host.
+      const target = isShareUrl(hostBase) ? await resolveShareUrl(hostBase, headers) : hostBase;
+      const response = await fetch(toJsonUrl(target), {
+        headers,
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (response.status === 404) {
@@ -118,11 +164,11 @@ export async function fetchRedditPost(redditUrl: string): Promise<RedditPostSnap
         author.trim() === '[deleted]';
       return { title, selftext, author, subreddit, deleted };
     } catch (error) {
-        // Session verdicts are final — never downgrade to a retried host.
-        if (error instanceof RedditSessionExpiredError) throw error;
-        lastError = error instanceof Error ? error.message : String(error);
-        logger.warn('Reddit format-check fetch failed', { url: redditUrl, host, error: lastError });
-      }
+      // Session verdicts are final — never downgrade to a retried host.
+      if (error instanceof RedditSessionExpiredError) throw error;
+      lastError = error instanceof Error ? error.message : String(error);
+      logger.warn('Reddit format-check fetch failed', { url: redditUrl, host, error: lastError });
+    }
   }
   throw new Error(lastError);
 }
