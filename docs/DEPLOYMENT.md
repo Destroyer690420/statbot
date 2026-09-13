@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-12 — Format auto-check live at git HEAD `4d8cd87`** (app + dashboard rebuild, backup `rtm-backup-20260912-formatchk.tar.gz`; migration excerpt applied: `formatCheckStatus/Detail/CheckedAt`; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200 with served bundle `index-D8JG9sSP.js` (hash matches local build, `recheck-format` present), `formatSubmissionReply` + `recheck-format` in live `dist/`, 9/9 new jest locally). Previous: Pending Invites removal (`bcab738`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — Session format pre-check live at git HEAD `004fea7`** (app + dashboard rebuild, backup `rtm-backup-20260913-sessionfmt.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200, `/reddit-format-check.user.js` v1.0.0 served 200, `expected` route in live `dist/`, endpoint 401-without-key). Previous: Format auto-check (`4d8cd87`).
 
 ---
 
@@ -101,6 +101,7 @@ docker compose up -d --build
 ## 8. GoPartTime Extension Deployment
 
 - Userscript served at `https://statbot.duckdns.org/goparttime-send.user.js` (from `dashboard/public/` — must stay identical to `scripts/goparttime-send.user.js`).
+- Session format-check script served at `https://statbot.duckdns.org/reddit-format-check.user.js` (same mirroring rule vs `scripts/reddit-format-check.user.js`; manager-only, Tampermonkey on reddit.com).
 - Workers install via Tampermonkey (desktop) or Edge Canary (Android, see `ANDROID_SETUP.md`); enter the API URL + shared `GOPARTTIME_API_KEY` once.
 
 ## 9. Insight Image Storage
