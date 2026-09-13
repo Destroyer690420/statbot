@@ -157,5 +157,63 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
     }
   });
 
+  /**
+   * GET /api/v1/goparttime/expected/:externalTaskId
+   * Returns the exact expected text Statbot delivered to Discord for a
+   * GoPartTime task (title + formattedContent + type + subreddit), so a
+   * manager-browser script on reddit.com can compare the live post against
+   * the Discord copy using the manager's own Reddit session (VPS-proof:
+   * no server-side Reddit fetch, no rate-limit exposure).
+   * Resolves the task via its (source, externalTaskId) link, falling back to
+   * manually-created tasks whose id embeds the number ("POST #688318").
+   * Read-only: never modifies tasks or reminders.
+   */
+  router.get('/expected/:externalTaskId', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const externalTaskId = String(req.params.externalTaskId);
+      if (!/^\d+$/.test(externalTaskId)) {
+        res.status(400).json({ success: false, message: 'Invalid task ID.' });
+        return;
+      }
+
+      let taskDoc = await taskRepository.findBySourceExternal(GOPARTTIME_SOURCE, externalTaskId);
+
+      // Same manual-task fallback as the insight endpoint: tasks created via
+      // slash command / dashboard embed the GoPartTime number in the id.
+      if (!taskDoc) {
+        for (const candidateId of buildManualTaskIdCandidates(externalTaskId)) {
+          const candidate = await taskRepository.findById(candidateId);
+          if (candidate && !candidate.source) {
+            taskDoc = candidate;
+            break;
+          }
+        }
+      }
+
+      if (!taskDoc) {
+        res.status(404).json({ success: false, message: 'Task not found.' });
+        return;
+      }
+
+      const task = toTask(taskDoc);
+      res.json({
+        success: true,
+        data: {
+          taskId: externalTaskId,
+          internalTaskId: task.id,
+          type: task.type,
+          title: task.title,
+          formattedContent: task.formattedContent,
+          subreddit: task.subreddit,
+          submittedRedditUrl: task.submittedRedditUrl,
+          formatCheckStatus: task.formatCheckStatus,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      res.status(400).json({ success: false, message });
+    }
+  });
+
   return router;
 }

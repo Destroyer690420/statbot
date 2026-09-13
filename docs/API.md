@@ -81,6 +81,7 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 | GET | `/api/v1/goparttime/tickets` | Ticket channels + per-channel task state for the extension dropdown | `{ success, data: TicketInfo[] }` `{ channelId, channelName, guildId, taskStatus: idle\|active\|awaiting-submission }` | 500 |
 | POST | `/api/v1/goparttime/assign` | Create + deliver task from extension payload | 201 `{ success, data: task, failed: false }` or 200 `{ success, data, failed: true, error }` (delivery failure) | **409** already assigned; 400 validation; 503 key unconfigured |
 | GET | `/api/v1/goparttime/insight/:externalTaskId` | **Read-only** (v1.4.0 Submit View): the stored insight screenshot for the task's view-data step; `?step=1\|2`, optional (auto-resolve). Task resolved via `(source='goparttime', externalTaskId)`; falls back to manually-created tasks whose id embeds the number (`POST #688318` / `Comment #688318` / lowercase variants), accepting only tasks with no source | `{ success, data: { taskId, internalTaskId, type, reminderId, reminderType, step, completed, imageUrl } }`; no reminder → `reminderId: null` + `message` | 400 non-numeric id / invalid step / step-2-on-comment; 404 `'Task not found.'`; 500 |
+| GET | `/api/v1/goparttime/expected/:externalTaskId` | **Read-only** (session format-check script v1.0.0): exact text delivered to Discord (`title`, `formattedContent`, `type`, `subreddit`, `submittedRedditUrl`, `formatCheckStatus`). Same task resolution as insight | `{ success, data: { taskId, internalTaskId, type, title, formattedContent, subreddit, submittedRedditUrl, formatCheckStatus } }` | 400 non-numeric id; 404 `'Task not found.'` |
 
 ---
 
@@ -256,5 +257,6 @@ Hardcoded model: revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30; c
 |---|---|
 | Dashboard `api/client.ts` | almost all JWT endpoints (full list in `docs/FRONTEND.md`) |
 | Extension userscript | `GET /goparttime/tickets`, `POST /goparttime/assign`, `GET /goparttime/insight/:externalTaskId` (Submit View, v1.4.0) |
+| Session format-check script | `GET /goparttime/expected/:externalTaskId` (`reddit-format-check.user.js` v1.0.0, display-only) |
 | Discord bot | commands hit repositories/services directly (no HTTP); only the API serves `/discord/tickets` |
 | Health watch | `GET /health` (no consumer found in repo — nothing polls it) |

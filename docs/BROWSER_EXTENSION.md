@@ -104,3 +104,20 @@ Step 2 on a comment → 400 "Comments have only one view-data step (COMMENT_20H)
 - Depends on GoPartTime's DOM structure (Radix/Vaul dialogs, `div.prose`, named inputs) — fragile to site changes; hence the debug tool.
 - Single shared API key for all workers (no per-worker identity).
 - Submit View: desktop-only (auto-disabled on narrow/mobile viewports, v1.4.0); works only after a card's Submit View/countdown button was clicked (tracking); comments currently render no Submit View button in the GoPartTime UI (step 1 assumed); screenshots expire after 60h; the preview lets the manager read the count but the script still does not verify GoPartTime actually accepted the attached file.
+
+## 10. Second Script — Reddit Format Check (Session, v1.0.0)
+
+> Source: `scripts/reddit-format-check.user.js`, byte-identical `dashboard/public/reddit-format-check.user.js`, served at `https://statbot.duckdns.org/reddit-format-check.user.js`. **Display-only pre-check** — the server verdict (bot reply + dashboard badge) stays the source of truth.
+
+| Field | Value |
+|---|---|
+| `@match` | `*://reddit.com/*`, `*://www.reddit.com/*`, `*://old.reddit.com/*`, `*://new.reddit.com/*`, `*://sh.reddit.com/*` |
+| `@grant` | `GM_getValue`, `GM_setValue`, `GM_registerMenuCommand`, `GM_xmlhttpRequest` |
+| `@connect` | backend hosts (`statbot.duckdns.org`, `161.118.164.85`, `localhost`, `127.0.0.1`) + reddit hosts (`reddit.com`, `www/old/new/sh.reddit.com`) |
+| `@run-at` | `document-idle` |
+
+Why it exists: the server format check fetches Reddit JSON from the VPS IP (429-prone, 404s ~30s on fresh posts). This script fetches the same `.json?raw_json=1` **same-origin from the manager's logged-in tab** (session cookies + home IP), so gated/fresh/throttled posts verify fine.
+
+Flow: open the worker's post → floating "Check Format" button → enter the GoPartTime task number → script `GET`s expected text from `GET /api/v1/goparttime/expected/:taskId` (extension key; exact `title` + `formattedContent` Discord received) via `GM_xmlhttpRequest` (bypasses CORS — reddit.com is not in the backend allowlist, so Tampermonkey is required), fetches live JSON same-origin first then `old.reddit.com` fallback (12s timeout each), compares with a verbatim port of `src/utils/reddit-format.ts` (`splitParagraphs` / `normalizeInline` / `compareRedditFormat` — normalized text, strict paragraph structure), renders MATCH / TITLE_MISMATCH / PARA_MISMATCH / TEXT_MISMATCH + per-paragraph Exp-vs-Live diff + the same hints as the bot reply. COMMENT tasks report SKIPPED; deleted posts report DELETED; a tab URL differing from the worker-submitted URL gets a warning line. Recheck button covers fresh-post 404s. Settings (backend URL + `GOPARTTIME_API_KEY`) via the Tampermonkey "Configure Format Check..." menu, same storage pattern as the sender script; last task ID remembered.
+
+Deliberate non-features: no POST back to Statbot (no verdict persistence, no audit) — advisory only.

@@ -96,6 +96,9 @@ Every guild's TextChannels; `taskStatus`: `awaiting-submission` (a task awaiting
 ### `recheckFormat(taskId)` — dashboard Recheck
 - Re-runs the same check for a task that already has a `submittedRedditUrl` (fresh posts can 404 for ~30s; 429s recover). Backed by `POST /api/v1/tasks/:id/recheck-format`.
 
+### Session format pre-check (manager browser, display-only)
+- The VPS-side fetch above can hit Reddit 429s (shared IP) and 404s on fresh posts. The separate Tampermonkey script **`scripts/reddit-format-check.user.js` v1.0.0** (byte-identical `dashboard/public/` copy, served at `/reddit-format-check.user.js`) runs on **reddit.com** post pages: it fetches the live post `.json?raw_json=1` **same-origin with the manager's logged-in session** (cookies + home IP — no VPS exposure), fetches the exact expected text from Statbot via read-only `GET /api/v1/goparttime/expected/:externalTaskId` (extension key; `title` + `formattedContent`, i.e. precisely what Discord received), compares locally with a verbatim port of `src/utils/reddit-format.ts`, and shows MATCH/MISMATCH + per-paragraph diff in a floating panel. **Never writes back** — the bot reply + dashboard badge stay the only official verdict. See `docs/BROWSER_EXTENSION.md` §10.
+
 ### `activateTask(taskId, by)` — the "Done" action
 - Guards: `assignmentStatus === 'SENT'`, status `ACCEPTED`.
 - `ACCEPTED → PENDING`; binds `redditUrl = submittedRedditUrl || null`; creates + schedules insight reminders; audit `TASK_ACCEPTED` (logs submitted URL or "no URL submitted").
@@ -111,6 +114,7 @@ Every guild's TextChannels; `taskStatus`: `awaiting-submission` (a task awaiting
 | `GET /api/v1/goparttime/tickets` | extension key | ticket dropdown data |
 | `POST /api/v1/goparttime/assign` | extension key | assign + deliver |
 | `GET /api/v1/goparttime/insight/:externalTaskId` | extension key | **read-only**; the stored insight screenshot for a task's view-data step (`?step=1\|2`, default: resolve automatically); used by Submit View (v1.4.0) |
+| `GET /api/v1/goparttime/expected/:externalTaskId` | extension key | **read-only**; exact expected text Statbot delivered to Discord (`title`, `formattedContent`, `type`, `subreddit`, `submittedRedditUrl`, `formatCheckStatus`); used by the session format-check script (`reddit-format-check.user.js` v1.0.0). Same task resolution as insight (source+external, manual-id fallback); 400 non-numeric id, 404 not found |
 | `GET /api/v1/discord/tickets` | JWT + admin username | same list for dashboard |
 | `POST /api/v1/tasks/assign-from-goparttime` | JWT | dashboard twin (same service) |
 | `POST /api/v1/tasks/:id/submit-url` | JWT | dashboard URL submission (also runs the auto format check) |

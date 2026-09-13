@@ -2,6 +2,9 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## Unreleased (implemented, NOT yet deployed)
+- **Session format pre-check**: new Tampermonkey script `scripts/reddit-format-check.user.js` v1.0.0 (byte-identical `dashboard/public/` copy, served at `/reddit-format-check.user.js`) runs on reddit.com post pages — fetches live `.json?raw_json=1` same-origin with the manager's logged-in session (cookies + home IP, no VPS exposure), fetches exact expected text via new read-only `GET /api/v1/goparttime/expected/:externalTaskId` (extension key; `title` + `formattedContent` as delivered to Discord; same task resolution as insight incl. manual-id fallback), compares locally with a verbatim port of `src/utils/reddit-format.ts`, shows MATCH/MISMATCH + per-paragraph diff in a floating panel. Display-only: no POST back, server verdict stays source of truth. Verified: `node --check` clean, 3/3 parity vs server comparator, `fc /b` identical copies, typecheck clean, `npm run build` clean, 258/258 jest (21 suites). `npm run lint` still broken repo-wide (no eslint config — pre-existing). Deploy checklist: `docker compose up -d --build` (backend + dashboard for the served copy); no DB migration; no slash-command redeploy.
+
 ## 2026-09-12
 ### Deployed
 - **Reddit format auto-check live** (`161.118.164.85`) at commit `4d8cd87` (app + dashboard rebuild; backup `rtm-backup-20260912-formatchk.tar.gz`; migration excerpt applied: `formatCheckStatus/Detail/CheckedAt`; no slash-command redeploy; pushed to GitHub; host + local bundles/scratch cleaned). Verified live: health healthy (DB+Redis), boot "All systems online!", dashboard 200 (`index-D8JG9sSP.js`, hash matches local build), new code in live `dist/`, 9/9 new jest.
