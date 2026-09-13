@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.2.0
+// @version      1.2.1
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,13 @@
 // ==/UserScript==
 
 /**
+ * v1.2.1 - Force-return to /tasks: GoPartTime auto-navigates the tab to
+ * /my-tasks/todo on every accept, which stalled the watcher (monitor +
+ * drawer matching only run on /tasks). After each claim verdict (success
+ * or failure) the script now navigates the same tab back to /tasks, so
+ * the next claim proceeds with no manual reload. Otherwise identical to
+ * v1.2.0 below.
+ *
  * v1.2.0 - Blast Now button (bottom-right, above the gear): manual immediate
  * round on /tasks - scans, blasts for the eligible count (server force
  * bypasses only the window gate), winners served exactly like hourly rounds.
@@ -94,7 +101,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.1';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -919,6 +926,17 @@
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   }
 
+  // GoPartTime auto-navigates the tab to /my-tasks/todo on every accept.
+  // Force-return to /tasks on the same tab so the next claim's drawer
+  // matching + monitor scans resume with no manual reload. Guarded by
+  // pathname: a no-op when already on /tasks (never a reload loop).
+  // Never throws - navigation must not break the claim flow.
+  function returnToTasks() {
+    try {
+      if (!/^\/tasks\/?$/.test(window.location.pathname)) window.location.href = '/tasks';
+    } catch (e) { /* never break claim flow for navigation */ }
+  }
+
   function findField(labelText, root) {
     const nodes = (root || document).querySelectorAll('div, span');
     for (const el of nodes) {
@@ -1274,6 +1292,7 @@
       const failReason = acceptError || 'GoPartTime acceptance timed out or drawer did not close.';
       await reportClaim(settings, claim, false, failReason);
       setStatus(false, 'accept #' + subTaskId + ' failed: ' + failReason);
+      returnToTasks();
       return;
     }
 
@@ -1298,6 +1317,9 @@
     } else {
       setStatus(false, 'accepted #' + subTaskId + ' - PUSH MANUALLY via Send Task');
     }
+    // 8. GoPartTime moved us to /my-tasks/todo on accept - go back to
+    // /tasks on the same tab so the next claim needs no manual reload.
+    returnToTasks();
   }
 
   // --- Loops --
