@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — watcher v1.2.2 Blast Now layout fix live at git HEAD `f14cffa`** (dashboard-only rebuild, backup `rtm-backup-watcher122.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, `/goparttime-auto.user.js` 200 serving v1.2.2). Previous: watcher v1.2.1 (`4434644`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — blast fill-safe sending live at git HEAD `c35d883`** (app + dashboard rebuild, backup `rtm-backup-blastfillsafe.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200, fix in live container `dist/`). Previous: watcher v1.2.2 (`f14cffa`).
 
 ---
 

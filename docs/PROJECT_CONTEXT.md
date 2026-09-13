@@ -251,7 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-13**: **Blast fill-safe sending (implemented, NOT yet deployed)**. Fixed stranded availability messages: a fast first reply filled the blast mid-send while the loop kept messaging (30 stranded in the ticket-0155 round) — `sendBlastMessages` now stops once the blast closes + post-send sweeps non-winner messages on filled blasts. Verified: typecheck + build clean, 277/277 jest. Needs app rebuild deploy.
+- **2026-09-13**: **DEPLOYED blast fill-safe sending** (`161.118.164.85`) at commit `c35d883` (app + dashboard rebuild; backup `rtm-backup-blastfillsafe.tar.gz`; no DB migration; no slash-command redeploy; pushed to GitHub; host + local bundles/scratch cleaned). Root cause of stranded messages: fast first reply filled the blast mid-send while the loop kept messaging (ticket-0155 round: 43 sent, 12 cleaned, 30 stranded) — `sendBlastMessages` now stops once the blast closes + post-send sweeps non-winner messages on filled blasts. Verified live: health healthy (DB+Redis), boot "All systems online!", dashboard 200, fix strings in live container `dist/`. Locally: typecheck + build clean, 277/277 jest.
 
 - **2026-09-13**: **DEPLOYED watcher v1.2.2 Blast Now layout fix** (`161.118.164.85`) at commit `f14cffa` (dashboard-only rebuild; backup `rtm-backup-watcher122.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Blast Now was at bottom:54px overlapping Send Task + Submit View — now parks above both (124px desktop, 144px narrow). Verified live: health healthy, `/goparttime-auto.user.js` 200 serving v1.2.2. Manager must update Tampermonkey to v1.2.2.
 
