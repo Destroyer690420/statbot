@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — Reddit session vault live at git HEAD `8b48f85`** (app + dashboard rebuild, backup `rtm-backup-20260913-redditsess.tar.gz`; migration excerpt applied: `RedditSession` + `REDDIT_SESSION_UPDATED`; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200 (`index-B9ciLHv5.js`, hash matches local build), new routes in live `dist/`, endpoints 401-gated, live `NO_SESSION` check green). Previous: Session format pre-check script (`004fea7`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — Reddit session vault + share-link fix live at git HEAD `e4d6f95`** (app + dashboard rebuilds, backups `rtm-backup-20260913-redditsess.tar.gz` + `rtm-backup-20260913-sharefix.tar.gz`; migration excerpt applied: `RedditSession` + `REDDIT_SESSION_UPDATED`; spare-account cookie vaulted; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200, live recheck on real worker share link → **MATCH 6/6**). Previous: Session format pre-check script (`004fea7`).
 
 ---
 
