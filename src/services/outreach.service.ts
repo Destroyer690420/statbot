@@ -186,6 +186,9 @@ class OutreachService {
   /**
    * Delivers one blast's message to every selected ticket (skipping capped
    * workers). Pair with beginBlast; sendBlast does both in one call.
+   * Fill-safe: re-checks the blast before each send and stops once it is
+   * closed (late tickets are logged as skipped), then sweeps any messages
+   * that raced in after the fill-cleanup so no loser keeps the message.
    */
   async sendBlastMessages(
     discordClient: Client,
@@ -211,7 +214,29 @@ class OutreachService {
 
     const sent: SendResult[] = [];
     const skipped: SkippedTicket[] = [];
-    for (const row of selected) {
+    for (let i = 0; i < selected.length; i++) {
+      const row = selected[i];
+      // Stop-the-send check: Discord sends are slow and the blast can fill
+      // while earlier sends are still in flight (a fast first reply closes
+      // it mid-loop). Anything sent after the fill-cleanup would never be
+      // deleted — so stop the moment this blast is no longer OPEN. This is
+      // one cheap indexed row read per send (~ms vs ~s for the send itself).
+      const live = await outreachRepository.getBlast(blast.id).catch(() => null);
+      if (!live || live.status !== 'OPEN') {
+        for (let j = i; j < selected.length; j++) {
+          skipped.push({
+            channelId: selected[j].channelId,
+            channelName: null,
+            reason: 'blast closed before send',
+          });
+        }
+        logger.info('Blast send stopped early: blast closed mid-send', {
+          blastId: blast.id,
+          sentOk: sent.filter((s) => s.ok).length,
+          skippedRest: selected.length - i,
+        });
+        break;
+      }
       try {
         const channel = await discordClient.channels.fetch(row.channelId);
         if (!channel || !(channel instanceof TextChannel)) {
@@ -251,8 +276,26 @@ class OutreachService {
       AuditAction.OUTREACH_MESSAGE_SENT,
       null,
       senderId,
-      `Outreach blast ${blast.id} (${blast.slotsTotal} slots) sent to ${okChannels.length} ticket(s)${okChannels.length ? `: ${okChannels.join(', ')}` : ''}${failedChannels.length ? ` — failed: ${failedChannels.join(', ')}` : ''}${skipped.length ? ` — skipped ${skipped.length} (daily cap / no worker)` : ''}`,
+      `Outreach blast ${blast.id} (${blast.slotsTotal} slots) sent to ${okChannels.length} ticket(s)${okChannels.length ? `: ${okChannels.join(', ')}` : ''}${failedChannels.length ? ` — failed: ${failedChannels.join(', ')}` : ''}${skipped.length ? ` — skipped ${skipped.length} (daily cap / no worker / closed mid-send)` : ''}`,
     );
+
+    // Post-send sweep: the fill-cleanup only deleted messages recorded
+    // before its snapshot, so sends that raced in between fill and the
+    // stop-the-send check above would otherwise stay forever. Sweep them
+    // now (winners keep theirs). Only for actually-filled blasts — a blast
+    // closed by supersede keeps its seen messages by design (beginBlast).
+    const finalBlast = await outreachRepository.getBlast(blast.id).catch(() => null);
+    if (finalBlast && isBlastFull(finalBlast.slotsFilled, finalBlast.slotsTotal)) {
+      const winners = new Set(await outreachRepository.listReplyChannelIds(blast.id).catch(() => []));
+      const swept = await this.deleteBlastMessages(discordClient, blast.id, winners);
+      if (swept.deleted > 0 || swept.failed > 0) {
+        logger.info('Blast post-send sweep complete', {
+          blastId: blast.id,
+          deleted: swept.deleted,
+          failed: swept.failed,
+        });
+      }
+    }
 
     return { sent, skipped };
   }

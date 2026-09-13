@@ -251,6 +251,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-13**: **Blast fill-safe sending (implemented, NOT yet deployed)**. Fixed stranded availability messages: a fast first reply filled the blast mid-send while the loop kept messaging (30 stranded in the ticket-0155 round) — `sendBlastMessages` now stops once the blast closes + post-send sweeps non-winner messages on filled blasts. Verified: typecheck + build clean, 277/277 jest. Needs app rebuild deploy.
+
 - **2026-09-13**: **DEPLOYED watcher v1.2.2 Blast Now layout fix** (`161.118.164.85`) at commit `f14cffa` (dashboard-only rebuild; backup `rtm-backup-watcher122.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Blast Now was at bottom:54px overlapping Send Task + Submit View — now parks above both (124px desktop, 144px narrow). Verified live: health healthy, `/goparttime-auto.user.js` 200 serving v1.2.2. Manager must update Tampermonkey to v1.2.2.
 
 - **2026-09-13**: **DEPLOYED watcher v1.2.1 force-return to /tasks** (`161.118.164.85`) at commit `4434644` (dashboard-only rebuild; backup `rtm-backup--watcher121.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). GoPartTime auto-navigates the tab to `/my-tasks/todo` on every accept — after each claim verdict (success or failure) the script now navigates the same tab back to `/tasks` (pathname-guarded `returnToTasks()`, after `reportClaim`). Verified live: health healthy (DB+Redis), dashboard 200, `/goparttime-auto.user.js` 200 serving v1.2.1 with the fix. Manager must update the Tampermonkey script to v1.2.1 in the browser.
