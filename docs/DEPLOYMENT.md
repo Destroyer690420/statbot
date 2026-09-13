@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — watcher v1.2.1 force-return to /tasks live at git HEAD `4434644`** (dashboard-only rebuild, backup `rtm-backup--watcher121.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, dashboard 200, `/goparttime-auto.user.js` 200 serving v1.2.1). Previous: Reddit session vault + share-link fix (`e4d6f95`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-13 — watcher v1.2.2 Blast Now layout fix live at git HEAD `f14cffa`** (dashboard-only rebuild, backup `rtm-backup-watcher122.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, `/goparttime-auto.user.js` 200 serving v1.2.2). Previous: watcher v1.2.1 (`4434644`).
 
 ---
 
