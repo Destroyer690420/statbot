@@ -15,7 +15,9 @@ export type FormatCheckStatus =
   | 'TEXT_MISMATCH'
   | 'FETCH_ERROR'
   | 'DELETED'
-  | 'SKIPPED';
+  | 'SKIPPED'
+  | 'NO_SESSION'
+  | 'SESSION_EXPIRED';
 
 export interface FormatCompareInput {
   expectedTitle: string | null;

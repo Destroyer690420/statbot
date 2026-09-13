@@ -3,6 +3,7 @@ import { Client, TextChannel } from 'discord.js';
 import { z } from 'zod';
 import { automationRepository, outreachRepository, taskRepository } from '../../database/repositories';
 import { sessionService } from '../../services/automation/session.service';
+import { redditSessionService } from '../../services/reddit-session.service';
 import { normalizeSubreddit } from '../../services/automation/subreddit';
 import { validateDetectedTask } from '../../services/automation/validator.service';
 import { scanTasks, acceptTask } from '../../services/automation/poller.service';
@@ -40,6 +41,11 @@ const sessionSchema = z.object({
 const blockedSchema = z.object({
   subreddit: z.string().min(1).max(80),
   reason: z.string().max(200).optional().nullable(),
+});
+
+const redditSessionSchema = z.object({
+  cookie: z.string().min(50).max(12000),
+  userAgent: z.string().max(500).optional().nullable(),
 });
 
 const testContactSchema = z.object({
@@ -305,6 +311,30 @@ export default function createAutomationRoutes(discordClient: Client): Router {
     try {
       const userId = (req as unknown as { userId: string }).userId;
       await sessionService.save(req.body, userId);
+      res.json({ success: true, data: { updated: true } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      res.status(400).json({ success: false, message });
+    }
+  });
+
+  /** GET /api/v1/automation/reddit-session — safe status, never the secret. */
+  router.get('/reddit-session', async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      const status = await redditSessionService.status();
+      res.json({ success: true, data: status });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /** POST /api/v1/automation/reddit-session — paste/refresh the spare-account login cookie. */
+  router.post('/reddit-session', validateBody(redditSessionSchema), async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      const userId = (req as unknown as { userId: string }).userId;
+      await redditSessionService.save(req.body, userId);
       res.json({ success: true, data: { updated: true } });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Internal server error.';

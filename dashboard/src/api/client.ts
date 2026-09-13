@@ -80,6 +80,21 @@ export async function recheckFormat(id: string) {
   return data;
 }
 
+export async function getLiveReddit(id: string) {
+  const { data } = await api.get(`/tasks/${encodeURIComponent(id)}/live-reddit`);
+  return data;
+}
+
+export async function getRedditSessionStatus() {
+  const { data } = await api.get('/automation/reddit-session');
+  return data;
+}
+
+export async function saveRedditSession(body: { cookie: string; userAgent?: string }) {
+  const { data } = await api.post('/automation/reddit-session', body);
+  return data;
+}
+
 export async function getTickets() {
   const { data } = await api.get('/discord/tickets');
   return data;

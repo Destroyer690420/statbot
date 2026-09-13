@@ -4,6 +4,11 @@ import { Client } from 'discord.js';
 import { taskService } from '../../services/task.service';
 import { reminderService } from '../../services/reminder.service';
 import { goparttimeService } from '../../services/goparttime.service';
+import {
+  fetchLiveSnapshot,
+  RedditSessionRequiredError,
+  RedditSessionExpiredError,
+} from '../../services/reddit-check.service';
 import { goPartTimePayloadSchema } from '../../utils/goparttime-payload';
 import { scheduleAllReminders, scheduleReminderJob, cancelTaskJobs } from '../../scheduler/jobs';
 import { Task, TaskType, TaskStatus, TaskFilters } from '../../types';
@@ -164,6 +169,47 @@ export default function createTaskRoutes(discordClient: Client): Router {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Internal server error.';
       res.status(400).json({ success: false, message });
+    }
+  });
+
+  /**
+   * GET /api/v1/tasks/:id/live-reddit
+   * Server-side (vault-session) snapshot of the submitted Reddit post for
+   * the dashboard diff modal. The browser-direct fetch is anonymous and
+   * Reddit 403s it, so the modal uses this instead. Never exposes the cookie.
+   */
+  router.get('/:id/live-reddit', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const task = await taskService.findById(String(req.params.id));
+      if (!task) {
+        res.status(404).json({ success: false, message: 'Task not found.' });
+        return;
+      }
+      if (!task.submittedRedditUrl) {
+        res.status(400).json({ success: false, status: 'NO_URL', message: 'No submitted URL to fetch yet.' });
+        return;
+      }
+      const snapshot = await fetchLiveSnapshot(task.submittedRedditUrl);
+      res.json({
+        success: true,
+        data: {
+          title: snapshot.title,
+          selftext: snapshot.selftext,
+          author: snapshot.author,
+          deleted: snapshot.deleted,
+        },
+      });
+    } catch (error) {
+      if (error instanceof RedditSessionRequiredError) {
+        res.status(400).json({ success: false, status: 'NO_SESSION', message: error.message });
+        return;
+      }
+      if (error instanceof RedditSessionExpiredError) {
+        res.status(400).json({ success: false, status: 'SESSION_EXPIRED', message: error.message });
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      res.status(502).json({ success: false, status: 'FETCH_ERROR', message });
     }
   });
 

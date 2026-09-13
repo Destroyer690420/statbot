@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { Client } from 'discord.js';
+import { z } from 'zod';
 import { goparttimeService } from '../../services/goparttime.service';
 import { goPartTimePayloadSchema } from '../../utils/goparttime-payload';
 import { extensionAuth } from '../middleware/extensionAuth';
 import { validateBody } from '../middleware/validate';
+import { redditSessionService } from '../../services/reddit-session.service';
 import { logger } from '../../utils/logger';
 import { taskRepository } from '../../database/repositories';
 import { reminderService } from '../../services/reminder.service';
@@ -214,6 +216,29 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
       res.status(400).json({ success: false, message });
     }
   });
+
+  /**
+   * POST /api/v1/goparttime/reddit-session
+   * Paste/refresh the spare Reddit account's login cookie (self-service,
+   * no SSH). Same vault + validation as the dashboard path. The secret is
+   * never echoed back.
+   */
+  router.post(
+    '/reddit-session',
+    validateBody(z.object({
+      cookie: z.string().min(50).max(12000),
+      userAgent: z.string().max(500).optional().nullable(),
+    })),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        await redditSessionService.save(req.body, 'goparttime-extension');
+        res.json({ success: true, data: { updated: true } });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Internal server error.';
+        res.status(400).json({ success: false, message });
+      }
+    },
+  );
 
   return router;
 }

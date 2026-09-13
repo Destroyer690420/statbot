@@ -64,6 +64,7 @@ enum AuditAction {
   AUTOMATION_BLOCKED
   AUTOMATION_SESSION_UPDATED
   AUTOMATION_STOPPED
+  REDDIT_SESSION_UPDATED
 }
 
 enum ReferralStatus {
@@ -504,4 +505,12 @@ model InviteDetection {
   @@index([inviteeId])
   @@index([status])
   @@index([createdAt])
+}
+
+model RedditSession {
+  id           String   @id @default("default")
+  cookieCipher String?
+  userAgent    String?
+  updatedAt    DateTime @updatedAt
+  updatedBy    String
 }

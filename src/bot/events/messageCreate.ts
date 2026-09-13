@@ -102,9 +102,16 @@ function formatSubmissionReply(task: { formatCheckStatus?: string | null; format
     const counts = parseParaCounts(task.formatCheckDetail);
     return `✅ Submission recorded. ✅ Post matches${counts ? ` (${counts.actual}/${counts.expected} ¶, title OK)` : ''} — ready for review.`;
   }
+  if (status === 'NO_SESSION') {
+    return '✅ Submission recorded. ⚠️ Format check is not set up yet — manager must paste the Reddit session cookie in dashboard Settings, then Recheck.';
+  }
+  if (status === 'SESSION_EXPIRED') {
+    const detail = parseCheckDetail(task.formatCheckDetail);
+    return `✅ Submission recorded. ⚠️ Reddit session expired${detail?.error ? ` (${detail.error})` : ''} — manager must re-paste the cookie in dashboard Settings, then Recheck.`;
+  }
   if (status === 'FETCH_ERROR' || status === 'DELETED') {
     const detail = parseCheckDetail(task.formatCheckDetail);
-    return `✅ Submission recorded. ⚠️ Could not verify formatting yet${detail?.error ? `: ${detail.error}` : ''} — manager will recheck.`;
+    return `✅ Submission recorded. ⚠️ Could not verify formatting yet${detail?.error ? `: ${detail.error}` : ''} — try Recheck from the dashboard.`;
   }
   const counts = parseParaCounts(task.formatCheckDetail);
   const countStr = counts ? ` (${counts.actual}/${counts.expected} ¶)` : '';

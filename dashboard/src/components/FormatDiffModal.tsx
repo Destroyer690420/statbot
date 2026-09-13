@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, ExternalLink, X, RefreshCw } from 'lucide-react';
 import { fetchRedditPostLive } from '../utils/redditFetch';
 import { normalizeInline, splitParagraphs } from '../utils/redditFormat';
-import { recheckFormat } from '../api/client';
+import { recheckFormat, getLiveReddit } from '../api/client';
 
 interface Props {
   task: any;
@@ -14,6 +14,7 @@ export function FormatDiffModal({ task, onClose, onRechecked }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<{ title: string; selftext: string } | null>(null);
+  const [source, setSource] = useState<'server' | 'browser' | null>(null);
   const [rechecking, setRechecking] = useState(false);
 
   const expectedTitle: string = task.title || '';
@@ -23,23 +24,50 @@ export function FormatDiffModal({ task, onClose, onRechecked }: Props) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchRedditPostLive(task.submittedRedditUrl)
-      .then((p) => {
-        if (!cancelled) {
-          setLive({ title: p.title, selftext: p.selftext });
+    setSource(null);
+    // Server snapshot first: the browser-direct fetch is anonymous and
+    // Reddit 403s it, so it only serves as a fallback for true server
+    // outages. Session problems (NO_SESSION / SESSION_EXPIRED / NO_URL)
+    // are final — retrying anonymously cannot fix them.
+    getLiveReddit(task.id)
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.success && res?.data) {
+          setLive({ title: res.data.title || '', selftext: res.data.selftext || '' });
+          setSource('server');
           setLoading(false);
+        } else {
+          throw { response: { data: res } };
         }
       })
-      .catch((e: Error) => {
-        if (!cancelled) {
-          setError(e.message);
+      .catch((err) => {
+        if (cancelled) return;
+        const serverStatus = err?.response?.data?.status as string | undefined;
+        const serverMessage = err?.response?.data?.message as string | undefined;
+        if (serverStatus === 'NO_SESSION' || serverStatus === 'SESSION_EXPIRED' || serverStatus === 'NO_URL') {
+          setError(serverMessage || 'Server snapshot unavailable.');
           setLoading(false);
+          return;
         }
+        fetchRedditPostLive(task.submittedRedditUrl)
+          .then((p) => {
+            if (!cancelled) {
+              setLive({ title: p.title, selftext: p.selftext });
+              setSource('browser');
+              setLoading(false);
+            }
+          })
+          .catch((e: Error) => {
+            if (!cancelled) {
+              setError(serverMessage || e.message);
+              setLoading(false);
+            }
+          });
       });
     return () => {
       cancelled = true;
     };
-  }, [task.submittedRedditUrl]);
+  }, [task.id, task.submittedRedditUrl]);
 
   const actualParas = live ? splitParagraphs(live.selftext) : [];
   const titleOk = live ? normalizeInline(expectedTitle) === normalizeInline(live.title) : false;
@@ -95,6 +123,9 @@ export function FormatDiffModal({ task, onClose, onRechecked }: Props) {
             <p className="text-sm text-orange-400 bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">{error}</p>
           ) : (
             <>
+              <div className="text-[11px] text-dark-500">
+                Live copy via {source === 'server' ? 'server session (spare Reddit account)' : 'your browser (fallback — may be rate-limited)'}.
+              </div>
               <div className={`rounded-lg border p-3 text-sm ${titleOk ? 'border-green-500/20 bg-green-500/5 text-green-300' : 'border-yellow-500/20 bg-yellow-500/5 text-yellow-300'}`}>
                 <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70 mb-1">{titleOk ? '✓ Title matches' : '✗ Title differs'}</p>
                 <p><span className="opacity-60">Expected:</span> {expectedTitle || '(none)'}</p>

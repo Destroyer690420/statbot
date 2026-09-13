@@ -641,3 +641,23 @@ ALTER TABLE "AutomationBurst" ADD COLUMN IF NOT EXISTS "taskDetails" TEXT;
 ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "formatCheckStatus" TEXT;
 ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "formatCheckDetail" TEXT;
 ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "formatCheckedAt" TIMESTAMP(3);
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Reddit session vault (server-side format check auth)
+-- ──────────────────────────────────────────────────────────────
+-- Reddit killed anonymous .json access (www -> 403, old -> login gate),
+-- so the server format check authenticates with a spare account's login
+-- cookie. The full Cookie header value lives encrypted (AES-256-GCM, key
+-- GOPARTTIME_SESSION_KEY) in this singleton row, never logged. The
+-- manager pastes/refreshes it self-service (dashboard Settings or the
+-- extension-key endpoint); no SSH needed. Schema-only, no data statements.
+CREATE TABLE IF NOT EXISTS "RedditSession" (
+  "id" TEXT NOT NULL DEFAULT 'default',
+  "cookieCipher" TEXT,
+  "userAgent" TEXT,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  "updatedBy" TEXT NOT NULL,
+  CONSTRAINT "RedditSession_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'REDDIT_SESSION_UPDATED';

@@ -56,6 +56,23 @@ export class AutomationRepository {
     });
   }
 
+  // ─── Reddit session (singleton id='default', cookie cipher at rest) ───
+  async getRedditSession() {
+    return getDb().redditSession.findUnique({ where: { id: 'default' } });
+  }
+
+  async saveRedditSession(data: {
+    cookieCipher: string | null;
+    userAgent: string | null;
+    updatedBy: string;
+  }) {
+    return getDb().redditSession.upsert({
+      where: { id: 'default' },
+      create: { id: 'default', ...data, updatedAt: new Date() },
+      update: { ...data, updatedAt: new Date() },
+    });
+  }
+
   // ─── Cycles ───
   async createCycle(data: { id: string; dryRun: boolean }) {
     return getDb().automationCycle.create({

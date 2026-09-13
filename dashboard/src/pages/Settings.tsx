@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X, MessageSquare } from 'lucide-react';
-import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin, getOutreachSettings, updateOutreachSettings } from '../api/client';
+import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin, getOutreachSettings, updateOutreachSettings, getRedditSessionStatus, saveRedditSession } from '../api/client';
 
 export function Settings() {
   const navigate = useNavigate();
@@ -143,6 +143,27 @@ export function Settings() {
   const handleSaveOutreachMessage = () => {
     outreachMutation.mutate({ message: outreachMessage });
   };
+
+  // ─── Reddit Session (spare-account login cookie for format checks) ──
+
+  const redditSessionQuery = useQuery({
+    queryKey: ['reddit-session'],
+    queryFn: getRedditSessionStatus,
+  });
+
+  const [redditCookie, setRedditCookie] = useState('');
+
+  const redditSessionMutation = useMutation({
+    mutationFn: (body: { cookie: string }) => saveRedditSession(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reddit-session'] });
+      setRedditCookie('');
+    },
+  });
+
+  const redditConfigured = !!redditSessionQuery.data?.data?.configured;
+  const redditUpdatedAt = redditSessionQuery.data?.data?.updatedAt as string | undefined;
+  const redditUpdatedBy = redditSessionQuery.data?.data?.updatedBy as string | undefined;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -476,6 +497,62 @@ export function Settings() {
           )}
           {outreachMutation.isError && (
             <p className="mt-2 text-red-400 text-sm">❌ Failed to update message: {(outreachMutation.error as Error).message}</p>
+          )}
+        </div>
+
+        {/* Reddit Session (format-check login) */}
+        <div className="glass-card p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Reddit Session</h3>
+          <p className="text-dark-400 text-sm mb-4">
+            Reddit blocks anonymous checks, so the bot verifies formatting with a spare account's login cookie
+            (stored encrypted, never shown). Paste the full <code className="text-primary-300">Cookie</code> header value
+            from DevTools (spare account logged into reddit.com → F12 → Network → any reddit request → Request Headers).
+            Re-paste whenever checks report an expired session.
+          </p>
+
+          {redditSessionQuery.isLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
+            </div>
+          ) : (
+            <p className="text-sm mb-4">
+              {redditConfigured ? (
+                <span className="text-green-400">
+                  ✅ Configured{redditUpdatedAt ? ` (updated ${new Date(redditUpdatedAt).toLocaleString()}${redditUpdatedBy ? ` by ${redditUpdatedBy}` : ''})` : ''}.
+                </span>
+              ) : (
+                <span className="text-yellow-400">⚠️ Not configured — format checks cannot run until you paste a cookie.</span>
+              )}
+            </p>
+          )}
+
+          <textarea
+            value={redditCookie}
+            onChange={(e) => setRedditCookie(e.target.value)}
+            rows={3}
+            maxLength={12000}
+            className="input-field w-full font-mono text-xs"
+            placeholder="Paste the full Cookie header value here (cleared on save, never stored in plain text)"
+          />
+
+          <button
+            onClick={() => redditSessionMutation.mutate({ cookie: redditCookie.trim() })}
+            disabled={!redditCookie.trim() || redditSessionMutation.isPending}
+            className="btn-primary flex items-center gap-2 mt-4"
+          >
+            {redditSessionMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save Cookie
+          </button>
+
+          {redditSessionMutation.isSuccess && (
+            <p className="mt-2 text-green-400 text-sm">✅ Reddit session updated successfully.</p>
+          )}
+          {redditSessionMutation.isError && (
+            <p className="mt-2 text-red-400 text-sm">❌ Failed to update session: {(redditSessionMutation.error as Error).message}</p>
           )}
         </div>
 
