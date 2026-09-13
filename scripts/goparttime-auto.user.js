@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.2.1
+// @version      1.2.2
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+ * v1.2.2 - Blast Now layout fix: the button sat at bottom:54px, overlapping
+ * the Send script's Send Task + Submit View buttons. It now parks above
+ * both (bottom:124px desktop, 144px on narrow screens). Otherwise identical
+ * to v1.2.1 below.
+ *
  * v1.2.1 - Force-return to /tasks: GoPartTime auto-navigates the tab to
  * /my-tasks/todo on every accept, which stalled the watcher (monitor +
  * drawer matching only run on /tasks). After each claim verdict (success
@@ -101,7 +106,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.2.1';
+  const VERSION = '1.2.2';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -415,7 +420,13 @@
       blastEl.textContent = '\u26A1 Blast Now';
       blastEl.style.position = 'fixed';
       blastEl.style.right = '16px';
-      blastEl.style.bottom = '54px';
+      // Right-edge column is owned by the Send script: Send Task (~20-64px)
+      // + Submit View (~72-116px desktop, taller circles on mobile). Park
+      // Blast Now above both so the three buttons never overlap.
+      blastEl.style.bottom = '124px';
+      try {
+        if (window.matchMedia && window.matchMedia('(max-width: 767px)').matches) blastEl.style.bottom = '144px';
+      } catch (e) { /* keep desktop offset */ }
       blastEl.style.zIndex = '2147483647';
       blastEl.style.height = '30px';
       blastEl.style.padding = '0 12px';
