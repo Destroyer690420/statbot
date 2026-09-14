@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.4.3
+// @version      1.4.4
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+ * v1.4.4 — Auto Submit View: clicking the site's own "Submit View" button
+ * now runs the whole flow immediately (fetch + attach + preview) — the
+ * floating "📊 Submit View" tap is no longer needed (it stays as a manual
+ * fallback). View-count entry, Submit click, and success verification stay
+ * manual, exactly as before.
  * v1.4.3 — Surface Zod validation details (Validation failed: field: message)
  * and keep v1.4.2 image-only fix (contentHtml may be empty when images exist,
  * e.g. task #880072 r/Nocfree). v1.4.0 disabled Submit View on phones — the
@@ -232,6 +237,13 @@
     const taskId = detectCardTaskId(card);
     if (!taskId) return;
     trackedViewCard = { card, taskId, step: detectCardViewStep(card), buttonText: text };
+    // Auto-run: the native click is already opening the view dialog, so
+    // fetch + attach + preview immediately — no extra floating-button tap.
+    // submitViewFlow is busy-guarded (double-clicks are no-ops) and waits
+    // for the dialog itself; the floating button stays as manual fallback.
+    try {
+      submitViewFlow();
+    } catch (err) { /* flow alerts internally; never break the page */ }
   }, true);
 
   function detectCardTaskId(card) {

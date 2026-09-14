@@ -37,6 +37,8 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
 1. Manager opens the View dialog for a task on goparttime.net ("Submit view data" = step 1 / 20h insight,
    "Submit second view data" = step 2 / 70h insight, posts only)
 2. Clicking a card's "Submit View" (or disabled countdown) button makes the userscript track that card
+   → since userscript v1.4.4 the tracked click ALSO auto-runs the whole flow immediately (the floating
+   "📊 Submit View" button stays only as a manual fallback)
    → "📊 Submit View" floating button reads GET /api/v1/goparttime/insight/:taskId?step=1|2
 3. Backend resolves the matching Reminder (step 1 → POST_20H/COMMENT_20H, step 2 → POST_70H;
    see src/services/goparttime-insight.service.ts) and returns its stored screenshot URL
