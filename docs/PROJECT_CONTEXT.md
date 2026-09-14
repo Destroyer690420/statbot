@@ -251,7 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-13**: **Send script v1.4.4 auto Submit View (implemented, NOT yet deployed)**. Clicking GoPartTime's own "Submit View" button now auto-runs fetch + attach + preview (floating 📊 button stays as fallback); count entry + Submit stay manual. Verified `node --check` clean, both copies identical. Needs dashboard rebuild + Tampermonkey update.
+- **2026-09-14**: **DEPLOYED send script v1.4.4 auto Submit View** (`161.118.164.85`) at commit `e4927e8` (dashboard-only rebuild; backup `rtm-backup-send144.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Native "Submit View" click now auto-runs fetch + attach + preview (floating 📊 stays as fallback). Verified live: `/goparttime-send.user.js` 200 serving v1.4.4, health healthy, dashboard 200. Manager must update Tampermonkey to v1.4.4.
 
 - **2026-09-13**: **DEPLOYED blast fill-safe sending** (`161.118.164.85`) at commit `c35d883` (app + dashboard rebuild; backup `rtm-backup-blastfillsafe.tar.gz`; no DB migration; no slash-command redeploy; pushed to GitHub; host + local bundles/scratch cleaned). Root cause of stranded messages: fast first reply filled the blast mid-send while the loop kept messaging (ticket-0155 round: 43 sent, 12 cleaned, 30 stranded) — `sendBlastMessages` now stops once the blast closes + post-send sweeps non-winner messages on filled blasts. Verified live: health healthy (DB+Redis), boot "All systems online!", dashboard 200, fix strings in live container `dist/`. Locally: typecheck + build clean, 277/277 jest.
 
