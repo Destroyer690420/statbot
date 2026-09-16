@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.2.2
+// @version      1.4.0
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,7 +18,29 @@
 // ==/UserScript==
 
 /**
- * v1.2.2 - Blast Now layout fix: the button sat at bottom:54px, overlapping
+  * v1.4.0 - Parallel tabs (Phase 2): each tab carries a stable per-tab id
+  * on the claim poll and the server leases every claim to exactly one tab,
+  * so 2-3 open tabs accept different tasks concurrently. Serial flow per
+  * tab, claim rules, and verdicts are unchanged; a tab without storage
+  * falls back to legacy pickup. Otherwise identical to v1.3.1 below.
+  *
+  * v1.3.1 - Accept-speed Phase 1 (waits only, logic unchanged): 2s claim
+  * poll while a burst is open on the server (new `burstOpen` poll flag -
+  * covers manual rounds outside the local window); client-side back
+  * navigation instead of full reload after each accept (one-shot reload
+  * fallback); boot settle skipped when a claim is already waiting;
+  * fast-accept capped at 2 tries x 3s; card scan capped at 5s total;
+  * claim API calls time out at 10s; never fails a claim for a
+  * still-loading card list (leaves it PENDING for the next fast poll).
+  * Otherwise identical to v1.3.0 below.
+  *
+  * v1.3.0 - Claim step timings: processClaim stamps poll-received,
+  * drawer-opened, accepted, and pushed markers and reports them with the
+  * verdict so the server log shows exactly which step consumes time.
+  * Zero behavior change - same waits, same flow. Otherwise identical to
+  * v1.2.2 below.
+  *
+  * v1.2.2 - Blast Now layout fix: the button sat at bottom:54px, overlapping
  * the Send script's Send Task + Submit View buttons. It now parks above
  * both (bottom:124px desktop, 144px on narrow screens). Otherwise identical
  * to v1.2.1 below.
@@ -106,7 +128,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.2.2';
+  const VERSION = '1.4.0';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -120,6 +142,19 @@
   const BURST_CLAIM_MS = 5000;
   const BUNDLE_TTL_MS = 15 * 60 * 1000;
   const RATE_LIMIT_PAUSE_MS = 60 * 1000;
+  // Phase-1 speed (no logic change - only waits shrink):
+  // - BURST_OPEN_CLAIM_MS: poll cadence while a burst is open on the server
+  //   (covers manual Blast Now rounds outside the local window).
+  // - BOOT_SETTLE_MS: skipped on boot when a claim was already waiting.
+  // - FAST_ACCEPT_TIMEOUT_MS/TRIES: fail fast on stale Server Action ids.
+  // - CARD_SCAN_BUDGET_MS: total budget for the card-by-card drawer search.
+  // - CLAIM_API_TIMEOUT_MS: API timeout for claim poll/verdict/assign calls.
+  const BURST_OPEN_CLAIM_MS = 2000;
+  const BOOT_SETTLE_MS = 5000;
+  const FAST_ACCEPT_TIMEOUT_MS = 3000;
+  const FAST_ACCEPT_TRIES = 2;
+  const CARD_SCAN_BUDGET_MS = 5000;
+  const CLAIM_API_TIMEOUT_MS = 10000;
   // Once-per-hour reporting: the first scan with eligible posts starts a
   // fixed countdown; when it lapses the CURRENT set is reported once.
   // No signature comparison (churn-proof - a live drop never sits still).
@@ -209,6 +244,26 @@
     } catch (e) { /* ignore */ }
   }
 
+  // Phase-1: per-tab session flags (survive reloads in the same tab, die
+  // with it). Never throws - a missing sessionStorage only costs the
+  // boot-settle skip, never correctness.
+  function sessGet(key) {
+    try {
+      if (typeof sessionStorage === 'undefined') return '';
+      return sessionStorage.getItem('gpt_' + key) || '';
+    } catch (e) { return ''; }
+  }
+
+  function sessSet(key, value) {
+    try {
+      if (typeof sessionStorage === 'undefined') return;
+      if (value) sessionStorage.setItem('gpt_' + key, value);
+      else sessionStorage.removeItem('gpt_' + key);
+    } catch (e) { /* ignore */ }
+  }
+
+  const CLAIM_PENDING_FLAG = 'claim_pending';
+
   function getSettings() {
     return {
       apiUrl: (storageGet('gpt_api_url').trim() || DEFAULTS.apiUrl).replace(/\/api\/v1\/goparttime\/?$/, '/api/v1/automation').replace(/\/$/, ''),
@@ -223,6 +278,28 @@
       storageSet('gpt_companion_id', id);
     }
     return id;
+  }
+
+  function getTabId() {
+    // Phase-2: stable id for THIS tab only (sessionStorage dies with the
+    // tab, so two tabs never share one). The server leases each claim to
+    // exactly one id, which is what makes parallel tabs safe. Returns ''
+    // when session storage is unavailable - the server then falls back to
+    // legacy oldest-first pickup for that poll. Never throws.
+    try {
+      if (typeof sessionStorage === 'undefined') return '';
+      let id = '';
+      try {
+        id = sessionStorage.getItem('gpt_tab_id') || '';
+      } catch (e) { return ''; }
+      if (!id) {
+        id = 'tab-' + Math.random().toString(36).slice(2, 10);
+        try {
+          sessionStorage.setItem('gpt_tab_id', id);
+        } catch (e) { return ''; }
+      }
+      return id;
+    } catch (e) { return ''; }
   }
 
   function watcherEnabled() {
@@ -264,7 +341,7 @@
     throw new Error(message);
   }
 
-  function request(settings, method, path, body, query) {
+  function request(settings, method, path, body, query, timeoutMs) {
     let url = settings.apiUrl + path;
     if (query) url += (url.includes('?') ? '&' : '?') + query;
     const headers = {
@@ -272,6 +349,11 @@
       Authorization: 'Bearer ' + settings.apiKey,
     };
     const payload = body ? JSON.stringify(body) : undefined;
+    // Phase-1: claim-path calls pass a tighter timeout so a stalled
+    // connection fails fast instead of wedging the serial claim queue.
+    // Default preserves the previous 30s/20s behavior for all other calls.
+    const gmTimeout = timeoutMs > 0 ? timeoutMs : 30000;
+    const fetchTimeout = timeoutMs > 0 ? timeoutMs : 20000;
 
     if (typeof GM_xmlhttpRequest === 'function') {
       return new Promise((resolve, reject) => {
@@ -280,7 +362,7 @@
           url,
           headers,
           data: payload,
-          timeout: 30000,
+          timeout: gmTimeout,
           onload: (res) => {
             try {
               resolve(parseStatus(res.status, res.responseText));
@@ -294,7 +376,7 @@
       });
     }
 
-    return fetchWithTimeout(url, { method, headers, body: payload, credentials: 'omit' }, 20000)
+    return fetchWithTimeout(url, { method, headers, body: payload, credentials: 'omit' }, fetchTimeout)
       .then(async (res) => parseStatus(res.status, await res.text()))
       .catch(() => { throw new Error('Server is unavailable.'); });
   }
@@ -848,6 +930,17 @@
   // --- Claim loop: accept in-page via native drawer flow when worker is confirmed ---
 
   let claimBusy = false;
+  // Phase-1: server-reported burst state (refreshed on every poll). Drives
+  // the fast poll cadence for manual rounds outside the local window.
+  let lastBurstOpen = false;
+
+  function shouldFastPoll() {
+    // Fast while the local drop window is live OR the server says a burst
+    // is open. Never throws - a check failure only costs speed.
+    try {
+      return isBurstWindow() || lastBurstOpen;
+    } catch (e) { return false; }
+  }
 
   async function claimTick() {
     if (claimBusy || !watcherEnabled() || isRateLimited()) return;
@@ -866,10 +959,25 @@
     claimBusy = true;
     try {
       const res = await request(settings, 'GET', '/claims/pending', null,
-        'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION));
+        'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION) + '&tabId=' + encodeURIComponent(getTabId()),
+        CLAIM_API_TIMEOUT_MS);
       setStatus(true, 'poll ok');
-      const claim = res && res.data && res.data.claim;
-      if (!claim) return;
+      const dd = (res && res.data) || {};
+      // Phase-1: remember the server burst state for the poll cadence.
+      if (typeof dd.burstOpen === 'boolean') lastBurstOpen = dd.burstOpen;
+      const claim = dd.claim;
+      if (!claim) {
+        sessSet(CLAIM_PENDING_FLAG, '');
+        return;
+      }
+      // Phase-1: mark work pending so a navigation reboot skips the settle
+      // pause and polls immediately. Cleared on the next empty poll.
+      sessSet(CLAIM_PENDING_FLAG, '1');
+      // Phase-0 instrumentation: stamp when the claim reached this tab so
+      // the verdict can report per-step durations. In-memory only - never
+      // sent except inside the timings object below. No behavior change.
+      claim._pollReceivedAt = Date.now();
+      claim._timings = { pollReceivedAt: claim._pollReceivedAt, drawerOpenedMs: null, acceptedMs: null, pushedMs: null };
       await processClaim(settings, claim);
     } catch (e) {
       if (isRateLimitError(e)) {
@@ -884,13 +992,37 @@
     }
   }
 
+  function claimTimings(claim) {
+    // Returns the in-progress step durations for the verdict body, or null
+    // when the claim predates instrumentation. Never throws.
+    try {
+      if (!claim || !claim._timings) return null;
+      return {
+        pollReceivedAt: claim._timings.pollReceivedAt || null,
+        drawerOpenedMs: claim._timings.drawerOpenedMs,
+        acceptedMs: claim._timings.acceptedMs,
+        pushedMs: claim._timings.pushedMs,
+      };
+    } catch (e) { return null; }
+  }
+
+  function stampTiming(claim, field) {
+    // Records ms since the claim reached this tab. Never throws - timing
+    // must not break the claim flow.
+    try {
+      if (!claim || !claim._timings || !claim._pollReceivedAt) return;
+      claim._timings[field] = Date.now() - claim._pollReceivedAt;
+    } catch (e) { /* ignore */ }
+  }
+
   async function reportClaim(settings, claim, ok, failureReason, pushed) {
     try {
       await request(settings, 'POST', '/claims/' + encodeURIComponent(claim.id) + '/result', {
         ok: !!ok,
         failureReason: failureReason || null,
         pushed: pushed === true,
-      });
+        timings: claimTimings(claim),
+      }, null, CLAIM_API_TIMEOUT_MS);
     } catch (e) {
       console.log('[Auto Watcher] claim report failed:', e && e.message);
     }
@@ -938,13 +1070,22 @@
   }
 
   // GoPartTime auto-navigates the tab to /my-tasks/todo on every accept.
-  // Force-return to /tasks on the same tab so the next claim's drawer
-  // matching + monitor scans resume with no manual reload. Guarded by
-  // pathname: a no-op when already on /tasks (never a reload loop).
-  // Never throws - navigation must not break the claim flow.
+  // Phase-1: prefer client-side back navigation so this script instance
+  // (and its fast poll timers) survives - no full reload, no reboot, no
+  // 5s settle. One-shot full-load fallback if the pathname does not
+  // restore. Guarded by pathname: a no-op when already on /tasks (never a
+  // reload loop). Never throws - navigation must not break the claim flow.
   function returnToTasks() {
     try {
-      if (!/^\/tasks\/?$/.test(window.location.pathname)) window.location.href = '/tasks';
+      if (/^\/tasks\/?$/.test(window.location.pathname)) return;
+      try {
+        history.back();
+      } catch (e) { /* fall through to full load */ }
+      setTimeout(function () {
+        try {
+          if (!/^\/tasks\/?$/.test(window.location.pathname)) window.location.href = '/tasks';
+        } catch (e) { /* never break claim flow for navigation */ }
+      }, 5000);
     } catch (e) { /* never break claim flow for navigation */ }
   }
 
@@ -1087,7 +1228,12 @@
     }
 
     // Strategy 3: Iterate through cards on the page
+    // Phase-1: bounded by a total time budget - a missing task (taken by a
+    // competitor) fails fast into the server move-on retry instead of
+    // clicking every card while later claims wait behind it.
+    const scanDeadline = Date.now() + CARD_SCAN_BUDGET_MS;
     for (const card of cards) {
+      if (Date.now() > scanDeadline) break;
       if (card === candidateCard) continue;
       const btn = findCardAcceptButton(card);
       if (!btn || btn.disabled) continue;
@@ -1148,10 +1294,13 @@
   async function tryFastAccept(subTaskId) {
     const candidates = findNextActionCandidates();
     if (candidates.length === 0) return { ok: null };
-    for (const action of candidates.slice(0, 3)) {
+    // Phase-1: fewer tries with a tighter timeout - a stale action id fails
+    // fast instead of stalling the serial claim queue (normal responses are
+    // well under a second; anything slower falls back to the drawer flow).
+    for (const action of candidates.slice(0, FAST_ACCEPT_TRIES)) {
       try {
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 8000);
+        const timer = setTimeout(() => ctrl.abort(), FAST_ACCEPT_TIMEOUT_MS);
         let text = '';
         try {
           const res = await fetch('/tasks', {
@@ -1196,6 +1345,21 @@
       return;
     }
 
+    // Phase-1 safety: never fail a claim for a still-loading list. After a
+    // client-side back-navigation /tasks can exist with zero cards for a
+    // moment - leave the claim PENDING and retry on the next fast poll
+    // instead of burning the task as FAILED (failed ids never re-queue).
+    // Zero wait in the normal case (cards already present).
+    let cardsReady = document.querySelectorAll('div[data-slot="card"]').length > 0;
+    for (let i = 0; i < 20 && !cardsReady; i++) {
+      await sleep(150);
+      cardsReady = document.querySelectorAll('div[data-slot="card"]').length > 0;
+    }
+    if (!cardsReady) {
+      console.log('[Auto Watcher] /tasks list not ready, leaving claim ' + claim.id + ' pending');
+      return;
+    }
+
     setStatus(true, 'claiming #' + subTaskId + '...');
     lastServerActionResponse = null;
 
@@ -1212,6 +1376,7 @@
       await reportClaim(settings, claim, false, 'Task #' + subTaskId + ' not found on /tasks (may already be taken or expired).');
       return;
     }
+    stampTiming(claim, 'drawerOpenedMs');
 
     // 2. Extract full task details while the drawer is open
     let detail = null;
@@ -1297,6 +1462,7 @@
         }
       }
     }
+    stampTiming(claim, 'acceptedMs');
 
     if (!accepted) {
       closeOpenDrawer();
@@ -1314,12 +1480,13 @@
         apiUrl: settings.apiUrl.replace(/\/automation\/?$/, '/goparttime'),
         apiKey: settings.apiKey,
       };
-      await request(assignSettings, 'POST', '/assign', detail, null);
+      await request(assignSettings, 'POST', '/assign', detail, null, CLAIM_API_TIMEOUT_MS);
       pushed = true;
       console.log('[Auto Watcher] task #' + subTaskId + ' assigned to ticket ' + claim.channelId);
     } catch (e) {
       console.log('[Auto Watcher] assign to ticket failed (task accepted, push manually):', e && e.message);
     }
+    stampTiming(claim, 'pushedMs');
 
     // 7. Report successful claim verdict (with push outcome for NEEDS_PUSH tracking)
     await reportClaim(settings, claim, true, null, pushed);
@@ -1345,12 +1512,16 @@
   }
 
   async function claimLoop() {
-    await sleep(5000); // let the page settle first
+    // Phase-1: skip the settle pause when a claim was already waiting (the
+    // flag survives a return-to-/tasks navigation in the same tab).
+    if (!sessGet(CLAIM_PENDING_FLAG)) await sleep(BOOT_SETTLE_MS);
     for (;;) {
       try {
         await claimTick();
       } catch (e) { /* never break the loop */ }
-      await sleep(isBurstWindow() ? withBurstJitter(BURST_CLAIM_MS) : withJitter(CLAIM_MS));
+      // Phase-1: 2-3.5s while a burst is open on the server (or the local
+      // window is live); the routine 30-40s cadence otherwise.
+      await sleep(shouldFastPoll() ? withBurstJitter(BURST_OPEN_CLAIM_MS) : withJitter(CLAIM_MS));
     }
   }
 

@@ -57,6 +57,10 @@ export const AUTOMATION = {
    *  never expire while their burst is open. Closed-burst orphans are swept
    *  by the queue tick, so this is only a backstop, not a deadline. */
   BURST_CLAIM_TTL_MS: 24 * 60 * 60 * 1000,
+  /** Phase-2 parallel tabs: a per-tab claim lease lapses after this long
+   *  without a verdict, so a stuck tab's claim becomes leasable again.
+   *  Generous on purpose — normal accepts finish in seconds. */
+  CLAIM_LEASE_TIMEOUT_MS: 3 * 60 * 1000,
   /** Merge grace: streaming completions may join an open blast's pool (slots
    *  grow, zero new messages) only within this window after blast creation.
    *  Later arrivals wait for next hour — the pool freezes. */

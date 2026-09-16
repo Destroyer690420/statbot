@@ -23,6 +23,7 @@ import { GOPARTTIME_SOURCE, AUTOMATION } from '../../config/constants';
 import { getAllAdminIds } from '../../utils/permissions';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
+import { buildClaimTimingsLog, claimTimingsSchema, ClaimTimings } from '../../utils/claim-timings';
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
@@ -86,10 +87,13 @@ const sightingsSchema = z.object({
     .nullable(),
 });
 
-const claimResultSchema = z.object({
+export const claimResultSchema = z.object({
   ok: z.boolean(),
   failureReason: z.string().max(500).optional().nullable(),
   pushed: z.boolean().optional().default(false),
+  // Phase-0 instrumentation from the watcher (shared schema — old watcher
+  // versions omit it entirely).
+  timings: claimTimingsSchema,
 });
 
 const rehearseSchema = z.object({
@@ -116,6 +120,21 @@ const burstSchema = z.object({
   /** Manual Blast Now: explicit human intent — bypasses the window gate only. */
   force: z.boolean().optional().default(false),
 });
+
+/** Phase-0 instrumentation: one log line per claim verdict with queue wait
+ * (claim created -> verdict) plus the watcher's in-page step durations.
+ * Never throws — timing must not break verdicts. */
+export function logClaimTimings(
+  claim: { id: string; cycleId: string; externalTaskId: string; workerId: string | null; createdAt: Date },
+  ok: boolean,
+  timings: ClaimTimings,
+): void {
+  try {
+    logger.info('Claim timings', buildClaimTimingsLog(claim, ok, timings));
+  } catch {
+    // ignore — timing must never break verdicts
+  }
+}
 
 export default function createAutomationRoutes(discordClient: Client): Router {
   const router = Router();
@@ -825,9 +844,26 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const version = typeof req.query.version === 'string' ? req.query.version : null;
       const companionId = typeof req.query.companionId === 'string' ? req.query.companionId : null;
       await automationRepository.heartbeat(companionId, version);
-      const claim = await automationRepository.pendingClaim();
+      // Phase-2 parallel tabs: a tab id leases the oldest actionable claim
+      // atomically (two tabs never hold the same claim). Watchers without a
+      // tab id keep the legacy oldest-first pickup.
+      const rawTabId = typeof req.query.tabId === 'string' ? req.query.tabId.trim() : '';
+      const tabId = rawTabId.length > 0 && rawTabId.length <= 64 ? rawTabId : null;
+      const claim = tabId
+        ? await automationRepository.leaseNextClaim(tabId)
+        : await automationRepository.pendingClaim();
+      // Phase-1 speed: tell the tab whether any burst is currently open so
+      // it can poll fast (2s) while work is live and idle (30s) otherwise.
+      // Best-effort — a lookup failure must never break the claim poll.
+      let burstOpen = false;
+      try {
+        const openBursts = await automationRepository.listOpenBursts();
+        burstOpen = openBursts.length > 0;
+      } catch {
+        burstOpen = false;
+      }
       if (!claim) {
-        res.json({ success: true, data: { claim: null } });
+        res.json({ success: true, data: { claim: null, burstOpen } });
         return;
       }
       // Expected subreddit for the browser's drawer ground-truth check
@@ -846,6 +882,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       res.json({
         success: true,
         data: {
+          burstOpen,
           claim: {
             id: claim.id,
             cycleId: claim.cycleId,
@@ -910,6 +947,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
 
       if (req.body.ok) {
         await automationRepository.resolveClaim(claim.id, 'CLAIMED');
+        logClaimTimings(claim, true, req.body.timings);
         const pushed = req.body.pushed === true;
         try {
           const contacts = await automationRepository.listCycleContacts(claim.cycleId);
@@ -943,6 +981,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       } else {
         const reason = req.body.failureReason || 'Companion reported failure';
         await automationRepository.resolveClaim(claim.id, 'FAILED', reason);
+        logClaimTimings(claim, false, req.body.timings);
         try {
           const contacts = await automationRepository.listCycleContacts(claim.cycleId);
           const held = contacts.find(

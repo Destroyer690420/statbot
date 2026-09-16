@@ -1,4 +1,6 @@
 import { getDb } from '../db';
+import { AUTOMATION } from '../../config/constants';
+import { pickLeaseCandidate } from '../../services/automation/claim-lease';
 
 export class AutomationRepository {
   // ─── Blocked subreddits ───
@@ -208,11 +210,54 @@ export class AutomationRepository {
     return getDb().automationClaim.findUnique({ where: { id } });
   }
 
-  async pendingClaim() {
+  /**
+   * Oldest actionable claim for legacy watchers (no tab id). Freshly leased
+   * rows are invisible here so a legacy tab never double-processes a claim
+   * a leased tab already holds. Status stays PENDING until the verdict.
+   */
+  async pendingClaim(leaseTimeoutMs: number = AUTOMATION.CLAIM_LEASE_TIMEOUT_MS) {
+    const now = new Date();
     return getDb().automationClaim.findFirst({
-      where: { status: 'PENDING', expiresAt: { gt: new Date() } },
+      where: {
+        status: 'PENDING',
+        expiresAt: { gt: now },
+        OR: [{ leasedBy: null }, { leasedAt: { lt: new Date(now.getTime() - leaseTimeoutMs) } }],
+      },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  /**
+   * Phase-2 parallel tabs: atomically lease the oldest actionable claim to
+   * one tab. Two tabs can never hold the same claim: the UPDATE guard
+   * re-checks PENDING + leasable, so exactly one tab wins the race and the
+   * loser gets null (it retries on the next fast poll). Returns the leased
+   * row, or null when there is nothing to take right now.
+   */
+  async leaseNextClaim(tabId: string, leaseTimeoutMs: number = AUTOMATION.CLAIM_LEASE_TIMEOUT_MS) {
+    const now = new Date();
+    const candidates = await getDb().automationClaim.findMany({
+      where: { status: 'PENDING', expiresAt: { gt: now } },
+      orderBy: { createdAt: 'asc' },
+      take: 10,
+    });
+    const pick = pickLeaseCandidate(candidates, now.getTime(), leaseTimeoutMs);
+    if (!pick) return null;
+    const leasedAt = new Date();
+    const claimed = await getDb().automationClaim.updateMany({
+      where: {
+        id: pick.id,
+        status: 'PENDING',
+        OR: [
+          { leasedBy: null },
+          { leasedBy: tabId },
+          { leasedAt: { lt: new Date(leasedAt.getTime() - leaseTimeoutMs) } },
+        ],
+      },
+      data: { leasedBy: tabId, leasedAt },
+    });
+    if (claimed.count !== 1) return null;
+    return getDb().automationClaim.findUnique({ where: { id: pick.id } });
   }
 
   async listPendingClaims() {

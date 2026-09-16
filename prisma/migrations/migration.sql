@@ -661,3 +661,14 @@ CREATE TABLE IF NOT EXISTS "RedditSession" (
 );
 
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'REDDIT_SESSION_UPDATED';
+
+--------------------------------------------------------------------------------
+-- Migration: Phase-2 parallel-tab claim leasing
+--------------------------------------------------------------------------------
+-- Lets 2-3 watcher tabs accept different tasks concurrently. Two nullable
+-- columns on AutomationClaim; status stays PENDING until the verdict, so
+-- every existing held/taken filter keeps working. A claim is leasable when
+-- leasedBy IS NULL or leasedAt is older than the lease timeout (stuck-tab
+-- reclaim). Schema-only, no data statements.
+ALTER TABLE "AutomationClaim" ADD COLUMN IF NOT EXISTS "leasedBy" TEXT;
+ALTER TABLE "AutomationClaim" ADD COLUMN IF NOT EXISTS "leasedAt" TIMESTAMP(3);

@@ -284,6 +284,8 @@ erDiagram
         timestamp expiresAt "+10min"
         timestamp respondedAt "nullable"
         string failureReason "nullable"
+        string leasedBy "nullable — Phase-2 per-tab lease holder"
+        timestamp leasedAt "nullable — Phase-2 lease time; stale after CLAIM_LEASE_TIMEOUT_MS (3min)"
     }
     CompanionStatus {
         string id PK "default 'companion'"

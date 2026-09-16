@@ -465,6 +465,12 @@ model AutomationClaim {
   expiresAt      DateTime
   respondedAt    DateTime?
   failureReason  String?
+  // Phase-2 parallel tabs: atomic per-tab lease. Status stays PENDING
+  // until the verdict, so every existing held/taken filter keeps working.
+  // A claim is leasable when leasedBy is null or leasedAt is older than
+  // the lease timeout (stuck-tab reclaim).
+  leasedBy       String?
+  leasedAt       DateTime?
 
   @@index([status, expiresAt])
   @@index([externalTaskId])
