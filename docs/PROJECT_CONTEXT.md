@@ -251,7 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-16**: **Digest all-posts view implemented (NOT yet deployed)** — DM lists every scanned post with `[BLOCKED]`/`[comment]`/`[NO_SUBREDDIT]` tags; release + new-sub logic unchanged. Verified: typecheck + build clean, 308/308 jest. Next: deploy (app-only).
+- **2026-09-16**: **DEPLOYED digest all-posts view + race guards** (`161.118.164.85`, git HEAD `3f0d178`; backup `rtm-backup-20260917-digestall.tar.gz`; app-only rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", new code in live `dist/`; locally typecheck + build clean, 308/308 jest).
 
 - **2026-09-16**: **Blast-approval race guards implemented (NOT yet deployed)** — duplicate-DM and double-tap release guards. Verified: typecheck + build clean, 307/307 jest. Will ride the next app deploy.
 
