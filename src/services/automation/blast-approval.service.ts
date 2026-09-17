@@ -38,6 +38,10 @@ const APPROVAL_EXPIRY_MS = 90 * 60 * 1000;
 // One digest DM per IST hour: retries of the same settled report stay
 // silent unless the eligible set grew (the drop is still streaming in).
 let lastDigest: { hourKey: number; cycleId: string; eligible: number } | null = null;
+// In-flight guard: two tabs' reports can land in the same seconds. The flag
+// is set synchronously (no await before it), so the second call sees it and
+// stays silent instead of sending a duplicate DM.
+let digestInFlightHour: number | null = null;
 
 export interface DigestDelivery {
   sentTo: string[];
@@ -106,9 +110,11 @@ export async function maybeSendDigest(
   eligible: number,
 ): Promise<DigestDelivery> {
   const delivery: DigestDelivery = { sentTo: [], failed: [] };
+  const hourKey = getIstHourStart().getTime();
+  if (lastDigest && lastDigest.hourKey === hourKey && eligible <= lastDigest.eligible) return delivery;
+  if (digestInFlightHour === hourKey) return delivery;
+  digestInFlightHour = hourKey;
   try {
-    const hourKey = getIstHourStart().getTime();
-    if (lastDigest && lastDigest.hourKey === hourKey && eligible <= lastDigest.eligible) return delivery;
     const built = await buildDigestForCycle(cycleId);
     if (!built || built.eligible === 0) return delivery;
     const approvers = [...new Set(getAdminOrManagerIds())];
@@ -133,7 +139,24 @@ export async function maybeSendDigest(
   } catch (error) {
     logger.warn('Blast digest DM failed (dashboard fallback still available)', { cycleId, error });
     return delivery;
+  } finally {
+    if (digestInFlightHour === hourKey) digestInFlightHour = null;
   }
+}
+
+// In-progress releases by cycle: two rapid Blast taps (or two approvers)
+// must not open two blasts. Guard is synchronous around the check; the
+// one-blast-per-hour rule inside createBurstFlow stays the backstop.
+const releasingCycles = new Set<string>();
+
+function claimRelease(cycleId: string): boolean {
+  if (releasingCycles.has(cycleId)) return false;
+  releasingCycles.add(cycleId);
+  return true;
+}
+
+function dropRelease(cycleId: string): void {
+  releasingCycles.delete(cycleId);
 }
 
 async function editReplySafe(interaction: ButtonInteraction, content: string, clearButtons: boolean): Promise<void> {
@@ -214,42 +237,52 @@ export async function handleBlastButton(interaction: ButtonInteraction): Promise
     }
 
     // parsed.action === 'go'
-    const settings = await automationRepository.getSettings().catch(() => null);
-    if (!settings?.enabled || settings.dryRun) {
-      await editReplySafe(
-        interaction,
-        'Automation is off (disabled or dry-run) — enable it on the dashboard first, then tap Blast again.',
-        false,
-      );
+    if (!claimRelease(parsed.cycleId)) {
+      // Say nothing: the winning tap owns this message (its success edit is
+      // coming). The defer above already acked this tap, so nothing hangs.
+      logger.info('Blast double-tap ignored', { cycleId: parsed.cycleId, userId: interaction.user.id });
       return true;
     }
-    const logs = await automationRepository.listCycleLogs(parsed.cycleId).catch(() => []);
-    const inputs = buildReleaseInputs(logs);
-    if (inputs.length === 0) {
-      await editReplySafe(interaction, 'Nothing eligible left in that round (all blocked or taken).', true);
+    try {
+      const settings = await automationRepository.getSettings().catch(() => null);
+      if (!settings?.enabled || settings.dryRun) {
+        await editReplySafe(
+          interaction,
+          'Automation is off (disabled or dry-run) — enable it on the dashboard first, then tap Blast again.',
+          false,
+        );
+        return true;
+      }
+      const logs = await automationRepository.listCycleLogs(parsed.cycleId).catch(() => []);
+      const inputs = buildReleaseInputs(logs);
+      if (inputs.length === 0) {
+        await editReplySafe(interaction, 'Nothing eligible left in that round (all blocked or taken).', true);
+        return true;
+      }
+      const result = await createBurstFlow(interaction.client as Client, inputs, interaction.user.id, {
+        forceWindow: true,
+      });
+      await auditLogService
+        .log(
+          AuditAction.AUTOMATION_CYCLE_STARTED,
+          null,
+          interaction.user.id,
+          `Blast released from DM for ${parsed.cycleId}: ${result.sent} sent / ${result.blast ? result.blast.slotsTotal : 0} slots`,
+        )
+        .catch(() => undefined);
+      if (result.blast) {
+        await editReplySafe(
+          interaction,
+          `Blast opened: ${result.sent}/${result.blast.slotsTotal} workers messaged. Winners claim by replying — same as always.`,
+          true,
+        );
+      } else {
+        await editReplySafe(interaction, `No blast opened: ${result.reason || 'unknown reason'}.`, true);
+      }
       return true;
+    } finally {
+      dropRelease(parsed.cycleId);
     }
-    const result = await createBurstFlow(interaction.client as Client, inputs, interaction.user.id, {
-      forceWindow: true,
-    });
-    await auditLogService
-      .log(
-        AuditAction.AUTOMATION_CYCLE_STARTED,
-        null,
-        interaction.user.id,
-        `Blast released from DM for ${parsed.cycleId}: ${result.sent} sent / ${result.blast ? result.blast.slotsTotal : 0} slots`,
-      )
-      .catch(() => undefined);
-    if (result.blast) {
-      await editReplySafe(
-        interaction,
-        `Blast opened: ${result.sent}/${result.blast.slotsTotal} workers messaged. Winners claim by replying — same as always.`,
-        true,
-      );
-    } else {
-      await editReplySafe(interaction, `No blast opened: ${result.reason || 'unknown reason'}.`, true);
-    }
-    return true;
   } catch (error) {
     logger.warn('Blast button handling failed', { error });
     await editReplySafe(interaction, 'Something went wrong — use the Blast Now button as fallback.', false);
