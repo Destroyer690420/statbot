@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Implemented (NOT yet deployed — dashboard rebuild + Tampermonkey update to v1.4.1 still pending)
+- **Watcher v1.4.1 fresh-list guarantee**: the :10 scan is fetch-first in both modes (the live DOM only refreshes on navigation, so a tab open since before :10 scanned the stale pre-drop list); a claim whose card is missing reloads EXACTLY once per claim for a fresh list instead of failing as taken (second miss still fails fast into move-on retry; storage-unavailable never loops). No server change, no behavior change otherwise. Verified: both copies byte-identical, pure ASCII, `node --check` clean.
 ### Deployed
 - **Phone-approval blast DMs live** (`161.118.164.85`) at commit `43be8c4` (app-only rebuild; backup `rtm-backup-20260917-blastdm.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Settled auto-reports DM the manager a digest + Blast/Hold/Block buttons. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `maybeSendDigest` + `handleBlastButton` in live `dist/`. Locally: typecheck + build clean, 307/307 jest (26 suites). Next: live DM test on a real drop.
 ### Implemented (NOT yet deployed — no DB migration; deploy + live DM test still pending)

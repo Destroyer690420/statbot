@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.0
+// @version      1.4.1
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,14 @@
 // ==/UserScript==
 
 /**
+  * v1.4.1 - Fresh-list guarantee (no behavior change otherwise): the
+  * :10 scan is fetch-first (the live DOM only refreshes on navigation, so
+  * a tab open since before :10 scanned the stale pre-drop list); and a
+  * claim whose card is missing reloads EXACTLY once per claim for a fresh
+  * list instead of failing as taken (second miss still fails fast into
+  * move-on retry; storage-unavailable never loops). Otherwise identical
+  * to v1.4.0 below.
+  *
   * v1.4.0 - Parallel tabs (Phase 2): each tab carries a stable per-tab id
   * on the claim poll and the server leases every claim to exactly one tab,
   * so 2-3 open tabs accept different tasks concurrently. Serial flow per
@@ -128,7 +136,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -802,21 +810,23 @@
     monitorBusy = true;
     try {
       const burst = isBurstWindow();
-      // Burst mode reads the live DOM first (instant - no extra page load);
-      // routine mode keeps the proven fetch-first order. Sightings are NOT
-      // posted during the burst: the settled /burst report replaces them
-      // (posting both would double-process via the sighting queue).
+      // Fetch-first in BOTH modes. The live DOM only refreshes on
+      // navigation, so a tab open since before :10 would otherwise scan the
+      // stale pre-drop list (new tasks appear only after reload) and the
+      // :10 report would carry the wrong set. A fresh fetch returns
+      // server-rendered data with the current drop - same as the proven
+      // routine order. Sightings are NOT posted during the burst: the
+      // settled /burst report replaces them (posting both would
+      // double-process via the sighting queue).
       let html = null;
       let source = 'fetch';
       if (burst) {
-        html = domHtml();
-        source = 'dom';
-        if (!html || parseAvailableTasks(html).length === 0) {
-          const fresh = await fetchPageHtml();
-          if (fresh) {
-            html = fresh;
-            source = 'fetch';
-          }
+        html = await fetchPageHtml();
+        if (html) {
+          source = 'fetch';
+        } else {
+          html = domHtml();
+          source = 'dom';
         }
       } else {
         // Fresh SSR HTML always embeds the flight scripts; the live DOM may
@@ -1373,6 +1383,27 @@
     }
 
     if (!drawer) {
+      // The card list may predate the drop (tab open since before :10 with
+      // no navigation since): reload EXACTLY once per claim for a fresh
+      // list. The claim stays PENDING server-side, so after the reboot the
+      // next fast poll retries it - nothing is lost and nothing double-runs.
+      // A second miss means genuinely taken: fail fast into move-on retry.
+      // sessionStorage survives the reload, so the flag cannot loop.
+      const reloadFlag = 'reloaded_' + claim.id;
+      if (!sessGet(reloadFlag)) {
+        sessSet(reloadFlag, '1');
+        // Storage may be unavailable (then the flag cannot persist and a
+        // reload would loop forever): only reload when the flag stuck.
+        if (!sessGet(reloadFlag)) {
+          await reportClaim(settings, claim, false, 'Task #' + subTaskId + ' not found on /tasks (may already be taken or expired).');
+          return;
+        }
+        sessSet(CLAIM_PENDING_FLAG, '1');
+        console.log('[Auto Watcher] Task #' + subTaskId + ' card missing - reloading once for a fresh list');
+        window.location.reload();
+        return;
+      }
+      sessSet(reloadFlag, '');
       await reportClaim(settings, claim, false, 'Task #' + subTaskId + ' not found on /tasks (may already be taken or expired).');
       return;
     }
