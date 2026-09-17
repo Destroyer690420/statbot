@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.2
+// @version      1.4.3
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,12 @@
 // ==/UserScript==
 
 /**
+  * v1.4.3 - Flap-proof countdown: an empty scan tick (throttled fetch,
+  * streaming gap) no longer restarts the 45s clock - the countdown runs on
+  * the best-seen set once tasks appear, and the report carries the latest
+  * non-empty set. Fixes rounds stuck flickering "sending in Ns" /
+  * "scanning" that never reported. Otherwise identical to v1.4.2 below.
+  *
   * v1.4.2 - Cache-bypass page fetch: background fetch() could be served
   * the cached pre-drop /tasks document (manual reload revalidates, which
   * is why refresh "found" tasks the scan could not see). The listing fetch
@@ -142,7 +148,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.2';
+  const VERSION = '1.4.3';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -176,6 +182,10 @@
   let reportedHour = '';
   let burstConfirmed = false;
   let lastBurstPostAt = 0;
+  // Flap-proofing: best non-empty eligible set seen this hour. Empty ticks
+  // (throttled fetch, streaming gap) count on this instead of restarting
+  // the countdown. Reset on hour rollover with the rest of the state.
+  let latchedEligible = null;
   const BURST_RETRY_MS = 30000;
   const BURST_REPORT_DELAY_MS = 45000;
   let firstSeenAt = 0;
@@ -855,6 +865,7 @@
           reportedHour = '';
           burstConfirmed = false;
           firstSeenAt = 0;
+          latchedEligible = null;
         }
         if (reportedHour === hourKey && burstConfirmed) {
           setStatus(true, 'BURST reported this hour');
@@ -862,13 +873,21 @@
         }
         const bundle = await getBundle(settings);
         const eligible = filterEligible(tasks, bundle);
-        if (eligible.length === 0) {
-          firstSeenAt = 0;
+        const nowMs = Date.now();
+        if (eligible.length > 0) {
+          // Fresh set wins; the countdown start stays latched.
+          latchedEligible = eligible;
+          if (!firstSeenAt) firstSeenAt = nowMs;
+        }
+        // Flap-proof: an empty tick (throttled fetch, streaming gap) must
+        // NEVER restart the clock - count on the best-seen set instead.
+        // Only a genuinely unseen hour waits; the server re-validates, and
+        // taken tasks fail fast into move-on retry downstream.
+        if (!firstSeenAt || !latchedEligible) {
           setStatus(true, 'BURST scanning (' + source + ')...');
           return;
         }
-        const nowMs = Date.now();
-        if (!firstSeenAt) firstSeenAt = nowMs;
+        const reportSet = eligible.length > 0 ? eligible : latchedEligible;
         // Adaptive countdown: full delay early in the window (let the drop
         // finish streaming so the single report carries the full number),
         // fast near the tail so delayed reports still land inside it.
@@ -878,7 +897,7 @@
         if (waitMs > 0) {
           // Count first, blast after: the single report carries the full
           // number - never partial, never repeated.
-          setStatus(true, 'BURST ' + eligible.length + ' found, sending in ' + Math.ceil(waitMs / 1000) + 's...');
+          setStatus(true, 'BURST ' + reportSet.length + ' found, sending in ' + Math.ceil(waitMs / 1000) + 's...');
           return;
         }
         if (nowMs - lastBurstPostAt < BURST_RETRY_MS) {
@@ -890,7 +909,7 @@
         lastBurstPostAt = nowMs;
         // Newest-first: page bottom carries the newest drop, so the first
         // replier wins the newest eligible post.
-        const ordered = eligible.slice().reverse();
+        const ordered = reportSet.slice().reverse();
         let res = null;
         try {
           res = await request(settings, 'POST', '/burst', {
@@ -908,7 +927,7 @@
           reportedHour = hourKey;
           burstConfirmed = true;
         }
-        const confirmed = dd.eligible ? dd.eligible.length : eligible.length;
+        const confirmed = dd.eligible ? dd.eligible.length : reportSet.length;
         const blast = dd.blast
           ? (dd.merged
             ? ' -> hour blast +' + ((dd.added && dd.added.length) || 0) + ' (no re-message)'

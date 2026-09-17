@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Implemented (NOT yet deployed — dashboard rebuild + Tampermonkey update to v1.4.3 still pending)
+- **Watcher v1.4.3 flap-proof countdown**: an empty scan tick (throttled fetch, streaming gap) no longer restarts the 45s clock — the countdown runs on the best-seen set once tasks appear, and the report carries the latest non-empty set. Fixes rounds stuck flickering "sending in Ns" / "scanning" that never reported (proven live 23:10 + 00:10 IST, zero POSTs in 90 min of nginx logs). Watcher-only, no server change. Verified: both copies byte-identical, pure ASCII, `node --check` clean.
 ### Deployed
 - **Watcher v1.4.2 cache-bypass page fetch live** (`161.118.164.85`) at commit `d550a1c` (dashboard-only rebuild; backup `rtm-backup-20260917-watcher142.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Listing fetch uses `cache:'no-store'` so the :10 scan always sees the current drop. Verified live: dashboard 200, `/goparttime-auto.user.js` 200 serving v1.4.2 with hash matching the local build. Manager must update Tampermonkey script #2 to v1.4.2.
 ### Implemented (NOT yet deployed — dashboard rebuild + Tampermonkey update to v1.4.2 still pending)
