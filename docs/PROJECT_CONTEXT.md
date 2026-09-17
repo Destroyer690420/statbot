@@ -251,7 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-16**: **Phone-approval blast DMs implemented (NOT yet deployed, no DB migration)** — settled auto-reports DM the manager a digest + Blast/Hold/Block buttons (`blast-digest.ts` pure + tested, `blast-approval.service.ts`, button branch in `interactionCreate`). Claim rules/order/winners/caps untouched. Verified locally: typecheck + build clean, 307/307 jest (26 suites). Next: deploy + live DM test on a real drop.
+- **2026-09-16**: **DEPLOYED phone-approval blast DMs** (`161.118.164.85`, git HEAD `43be8c4`; backup `rtm-backup-20260917-blastdm.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", new code in live `dist/`; locally typecheck + build clean, 307/307 jest). Settled reports DM the manager Blast/Hold/Block buttons — no Remote Desktop needed. Next: live DM test on a real drop.
 
 - **2026-09-16**: **DEPLOYED accept-speed phases 0–2** (`161.118.164.85`, git HEAD `196e708`; backup `rtm-backup-20260916-speedphases.tar.gz`; migration excerpt applied live: `AutomationClaim.leasedBy/leasedAt`; pushed to GitHub; verified: health healthy, boot "All systems online!", dashboard 200, watcher v1.4.0 served, lease + timings code in live `dist/`; locally typecheck + build clean, 293/293 jest). Watcher v1.4.0: step timings, 2s burst-open poll, back-nav, per-tab leasing. Manager must update Tampermonkey script #2 to v1.4.0 + open 2 `/tasks` tabs. Next: live batch confirming ≤5s/task, ≤50s/10, zero double-accepts.
 
