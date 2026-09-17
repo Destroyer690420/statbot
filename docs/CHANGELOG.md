@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Implemented (NOT yet deployed — app rebuild still pending)
+- **Digest shows every scanned post with reason tags**: the pre-blast DM now lists ALL scanned posts grouped by subreddit — eligible plain, the rest labeled (`[BLOCKED]`, `[comment]`, `[NO_SUBREDDIT]`, unreadable grouped as "unknown subreddit"). Release inputs and new-sub detection unchanged (eligible only). 1 new jest test. Verified: typecheck + build clean, 308/308 jest (26 suites). No DB migration, no watcher change.
 ### Implemented (NOT yet deployed)
 - **Blast-approval race guards**: duplicate digest DMs impossible when two tabs report in the same seconds (synchronous in-flight flag); double Blast taps / two approvers can't open two blasts (per-cycle release guard + one-blast-per-hour backstop; second tapper is silently ignored since the winning tap owns the message). No logic change otherwise. Verified: typecheck + build clean, 307/307 jest (26 suites).
 ### Deployed

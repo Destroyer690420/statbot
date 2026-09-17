@@ -251,6 +251,10 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-16**: **Digest all-posts view implemented (NOT yet deployed)** — DM lists every scanned post with `[BLOCKED]`/`[comment]`/`[NO_SUBREDDIT]` tags; release + new-sub logic unchanged. Verified: typecheck + build clean, 308/308 jest. Next: deploy (app-only).
+
+- **2026-09-16**: **Blast-approval race guards implemented (NOT yet deployed)** — duplicate-DM and double-tap release guards. Verified: typecheck + build clean, 307/307 jest. Will ride the next app deploy.
+
 - **2026-09-16**: **DEPLOYED watcher v1.4.3 flap-proof countdown** (`161.118.164.85`, git HEAD `ad8c345`; backup `rtm-backup-20260917-watcher143.tar.gz`; dashboard-only rebuild; no DB migration; pushed to GitHub; verified: dashboard 200, served v1.4.3 hash-matches local). Manager must update Tampermonkey script #2 to v1.4.3.
 
 - **2026-09-16**: **DEPLOYED watcher v1.4.2 cache-bypass fetch** (`161.118.164.85`, git HEAD `d550a1c`; backup `rtm-backup-20260917-watcher142.tar.gz`; dashboard-only rebuild; no DB migration; pushed to GitHub; verified: dashboard 200, served v1.4.2 hash-matches local). Manager must update Tampermonkey script #2 to v1.4.2.

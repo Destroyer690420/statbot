@@ -35,8 +35,9 @@ describe('buildBlastDigest', () => {
       { scanned: 4, eligible: 3, blocked: 1 },
     );
     expect(d.subs).toEqual([
-      { sub: 'cats', count: 2, ids: ['1', '2'] },
-      { sub: 'dogs', count: 1, ids: ['3'] },
+      { sub: 'cats', count: 2, ids: ['1', '2'], eligible: 2, reasons: [] },
+      { sub: 'dogs', count: 1, ids: ['3'], eligible: 1, reasons: [] },
+      { sub: 'blockedsub', count: 1, ids: ['4'], eligible: 0, reasons: ['BLOCKED'] },
     ]);
     expect(d.newSubs).toEqual([]);
     expect(d.scanned).toBe(4);
@@ -45,12 +46,17 @@ describe('buildBlastDigest', () => {
   it('flags never-seen eligible subs as new (case-insensitive, URL forms)', () => {
     const d = buildBlastDigest(
       'c1',
-      [log('1', 'Cats'), log('2', 'https://www.reddit.com/r/BrandNew/'), log('3', null)],
+      [log('1', 'Cats'), log('2', 'https://www.reddit.com/r/BrandNew/'), log('3', null, 'NO_SUBREDDIT')],
       [],
       ['cats'],
       { scanned: 3, eligible: 2, blocked: 0 },
     );
     expect(d.newSubs).toEqual(['brandnew']);
+    expect(d.subs).toEqual([
+      { sub: 'cats', count: 1, ids: ['1'], eligible: 1, reasons: [] },
+      { sub: 'brandnew', count: 1, ids: ['2'], eligible: 1, reasons: [] },
+      { sub: 'unknown', count: 1, ids: ['3'], eligible: 0, reasons: ['NO_SUBREDDIT'] },
+    ]);
   });
 
   it('never flags blocked subs as new', () => {
@@ -67,13 +73,38 @@ describe('buildBlastDigest', () => {
   it('ignores malformed entries without throwing', () => {
     const d = buildBlastDigest(
       'c1',
-      [null, undefined, log('1', '   '), log('2', 'ok')] as never[],
+      [null, undefined, log('1', '   ', 'NO_SUBREDDIT'), log('2', 'ok')] as never[],
       [],
       [],
       { scanned: 4, eligible: 1, blocked: 0 },
     );
-    expect(d.subs).toEqual([{ sub: 'ok', count: 1, ids: ['2'] }]);
+    expect(d.subs).toEqual([
+      { sub: 'unknown', count: 1, ids: ['1'], eligible: 0, reasons: ['NO_SUBREDDIT'] },
+      { sub: 'ok', count: 1, ids: ['2'], eligible: 1, reasons: [] },
+    ]);
     expect(d.newSubs).toEqual(['ok']);
+  });
+
+  it('labels blocked and comment groups in the message', () => {
+    const d = buildBlastDigest(
+      'c1',
+      [
+        log('1', 'cats'),
+        log('2', 'junk', 'BLOCKED'),
+        log('3', 'junk', 'BLOCKED'),
+        log('4', 'somevid', 'SKIPPED_COMMENT'),
+        log('5', null, 'NO_SUBREDDIT'),
+      ],
+      ['junk'],
+      ['cats'],
+      { scanned: 5, eligible: 1, blocked: 2 },
+    );
+    const msg = formatDigestMessage(d);
+    expect(msg).toContain('• r/cats x1 (1)');
+    expect(msg).toContain('• r/junk x2 [BLOCKED] (2, 3)');
+    expect(msg).toContain('• r/somevid x1 [comment] (4)');
+    expect(msg).toContain('• unknown subreddit x1 [NO_SUBREDDIT] (5)');
+    expect(d.newSubs).toEqual([]);
   });
 });
 

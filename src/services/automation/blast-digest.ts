@@ -18,11 +18,24 @@ export interface DigestTaskLog {
 }
 
 export interface DigestSub {
-  /** Normalized subreddit. */
+  /** Normalized subreddit, or 'unknown' when unreadable. */
   sub: string;
   count: number;
   /** Up to 3 sample task ids for the message. */
   ids: string[];
+  /** Eligible tasks in this group (the releasable ones). */
+  eligible: number;
+  /** Distinct non-eligible reasons in this group (empty = fully eligible). */
+  reasons: string[];
+}
+
+/** Unknown-subreddit group key (unreadable subreddit — can never be eligible). */
+export const UNKNOWN_SUB = 'unknown';
+
+/** Human tag per validation reason for the DM. */
+function reasonTag(reason: string): string {
+  if (reason === 'SKIPPED_COMMENT') return 'comment';
+  return reason;
 }
 
 export interface BlastDigest {
@@ -66,7 +79,9 @@ function normalizeSet(values: readonly (string | null | undefined)[]): Set<strin
 /**
  * Builds the digest for one settled cycle. `logs` are the cycle's task
  * logs, `blockedSubs` the current blocked list, `seenSubs` subreddits from
- * any prior scan (seen-history). Counts mirror the cycle row.
+ * any prior scan (seen-history). Every scanned post appears, grouped by
+ * subreddit; non-eligible groups carry their reason tags (BLOCKED, comment,
+ * NO_SUBREDDIT, ...). Counts mirror the cycle row.
  */
 export function buildBlastDigest(
   cycleId: string,
@@ -79,20 +94,33 @@ export function buildBlastDigest(
   const seen = normalizeSet(seenSubs);
   const subs: DigestSub[] = [];
   const bySub = new Map<string, DigestSub>();
+  const seenReasons = new Map<string, Set<string>>();
   for (const log of logs) {
-    if (!log || !isEligibleLogStatus(log.status)) continue;
-    const norm = normalizeSubreddit(log.subreddit);
-    if (!norm) continue;
+    if (!log) continue;
+    const norm = normalizeSubreddit(log.subreddit) || UNKNOWN_SUB;
     let entry = bySub.get(norm);
     if (!entry) {
-      entry = { sub: norm, count: 0, ids: [] };
+      entry = { sub: norm, count: 0, ids: [], eligible: 0, reasons: [] };
       bySub.set(norm, entry);
       subs.push(entry);
+      seenReasons.set(norm, new Set<string>());
     }
     entry.count += 1;
     if (entry.ids.length < 3) entry.ids.push(log.externalTaskId);
+    if (isEligibleLogStatus(log.status)) {
+      entry.eligible += 1;
+    } else {
+      const tag = reasonTag(log.status);
+      const tags = seenReasons.get(norm) as Set<string>;
+      if (!tags.has(tag)) {
+        tags.add(tag);
+        entry.reasons.push(tag);
+      }
+    }
   }
-  const newSubs = subs.filter((s) => !blocked.has(s.sub) && !seen.has(s.sub)).map((s) => s.sub);
+  const newSubs = subs
+    .filter((s) => s.sub !== UNKNOWN_SUB && s.eligible > 0 && !blocked.has(s.sub) && !seen.has(s.sub))
+    .map((s) => s.sub);
   return { cycleId, scanned: counts.scanned, eligible: counts.eligible, blocked: counts.blocked, subs, newSubs };
 }
 
@@ -102,7 +130,9 @@ export function formatDigestMessage(digest: BlastDigest): string {
     `Drop ${digest.cycleId}: ${digest.eligible} eligible (${digest.scanned} scanned, ${digest.blocked} blocked)`,
   ];
   for (const s of digest.subs) {
-    lines.push(`• r/${s.sub} x${s.count} (${s.ids.join(', ')})`);
+    const name = s.sub === UNKNOWN_SUB ? 'unknown subreddit' : `r/${s.sub}`;
+    const tags = s.reasons.length > 0 ? ` [${s.reasons.join(', ')}]` : '';
+    lines.push(`• ${name} x${s.count}${tags} (${s.ids.join(', ')})`);
   }
   if (digest.newSubs.length > 0) {
     lines.push(`NEW - never seen before: ${digest.newSubs.map((s) => `r/${s}`).join(', ')}`);
