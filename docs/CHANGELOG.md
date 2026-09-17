@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Deployed
+- **Watcher v1.4.1 fresh-list guarantee live** (`161.118.164.85`) at commit `d741bf9` (dashboard-only rebuild; backup `rtm-backup-20260917-watcher141.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). :10 scan fetch-first (stale-DOM fix) + one reload per missing card. Verified live: dashboard 200, `/goparttime-auto.user.js` 200 serving v1.4.1 with hash matching the local build. Manager must update Tampermonkey script #2 to v1.4.1.
 ### Implemented (NOT yet deployed — dashboard rebuild + Tampermonkey update to v1.4.1 still pending)
 - **Watcher v1.4.1 fresh-list guarantee**: the :10 scan is fetch-first in both modes (the live DOM only refreshes on navigation, so a tab open since before :10 scanned the stale pre-drop list); a claim whose card is missing reloads EXACTLY once per claim for a fresh list instead of failing as taken (second miss still fails fast into move-on retry; storage-unavailable never loops). No server change, no behavior change otherwise. Verified: both copies byte-identical, pure ASCII, `node --check` clean.
 ### Deployed

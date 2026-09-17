@@ -251,7 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-16**: **Watcher v1.4.1 fresh-list guarantee implemented (NOT yet deployed)** — :10 scan fetch-first (stale-DOM fix); one reload per claim when the card is missing instead of false taken-failures. Watcher-only, no server change. Verified: identical copies, ASCII, `node --check` clean. Next: deploy + Tampermonkey update.
+- **2026-09-16**: **DEPLOYED watcher v1.4.1 fresh-list guarantee** (`161.118.164.85`, git HEAD `d741bf9`; backup `rtm-backup-20260917-watcher141.tar.gz`; dashboard-only rebuild; no DB migration; pushed to GitHub; verified: dashboard 200, served v1.4.1 hash-matches local). Manager must update Tampermonkey script #2 to v1.4.1.
 
 - **2026-09-16**: **DEPLOYED phone-approval blast DMs** (`161.118.164.85`, git HEAD `43be8c4`; backup `rtm-backup-20260917-blastdm.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", new code in live `dist/`; locally typecheck + build clean, 307/307 jest). Settled reports DM the manager Blast/Hold/Block buttons — no Remote Desktop needed. Next: live DM test on a real drop.
 
