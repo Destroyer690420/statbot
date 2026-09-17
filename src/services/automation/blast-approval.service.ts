@@ -39,6 +39,20 @@ const APPROVAL_EXPIRY_MS = 90 * 60 * 1000;
 // silent unless the eligible set grew (the drop is still streaming in).
 let lastDigest: { hourKey: number; cycleId: string; eligible: number } | null = null;
 
+export interface DigestDelivery {
+  sentTo: string[];
+  failed: { id: string; error: string }[];
+}
+
+function deliveryError(error: unknown): string {
+  if (error instanceof Error) return error.message.slice(0, 200);
+  try {
+    return JSON.stringify(error)?.slice(0, 200) || 'unknown error';
+  } catch {
+    return 'unknown error';
+  }
+}
+
 function styleFor(style: ButtonSpec['style']): ButtonStyle {
   if (style === 'primary') return ButtonStyle.Primary;
   if (style === 'danger') return ButtonStyle.Danger;
@@ -83,29 +97,42 @@ export async function buildDigestForCycle(cycleId: string): Promise<BuiltDigest 
 /**
  * Sends the pre-blast digest DM after a settled auto-report. Best-effort:
  * any failure only logs (the dashboard + Blast Now button stay available).
+ * Sends to every admin/manager (deduped) and reports per-recipient results.
  * Never throws.
  */
 export async function maybeSendDigest(
   discordClient: Client,
   cycleId: string,
   eligible: number,
-): Promise<void> {
+): Promise<DigestDelivery> {
+  const delivery: DigestDelivery = { sentTo: [], failed: [] };
   try {
     const hourKey = getIstHourStart().getTime();
-    if (lastDigest && lastDigest.hourKey === hourKey && eligible <= lastDigest.eligible) return;
+    if (lastDigest && lastDigest.hourKey === hourKey && eligible <= lastDigest.eligible) return delivery;
     const built = await buildDigestForCycle(cycleId);
-    if (!built || built.eligible === 0) return;
-    const approvers = getAdminOrManagerIds();
+    if (!built || built.eligible === 0) return delivery;
+    const approvers = [...new Set(getAdminOrManagerIds())];
     if (approvers.length === 0) {
       logger.warn('Blast digest skipped: no admin/manager ids configured', { cycleId });
-      return;
+      return delivery;
     }
-    const user = await discordClient.users.fetch(approvers[0]);
-    await user.send({ content: built.message, components: built.components });
-    lastDigest = { hourKey, cycleId, eligible: built.eligible };
-    logger.info('Blast digest DM sent', { cycleId, to: approvers[0], eligible: built.eligible });
+    for (const approverId of approvers) {
+      try {
+        const user = await discordClient.users.fetch(approverId);
+        await user.send({ content: built.message, components: built.components });
+        delivery.sentTo.push(approverId);
+        logger.info('Blast digest DM sent', { cycleId, to: approverId, eligible: built.eligible });
+      } catch (error) {
+        delivery.failed.push({ id: approverId, error: deliveryError(error) });
+        logger.warn('Blast digest DM failed for recipient', { cycleId, to: approverId, error });
+      }
+    }
+    // Only suppress later retries once at least one DM actually went out.
+    if (delivery.sentTo.length > 0) lastDigest = { hourKey, cycleId, eligible: built.eligible };
+    return delivery;
   } catch (error) {
     logger.warn('Blast digest DM failed (dashboard fallback still available)', { cycleId, error });
+    return delivery;
   }
 }
 
