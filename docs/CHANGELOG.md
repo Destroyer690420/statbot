@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Implemented (NOT yet deployed — dashboard rebuild + Tampermonkey update to v1.4.2 still pending)
+- **Watcher v1.4.2 cache-bypass page fetch**: background `fetch()` could be served the cached pre-drop `/tasks` document (manual reload revalidates — the 23:10 IST round proved it: tabs showed old tasks until hand-refreshed while the countdown sat idle). The listing fetch now uses `cache:'no-store'`. Watcher-only, no server change. Verified: both copies byte-identical, pure ASCII, `node --check` clean.
 ### Deployed
 - **Watcher v1.4.1 fresh-list guarantee live** (`161.118.164.85`) at commit `d741bf9` (dashboard-only rebuild; backup `rtm-backup-20260917-watcher141.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). :10 scan fetch-first (stale-DOM fix) + one reload per missing card. Verified live: dashboard 200, `/goparttime-auto.user.js` 200 serving v1.4.1 with hash matching the local build. Manager must update Tampermonkey script #2 to v1.4.1.
 ### Implemented (NOT yet deployed — dashboard rebuild + Tampermonkey update to v1.4.1 still pending)

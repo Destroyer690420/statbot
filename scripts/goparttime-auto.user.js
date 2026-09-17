@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.1
+// @version      1.4.2
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,12 @@
 // ==/UserScript==
 
 /**
+  * v1.4.2 - Cache-bypass page fetch: background fetch() could be served
+  * the cached pre-drop /tasks document (manual reload revalidates, which
+  * is why refresh "found" tasks the scan could not see). The listing fetch
+  * now uses cache:'no-store' so the :10 scan always sees the current drop.
+  * Otherwise identical to v1.4.1 below.
+  *
   * v1.4.1 - Fresh-list guarantee (no behavior change otherwise): the
   * :10 scan is fetch-first (the live DOM only refreshes on navigation, so
   * a tab open since before :10 scanned the stale pre-drop list); and a
@@ -136,7 +142,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.1';
+  const VERSION = '1.4.2';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -696,8 +702,12 @@
   // Live bytes escape quotes with one backslash; tolerate two (copies vary).
 
   function fetchPageHtml() {
+    // cache:'no-store': a background fetch may otherwise be served the
+    // cached pre-drop /tasks document (a manual reload revalidates, which
+    // is why refresh "found" tasks the scan could not see). Always hit the
+    // network so the :10 scan sees the current drop.
     try {
-      return fetchWithTimeout(window.location.pathname, { credentials: 'include' }, 15000)
+      return fetchWithTimeout(window.location.pathname, { credentials: 'include', cache: 'no-store' }, 15000)
         .then((res) => (res.ok ? res.text() : null))
         .catch(() => null);
     } catch (e) {
