@@ -18,6 +18,7 @@ import * as helpCmd from '../commands/help';
 import * as referralCmd from '../commands/referral';
 import * as mystatsCmd from '../commands/mystats';
 import * as myinvitesCmd from '../commands/myinvites';
+import { handleBlastButton } from '../../services/automation/blast-approval.service';
 
 const commands = new Map<string, { execute: (interaction: ChatInputCommandInteraction) => Promise<void> }>();
 commands.set('task', taskCmd);
@@ -36,9 +37,21 @@ commands.set('mystats', mystatsCmd);
 commands.set('myinvites', myinvitesCmd);
 
 /**
- * Handle interactionCreate event — route slash commands.
+ * Handle interactionCreate event — route slash commands and DM buttons.
  */
 export async function handleInteractionCreate(interaction: Interaction): Promise<void> {
+  // Pre-blast DM buttons (manager phone approvals) — guild-agnostic.
+  // Other buttons (e.g. /delete confirmations via collectors) pass through.
+  if (interaction.isButton()) {
+    if (!interaction.customId.startsWith('blast:')) return;
+    try {
+      await handleBlastButton(interaction);
+    } catch (error) {
+      logger.error('Button handling failed', { error });
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const command = commands.get(interaction.commandName);

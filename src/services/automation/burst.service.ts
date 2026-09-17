@@ -16,6 +16,9 @@ export interface BurstTaskInput {
   title: string | null;
 }
 
+/** Returned when a settled auto-report validated fine but only a manual start may blast. */
+export const AUTO_PAUSED_REASON = 'auto bursts paused — use Blast Now';
+
 export interface BurstResult {
   cycleId: string;
   eligible: DetectedGoPartTimeTask[];
@@ -187,7 +190,7 @@ export async function createBurstFlow(
   // Automatic hourly bursts are paused — only an explicit manual start
   // (Blast Now, forceWindow) may open a blast. Auto reports still validated
   // + logged above; they just never message.
-  else if (!opts.forceWindow) reason = 'auto bursts paused — use Blast Now';
+  else if (!opts.forceWindow) reason = AUTO_PAUSED_REASON;
   if (reason) {
     await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date() });
     return {

@@ -167,6 +167,16 @@ export class AutomationRepository {
     return getDb().automationTaskLog.findMany({ where: { cycleId }, orderBy: { createdAt: 'asc' } });
   }
 
+  /** Distinct readable subreddits from every past scan — the digest's seen-history. */
+  async listSeenSubreddits(): Promise<string[]> {
+    const rows = await getDb().automationTaskLog.findMany({
+      where: { subreddit: { not: null } },
+      select: { subreddit: true },
+      distinct: ['subreddit'],
+    });
+    return rows.map((r) => r.subreddit as string);
+  }
+
   // ─── Sightings (companion-reported task list) ───
   async upsertSighting(data: {
     externalTaskId: string; taskType: string; subreddit: string | null;

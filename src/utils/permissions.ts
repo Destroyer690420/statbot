@@ -37,6 +37,11 @@ export function getAllAdminIds(): string[] {
   return [...getAdminIds(), ...getManagerIds(), ...getModeratorIds()];
 }
 
+/** Admins + managers (no moderators) — recipients and approvers of blast DMs. */
+export function getAdminOrManagerIds(): string[] {
+  return [...getAdminIds(), ...getManagerIds()];
+}
+
 export function getPermissionDeniedMessage(): string {
   return '❌ You do not have permission to use this command.';
 }

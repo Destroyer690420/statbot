@@ -9,7 +9,8 @@ import { validateDetectedTask } from '../../services/automation/validator.servic
 import { scanTasks, acceptTask } from '../../services/automation/poller.service';
 import { runCycle } from '../../services/automation/cycle.service';
 import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
-import { createBurstFlow } from '../../services/automation/burst.service';
+import { AUTO_PAUSED_REASON, createBurstFlow } from '../../services/automation/burst.service';
+import * as blastApprovalService from '../../services/automation/blast-approval.service';
 import { parsePooledTasks, pickNextTask } from '../../services/automation/eligibility';
 import { outreachService, DAILY_POST_CAP } from '../../services/outreach.service';
 import { isAtDailyCap } from '../../utils/outreach-blast';
@@ -811,6 +812,20 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const result = await createBurstFlow(discordClient, tasks, 'burst', {
         forceWindow: req.body.force === true,
       });
+      // Phone-approval flow: a settled auto-report validated fine but only a
+      // manual start may blast — DM the manager the digest (fire-and-forget;
+      // never delay or break the watcher's confirmed report).
+      if (
+        req.body.force !== true &&
+        result.reason === AUTO_PAUSED_REASON &&
+        result.merged === false &&
+        result.blast === null &&
+        result.eligible.length > 0
+      ) {
+        void blastApprovalService
+          .maybeSendDigest(discordClient, result.cycleId, result.eligible.length)
+          .catch(() => undefined);
+      }
       res.json({
         success: true,
         data: {
