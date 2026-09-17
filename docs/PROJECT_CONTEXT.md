@@ -251,6 +251,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-16**: **Watcher v1.4.4 hourly :10 refresh implemented (NOT yet deployed)** — visible hard reload once/hour at :10 (skips fresh boots + mid-accept; loop-proof via session flag). Watcher-only. Verified: identical copies, ASCII, `node --check` clean. Next: deploy + Tampermonkey update.
+
 - **2026-09-16**: **DEPLOYED digest all-posts view + race guards** (`161.118.164.85`, git HEAD `3f0d178`; backup `rtm-backup-20260917-digestall.tar.gz`; app-only rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", new code in live `dist/`; locally typecheck + build clean, 308/308 jest).
 
 - **2026-09-16**: **Blast-approval race guards implemented (NOT yet deployed)** — duplicate-DM and double-tap release guards. Verified: typecheck + build clean, 307/307 jest. Will ride the next app deploy.

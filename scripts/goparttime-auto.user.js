@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.3
+// @version      1.4.4
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,12 @@
 // ==/UserScript==
 
 /**
+  * v1.4.4 - Visible hourly :10 refresh: the tab hard-reloads once per
+  * hour at minute :10 (skipped when freshly loaded or mid-accept, once
+  * only via a reload-surviving flag) so DOM, caches, and page state start
+  * the drop window on the current listing before scanning. Otherwise
+  * identical to v1.4.3 below.
+  *
   * v1.4.3 - Flap-proof countdown: an empty scan tick (throttled fetch,
   * streaming gap) no longer restarts the 45s clock - the countdown runs on
   * the best-seen set once tasks appear, and the report carries the latest
@@ -148,7 +154,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.3';
+  const VERSION = '1.4.4';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -830,6 +836,7 @@
     monitorBusy = true;
     try {
       const burst = isBurstWindow();
+      if (burst) maybeHourlyReload();
       // Fetch-first in BOTH modes. The live DOM only refreshes on
       // navigation, so a tab open since before :10 would otherwise scan the
       // stale pre-drop list (new tasks appear only after reload) and the
@@ -1126,6 +1133,38 @@
         } catch (e) { /* never break claim flow for navigation */ }
       }, 5000);
     } catch (e) { /* never break claim flow for navigation */ }
+  }
+
+  // Script boot time: a tab opened fresh just before :10 already shows the
+  // current list, so the hourly refresh skips it (avoids a pointless reload
+  // seconds after load).
+  const bootAtMs = Date.now();
+
+  // Hourly :10 hard refresh: the drop may already be listed while this tab
+  // still renders (and caches) the pre-drop page - a visible reload puts
+  // DOM, caches, and React state on the current drop before scanning.
+  // Runs at most once per hour, only on /tasks (callers guarantee that),
+  // never mid-accept (a reload then could strand an accepted-but-unpushed
+  // task), and never twice (sessionStorage survives the reload, so the
+  // flag cannot loop). Pending-but-unprocessed claims are safe: they stay
+  // PENDING server-side and re-poll immediately after the reboot. Never
+  // throws - a refresh must not break scanning.
+  function maybeHourlyReload() {
+    try {
+      const d = new Date();
+      if (d.getMinutes() !== 10) return;
+      const hk = burstHourKey(d);
+      if (sessGet('reloaded_hour') === hk) return;
+      if (Date.now() - bootAtMs < 90000) {
+        sessSet('reloaded_hour', hk);
+        return;
+      }
+      if (typeof claimBusy !== 'undefined' && claimBusy) return; // retry next tick
+      sessSet('reloaded_hour', hk);
+      if (!sessGet('reloaded_hour')) return; // storage unavailable: fail safe, never loop
+      console.log('[Auto Watcher] hourly :10 refresh for the fresh drop');
+      window.location.reload();
+    } catch (e) { /* never break scans for a refresh */ }
   }
 
   function findField(labelText, root) {

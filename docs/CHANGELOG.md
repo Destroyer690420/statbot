@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Implemented (NOT yet deployed — dashboard rebuild + Tampermonkey update to v1.4.4 still pending)
+- **Watcher v1.4.4 visible hourly :10 refresh**: the tab hard-reloads once per hour at minute :10 (skipped when freshly loaded or mid-accept; once-only via a reload-surviving session flag) so DOM, caches, and page state start the window on the current listing before scanning. Pending claims survive (PENDING + immediate re-poll). Watcher-only, no server change. Verified: both copies byte-identical, pure ASCII, `node --check` clean.
 ### Deployed
 - **Digest all-posts view + race guards live** (`161.118.164.85`) at commits `df06301` + `3f0d178` (app-only rebuild; backup `rtm-backup-20260917-digestall.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). DM lists every scanned post with reason tags; duplicate-DM and double-tap guards live. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, new code in live `dist/`. Locally: typecheck + build clean, 308/308 jest (26 suites).
 ### Implemented (NOT yet deployed — app rebuild still pending)
