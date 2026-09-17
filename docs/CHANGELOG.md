@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Deployed
+- **Watcher v1.4.4 hourly :10 refresh live** (`161.118.164.85`) at commit `e125869` (dashboard-only rebuild; backup `rtm-backup-20260917-watcher144.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Visible hard reload once/hour at :10 (skips fresh boots + mid-accept; loop-proof). Verified live: dashboard 200, `/goparttime-auto.user.js` 200 serving v1.4.4 with hash matching the local build. Manager must update Tampermonkey script #2 to v1.4.4.
 ### Implemented (NOT yet deployed — dashboard rebuild + Tampermonkey update to v1.4.4 still pending)
 - **Watcher v1.4.4 visible hourly :10 refresh**: the tab hard-reloads once per hour at minute :10 (skipped when freshly loaded or mid-accept; once-only via a reload-surviving session flag) so DOM, caches, and page state start the window on the current listing before scanning. Pending claims survive (PENDING + immediate re-poll). Watcher-only, no server change. Verified: both copies byte-identical, pure ASCII, `node --check` clean.
 ### Deployed
