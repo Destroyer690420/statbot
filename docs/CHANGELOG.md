@@ -3,8 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
-### Implemented (NOT yet deployed — full rebuild still pending)
-- **Auditable report POST (watcher v1.4.7)**: every burst-report attempt is console-logged and raced against a hard 35s timeout (a hung transport degrades to a loud retry instead of a silent loop wedge); attempt outcome rides poll telemetry (`post`/`postOk`, debug-logged server-side with range guards). Diagnostics only — success path identical. Verified: typecheck + build clean, 313/313 jest (27 suites), both userscripts byte-identical/ASCII/`node --check` clean. No DB migration.
+### Deployed
+- **Auditable report POST live (watcher v1.4.7)** (`161.118.164.85`) at commit `81759cc` (full rebuild; backup `rtm-backup-20260919-v147auditpost.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Attempt logging, 35s hard-timeout race, outcome telemetry. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, served v1.4.7 hash-matches local, telemetry code in live `dist/`. Manager must update Tampermonkey script #2 to v1.4.7 and reload tabs. Locally: typecheck + build clean, 313/313 jest (27 suites).
 ### Deployed
 - **Empty-DM guard fix + scan telemetry live** (`161.118.164.85`) at commits `8883016` + `e9dc07a` (full rebuild; backup `rtm-backup-20260919-v146telemetry.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Empty drops DM "nothing listed"; claim polls carry scan page/counts (debug log); watcher v1.4.6. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, served v1.4.6 hash-matches local, both fixes in live `dist/`. Manager must update Tampermonkey script #2 to v1.4.6 and reload tabs. Locally: typecheck + build clean, 313/313 jest (27 suites).
 ### Deployed
