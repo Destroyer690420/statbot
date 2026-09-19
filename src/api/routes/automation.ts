@@ -886,6 +886,21 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const claim = tabId
         ? await automationRepository.leaseNextClaim(tabId)
         : await automationRepository.pendingClaim();
+      // Scan telemetry (watcher v1.4.6+): last monitor outcome per tab, so
+      // "empty listing" vs "stalled/off-page scan" is distinguishable from
+      // logs alone. Debug level (invisible by default; flip LOG_LEVEL to
+      // debug during an incident). Never affects the response.
+      const telePage = typeof req.query.page === 'string' ? req.query.page.slice(0, 64) : null;
+      const teleScan = typeof req.query.scan === 'string' ? Number(req.query.scan) : NaN;
+      const teleElig = typeof req.query.elig === 'string' ? Number(req.query.elig) : NaN;
+      if (telePage !== null || Number.isFinite(teleScan) || Number.isFinite(teleElig)) {
+        logger.debug('Companion scan telemetry', {
+          tabId,
+          page: telePage,
+          scanned: Number.isFinite(teleScan) ? teleScan : null,
+          eligible: Number.isFinite(teleElig) ? teleElig : null,
+        });
+      }
       // Phase-1 speed: tell the tab whether any burst is currently open so
       // it can poll fast (2s) while work is live and idle (30s) otherwise.
       // Best-effort — a lookup failure must never break the claim poll.

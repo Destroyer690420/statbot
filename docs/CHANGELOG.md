@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Implemented (NOT yet deployed — full rebuild still pending)
+- **Empty-DM guard fix + scan telemetry**: the "nothing listed" DM path had a `total === 0` early-return that killed exactly the case it was built for (removed); every claim poll now carries the tab's last scan page + parsed/eligible counts, debug-logged server-side so "empty" vs "stalled" needs no browser peek. Watcher v1.4.6. Verified: typecheck + build clean, 313/313 jest (27 suites), both userscripts byte-identical/ASCII/`node --check` clean. No DB migration.
 ### Deployed
 - **DM-every-hour live** (`161.118.164.85`) at commit `1459441` (full rebuild; backup `rtm-backup-20260919-v145dmhour.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Watcher v1.4.5 (scanned latch, empty tail sweep) + all-reason/merge-once trigger + empty-digest message. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, served v1.4.5 hash-matches local, new trigger code in live `dist/`. Manager must update Tampermonkey script #2 to v1.4.5 and reload tabs. Locally: typecheck + build clean, 313/313 jest (27 suites).
 ### Deployed

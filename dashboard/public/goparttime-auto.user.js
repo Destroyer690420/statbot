@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.5
+// @version      1.4.6
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+  * v1.4.6 - Scan telemetry: every claim poll carries the last scan's
+  * page + parsed/eligible counts, so the server log distinguishes "empty
+  * listing" from "stalled scan" with no browser peek. Diagnostics only -
+  * zero behavior change. Otherwise identical to v1.4.5 below.
+  *
   * v1.4.5 - Report every drop: the countdown latches on ANY scanned
   * post (banned/unreadable included - server tags them), and a tail sweep
   * from :15 reports even a fully empty drop once ("nothing listed" DM).
@@ -160,7 +165,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.5';
+  const VERSION = '1.4.6';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -879,6 +884,7 @@
         }
       }
       const tasks = parseAvailableTasks(html || '');
+      try { noteScan(window.location.pathname, tasks.length, -1); } catch (e) { /* ignore */ }
       if (burst) {
         const hourKey = burstHourKey();
         if (reportedHour !== hourKey) {
@@ -896,6 +902,7 @@
         }
         const bundle = await getBundle(settings);
         const eligible = filterEligible(tasks, bundle);
+        try { noteScan(window.location.pathname, tasks.length, eligible.length); } catch (e) { /* ignore */ }
         const nowMs = Date.now();
         // v1.4.5: latch on ANY scanned post (comments excluded). A banned-
         // only drop starts the clock exactly like an eligible one - the
@@ -1047,6 +1054,23 @@
   // the fast poll cadence for manual rounds outside the local window.
   let lastBurstOpen = false;
 
+  // Scan telemetry: last monitor outcome, reported on every claim poll so
+  // the server can tell "empty listing" from "broken/stalled scan" without
+  // anyone peeking at the browser. Write-only diagnostics - never affects
+  // flow. -1 = no scan completed yet.
+  let lastScan = { page: '', scanned: -1, eligible: -1 };
+
+  function noteScan(page, scanned, eligible) {
+    // Never throws - telemetry must not break scanning.
+    try {
+      lastScan = {
+        page: String(page || '').slice(0, 64),
+        scanned: typeof scanned === 'number' ? scanned : -1,
+        eligible: typeof eligible === 'number' ? eligible : -1,
+      };
+    } catch (e) { /* ignore */ }
+  }
+
   function shouldFastPoll() {
     // Fast while the local drop window is live OR the server says a burst
     // is open. Never throws - a check failure only costs speed.
@@ -1072,7 +1096,8 @@
     claimBusy = true;
     try {
       const res = await request(settings, 'GET', '/claims/pending', null,
-        'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION) + '&tabId=' + encodeURIComponent(getTabId()),
+        'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION) + '&tabId=' + encodeURIComponent(getTabId()) +
+        '&page=' + encodeURIComponent(lastScan.page) + '&scan=' + lastScan.scanned + '&elig=' + lastScan.eligible,
         CLAIM_API_TIMEOUT_MS);
       setStatus(true, 'poll ok');
       const dd = (res && res.data) || {};
