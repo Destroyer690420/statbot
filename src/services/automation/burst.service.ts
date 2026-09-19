@@ -19,6 +19,9 @@ export interface BurstTaskInput {
 /** Returned when a settled auto-report validated fine but only a manual start may blast. */
 export const AUTO_PAUSED_REASON = 'auto bursts paused — use Blast Now';
 
+/** Returned when a settled report validated but nothing is eligible (all blocked/unreadable). */
+export const NO_ELIGIBLE_REASON = 'no eligible tasks found';
+
 export interface BurstResult {
   cycleId: string;
   /** Validated-eligible tasks. */
@@ -187,7 +190,7 @@ export async function createBurstFlow(
   );
 
   let reason: string | null = null;
-  if (eligible.length === 0) reason = 'no eligible tasks found';
+  if (eligible.length === 0) reason = NO_ELIGIBLE_REASON;
   else if (!live) reason = dryRun ? 'dry-run is on' : 'automation disabled';
   else if (!inWindow) reason = 'outside the blast window';
   // Automatic hourly bursts are paused — only an explicit manual start

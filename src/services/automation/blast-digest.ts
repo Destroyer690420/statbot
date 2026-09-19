@@ -129,6 +129,9 @@ export function formatDigestMessage(digest: BlastDigest): string {
   const lines: string[] = [
     `Drop ${digest.cycleId}: ${digest.eligible} eligible (${digest.scanned} scanned, ${digest.blocked} blocked)`,
   ];
+  if (digest.subs.length === 0) {
+    lines.push('No posts listed this drop.');
+  }
   for (const s of digest.subs) {
     const name = s.sub === UNKNOWN_SUB ? 'unknown subreddit' : `r/${s.sub}`;
     const tags = s.reasons.length > 0 ? ` [${s.reasons.join(', ')}]` : '';

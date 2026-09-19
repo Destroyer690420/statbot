@@ -43,6 +43,11 @@ let lastDigest: { hourKey: number; cycleId: string; scanned: number } | null = n
 // stays silent instead of sending a duplicate DM.
 let digestInFlightHour: number | null = null;
 
+/** True when any digest already went out this IST hour (merge-path DM gate). */
+export function digestSentForHour(hourKey: number): boolean {
+  return !!lastDigest && lastDigest.hourKey === hourKey;
+}
+
 export interface DigestDelivery {
   sentTo: string[];
   failed: { id: string; error: string }[];

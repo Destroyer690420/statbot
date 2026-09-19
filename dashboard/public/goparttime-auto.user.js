@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.4
+// @version      1.4.5
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,12 @@
 // ==/UserScript==
 
 /**
+  * v1.4.5 - Report every drop: the countdown latches on ANY scanned
+  * post (banned/unreadable included - server tags them), and a tail sweep
+  * from :15 reports even a fully empty drop once ("nothing listed" DM).
+  * Report body is eligible-first plus the rest, capped at 20. Comments
+  * never count. Otherwise identical to v1.4.4 below.
+  *
   * v1.4.4 - Visible hourly :10 refresh: the tab hard-reloads once per
   * hour at minute :10 (skipped when freshly loaded or mid-accept, once
   * only via a reload-surviving flag) so DOM, caches, and page state start
@@ -154,7 +160,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.4';
+  const VERSION = '1.4.5';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -192,6 +198,14 @@
   // (throttled fetch, streaming gap) count on this instead of restarting
   // the countdown. Reset on hour rollover with the rest of the state.
   let latchedEligible = null;
+  // v1.4.5: scanned posts latch (any status - eligible, blocked,
+  // unreadable). The countdown starts on ANY listed post so banned-only
+  // drops still report (server tags them); empty drops are covered by the
+  // tail sweep below. Comments never count.
+  let latchedPosts = null;
+  // Hour key of the last tail-sweep empty report (never the confirmed hour:
+  // a real drop later in the window must still report normally).
+  let emptyReportedHour = '';
   const BURST_RETRY_MS = 30000;
   const BURST_REPORT_DELAY_MS = 45000;
   let firstSeenAt = 0;
@@ -873,6 +887,8 @@
           burstConfirmed = false;
           firstSeenAt = 0;
           latchedEligible = null;
+          latchedPosts = null;
+          emptyReportedHour = '';
         }
         if (reportedHour === hourKey && burstConfirmed) {
           setStatus(true, 'BURST reported this hour');
@@ -881,6 +897,22 @@
         const bundle = await getBundle(settings);
         const eligible = filterEligible(tasks, bundle);
         const nowMs = Date.now();
+        // v1.4.5: latch on ANY scanned post (comments excluded). A banned-
+        // only drop starts the clock exactly like an eligible one - the
+        // server tags every task, so nothing reportable ever waits silently.
+        const posts = [];
+        const postSeen = {};
+        for (const t of tasks || []) {
+          if (!t || t.type !== 'post' || t.subTaskId === undefined || t.subTaskId === null) continue;
+          const key = String(t.subTaskId);
+          if (postSeen[key]) continue;
+          postSeen[key] = true;
+          posts.push({ subTaskId: Number(t.subTaskId), type: t.type, subreddit: t.subreddit || null, title: t.title || null });
+        }
+        if (posts.length > 0) {
+          latchedPosts = posts;
+          if (!firstSeenAt) firstSeenAt = nowMs;
+        }
         if (eligible.length > 0) {
           // Fresh set wins; the countdown start stays latched.
           latchedEligible = eligible;
@@ -890,11 +922,46 @@
         // NEVER restart the clock - count on the best-seen set instead.
         // Only a genuinely unseen hour waits; the server re-validates, and
         // taken tasks fail fast into move-on retry downstream.
-        if (!firstSeenAt || !latchedEligible) {
-          setStatus(true, 'BURST scanning (' + source + ')...');
+        if (!firstSeenAt || !latchedPosts) {
+          // Tail sweep: from minute :15, report even a fully empty drop
+          // once, so every hour ends with a DM ("nothing listed") instead
+          // of silence. Never marks the hour confirmed - a real drop later
+          // in the window still reports normally.
+          if (new Date().getMinutes() >= 15 && emptyReportedHour !== hourKey &&
+              nowMs - lastBurstPostAt >= BURST_RETRY_MS) {
+            lastBurstPostAt = nowMs;
+            try {
+              const emptyRes = await request(settings, 'POST', '/burst', {
+                companionId: getCompanionId(),
+                version: VERSION,
+                tasks: [],
+              });
+              if (emptyRes && emptyRes.success) {
+                emptyReportedHour = hourKey;
+                setStatus(true, 'BURST empty drop reported');
+              } else {
+                setStatus(false, 'BURST empty report failed - retrying');
+              }
+            } catch (e) {
+              setStatus(false, 'BURST empty report failed - retrying');
+              console.log('[Auto Watcher] burst empty report failed:', e && e.message);
+            }
+          } else {
+            setStatus(true, 'BURST scanning (' + source + ')...');
+          }
           return;
         }
-        const reportSet = eligible.length > 0 ? eligible : latchedEligible;
+        // Report set: eligible first (newest-first at send), then the rest
+        // of the latched posts for visibility (server labels them); cap 20.
+        const latchedRest = (latchedPosts || []).filter((t) => {
+          for (const e of (eligible.length > 0 ? eligible : (latchedEligible || []))) {
+            if (Number(e.subTaskId) === Number(t.subTaskId)) return false;
+          }
+          return true;
+        });
+        const reportSet = (eligible.length > 0 ? eligible : (latchedEligible || []).slice())
+          .concat(latchedRest)
+          .slice(0, 20);
         // Adaptive countdown: full delay early in the window (let the drop
         // finish streaming so the single report carries the full number),
         // fast near the tail so delayed reports still land inside it.

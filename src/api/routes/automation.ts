@@ -9,12 +9,12 @@ import { validateDetectedTask } from '../../services/automation/validator.servic
 import { scanTasks, acceptTask } from '../../services/automation/poller.service';
 import { runCycle } from '../../services/automation/cycle.service';
 import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
-import { AUTO_PAUSED_REASON, createBurstFlow } from '../../services/automation/burst.service';
+import { AUTO_PAUSED_REASON, NO_ELIGIBLE_REASON, createBurstFlow } from '../../services/automation/burst.service';
 import * as blastApprovalService from '../../services/automation/blast-approval.service';
 import { parsePooledTasks, pickNextTask } from '../../services/automation/eligibility';
 import { outreachService, DAILY_POST_CAP } from '../../services/outreach.service';
 import { isAtDailyCap } from '../../utils/outreach-blast';
-import { getIstDayBoundaries } from '../../utils/ist-time';
+import { getIstDayBoundaries, getIstHourStart } from '../../utils/ist-time';
 import { authMiddleware, AuthRequest, requireDashboardAdmin } from '../middleware/auth';
 import { extensionAuth } from '../middleware/extensionAuth';
 import { validateBody } from '../middleware/validate';
@@ -817,17 +817,23 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const result = await createBurstFlow(discordClient, tasks, 'burst', {
         forceWindow: req.body.force === true,
       });
-      // Phone-approval flow: a settled auto-report validated but only a
-      // manual start may blast — DM the manager the digest (fire-and-forget;
-      // never delay or break the watcher's confirmed report). Fires on ANY
-      // scanned content (eligible or all-blocked) so banned-only drops are
-      // visible too; empty drops stay silent.
-      if (
+      // Phone-approval flow: a settled report lands — DM the manager the
+      // digest (fire-and-forget; never delay or break the watcher's
+      // confirmed report). Fresh settled reports DM on ANY content
+      // (eligible, banned-only, or empty — "nothing listed") so no hour
+      // stays silent. A merge into an already-live hour blast DMs once as
+      // information (manual blast preempted the round).
+      if (req.body.force !== true && result.blast === null && !result.merged &&
+        (result.reason === AUTO_PAUSED_REASON || result.reason === NO_ELIGIBLE_REASON)
+      ) {
+        void blastApprovalService
+          .maybeSendDigest(discordClient, result.cycleId, result.scanned)
+          .catch(() => undefined);
+      } else if (
         req.body.force !== true &&
-        result.reason === AUTO_PAUSED_REASON &&
-        result.merged === false &&
-        result.blast === null &&
-        result.scanned > 0
+        result.merged === true &&
+        result.blast !== null &&
+        !blastApprovalService.digestSentForHour(getIstHourStart().getTime())
       ) {
         void blastApprovalService
           .maybeSendDigest(discordClient, result.cycleId, result.scanned)

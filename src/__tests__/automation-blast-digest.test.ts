@@ -121,6 +121,17 @@ describe('buildBlastDigest', () => {
     expect(msg).toContain('Nothing eligible');
     expect(d.newSubs).toEqual([]);
   });
+
+  it('says nothing listed for a fully empty drop', () => {
+    const d = buildBlastDigest('c1', [], [], [], { scanned: 0, eligible: 0, blocked: 0 });
+    expect(d.subs).toEqual([]);
+    expect(d.newSubs).toEqual([]);
+    const msg = formatDigestMessage(d);
+    expect(msg).toContain('0 eligible (0 scanned, 0 blocked)');
+    expect(msg).toContain('No posts listed this drop.');
+    expect(msg.length).toBeLessThanOrEqual(2000);
+    expect(buildDigestButtons(d)).toHaveLength(1);
+  });
 });
 
 describe('formatDigestMessage', () => {
