@@ -893,12 +893,24 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const telePage = typeof req.query.page === 'string' ? req.query.page.slice(0, 64) : null;
       const teleScan = typeof req.query.scan === 'string' ? Number(req.query.scan) : NaN;
       const teleElig = typeof req.query.elig === 'string' ? Number(req.query.elig) : NaN;
-      if (telePage !== null || Number.isFinite(teleScan) || Number.isFinite(teleElig)) {
+      const telePost = typeof req.query.post === 'string' ? Number(req.query.post) : NaN;
+      const telePostOk = typeof req.query.postOk === 'string' ? Number(req.query.postOk) : NaN;
+      let telePostAt: string | null = null;
+      if (Number.isFinite(telePost) && telePost > 0 && telePost < 4102444800000) {
+        try {
+          telePostAt = new Date(telePost).toISOString();
+        } catch {
+          telePostAt = null;
+        }
+      }
+      if (telePage !== null || Number.isFinite(teleScan) || Number.isFinite(teleElig) || telePostAt !== null) {
         logger.debug('Companion scan telemetry', {
           tabId,
           page: telePage,
           scanned: Number.isFinite(teleScan) ? teleScan : null,
           eligible: Number.isFinite(teleElig) ? teleElig : null,
+          postAt: telePostAt,
+          postOk: Number.isFinite(telePostOk) ? telePostOk : null,
         });
       }
       // Phase-1 speed: tell the tab whether any burst is currently open so

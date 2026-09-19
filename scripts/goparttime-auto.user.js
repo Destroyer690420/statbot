@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.6
+// @version      1.4.7
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,12 @@
 // ==/UserScript==
 
 /**
+  * v1.4.7 - Auditable report POST: every attempt is console-logged,
+  * raced against a hard 35s timeout (a hung transport degrades to a loud
+  * retry instead of a silent wedge), and its outcome rides poll telemetry.
+  * Diagnostics only - success path identical. Otherwise identical to
+  * v1.4.6 below.
+  *
   * v1.4.6 - Scan telemetry: every claim poll carries the last scan's
   * page + parsed/eligible counts, so the server log distinguishes "empty
   * listing" from "stalled scan" with no browser peek. Diagnostics only -
@@ -165,7 +171,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.6';
+  const VERSION = '1.4.7';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -192,6 +198,11 @@
   const FAST_ACCEPT_TRIES = 2;
   const CARD_SCAN_BUDGET_MS = 5000;
   const CLAIM_API_TIMEOUT_MS = 10000;
+  // Hard timeout racing the burst report POST: the transport timeout alone
+  // proved untrustworthy (a hung POST wedged the loop with zero trace, no
+  // log, no retry, no DM). Slightly above the transport timeout so normal
+  // slow responses still resolve first.
+  const POST_TIMEOUT_MS = 35000;
   // Once-per-hour reporting: the first scan with eligible posts starts a
   // fixed countdown; when it lapses the CURRENT set is reported once.
   // No signature comparison (churn-proof - a live drop never sits still).
@@ -991,14 +1002,24 @@
         // Newest-first: page bottom carries the newest drop, so the first
         // replier wins the newest eligible post.
         const ordered = reportSet.slice().reverse();
+        // Attempt visibility + survival: log every attempt, race a hard
+        // timeout so a hung transport degrades to a loud retry instead of
+        // a silent wedge, and record the outcome for poll telemetry.
+        console.log('[Auto Watcher] burst report posting ' + ordered.length + ' task(s)...');
+        notePostAttempt();
         let res = null;
         try {
-          res = await request(settings, 'POST', '/burst', {
-            companionId: getCompanionId(),
-            version: VERSION,
-            tasks: ordered,
-          });
+          res = await Promise.race([
+            request(settings, 'POST', '/burst', {
+              companionId: getCompanionId(),
+              version: VERSION,
+              tasks: ordered,
+            }),
+            sleep(POST_TIMEOUT_MS).then(() => { throw new Error('burst report timed out'); }),
+          ]);
+          notePostResult(true);
         } catch (e) {
+          notePostResult(false);
           setStatus(false, 'BURST send failed - retrying');
           console.log('[Auto Watcher] burst report failed:', e && e.message);
           return;
@@ -1071,6 +1092,25 @@
     } catch (e) { /* ignore */ }
   }
 
+  // Burst-report outcome telemetry: the POST step used to fail three ways
+  // (rejected = visible; hung forever = invisible wedge; never attempted =
+  // invisible). Attempt + hard timeout + result are all recorded so the
+  // server log always shows what happened. Never throws.
+  // ok: -1 = never attempted, 0 = failed/timed out, 1 = responded.
+  let lastPost = { at: 0, ok: -1 };
+
+  function notePostAttempt() {
+    try {
+      lastPost = { at: Date.now(), ok: -1 };
+    } catch (e) { /* ignore */ }
+  }
+
+  function notePostResult(ok) {
+    try {
+      lastPost = { at: Date.now(), ok: ok ? 1 : 0 };
+    } catch (e) { /* ignore */ }
+  }
+
   function shouldFastPoll() {
     // Fast while the local drop window is live OR the server says a burst
     // is open. Never throws - a check failure only costs speed.
@@ -1097,7 +1137,8 @@
     try {
       const res = await request(settings, 'GET', '/claims/pending', null,
         'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION) + '&tabId=' + encodeURIComponent(getTabId()) +
-        '&page=' + encodeURIComponent(lastScan.page) + '&scan=' + lastScan.scanned + '&elig=' + lastScan.eligible,
+        '&page=' + encodeURIComponent(lastScan.page) + '&scan=' + lastScan.scanned + '&elig=' + lastScan.eligible +
+        '&post=' + lastPost.at + '&postOk=' + lastPost.ok,
         CLAIM_API_TIMEOUT_MS);
       setStatus(true, 'poll ok');
       const dd = (res && res.data) || {};
