@@ -4,6 +4,7 @@
 
 ## 2026-09-16
 ### Implemented (NOT yet deployed — app rebuild still pending)
+- **DM fires on any scanned content**: the pre-blast digest triggers on `scanned > 0` (was eligible-only), so banned-only drops also DM with every post labeled. New `BurstResult.scanned` plumbed through all return paths; dedupe compares scanned counts. Verified: typecheck + build clean, 312/312 jest (27 suites). No DB migration, no watcher change.
 - **Watcher version-change radar**: the claim poll logs every companion version transition (`Companion watcher version`, upgrades and regressions). Stale tabs (e.g. v1.4.0 polling while v1.4.4 is current) can no longer hide — 24h of zero DMs traced to exactly that. New pure `companion-version.ts` + 3 tests. Verified: typecheck + build clean, 311/311 jest (27 suites). No behavior change.
 ### Deployed
 - **Watcher v1.4.4 hourly :10 refresh live** (`161.118.164.85`) at commit `e125869` (dashboard-only rebuild; backup `rtm-backup-20260917-watcher144.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Visible hard reload once/hour at :10 (skips fresh boots + mid-accept; loop-proof). Verified live: dashboard 200, `/goparttime-auto.user.js` 200 serving v1.4.4 with hash matching the local build. Manager must update Tampermonkey script #2 to v1.4.4.

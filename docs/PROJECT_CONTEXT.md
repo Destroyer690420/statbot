@@ -251,6 +251,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-16**: **DM all-scanned view implemented (NOT yet deployed)** — trigger on `scanned > 0`, digest lists every post with tags, zero-eligible message. Verified: typecheck + build clean, 312/312 jest. Next: deploy (app-only).
+
 - **2026-09-16**: **DEPLOYED watcher v1.4.4 hourly :10 refresh** (`161.118.164.85`, git HEAD `e125869`; backup `rtm-backup-20260917-watcher144.tar.gz`; dashboard-only rebuild; no DB migration; pushed to GitHub; verified: dashboard 200, served v1.4.4 hash-matches local). Manager must update Tampermonkey script #2 to v1.4.4.
 
 - **2026-09-16**: **DEPLOYED digest all-posts view + race guards** (`161.118.164.85`, git HEAD `3f0d178`; backup `rtm-backup-20260917-digestall.tar.gz`; app-only rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", new code in live `dist/`; locally typecheck + build clean, 308/308 jest).
