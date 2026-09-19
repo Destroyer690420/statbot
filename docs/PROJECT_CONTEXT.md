@@ -251,7 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-16**: **DM-every-hour implemented (NOT yet deployed)** — v1.4.5 countdown on scanned posts + :15 empty tail sweep; trigger on auto-paused/no-eligible/merge-once; empty drops DM "nothing listed". Verified: typecheck + build clean, 313/313 jest. Next: full deploy + script update.
+- **2026-09-16**: **DEPLOYED DM-every-hour** (`161.118.164.85`, git HEAD `1459441`; backup `rtm-backup-20260919-v145dmhour.tar.gz`; full rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", served v1.4.5 hash-matches, trigger code live; locally typecheck + build clean, 313/313 jest). Manager must update script #2 to v1.4.5 + reload tabs.
 
 - **2026-09-16**: **DEPLOYED digest all-scanned view + version radar** (`161.118.164.85`, git HEAD `086f0c8`; backup `rtm-backup-20260919-dmall.tar.gz`; app-only rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", new code in live `dist/`; locally typecheck + build clean, 312/312 jest).
 
