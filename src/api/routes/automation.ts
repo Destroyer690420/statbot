@@ -25,6 +25,7 @@ import { getAllAdminIds } from '../../utils/permissions';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 import { buildClaimTimingsLog, claimTimingsSchema, ClaimTimings } from '../../utils/claim-timings';
+import { shouldLogVersionChange } from '../../utils/companion-version';
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
@@ -139,6 +140,10 @@ export function logClaimTimings(
 
 export default function createAutomationRoutes(discordClient: Client): Router {
   const router = Router();
+
+  // Last watcher version seen on the claim poll (staleness radar —reset on
+  // restart, which re-logs the current version once; harmless).
+  let lastCompanionVersion: string | null = null;
 
   // Dual auth on one prefix: the manager-browser companion uses the shared
   // extension key, everything else uses the dashboard JWT. A single router is
@@ -859,6 +864,12 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const version = typeof req.query.version === 'string' ? req.query.version : null;
       const companionId = typeof req.query.companionId === 'string' ? req.query.companionId : null;
       await automationRepository.heartbeat(companionId, version);
+      // Staleness radar: a stale watcher silently stops auto-reporting, so
+      // every version transition is logged (upgrades and regressions alike).
+      if (shouldLogVersionChange(lastCompanionVersion, version)) {
+        logger.info('Companion watcher version', { previous: lastCompanionVersion, version });
+        lastCompanionVersion = version;
+      }
       // Phase-2 parallel tabs: a tab id leases the oldest actionable claim
       // atomically (two tabs never hold the same claim). Watchers without a
       // tab id keep the legacy oldest-first pickup.
