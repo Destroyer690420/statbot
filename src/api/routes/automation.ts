@@ -817,18 +817,20 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const result = await createBurstFlow(discordClient, tasks, 'burst', {
         forceWindow: req.body.force === true,
       });
-      // Phone-approval flow: a settled auto-report validated fine but only a
+      // Phone-approval flow: a settled auto-report validated but only a
       // manual start may blast — DM the manager the digest (fire-and-forget;
-      // never delay or break the watcher's confirmed report).
+      // never delay or break the watcher's confirmed report). Fires on ANY
+      // scanned content (eligible or all-blocked) so banned-only drops are
+      // visible too; empty drops stay silent.
       if (
         req.body.force !== true &&
         result.reason === AUTO_PAUSED_REASON &&
         result.merged === false &&
         result.blast === null &&
-        result.eligible.length > 0
+        result.scanned > 0
       ) {
         void blastApprovalService
-          .maybeSendDigest(discordClient, result.cycleId, result.eligible.length)
+          .maybeSendDigest(discordClient, result.cycleId, result.scanned)
           .catch(() => undefined);
       }
       res.json({

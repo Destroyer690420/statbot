@@ -136,7 +136,9 @@ export function formatDigestMessage(digest: BlastDigest): string {
   }
   if (digest.newSubs.length > 0) {
     lines.push(`NEW - never seen before: ${digest.newSubs.map((s) => `r/${s}`).join(', ')}`);
-    lines.push('Hold + review, or block a sub above. Tapping Blast releases the current set.');
+    lines.push('Hold + review, or block a sub above. Tapping Blast releases the eligible set.');
+  } else if (digest.eligible === 0) {
+    lines.push('Nothing eligible - everything scanned is tagged above. No blast needed; Hold to dismiss.');
   } else {
     lines.push('No new subreddits. Tap Blast to release, Hold to skip this round.');
   }

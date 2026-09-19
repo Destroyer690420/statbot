@@ -21,7 +21,10 @@ export const AUTO_PAUSED_REASON = 'auto bursts paused — use Blast Now';
 
 export interface BurstResult {
   cycleId: string;
+  /** Validated-eligible tasks. */
   eligible: DetectedGoPartTimeTask[];
+  /** Total scanned candidates (eligible + blocked + duplicates + skipped). */
+  scanned: number;
   blocked: number;
   duplicates: number;
   commentsSkipped: number;
@@ -196,6 +199,7 @@ export async function createBurstFlow(
     return {
       cycleId,
       eligible,
+      scanned: candidates.length,
       blocked,
       duplicates,
       commentsSkipped,
@@ -233,6 +237,7 @@ export async function createBurstFlow(
   return {
     cycleId,
     eligible,
+    scanned: candidates.length,
     blocked,
     duplicates,
     commentsSkipped,
@@ -261,6 +266,7 @@ async function mergeIntoHourBurst(
   const empty: BurstResult = {
     cycleId: '',
     eligible: [],
+    scanned: 0,
     blocked: 0,
     duplicates: 0,
     commentsSkipped: 0,
@@ -339,6 +345,7 @@ async function mergeIntoHourBurst(
   return {
     cycleId: burst.cycleId,
     eligible: eligible.filter((t) => added.includes(t.subTaskId)),
+    scanned: candidates.length,
     blocked,
     duplicates,
     commentsSkipped,

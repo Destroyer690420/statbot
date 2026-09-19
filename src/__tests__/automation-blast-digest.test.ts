@@ -106,6 +106,21 @@ describe('buildBlastDigest', () => {
     expect(msg).toContain('• unknown subreddit x1 [NO_SUBREDDIT] (5)');
     expect(d.newSubs).toEqual([]);
   });
+
+  it('says nothing eligible when every group is tagged', () => {
+    const d = buildBlastDigest(
+      'c1',
+      [log('1', 'junk', 'BLOCKED'), log('2', 'junk', 'BLOCKED')],
+      ['junk'],
+      [],
+      { scanned: 2, eligible: 0, blocked: 2 },
+    );
+    const msg = formatDigestMessage(d);
+    expect(msg).toContain('0 eligible');
+    expect(msg).toContain('• r/junk x2 [BLOCKED] (1, 2)');
+    expect(msg).toContain('Nothing eligible');
+    expect(d.newSubs).toEqual([]);
+  });
 });
 
 describe('formatDigestMessage', () => {

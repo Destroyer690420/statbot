@@ -36,8 +36,8 @@ import {
 const APPROVAL_EXPIRY_MS = 90 * 60 * 1000;
 
 // One digest DM per IST hour: retries of the same settled report stay
-// silent unless the eligible set grew (the drop is still streaming in).
-let lastDigest: { hourKey: number; cycleId: string; eligible: number } | null = null;
+// silent unless the scanned set grew (the drop is still streaming in).
+let lastDigest: { hourKey: number; cycleId: string; scanned: number } | null = null;
 // In-flight guard: two tabs' reports can land in the same seconds. The flag
 // is set synchronously (no await before it), so the second call sees it and
 // stays silent instead of sending a duplicate DM.
@@ -75,6 +75,8 @@ export interface BuiltDigest {
   message: string;
   components: ActionRowBuilder<ButtonBuilder>[];
   eligible: number;
+  /** Total scanned posts (eligible + tagged) — zero means nothing to show. */
+  total: number;
 }
 
 /** Rebuilds the digest for a cycle from current DB state (logs + blocked). */
@@ -95,28 +97,31 @@ export async function buildDigestForCycle(cycleId: string): Promise<BuiltDigest 
     message: formatDigestMessage(digest),
     components: digestComponents(buildDigestButtons(digest)),
     eligible: digest.eligible,
+    total: logs.length,
   };
 }
 
 /**
  * Sends the pre-blast digest DM after a settled auto-report. Best-effort:
  * any failure only logs (the dashboard + Blast Now button stay available).
- * Sends to every admin/manager (deduped) and reports per-recipient results.
- * Never throws.
+ * Fires on ANY scanned content (eligible or all-blocked) — the digest lists
+ * every available post with reason tags, so banned-only drops are visible
+ * too. Sends to every admin/manager (deduped) and reports per-recipient
+ * results. Never throws.
  */
 export async function maybeSendDigest(
   discordClient: Client,
   cycleId: string,
-  eligible: number,
+  scanned: number,
 ): Promise<DigestDelivery> {
   const delivery: DigestDelivery = { sentTo: [], failed: [] };
   const hourKey = getIstHourStart().getTime();
-  if (lastDigest && lastDigest.hourKey === hourKey && eligible <= lastDigest.eligible) return delivery;
+  if (lastDigest && lastDigest.hourKey === hourKey && scanned <= lastDigest.scanned) return delivery;
   if (digestInFlightHour === hourKey) return delivery;
   digestInFlightHour = hourKey;
   try {
     const built = await buildDigestForCycle(cycleId);
-    if (!built || built.eligible === 0) return delivery;
+    if (!built || built.total === 0) return delivery;
     const approvers = [...new Set(getAdminOrManagerIds())];
     if (approvers.length === 0) {
       logger.warn('Blast digest skipped: no admin/manager ids configured', { cycleId });
@@ -134,7 +139,7 @@ export async function maybeSendDigest(
       }
     }
     // Only suppress later retries once at least one DM actually went out.
-    if (delivery.sentTo.length > 0) lastDigest = { hourKey, cycleId, eligible: built.eligible };
+    if (delivery.sentTo.length > 0) lastDigest = { hourKey, cycleId, scanned: built.total };
     return delivery;
   } catch (error) {
     logger.warn('Blast digest DM failed (dashboard fallback still available)', { cycleId, error });
