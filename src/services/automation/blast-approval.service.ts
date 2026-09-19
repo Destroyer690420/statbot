@@ -126,7 +126,10 @@ export async function maybeSendDigest(
   digestInFlightHour = hourKey;
   try {
     const built = await buildDigestForCycle(cycleId);
-    if (!built || built.total === 0) return delivery;
+    // NOTE: no emptiness guard here by design — an empty drop still DMs
+    // ("nothing listed"); only a missing cycle bails. buildDigestForCycle
+    // returns null only when the cycle row itself is gone.
+    if (!built) return delivery;
     const approvers = [...new Set(getAdminOrManagerIds())];
     if (approvers.length === 0) {
       logger.warn('Blast digest skipped: no admin/manager ids configured', { cycleId });
