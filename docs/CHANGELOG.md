@@ -3,8 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
-### Implemented (NOT yet deployed — full rebuild still pending)
-- **Blast-button colon fix**: every `blast:*` tap died silently — cycle ids contain an `HH:MM` colon (`burst-...-09:17-...`) that `parseBlastButtonId` split positionally and rejected, so the handler returned with no ack ("didn't respond in time", zero logs, 100% of taps, since the feature shipped). Parser now re-joins the tail and validates (max one colon); unreadable `blast:` ids log loudly + answer best-effort instead of silent-dropping. Tests corrected (old cases used hyphenated ids that don't exist in production) + round-trip test over real ids. Verified: typecheck + build clean, 323/323 jest (28 suites). No DB migration, no userscript change (button format unchanged — existing digest buttons work after deploy).
+### Deployed
+- **Blast-button colon fix live** (`161.118.164.85`) at commit `1c296e6` (full rebuild; backup `rtm-backup-20260920-v150blastcolon.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `isValidCycleId` in live `dist/`. Existing digest buttons (incl. the 09:17 manual round) parse immediately — no script update needed. Locally: typecheck + build clean, 323/323 jest (28 suites).
 ### Deployed
 - **DM-text `scan` trigger live** (`161.118.164.85`) at commit `e5225e2` (full rebuild; backup `rtm-backup-20260920-v149dmtext.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Typing `scan` in the bot DM queues the on-demand round; `/scan` slash removed (global cleared via deploy-commands). Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `handleDirectMessage` in live `dist/`. No script update needed (watcher stays v1.4.8). Locally: typecheck + build clean, 322/322 jest (28 suites).
 ### Deployed
