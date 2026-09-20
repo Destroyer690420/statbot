@@ -62,6 +62,55 @@ function deliveryError(error: unknown): string {
   }
 }
 
+// Manual (`/scan`) digests are keyed per request, never per hour: an
+// on-demand scan always answers with its own DM and never disturbs the
+// automatic hour state (lastDigest / digestInFlightHour untouched).
+const manualDigestsSent = new Set<string>();
+
+/** True when a manual digest already went out for this request id. */
+export function manualDigestSent(requestId: string): boolean {
+  return manualDigestsSent.has(requestId);
+}
+
+/** Shared DM delivery: builds the digest for a cycle and sends it to every
+ *  admin/manager. Returns the delivery record plus the built digest (for
+ *  growth checks). Never throws. */
+async function deliverDigest(
+  discordClient: Client,
+  cycleId: string,
+  banner: string | null,
+): Promise<{ delivery: DigestDelivery; built: BuiltDigest | null }> {
+  const delivery: DigestDelivery = { sentTo: [], failed: [] };
+  try {
+    const built = await buildDigestForCycle(cycleId);
+    // NOTE: no emptiness guard here by design — an empty drop still DMs
+    // ("nothing listed"); only a missing cycle bails. buildDigestForCycle
+    // returns null only when the cycle row itself is gone.
+    if (!built) return { delivery, built };
+    const message = banner ? `${banner}\n${built.message}` : built.message;
+    const approvers = [...new Set(getAdminOrManagerIds())];
+    if (approvers.length === 0) {
+      logger.warn('Blast digest skipped: no admin/manager ids configured', { cycleId });
+      return { delivery, built };
+    }
+    for (const approverId of approvers) {
+      try {
+        const user = await discordClient.users.fetch(approverId);
+        await user.send({ content: message, components: built.components });
+        delivery.sentTo.push(approverId);
+        logger.info('Blast digest DM sent', { cycleId, to: approverId, eligible: built.eligible });
+      } catch (error) {
+        delivery.failed.push({ id: approverId, error: deliveryError(error) });
+        logger.warn('Blast digest DM failed for recipient', { cycleId, to: approverId, error });
+      }
+    }
+    return { delivery, built };
+  } catch (error) {
+    logger.warn('Blast digest DM failed (dashboard fallback still available)', { cycleId, error });
+    return { delivery, built: null };
+  }
+}
+
 function styleFor(style: ButtonSpec['style']): ButtonStyle {
   if (style === 'primary') return ButtonStyle.Primary;
   if (style === 'danger') return ButtonStyle.Danger;
@@ -125,36 +174,36 @@ export async function maybeSendDigest(
   if (digestInFlightHour === hourKey) return delivery;
   digestInFlightHour = hourKey;
   try {
-    const built = await buildDigestForCycle(cycleId);
-    // NOTE: no emptiness guard here by design — an empty drop still DMs
-    // ("nothing listed"); only a missing cycle bails. buildDigestForCycle
-    // returns null only when the cycle row itself is gone.
-    if (!built) return delivery;
-    const approvers = [...new Set(getAdminOrManagerIds())];
-    if (approvers.length === 0) {
-      logger.warn('Blast digest skipped: no admin/manager ids configured', { cycleId });
-      return delivery;
-    }
-    for (const approverId of approvers) {
-      try {
-        const user = await discordClient.users.fetch(approverId);
-        await user.send({ content: built.message, components: built.components });
-        delivery.sentTo.push(approverId);
-        logger.info('Blast digest DM sent', { cycleId, to: approverId, eligible: built.eligible });
-      } catch (error) {
-        delivery.failed.push({ id: approverId, error: deliveryError(error) });
-        logger.warn('Blast digest DM failed for recipient', { cycleId, to: approverId, error });
-      }
-    }
+    const { delivery: delivered, built } = await deliverDigest(discordClient, cycleId, null);
+    delivery.sentTo = delivered.sentTo;
+    delivery.failed = delivered.failed;
     // Only suppress later retries once at least one DM actually went out.
-    if (delivery.sentTo.length > 0) lastDigest = { hourKey, cycleId, scanned: built.total };
-    return delivery;
-  } catch (error) {
-    logger.warn('Blast digest DM failed (dashboard fallback still available)', { cycleId, error });
+    if (delivery.sentTo.length > 0) lastDigest = { hourKey, cycleId, scanned: built ? built.total : scanned };
     return delivery;
   } finally {
     if (digestInFlightHour === hourKey) digestInFlightHour = null;
   }
+}
+
+/**
+ * Sends the on-demand (`/scan`) digest DM for a consumed manual report.
+ * Always answers — even for an empty scan — and is idempotent per request
+ * id, so the second tab's merged duplicate never double-DMs. Never throws.
+ */
+export async function sendManualDigest(
+  discordClient: Client,
+  cycleId: string,
+  requestId: string,
+  requestedBy: string | null,
+): Promise<DigestDelivery> {
+  const delivery: DigestDelivery = { sentTo: [], failed: [] };
+  if (manualDigestsSent.has(requestId)) return delivery;
+  manualDigestsSent.add(requestId);
+  const banner = `Manual scan${requestedBy ? ` (requested by <@${requestedBy}>)` : ''} — same rules as the automatic round.`;
+  const { delivery: delivered } = await deliverDigest(discordClient, cycleId, banner);
+  delivery.sentTo = delivered.sentTo;
+  delivery.failed = delivered.failed;
+  return delivery;
 }
 
 // In-progress releases by cycle: two rapid Blast taps (or two approvers)

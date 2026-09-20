@@ -11,6 +11,7 @@ import { runCycle } from '../../services/automation/cycle.service';
 import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
 import { AUTO_PAUSED_REASON, NO_ELIGIBLE_REASON, createBurstFlow } from '../../services/automation/burst.service';
 import * as blastApprovalService from '../../services/automation/blast-approval.service';
+import * as scanRequestService from '../../services/automation/scan-request.service';
 import { parsePooledTasks, pickNextTask } from '../../services/automation/eligibility';
 import { outreachService, DAILY_POST_CAP } from '../../services/outreach.service';
 import { isAtDailyCap } from '../../utils/outreach-blast';
@@ -121,6 +122,10 @@ const burstSchema = z.object({
   tasks: z.array(burstTaskSchema).max(20),
   /** Manual Blast Now: explicit human intent — bypasses the window gate only. */
   force: z.boolean().optional().default(false),
+  /** On-demand `/scan` report: the request id from the poll's `scanNow`.
+   *  The first report carrying an id consumes it and gets a per-request
+   *  digest DM; later same-id reports merge as normal duplicates. */
+  scanRequestId: z.string().max(64).optional().nullable(),
 });
 
 /** Phase-0 instrumentation: one log line per claim verdict with queue wait
@@ -817,19 +822,36 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const result = await createBurstFlow(discordClient, tasks, 'burst', {
         forceWindow: req.body.force === true,
       });
+      // On-demand `/scan` report: the first report carrying the request id
+      // consumes it and ALWAYS answers with its own digest DM (per-request
+      // idempotency, never the hour gate). Same-id duplicates stay silent
+      // (see isManualReport below); validation + cycle flow is identical.
+      const rawScanRequestId = typeof req.body.scanRequestId === 'string' ? req.body.scanRequestId : null;
+      const manualRequest = rawScanRequestId ? scanRequestService.takeRequest(rawScanRequestId) : null;
+      // A report tagged with a real scan request id is fully answered by
+      // the manual DM (first tab) or silence (second tab's duplicate) — it
+      // must never ALSO trigger the hour-gated automatic digest. Forged or
+      // ancient ids are NOT manual: they keep the normal auto path.
+      const isManualReport = rawScanRequestId !== null && scanRequestService.wasRequested(rawScanRequestId);
+      if (manualRequest) {
+        void blastApprovalService
+          .sendManualDigest(discordClient, result.cycleId, manualRequest.requestId, manualRequest.requestedBy)
+          .catch(() => undefined);
+      }
       // Phone-approval flow: a settled report lands — DM the manager the
       // digest (fire-and-forget; never delay or break the watcher's
       // confirmed report). Fresh settled reports DM on ANY content
       // (eligible, banned-only, or empty — "nothing listed") so no hour
       // stays silent. A merge into an already-live hour blast DMs once as
       // information (manual blast preempted the round).
-      if (req.body.force !== true && result.blast === null && !result.merged &&
+      if (!isManualReport && req.body.force !== true && result.blast === null && !result.merged &&
         (result.reason === AUTO_PAUSED_REASON || result.reason === NO_ELIGIBLE_REASON)
       ) {
         void blastApprovalService
           .maybeSendDigest(discordClient, result.cycleId, result.scanned)
           .catch(() => undefined);
       } else if (
+        !isManualReport &&
         req.body.force !== true &&
         result.merged === true &&
         result.blast !== null &&
@@ -924,7 +946,16 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         burstOpen = false;
       }
       if (!claim) {
-        res.json({ success: true, data: { claim: null, burstOpen } });
+        // On-demand scan: a pending `/scan` request rides the poll so the
+        // watcher performs one immediate full scan + settled report.
+        // Best-effort — a lookup failure must never break the claim poll.
+        let scanNow: string | null = null;
+        try {
+          scanNow = scanRequestService.pendingRequest()?.requestId ?? null;
+        } catch {
+          scanNow = null;
+        }
+        res.json({ success: true, data: { claim: null, burstOpen, scanNow } });
         return;
       }
       // Expected subreddit for the browser's drawer ground-truth check
@@ -944,6 +975,13 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         success: true,
         data: {
           burstOpen,
+          scanNow: (() => {
+            try {
+              return scanRequestService.pendingRequest()?.requestId ?? null;
+            } catch {
+              return null;
+            }
+          })(),
           claim: {
             id: claim.id,
             cycleId: claim.cycleId,

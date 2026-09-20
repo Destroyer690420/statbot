@@ -251,6 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-09-16**: **On-demand `/scan` implemented (NOT yet deployed)** — v1.4.8: Discord slash command (DM-capable) → `scanNow` on next poll → immediate tab scan + tagged report → per-request manual digest DM. Verified: identical copies, ASCII, `node --check`, typecheck + build clean, 319/319 jest. Next: full deploy + `deploy-commands` + script update.
 - **2026-09-16**: **DEPLOYED auditable report POST** (`161.118.164.85`, git HEAD `81759cc`; backup `rtm-backup-20260919-v147auditpost.tar.gz`; full rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", served v1.4.7 hash-matches, telemetry live; locally typecheck + build clean, 313/313 jest). Manager must update script #2 to v1.4.7 + reload tabs.
 
 - **2026-09-16**: **DEPLOYED empty-DM fix + scan telemetry** (`161.118.164.85`, git HEAD `e9dc07a`; backup `rtm-backup-20260919-v146telemetry.tar.gz`; full rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", served v1.4.6 hash-matches, both fixes live; locally typecheck + build clean, 313/313 jest). Manager must update script #2 to v1.4.6 + reload tabs.

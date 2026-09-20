@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.7
+// @version      1.4.8
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,7 +18,14 @@
 // ==/UserScript==
 
 /**
-  * v1.4.7 - Auditable report POST: every attempt is console-logged,
+   * v1.4.8 - On-demand `/scan`: the claim poll carries a `scanNow`
+   * request id when the manager taps /scan in Discord; the tab then runs
+   * one immediate full scan + settled /burst report tagged with that id
+   * (no countdown, no hourly gates), and the server answers with a
+   * per-request digest DM. First tab's report wins, second merges
+   * silently. Auto flow untouched. Otherwise identical to v1.4.7 below.
+   *
+   * v1.4.7 - Auditable report POST: every attempt is console-logged,
   * raced against a hard 35s timeout (a hung transport degrades to a loud
   * retry instead of a silent wedge), and its outcome rides poll telemetry.
   * Diagnostics only - success path identical. Otherwise identical to
@@ -171,7 +178,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.7';
+  const VERSION = '1.4.8';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -854,6 +861,76 @@
   // hasn't finished in 90s (hung promise defense in depth).
   let lastMonitorDoneAt = Date.now();
 
+  // v1.4.8 on-demand scan: one immediate full scan + settled /burst
+  // report for a /scan request id. No countdown, no hourly gates - the
+  // server answers with a per-request digest DM. Failures keep the request
+  // pending (retry next tick); only a confirmed report consumes it. The
+  // server-side consume is the real exactly-once: the second tab's same-id
+  // report merges silently. Never throws.
+  async function runManualScan(settings) {
+    const reqId = pendingManualScan;
+    try {
+      setStatus(true, 'MANUAL scan running...');
+      let html = await fetchPageHtml();
+      let source = 'fetch';
+      if (!html) {
+        html = domHtml();
+        source = 'dom';
+      }
+      const tasks = parseAvailableTasks(html || '');
+      const bundle = await getBundle(settings);
+      const eligible = filterEligible(tasks, bundle);
+      try { noteScan(window.location.pathname, tasks.length, eligible.length); } catch (e) { /* ignore */ }
+      const posts = [];
+      const postSeen = {};
+      for (const t of tasks || []) {
+        if (!t || t.type !== 'post' || t.subTaskId === undefined || t.subTaskId === null) continue;
+        const key = String(t.subTaskId);
+        if (postSeen[key]) continue;
+        postSeen[key] = true;
+        posts.push({ subTaskId: Number(t.subTaskId), type: t.type, subreddit: t.subreddit || null, title: t.title || null });
+      }
+      const rest = posts.filter((t) => {
+        for (const e of eligible) {
+          if (Number(e.subTaskId) === Number(t.subTaskId)) return false;
+        }
+        return true;
+      });
+      // Newest-first, capped - same set shape as the automatic report.
+      const ordered = eligible.concat(rest).slice(0, 20).reverse();
+      console.log('[Auto Watcher] manual scan posting ' + ordered.length + ' task(s) (' + source + ') for ' + reqId + '...');
+      notePostAttempt();
+      let res = null;
+      try {
+        res = await Promise.race([
+          request(settings, 'POST', '/burst', {
+            companionId: getCompanionId(),
+            version: VERSION,
+            tasks: ordered,
+            scanRequestId: reqId,
+          }),
+          sleep(POST_TIMEOUT_MS).then(() => { throw new Error('manual scan report timed out'); }),
+        ]);
+        notePostResult(true);
+      } catch (e) {
+        notePostResult(false);
+        setStatus(false, 'MANUAL scan failed - retrying');
+        console.log('[Auto Watcher] manual scan failed:', e && e.message);
+        return;
+      }
+      if (res && res.success) {
+        consumedManualScans[reqId] = 1;
+        if (pendingManualScan === reqId) pendingManualScan = '';
+        setStatus(true, 'MANUAL scan reported ' + ordered.length);
+      } else {
+        setStatus(false, 'MANUAL scan rejected - retrying');
+      }
+    } catch (e) {
+      setStatus(false, 'MANUAL scan error - retrying');
+      console.log('[Auto Watcher] manual scan tick failed:', e && e.message);
+    }
+  }
+
   async function monitorTick() {
     if (monitorBusy || !watcherEnabled() || isRateLimited()) return;
     const settings = getSettings();
@@ -863,6 +940,16 @@
     }
     // Only the /tasks page carries the listing.
     if (!/^\/tasks\/?$/.test(window.location.pathname)) return;
+    // v1.4.8 on-demand scan first: one immediate full scan + settled
+    // report for the /scan request, then the auto flow resumes next tick.
+    if (pendingManualScan && !consumedManualScans[pendingManualScan]) {
+      try {
+        await runManualScan(settings);
+      } catch (e) {
+        console.log('[Auto Watcher] manual scan tick failed:', e && e.message);
+      }
+      return;
+    }
     monitorBusy = true;
     try {
       const burst = isBurstWindow();
@@ -1075,6 +1162,14 @@
   // the fast poll cadence for manual rounds outside the local window.
   let lastBurstOpen = false;
 
+  // v1.4.8 on-demand scan: request id from the poll's `scanNow`, set by
+  // claimTick. The monitor tick runs one immediate full scan + settled
+  // report tagged with it (no countdown, no hourly gates). Consumed ids
+  // are remembered so a re-broadcast never reports twice; the server-side
+  // consume is the real exactly-once (second tab merges silently).
+  let pendingManualScan = '';
+  const consumedManualScans = {};
+
   // Scan telemetry: last monitor outcome, reported on every claim poll so
   // the server can tell "empty listing" from "broken/stalled scan" without
   // anyone peeking at the browser. Write-only diagnostics - never affects
@@ -1113,9 +1208,10 @@
 
   function shouldFastPoll() {
     // Fast while the local drop window is live OR the server says a burst
-    // is open. Never throws - a check failure only costs speed.
+    // is open OR a manual /scan is waiting (pickup + report in seconds).
+    // Never throws - a check failure only costs speed.
     try {
-      return isBurstWindow() || lastBurstOpen;
+      return isBurstWindow() || lastBurstOpen || !!pendingManualScan;
     } catch (e) { return false; }
   }
 
@@ -1144,6 +1240,17 @@
       const dd = (res && res.data) || {};
       // Phase-1: remember the server burst state for the poll cadence.
       if (typeof dd.burstOpen === 'boolean') lastBurstOpen = dd.burstOpen;
+      // v1.4.8 on-demand scan: a /scan request id rides the poll. The
+      // monitor tick performs one immediate full scan + settled report
+      // tagged with it; the server answers with a per-request digest DM.
+      try {
+        if (typeof dd.scanNow === 'string' && dd.scanNow && !consumedManualScans[dd.scanNow]) {
+          if (pendingManualScan !== dd.scanNow) {
+            pendingManualScan = dd.scanNow;
+            console.log('[Auto Watcher] manual scan requested: ' + dd.scanNow);
+          }
+        }
+      } catch (e) { /* ignore - scan request must not break polling */ }
       const claim = dd.claim;
       if (!claim) {
         sessSet(CLAIM_PENDING_FLAG, '');
