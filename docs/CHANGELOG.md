@@ -3,8 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-20
-### Implemented (NOT yet deployed)
-- **Pay-worker ticket payment notice**: `POST /payouts/pay-worker/:workerId` now posts an aesthetic embed in the worker's ticket tagging the worker — amount + post/comment breakdown, batch # + week label, credited-at IST time, and a pointer to share the payment screenshot in <#1520613959315488930>. Best-effort (payment never rolls back on Discord failure; `notification: {sent, channelId, reason?}` in response); Pay All sends nothing. Files: `payout-notification.service.ts` (new), `payoutCreditedEmbed` + `formatIST` in `bot/embeds`, `PAYMENT_PROOF_CHANNEL_ID` in constants, `payWorker` returns ticket `channelId`, `payouts.ts` → `createPayoutRoutes(discordClient)` factory. Verified: typecheck + build clean, 328/328 jest (29 suites, 5 new).
+### Deployed
+- **Pay-worker ticket payment notice live** (`161.118.164.85`) at commit `4642914` (app-only rebuild; backup `rtm-backup-20260920-payoutnotice.tar.gz`; no DB migration — schema unchanged; no slash-command redeploy — no command files changed; pushed to GitHub; host + local bundles/scratch cleaned). `POST /payouts/pay-worker/:workerId` posts an aesthetic embed in the worker's ticket tagging the worker (amount + post/comment breakdown, batch # + week label, credited-at IST time, screenshot pointer to <#1520613959315488930>); best-effort (payment never rolls back; `notification` in response); Pay All sends nothing. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `payoutCreditedEmbed` + `PAYMENT_PROOF_CHANNEL_ID` + `sendPayoutNotification` in live `dist/`, dashboard 200. Locally: typecheck + build clean, 328/328 jest (29 suites, 5 new).
 
 ## 2026-09-16
 ### Deployed
