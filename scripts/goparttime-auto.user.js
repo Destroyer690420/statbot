@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.8
+// @version      1.4.9
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,13 @@
 // ==/UserScript==
 
 /**
+   * v1.4.9 - Faster auto report: drops land at xx:10 +-20s, so the
+   * early-window countdown drops from 45s to 20s (tail stays 10s) -
+   * digest DM lands ~xx:10:40-xx:11 instead of ~xx:15. Countdown
+   * length only sets WHEN (content is always the latest scan), so a
+   * 20s wait still carries the full drop. Otherwise identical to
+   * v1.4.8 below.
+   *
    * v1.4.8 - On-demand `/scan`: the claim poll carries a `scanNow`
    * request id when the manager taps /scan in Discord; the tab then runs
    * one immediate full scan + settled /burst report tagged with that id
@@ -178,7 +185,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.8';
+  const VERSION = '1.4.9';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -230,7 +237,7 @@
   // a real drop later in the window must still report normally).
   let emptyReportedHour = '';
   const BURST_RETRY_MS = 30000;
-  const BURST_REPORT_DELAY_MS = 45000;
+  const BURST_REPORT_DELAY_MS = 20000;
   let firstSeenAt = 0;
 
   function burstHourKey(now) {
@@ -1067,9 +1074,9 @@
         const reportSet = (eligible.length > 0 ? eligible : (latchedEligible || []).slice())
           .concat(latchedRest)
           .slice(0, 20);
-        // Adaptive countdown: full delay early in the window (let the drop
-        // finish streaming so the single report carries the full number),
-        // fast near the tail so delayed reports still land inside it.
+        // Adaptive countdown: short delay early in the window (drops land
+        // at xx:10 +-20s, so 20s covers the full drop), fast near the
+        // tail so delayed reports still land inside it.
         // Fixed countdowns only - churn can never stall this.
         const delayMs = new Date().getMinutes() >= 15 ? 10000 : BURST_REPORT_DELAY_MS;
         const waitMs = delayMs - (nowMs - firstSeenAt);
