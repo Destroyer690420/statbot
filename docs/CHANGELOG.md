@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-16
+### Implemented (NOT yet deployed — full rebuild still pending)
+- **DM-text scan trigger (replaces `/scan`)**: typing `scan` in the bot DM queues the on-demand round (shared `requestScanCommand`: 60s cooldown + reuse of waiting request); `DirectMessages` intent added; non-matches and non-managers stay silent; `/scan` slash command removed (deploy clears the stale global). Verified: typecheck + build clean, 322/322 jest (28 suites). No userscript change (still v1.4.8), no DB migration.
 ### Deployed
 - **On-demand `/scan` live (watcher v1.4.8)** (`161.118.164.85`) at commit `58d172c` (full rebuild; backup `rtm-backup-20260919-v148ondemand.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Slash `/scan` (guild + global/DM) → `scanNow` poll flag → immediate tab scan + tagged report → per-request manual digest DM; duplicates silent; auto flow untouched. `deploy-commands` run: 14 guild commands + global `/scan`. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, served v1.4.8 hash-matches local, `sendManualDigest` + `scanNow` in live `dist/`. Manager must update Tampermonkey script #2 to v1.4.8 and reload tabs (global /scan can take up to ~1h to appear in DMs). Locally: typecheck + build clean, 319/319 jest (28 suites). NOTE: `npm run lint` fails repo-wide (no eslint config — pre-existing, unrelated).
 ### Deployed

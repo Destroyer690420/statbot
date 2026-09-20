@@ -17,7 +17,6 @@ import { data as helpData } from './commands/help';
 import { data as referralData } from './commands/referral';
 import { data as mystatsData } from './commands/mystats';
 import { data as myinvitesData } from './commands/myinvites';
-import { data as scanData } from './commands/scan';
 
 const commands = [
   taskData.toJSON(),
@@ -50,17 +49,15 @@ async function deployCommands() {
     logger.info('✅ Slash commands deployed successfully!');
     console.log('✅ Slash commands deployed successfully!');
 
-    // /scan must work from the manager's phone DM with the bot. Guild
-    // commands never appear in DMs, so the scan command is ALSO published
-    // globally (other commands stay guild-only). Global propagation can
-    // take up to an hour on Discord's side.
+    // The on-demand scan trigger moved to DM text ("scan") — clear any
+    // previously published global /scan so no stale command lingers.
     await rest.put(
       Routes.applicationCommands(env.CLIENT_ID),
-      { body: [scanData.toJSON()] },
+      { body: [] },
     );
 
-    logger.info('✅ Global /scan command deployed (DM-capable).');
-    console.log('✅ Global /scan command deployed (DM-capable).');
+    logger.info('✅ Global /scan command cleared (DM text trigger).');
+    console.log('✅ Global /scan command cleared (DM text trigger).');
 
   } catch (error) {
     logger.error('Failed to deploy commands', { error });

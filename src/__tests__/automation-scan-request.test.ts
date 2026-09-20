@@ -5,16 +5,20 @@
  */
 import {
   clearRequests,
+  clearScanCooldown,
   consumeRequest,
   isKnownRequest,
+  isScanRetry,
   pendingRequest,
   requestScan,
+  requestScanCommand,
   takeRequest,
   wasRequested,
 } from '../services/automation/scan-request.service';
 
 beforeEach(() => {
   clearRequests();
+  clearScanCooldown();
 });
 
 describe('requestScan / pendingRequest', () => {
@@ -60,5 +64,34 @@ describe('wasRequested (manual-report routing)', () => {
     takeRequest(req.requestId);
     expect(wasRequested(req.requestId)).toBe(true);
     expect(wasRequested('req-forged-123')).toBe(false);
+  });
+});
+
+describe('requestScanCommand (shared trigger)', () => {
+  it('creates a request on first trigger', () => {
+    const result = requestScanCommand('user-1');
+    expect(isScanRetry(result)).toBe(false);
+    if (!isScanRetry(result)) {
+      expect(result.reused).toBe(false);
+      expect(result.request.requestedBy).toBe('user-1');
+    }
+  });
+
+  it('reuses the waiting request instead of queueing twice', () => {
+    const first = requestScanCommand('user-1');
+    clearScanCooldown();
+    const second = requestScanCommand('user-2');
+    if (!isScanRetry(first) && !isScanRetry(second)) {
+      expect(second.request.requestId).toBe(first.request.requestId);
+      expect(second.reused).toBe(true);
+    } else {
+      throw new Error('expected two live requests');
+    }
+  });
+
+  it('enforces a per-user cooldown', () => {
+    requestScanCommand('user-1');
+    const retry = requestScanCommand('user-1');
+    expect(isScanRetry(retry)).toBe(true);
   });
 });

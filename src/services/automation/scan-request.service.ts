@@ -111,3 +111,38 @@ export function clearRequests(): void {
   requests.clear();
   consumed.clear();
 }
+
+// Shared trigger logic for every `/scan` surface (slash command, DM text).
+// Per-user cooldown against accidental double-taps; an already-waiting
+// request is REUSED (never queued twice), so two triggers can never
+// produce two digest DMs.
+const SCAN_COMMAND_COOLDOWN_MS = 60 * 1000;
+const lastScanAt = new Map<string, number>();
+
+export type ScanCommandResult =
+  | { request: ScanRequest; reused: boolean }
+  | { retryAfterSec: number };
+
+export function isScanRetry(result: ScanCommandResult): result is { retryAfterSec: number } {
+  return (result as { retryAfterSec: number }).retryAfterSec !== undefined;
+}
+
+export function requestScanCommand(userId: string): ScanCommandResult {
+  const now = Date.now();
+  const last = lastScanAt.get(userId) ?? 0;
+  if (now - last < SCAN_COMMAND_COOLDOWN_MS) {
+    return { retryAfterSec: Math.ceil((SCAN_COMMAND_COOLDOWN_MS - (now - last)) / 1000) };
+  }
+  const waiting = pendingRequest();
+  if (waiting) {
+    lastScanAt.set(userId, now);
+    return { request: waiting, reused: true };
+  }
+  lastScanAt.set(userId, now);
+  return { request: requestScan(userId), reused: false };
+}
+
+/** Test hook: clears the per-user trigger cooldown. */
+export function clearScanCooldown(): void {
+  lastScanAt.clear();
+}

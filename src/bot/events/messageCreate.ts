@@ -11,12 +11,24 @@ import { TaskStatus, AuditAction } from '../../types';
 import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
 import { auditLogService } from '../../services/audit.service';
 import { logger } from '../../utils/logger';
-import { getAllAdminIds } from '../../utils/permissions';
+import { getAllAdminIds, isAdminOrManager } from '../../utils/permissions';
 import { TICKET_GUIDE_MESSAGE } from '../../config/constants';
+import { isScanRetry, requestScanCommand } from '../../services/automation/scan-request.service';
 
 export async function handleMessageCreate(message: Message): Promise<void> {
   if (message.author.bot) return;
-  if (!message.guild) return;
+  // DM trigger: the manager types "scan" in the bot DM and the on-demand
+  // round starts (same flow as the automatic one). Non-matching DMs stay
+  // silent; non-managers stay silent too (no existence leak).
+  if (!message.guild) {
+    await handleDirectMessage(message).catch((err) =>
+      logger.warn('DM handler failed', {
+        userId: message.author.id,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return;
+  }
 
   try {
     await outreachService.onWorkerMessage(message.channel.id, message.author.id, message.client);
@@ -45,6 +57,36 @@ export async function handleMessageCreate(message: Message): Promise<void> {
       userId: message.author.id,
     });
   }
+}
+
+/**
+ * Bot-DM handler. The only command is `scan` (exact word, any case):
+ * queues one on-demand watcher scan and acks with what happens next.
+ * Everything else — and everyone unauthorized — gets silence.
+ */
+async function handleDirectMessage(message: Message): Promise<void> {
+  try {
+    if (message.partial) await message.fetch();
+  } catch {
+    return;
+  }
+  const text = (message.content || '').trim().toLowerCase();
+  if (text !== 'scan') return;
+  if (!isAdminOrManager(message.author.id)) return;
+  const result = requestScanCommand(message.author.id);
+  if (isScanRetry(result)) {
+    await message.reply(`A scan was just requested — wait ${result.retryAfterSec}s before requesting another.`);
+    return;
+  }
+  const queued = result.reused ? 'already queued' : 'requested';
+  await message.reply(
+    `Scan ${queued} (\`${result.request.requestId}\`). The watcher tabs pick it up on their next poll — digest DM lands in ~1–2 min. If nothing arrives in 3 min, the tabs may be closed: reopen /tasks and type \`scan\` again.`,
+  );
+  logger.info('On-demand scan requested via DM', {
+    requestId: result.request.requestId,
+    userId: message.author.id,
+    reused: result.reused,
+  });
 }
 
 /**
