@@ -1,9 +1,12 @@
 import { Router, Request, Response } from 'express';
+import { Client } from 'discord.js';
 import { payoutService } from '../../services/payout.service';
+import { sendPayoutNotification } from '../../services/payout-notification.service';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 
+export default function createPayoutRoutes(discordClient: Client): Router {
 const router = Router();
 
 router.use(authMiddleware);
@@ -109,6 +112,8 @@ router.get('/workers/:workerId', async (req: Request, res: Response): Promise<vo
 /**
  * POST /api/v1/payouts/pay-worker/:workerId
  * Pay a single worker's eligible tasks. Accepts optional weekStart/weekEnd.
+ * Best-effort: posts a payment-credited notice in the worker's ticket.
+ * The payment itself never fails because of a Discord send failure.
  */
 router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
@@ -116,8 +121,34 @@ router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promis
   try {
     const userId = (req as AuthRequest).userId || 'api';
     const { weekStart, weekEnd } = parseWeekParams(req);
-    const result = await payoutService.payWorker(String(req.params.workerId), userId, weekStart, weekEnd);
-    res.json({ success: true, data: result });
+    const workerId = String(req.params.workerId);
+    const result = await payoutService.payWorker(workerId, userId, weekStart, weekEnd);
+
+    let notification: { sent: boolean; channelId: string; reason?: string } = { sent: false, channelId: result.channelId, reason: 'skipped' };
+    try {
+      const posts = result.items.filter((i) => i.taskType === 'POST').length;
+      const comments = result.items.filter((i) => i.taskType === 'COMMENT').length;
+      const totalAmount = result.items.reduce((sum, i) => sum + i.amount, 0);
+      const weekLabel = payoutService.getWeekLabel(result.batch.weekStart, result.batch.weekEnd);
+      notification = await sendPayoutNotification(discordClient, {
+        channelId: result.channelId,
+        workerId,
+        totalAmount,
+        posts,
+        comments,
+        batchNumber: result.batch.batchNumber,
+        weekLabel,
+        paidAt: new Date(),
+      });
+    } catch (notifyError) {
+      logger.warn('Pay-worker notification error (payment kept)', {
+        workerId,
+        batchId: result.batch.id,
+        error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+      });
+    }
+
+    res.json({ success: true, data: { ...result, notification } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error.';
     res.status(400).json({ success: false, message });
@@ -211,4 +242,5 @@ router.get('/export/csv', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-export default router;
+  return router;
+}

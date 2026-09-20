@@ -245,6 +245,66 @@ export function successEmbed(message: string): EmbedBuilder {
 }
 
 /**
+ * Format a Date in IST for payout notifications (e.g. "Sep 20, 4:32 PM IST").
+ */
+export function formatIST(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date);
+  return `${parts} IST`;
+}
+
+export interface PayoutNotificationData {
+  totalAmount: number;
+  posts: number;
+  comments: number;
+  batchNumber: number;
+  weekLabel: string;
+  paidAt: Date;
+  proofChannelId: string;
+}
+
+/**
+ * Build the aesthetic payment-credited embed posted in the worker's ticket
+ * after a successful Pay Worker. The caller sends `<@workerId>` as the
+ * message content alongside this embed.
+ */
+export function payoutCreditedEmbed(data: PayoutNotificationData): EmbedBuilder {
+  const totalTasks = data.posts + data.comments;
+  const taskWord = totalTasks === 1 ? 'task' : 'tasks';
+  return new EmbedBuilder()
+    .setTitle('💸 Payment Credited ✨')
+    .setColor(COLORS.SUCCESS)
+    .setDescription(
+      `Hey! Your payment for this week has been credited to your account at **${formatIST(data.paidAt)}**. 🎉`,
+    )
+    .addFields(
+      {
+        name: '💰 Amount',
+        value: `**${formatRs(data.totalAmount)}** for ${totalTasks} ${taskWord} (📝 ${data.posts} · 💬 ${data.comments})`,
+        inline: false,
+      },
+      {
+        name: '📦 Batch',
+        value: `#${data.batchNumber} · ${data.weekLabel}`,
+        inline: false,
+      },
+      {
+        name: '📸 Payment Screenshot',
+        value: `If you want, you can share the payment screenshot in <#${data.proofChannelId}>. 🙏`,
+        inline: false,
+      },
+    )
+    .setTimestamp()
+    .setFooter({ text: 'Thank you for your work! • Reddit Task Manager' });
+}
+
+/**
  * Build a warning embed.
  */
 export function warningEmbed(message: string): EmbedBuilder {

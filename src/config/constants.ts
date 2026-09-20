@@ -88,6 +88,9 @@ export const INVITES_CHANNEL_ID = '1520616800063328437';
 export const VERIFICATION_CHANNEL_ID = '1520483343018496104';
 export const MEMBER_WELCOME_MESSAGE = 'hey {user} please create your ticket in <#{verification}> then we can get started';
 
+/** Payment proof channel where workers may share payment screenshots */
+export const PAYMENT_PROOF_CHANNEL_ID = '1520613959315488930';
+
 /** Embed colors */
 export const COLORS = {
   SUCCESS: 0x00d26a,

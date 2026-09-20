@@ -20,7 +20,7 @@ import healthRoutes from './routes/health';
 import exportRoutes from './routes/export';
 import auditRoutes from './routes/audit';
 import uploadRoutes from './routes/uploads';
-import payoutRoutes from './routes/payouts';
+import createPayoutRoutes from './routes/payouts';
 import payoutSettingsRoutes from './routes/settings';
 import commissionRoutes from './routes/commissions';
 import ownerRoutes from './routes/owner';
@@ -99,7 +99,7 @@ export function createApiServer(discordClient: Client): express.Application {
   app.use('/api/v1/export', exportRoutes);
   app.use('/api/v1/audit-logs', auditRoutes);
   // Payout routes
-  app.use('/api/v1/payouts', payoutRoutes);
+  app.use('/api/v1/payouts', createPayoutRoutes(discordClient));
   // Settings routes
   app.use('/api/v1/settings', payoutSettingsRoutes);
   // Commission routes

@@ -320,7 +320,7 @@ class PayoutService {
     return batch;
   }
 
-  async payWorker(workerId: string, createdBy: string, weekStart?: Date, weekEnd?: Date): Promise<{ batch: PayoutBatch; items: PayoutItem[] }> {
+  async payWorker(workerId: string, createdBy: string, weekStart?: Date, weekEnd?: Date): Promise<{ batch: PayoutBatch; items: PayoutItem[]; channelId: string }> {
     const eligible = await this.findEligibleTasks(weekStart, weekEnd);
     const workerTasks = eligible.filter((t) => t.assignedUserId === workerId);
 
@@ -405,7 +405,10 @@ class PayoutService {
 
     logger.info('Worker paid', { workerId, batchId: batch.id, itemsCreated: items.length });
 
-    return { batch, items };
+    // Each worker owns a single ticket — every paid task shares this channel.
+    const channelId = workerTasks[0].channelId;
+
+    return { batch, items, channelId };
   }
 
   async payAll(createdBy: string, weekStart?: Date, weekEnd?: Date): Promise<{ batch: PayoutBatch; items: PayoutItem[] }> {
