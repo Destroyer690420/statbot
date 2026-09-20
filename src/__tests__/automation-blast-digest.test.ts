@@ -206,18 +206,51 @@ describe('parseBlastButtonId', () => {
     });
   });
 
+  it('parses real cycle ids (HH:MM colon inside the id)', () => {
+    expect(parseBlastButtonId('blast:go:burst-2026-09-20-09:17-mu9lra8m')).toEqual({
+      action: 'go',
+      cycleId: 'burst-2026-09-20-09:17-mu9lra8m',
+      sub: null,
+    });
+    expect(parseBlastButtonId('blast:hold:burst-2026-09-20-09:17-mu9lra8m')).toEqual({
+      action: 'hold',
+      cycleId: 'burst-2026-09-20-09:17-mu9lra8m',
+      sub: null,
+    });
+    expect(parseBlastButtonId('blast:block:burst-2026-09-20-09:17-mu9lra8m:aidiscussion')).toEqual({
+      action: 'block',
+      cycleId: 'burst-2026-09-20-09:17-mu9lra8m',
+      sub: 'aidiscussion',
+    });
+    // Round-trip: every id buildDigestButtons emits must parse back.
+    const d = {
+      cycleId: 'burst-2026-09-20-09:17-mu9lra8m',
+      scanned: 2,
+      eligible: 1,
+      blocked: 1,
+      subs: [],
+      newSubs: ['aidiscussion'],
+    };
+    for (const row of buildDigestButtons(d)) {
+      for (const b of row) {
+        expect(parseBlastButtonId(b.customId)).not.toBeNull();
+      }
+    }
+  });
+
   it('rejects malformed or mismatched ids', () => {
     for (const bad of [
       '',
       'blast:go:',
       'blast:block:c1',
-      'blast:go:c1:extra',
+      'blast:go:c1:ex:tra',
+      'blast:block:c1:s1:s2:s3',
       'blast:nuke:c1',
       'delete-confirm-x',
       'blast:block:c1:UPPER',
       'blast:go:c1 has spaces',
       'blast-go-c1',
-      'blast:block:c1:s1:s2',
+      'blast:block::weirdsub',
       null,
       undefined,
     ]) {

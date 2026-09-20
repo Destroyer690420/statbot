@@ -235,7 +235,24 @@ async function editReplySafe(interaction: ButtonInteraction, content: string, cl
  */
 export async function handleBlastButton(interaction: ButtonInteraction): Promise<boolean> {
   const parsed = parseBlastButtonId(interaction.customId);
-  if (!parsed) return false;
+  if (!parsed) {
+    // Never silent: an unreadable blast: id used to return false with no
+    // ack, which Discord surfaces as "didn't respond in time" (incident:
+    // cycle ids contain HH:MM colons the old parser rejected — every tap
+    // died here with zero logs). Log loudly and answer best-effort.
+    logger.warn('Blast button id unreadable', { customId: interaction.customId });
+    try {
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: 'That button could not be read — please use the buttons on the latest digest DM.',
+          ephemeral: interaction.guildId !== null,
+        });
+      }
+    } catch {
+      // ignore — never break on a fallback reply
+    }
+    return true;
+  }
   if (!isAdminOrManager(interaction.user.id)) {
     try {
       // Ephemeral is guild-only — in DMs fall back to a normal reply.

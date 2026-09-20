@@ -184,27 +184,49 @@ export interface ParsedBlastButton {
   sub: string | null;
 }
 
-const CYCLE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const CYCLE_ID_RE = /^[A-Za-z0-9_:-]{1,64}$/;
 const SUB_RE = /^[a-z0-9_]{1,32}$/;
+
+/** Cycle ids carry exactly one colon (HH:MM) — see burst.service. */
+function isValidCycleId(cycleId: string): boolean {
+  if (!CYCLE_ID_RE.test(cycleId)) return false;
+  let colons = 0;
+  for (const ch of cycleId) {
+    if (ch === ':') {
+      colons += 1;
+      if (colons > 1) return false;
+    }
+  }
+  return true;
+}
 
 /**
  * Strict parse of a blast DM button id (`blast:<go|hold|block>:<cycleId>[:<sub>]`).
- * Colons separate fields because cycle ids and subs never contain them.
- * Returns null on any mismatch.
+ * The cycle id itself contains one colon (HH:MM), so the tail is re-joined
+ * and validated instead of split positionally. Only ids the bot built can
+ * ever arrive (Discord delivers presses of real buttons), so the regex is
+ * defense-in-depth; unknown shapes return null.
  */
 export function parseBlastButtonId(customId: string): ParsedBlastButton | null {
   if (typeof customId !== 'string') return null;
   const parts = customId.split(':');
-  if (parts.length < 3 || parts.length > 4 || parts[0] !== 'blast') return null;
+  if (parts.length < 3 || parts[0] !== 'blast') return null;
   const action = parts[1];
   if (action !== 'go' && action !== 'hold' && action !== 'block') return null;
-  const cycleId = parts[2];
-  if (!CYCLE_ID_RE.test(cycleId)) return null;
   if (action === 'block') {
-    if (parts.length !== 4 || !SUB_RE.test(parts[3])) return null;
-    return { action, cycleId, sub: parts[3] };
+    // blast:block:<cycleId>:<sub> — a real id splits into 5 (cycle has
+    // one colon); 4-part simple ids stay accepted.
+    if (parts.length !== 4 && parts.length !== 5) return null;
+    const sub = parts[parts.length - 1];
+    if (!SUB_RE.test(sub)) return null;
+    const cycleId = parts.slice(2, -1).join(':');
+    if (!isValidCycleId(cycleId)) return null;
+    return { action, cycleId, sub };
   }
-  if (parts.length !== 3) return null;
+  // blast:<go|hold>:<cycleId> — a real id splits into 4.
+  if (parts.length !== 3 && parts.length !== 4) return null;
+  const cycleId = parts.slice(2).join(':');
+  if (!isValidCycleId(cycleId)) return null;
   return { action, cycleId, sub: null };
 }
 
