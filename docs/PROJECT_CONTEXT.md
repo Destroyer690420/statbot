@@ -251,7 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-16**: **DM-text scan trigger implemented (NOT yet deployed)** — typing `scan` in the bot DM starts the on-demand round (replaces the `/scan` slash, which is removed + unregistered). Verified: typecheck + build clean, 322/322 jest. No userscript change. Next: full deploy + `deploy-commands` (clears stale global) — no script update needed.
+- **2026-09-16**: **DEPLOYED DM-text `scan` trigger** (`161.118.164.85`, git HEAD `e5225e2`; backup `rtm-backup-20260920-v149dmtext.tar.gz`; full rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", `handleDirectMessage` live; stale global `/scan` cleared; locally typecheck + build clean, 322/322 jest). No script update needed (watcher stays v1.4.8).
 - **2026-09-16**: **DEPLOYED on-demand `/scan`** (`161.118.164.85`, git HEAD `58d172c`; backup `rtm-backup-20260919-v148ondemand.tar.gz`; full rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", served v1.4.8 hash-matches, `sendManualDigest` + `scanNow` live; `deploy-commands`: 14 guild + global `/scan`; locally typecheck + build clean, 319/319 jest). Manager must update script #2 to v1.4.8 + reload tabs (global /scan up to ~1h to appear in DMs).
 - **2026-09-16**: **DEPLOYED auditable report POST** (`161.118.164.85`, git HEAD `81759cc`; backup `rtm-backup-20260919-v147auditpost.tar.gz`; full rebuild; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", served v1.4.7 hash-matches, telemetry live; locally typecheck + build clean, 313/313 jest). Manager must update script #2 to v1.4.7 + reload tabs.
 
