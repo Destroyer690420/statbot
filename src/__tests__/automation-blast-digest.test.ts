@@ -181,13 +181,61 @@ describe('buildDigestButtons', () => {
     for (const row of rows) expect(row.length).toBeLessThanOrEqual(5);
   });
 
-  it('renders no block row when nothing is new', () => {
+  it('renders block buttons for seen-before subs too (only newness line stays gated)', () => {
     const d = buildBlastDigest('c1', [log('1', 'cats')], [], ['cats'], {
       scanned: 1,
       eligible: 1,
       blocked: 0,
     });
+    const rows = buildDigestButtons(d);
+    expect(rows).toHaveLength(2);
+    expect(rows[1][0]).toMatchObject({ action: 'block' });
+    expect(rows[1][0].customId).toContain('cats');
+  });
+
+  it('never renders block buttons for unknown or already-blocked subs', () => {
+    const d = buildBlastDigest(
+      'c1',
+      [log('1', 'junk', 'BLOCKED'), log('2', null, 'NO_SUBREDDIT')],
+      ['junk'],
+      [],
+      { scanned: 2, eligible: 0, blocked: 1 },
+    );
+    expect(d.blockableSubs).toEqual([]);
     expect(buildDigestButtons(d)).toHaveLength(1);
+  });
+});
+
+describe('blockableSubs', () => {
+  it('covers every listed sub, eligible first, unknown and blocked excluded', () => {
+    const d = buildBlastDigest(
+      'c1',
+      [
+        log('1', 'seencomment', 'SKIPPED_COMMENT'),
+        log('2', 'seenyet', 'ELIGIBLE'),
+        log('3', 'junk', 'BLOCKED'),
+        log('4', null, 'NO_SUBREDDIT'),
+        log('5', 'fresh', 'ELIGIBLE'),
+      ],
+      ['junk'],
+      ['seenyet', 'seencomment'],
+      { scanned: 5, eligible: 2, blocked: 1 },
+    );
+    // seen-before eligible + brand-new eligible first, then tagged.
+    expect(d.blockableSubs).toEqual(['seenyet', 'fresh', 'seencomment']);
+  });
+
+  it('caps at MAX_BLOCK_BUTTONS with Blast + Hold intact', () => {
+    const logs = Array.from({ length: MAX_BLOCK_BUTTONS + 10 }, (_, i) => log(String(i), `s${i}`));
+    const d = buildBlastDigest('c1', logs, [], [], {
+      scanned: logs.length,
+      eligible: logs.length,
+      blocked: 0,
+    });
+    expect(d.blockableSubs).toHaveLength(MAX_BLOCK_BUTTONS);
+    const rows = buildDigestButtons(d);
+    expect(rows[0].map((b) => b.action)).toEqual(['go', 'hold']);
+    expect(rows.flat().filter((b) => b.action === 'block')).toHaveLength(MAX_BLOCK_BUTTONS);
   });
 });
 
@@ -230,6 +278,7 @@ describe('parseBlastButtonId', () => {
       blocked: 1,
       subs: [],
       newSubs: ['aidiscussion'],
+      blockableSubs: ['aidiscussion'],
     };
     for (const row of buildDigestButtons(d)) {
       for (const b of row) {

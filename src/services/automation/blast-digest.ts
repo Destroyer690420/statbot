@@ -47,6 +47,10 @@ export interface BlastDigest {
   subs: DigestSub[];
   /** Eligible subs never seen before and not blocked — need review. */
   newSubs: string[];
+  /** Every listed sub the manager can block from the DM: known
+   * (not UNKNOWN_SUB) and not already blocked, eligible first then
+   * tagged, first-seen order within each group, capped for buttons. */
+  blockableSubs: string[];
 }
 
 export type BlastButtonAction = 'go' | 'hold' | 'block';
@@ -121,7 +125,21 @@ export function buildBlastDigest(
   const newSubs = subs
     .filter((s) => s.sub !== UNKNOWN_SUB && s.eligible > 0 && !blocked.has(s.sub) && !seen.has(s.sub))
     .map((s) => s.sub);
-  return { cycleId, scanned: counts.scanned, eligible: counts.eligible, blocked: counts.blocked, subs, newSubs };
+  // Block buttons used to cover newSubs only, so a seen-before sub (or a
+  // tagged one) could never be blocked from the DM. Every listed,
+  // blockable sub gets one now — eligible first (the releasable ones),
+  // then tagged; unknown and already-blocked never do (blocking them is
+  // meaningless). Capped: Discord fits 5 rows, row 0 is Blast + Hold.
+  const blockableSubs = subs
+    .filter((s) => s.sub !== UNKNOWN_SUB && !blocked.has(s.sub))
+    .sort((a, b) => {
+      const ae = a.eligible > 0 ? 0 : 1;
+      const be = b.eligible > 0 ? 0 : 1;
+      return ae - be;
+    })
+    .map((s) => s.sub)
+    .slice(0, MAX_BLOCK_BUTTONS);
+  return { cycleId, scanned: counts.scanned, eligible: counts.eligible, blocked: counts.blocked, subs, newSubs, blockableSubs };
 }
 
 /** One-line-per-sub breakdown, capped to fit a 2000-char DM. */
@@ -158,7 +176,7 @@ export function buildDigestButtons(digest: BlastDigest): ButtonSpec[][] {
       { action: 'hold', label: 'Hold', style: 'secondary', customId: `blast:hold:${digest.cycleId}` },
     ],
   ];
-  const subs = digest.newSubs.slice(0, MAX_BLOCK_BUTTONS);
+  const subs = digest.blockableSubs.slice(0, MAX_BLOCK_BUTTONS);
   let row: ButtonSpec[] = [];
   for (const sub of subs) {
     row.push({
