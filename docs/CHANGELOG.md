@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-09-21
+### Deployed
+- **`/task` worker auto-detect fix live** (`161.118.164.85`) at commit `c282411` (app-only rebuild; backup `rtm-backup-taskfix-20260921-183249.tar.gz`; no DB migration; no slash-command redeploy — no signatures changed; NOT pushed to GitHub; host + local bundles/scratch cleaned). Root cause: `/task` excluded only the invoking admin from channel members while admins bypass channel overwrites and appear in every ticket — always tripping the "Multiple non-bot users found" error. Now excludes all staff via `getAllAdminIds()` (admins/managers/moderators) like every other detection site; error names the conflicting users; `members.fetch()` failure no longer throws. Verified live: health healthy (DB+Redis), boot "All systems online!", `getAllAdminIds` in live `dist/bot/commands/task.js`, dashboard 200. Locally: typecheck + build clean, 331/331 jest (29 suites).
+
 ## 2026-09-20
 ### Deployed
 - **DM Block-for-any-sub live** (`161.118.164.85`) at commit `bb22e21` (app-only rebuild; backup `rtm-backup-20260920-blockbtn.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `blockableSubs` in live `dist/`. No script update needed. Locally: typecheck + build clean, 331/331 jest (29 suites).
