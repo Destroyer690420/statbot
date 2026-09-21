@@ -8,7 +8,7 @@ import { TaskType, CreateTaskInput } from '../../types';
 import { taskService } from '../../services/task.service';
 import { reminderService } from '../../services/reminder.service';
 import { scheduleAllReminders } from '../../scheduler/jobs';
-import { isAdminOrManager, getPermissionDeniedMessage } from '../../utils/permissions';
+import { isAdminOrManager, getPermissionDeniedMessage, getAllAdminIds } from '../../utils/permissions';
 import { taskCreatedEmbed, errorEmbed } from '../embeds';
 import { logger } from '../../utils/logger';
 
@@ -82,8 +82,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     let givenUser = interaction.options.getUser('assigned_user');
     if (!givenUser) {
       const channel = givenChannel as TextChannel;
-      await channel.guild.members.fetch();
-      const nonBotMembers = channel.members.filter((m) => !m.user.bot && m.id !== interaction.user.id);
+      await channel.guild.members.fetch().catch(() => undefined);
+      // Exclude bots AND all staff (admins/managers/moderators). Admins with the
+      // Administrator permission bypass channel overwrites, so they show up in
+      // channel.members for every ticket — filtering only the invoker always
+      // leaves other staff behind and falsely triggers the "multiple users" error.
+      const staffIds = new Set(getAllAdminIds());
+      const nonBotMembers = channel.members.filter((m) => !m.user.bot && !staffIds.has(m.id));
 
       if (nonBotMembers.size === 0) {
         await interaction.editReply({
@@ -93,8 +98,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       }
 
       if (nonBotMembers.size > 1) {
+        const names = nonBotMembers.map((m) => m.displayName ?? m.user.username).join(', ');
         await interaction.editReply({
-          embeds: [errorEmbed('Multiple non-bot users found. Use the assigned_user option to specify which one.')],
+          embeds: [errorEmbed(`Multiple non-bot users found (${names}). Use the assigned_user option to specify which one.`)],
         });
         return;
       }
