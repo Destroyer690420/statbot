@@ -43,7 +43,7 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 - `ProtectedRoute`: spinner while loading; redirect to `/login` with `state.from`; Login returns there after success.
 - Single account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD` server-side).
 
-## 3b. Worker Auth (useWorkerAuth.tsx, api/worker.ts, WorkerProtectedRoute.tsx) — added 2026-09-22, NOT yet deployed
+## 3b. Worker Auth (useWorkerAuth.tsx, api/worker.ts, WorkerProtectedRoute.tsx) — added + deployed 2026-09-22 at `4c75858`
 
 - Separate token `rtm_worker_token` + identity `rtm_worker_identity` in **localStorage**; separate axios instance (`baseURL /api/v1/worker`) so worker 401s never clear the admin token (and vice versa). Worker 401 → clear worker token → hard redirect to `/worker-login` only when on a `/worker*` path (verify-code failures excluded).
 - `WorkerProtectedRoute`: same spinner/redirect pattern, target `/worker-login`.
