@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-14 — send script v1.4.4 auto Submit View live at git HEAD `e4927e8`** (dashboard-only rebuild, backup `rtm-backup-send144.tar.gz`; no DB migration; pushed to GitHub; verified: `/goparttime-send.user.js` 200 serving v1.4.4, health healthy, dashboard 200). Previous: blast fill-safe sending (`c35d883`).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-22 — owner earnings 30-day history live at git HEAD `2c95baa`** (dashboard-only rebuild, backup `rtm-backup-20260922-30day.tar.gz`; no DB migration; pushed to GitHub; verified: `/owner/daily-earnings/history?days=30` returns 30 rows, served bundle `index-DaIrKVRZ.js` contains "Last 30 Days", health healthy, dashboard 200). Previous: send script v1.4.4 auto Submit View live at git HEAD `e4927e8` (dashboard-only rebuild, backup `rtm-backup-send144.tar.gz`; no DB migration; pushed to GitHub; verified: `/goparttime-send.user.js` 200 serving v1.4.4, health healthy, dashboard 200). Previous: blast fill-safe sending (`c35d883`).
 
 ---
 
