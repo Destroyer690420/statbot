@@ -131,3 +131,11 @@
 - **Reason**: only working server-side path; matches the existing GoPartTime vault pattern; self-service refresh avoids SSH on every expiry.
 - **Consequences**: new table + audit value (additive DDL); cookie re-paste needed on expiry/password change; if Reddit ever gates cookie-auth from datacenter ASNs, the Tampermonkey session script remains the fallback.
 - **Status**: Implemented + deployed 2026-09-13 (`src/services/reddit-session.service.ts`, `src/services/reddit-check.service.ts`, `GET /tasks/:id/live-reddit`).
+
+## Decision 17: Worker portal uses Discord ticket-channel OTP + channel-scoped JWT
+
+- **Context**: Workers need a self-service view of their own tasks (counts, statuses, dates, details) without admin credentials and without new passwords to manage. The only identity the system already trusts is "can read this Discord ticket channel".
+- **Decision**: Login = pick ticket → server sends a 6-digit code into that ticket channel (worker proves channel access by reading it) → code verifies → 7-day JWT with `scope:'worker'` + `channelId`. Data endpoints filter strictly by the token's `channelId` and return sanitized fields (no delivery internals). OTPs are SHA-256-hashed, Redis-backed with 5-min TTL (in-memory fallback), throttled (3/10min/ticket + per-route IP limiters) with 5-attempt lockout. The worker token lives under a separate localStorage key and axios instance so admin auth is untouched; no new DB tables, no new infra.
+- **Reason**: zero new credentials to issue/rotate; proof-of-channel-read is exactly the right identity for per-ticket data; scope enforcement server-side makes cross-ticket reads impossible even with a stolen token from another ticket.
+- **Consequences**: codes depend on the bot being able to post in the ticket; 7-day token means a leaked token reads that ticket's tasks for a week (acceptable: read-only, single-ticket); OTP Redis loss only forces re-request.
+- **Status**: Implemented 2026-09-22, NOT yet deployed (`src/services/worker-auth.service.ts`, `src/services/worker.service.ts`, `src/api/middleware/workerAuth.ts`, `src/api/routes/worker.ts`, dashboard `/worker-login` + `/worker`).

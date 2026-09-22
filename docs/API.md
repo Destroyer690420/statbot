@@ -29,8 +29,9 @@
 | **Admin (username)** `requireDashboardAdmin` | in-file helper in discord.ts/payouts.ts/commissions.ts: `req.userId === env.DASHBOARD_USERNAME` else 403 "Admin access required." | — |
 | **Admin (Discord IDs)** `isAdmin(userId)` from `src/utils/permissions.ts` | settings.ts PUT, commissions.ts rates PUT: checks `env.ADMIN_USER_IDS` | — |
 | **Extension Bearer** (`extensionAuth` in `src/api/middleware/extensionAuth.ts`) | all `/goparttime/*`; token compared with `crypto.timingSafeEqual` vs `env.GOPARTTIME_API_KEY`; 503 if key unconfigured, 401 mismatch; sets `req.userId='goparttime-extension'` | `GOPARTTIME_API_KEY` |
+| **Worker JWT** (`workerAuthMiddleware` in `src/api/middleware/workerAuth.ts`) | `/worker/me`, `/worker/tasks*`; payload `{scope:'worker', channelId, channelName, workerId, workerName}`, HS256, expires **7d**; sets `req.worker` | issued by `POST /worker/verify-code` after ticket-code check |
 
-**Unauthenticated endpoints**: `POST /auth/login`, `POST /auth/verify`, `GET /health`, `POST /owner/verify`, `GET /owner/daily-earnings`, `GET /owner/daily-earnings/history`, `GET /owner/weekly-earnings`, `GET /uploads/insights/:taskId/:filename`.
+**Unauthenticated endpoints**: `POST /auth/login`, `POST /auth/verify`, `GET /health`, `POST /owner/verify`, `GET /owner/daily-earnings`, `GET /owner/daily-earnings/history`, `GET /owner/weekly-earnings`, `GET /uploads/insights/:taskId/:filename`, `GET /worker/tickets`, `POST /worker/request-code`, `POST /worker/verify-code`.
 
 ---
 
@@ -255,12 +256,28 @@ Hardcoded model: revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30; c
 
 ---
 
+## 16b. Worker Portal — `src/api/routes/worker.ts` (mounted `/api/v1/worker`; implemented 2026-09-22, NOT yet deployed)
+
+Ticket-code login: worker picks a ticket → bot DMs the ticket channel a 6-digit code (SHA-256 stored, Redis `worker:otp:<channelId>` 5-min TTL with in-memory fallback; max 3 codes / 10 min per ticket; 5 wrong attempts lock the code). Correct code → 7-day JWT scoped to that `channelId`. All data endpoints enforce the scope — a worker can only ever see their own ticket's tasks.
+
+| Method | Path | Auth | Purpose | Notes |
+|---|---|---|---|---|
+| GET | `/api/v1/worker/tickets` | none | Ticket dropdown (distinct `channelId`/`channelName` + task counts from DB) | capped 1000 |
+| POST | `/api/v1/worker/request-code` | none (+ 20 req/10min/IP limiter) | `{ticket}` → send code into the Discord ticket | 404 unknown ticket; 429 over throttle; 502 Discord send failed |
+| POST | `/api/v1/worker/verify-code` | none (+ 30 req/10min/IP limiter) | `{ticket, code}` → `{token, expiresIn:'7d', channelId, channelName, workerName}` | 401 expired/mismatch/locked |
+| GET | `/api/v1/worker/me` | worker JWT | Overview: totals (all/posts/comments/completed/active/cancelled) + by-status | — |
+| GET | `/api/v1/worker/tasks` | worker JWT | Paginated task list (`status`, `type`, `limit` ≤100, `page`) | sanitized fields only (no delivery internals) |
+| GET | `/api/v1/worker/tasks/:id` | worker JWT | Task detail + reminder timeline (sent/completed/due only) | 404 outside own ticket |
+
+---
+
 ## 17. Callers Map (who calls what)
 
 | Caller | Endpoints used |
 |---|---|
 | Dashboard `api/client.ts` | almost all JWT endpoints (full list in `docs/FRONTEND.md`) |
+| Worker portal `api/worker.ts` | `/worker/tickets`, `/worker/request-code`, `/worker/verify-code`, `/worker/me`, `/worker/tasks*` (worker JWT `rtm_worker_token`) |
 | Extension userscript | `GET /goparttime/tickets`, `POST /goparttime/assign`, `GET /goparttime/insight/:externalTaskId` (Submit View, v1.4.0) |
 | Session format-check script | `GET /goparttime/expected/:externalTaskId` (`reddit-format-check.user.js` v1.0.0, display-only) |
-| Discord bot | commands hit repositories/services directly (no HTTP); only the API serves `/discord/tickets` |
+| Discord bot | commands hit repositories/services directly (no HTTP); only the API serves `/discord/tickets`; worker portal sends OTP codes via `channel.send` |
 | Health watch | `GET /health` (no consumer found in repo — nothing polls it) |

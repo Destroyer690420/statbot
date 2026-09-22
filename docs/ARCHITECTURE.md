@@ -64,9 +64,9 @@ flowchart TB
 | Discord client | `src/bot/index.ts` | discord.js client (intents: Guilds, GuildMessages, MessageContent, GuildMembers; partials Message/Channel) | gateway events | slash replies, messages | `env.DISCORD_TOKEN` |
 | Bot events | `src/bot/events/interactionCreate.ts`, `messageCreate.ts` | command dispatch; instruction replies (URL submission); insight uploads; daily-outreach availability marking | interactions/messages | DB writes, embeds, reactions | repositories, services |
 | Commands | `src/bot/commands/*.ts` (12) | slash command implementations | interaction args | embeds, DB writes, job scheduling | services, scheduler |
-| API | `src/api/server.ts` + middleware + 15 route files | REST API `/api/v1` | HTTP | JSON/CSV/files | services, schemas |
+| API | `src/api/server.ts` + middleware (`auth`, `workerAuth`, `extensionAuth`, `errorHandler`, `validate`) + 16 route files (incl. `worker.ts`) | REST API `/api/v1` | HTTP | JSON/CSV/files | services, schemas |
 | Scheduler | `src/scheduler/{queue,jobs,worker}.ts` | BullMQ queue/worker for reminders | Redis, DB | reminder embeds, status transitions, overdue alerts | shared Discord client |
-| Services | `src/services/*.ts` (12) | business logic (task, reminder, payout, commission, goparttime, analytics, audit, settings, owner-earnings, insight-storage, state-machine, outreach) | repositories | DB writes, audits, jobs | repositories, utils |
+| Services | `src/services/*.ts` (14, incl. `worker-auth`, `worker`) | business logic (task, reminder, payout, commission, goparttime, analytics, audit, settings, owner-earnings, insight-storage, state-machine, outreach, worker-auth, worker) | repositories | DB writes, audits, jobs | repositories, utils |
 | Repositories | `src/database/repositories/*.ts` (8) | data access (Prisma queries) | services | Prisma results | Prisma client |
 | DB bootstrap | `src/database/db.ts` | PrismaClient + PrismaPg adapter | `DATABASE_URL` | client singleton | generated client |
 | Utils | `src/utils/*.ts` | validation, formatting, image processing, chunking, logging, permissions | — | — | — |
@@ -75,8 +75,8 @@ flowchart TB
 
 | Component | Files | Responsibility |
 |---|---|---|
-| SPA | `dashboard/src/` | React admin UI (13 routes), PWA |
-| API client | `dashboard/src/api/client.ts` | axios wrapper (all endpoints) |
+| SPA | `dashboard/src/` | React admin UI (13 routes) + worker portal (`/worker-login`, `/worker`), PWA |
+| API client | `dashboard/src/api/client.ts` (+ `worker.ts` for the portal) | axios wrappers (admin + worker `rtm_worker_token`) |
 | nginx | `dashboard/nginx.conf`, `Dockerfile` | TLS termination, `/api/` → `app:3000`, SPA fallback |
 
 ### 2.3 External
@@ -87,7 +87,7 @@ flowchart TB
 | GoPartTime | task source; userscript runs in the browser and POSTs to the API |
 | Reddit | task target; only used to validate submitted URLs (patterns in `src/utils/validators.ts`); deletion auto-detection removed |
 | PostgreSQL | persistence |
-| Redis | BullMQ broker (reminders) |
+| Redis | BullMQ broker (reminders) + worker-portal OTP codes (`worker:otp:*`, 5-min TTL) |
 
 ---
 

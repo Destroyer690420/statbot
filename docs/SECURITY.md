@@ -9,6 +9,7 @@
 | Surface | Scheme | Detail |
 |---|---|---|
 | Dashboard API | JWT (HS256, `JWT_SECRET`, 24h expiry) | issued by `POST /auth/login` from `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`; payload `{username, iat}`; `Authorization: Bearer` |
+| Worker portal API | Ticket-code + JWT (HS256, `JWT_SECRET`, 7d expiry, `scope:'worker'`) | `POST /worker/request-code` sends 6-digit code into the Discord ticket (SHA-256 stored, Redis 5-min TTL + memory fallback; 3 codes/10min/ticket; 5-attempt lock; per-route IP limiters); `POST /worker/verify-code` issues `{scope, channelId, ...}` token; data endpoints enforce channel scope server-side; worker token never passes `requireDashboardAdmin` |
 | Discord commands | Discord user IDs in env (`ADMIN_USER_IDS`, `MANAGER_USER_IDS`) | per-command checks via `src/utils/permissions.ts` |
 | GoPartTime extension | Shared secret `GOPARTTIME_API_KEY` as Bearer | `crypto.timingSafeEqual` compare; 503 when unconfigured; 401 mismatch; sets `req.userId='goparttime-extension'` |
 
@@ -24,7 +25,7 @@ Managers (`MANAGER_USER_IDS`) are used **only** by the bot, never the API.
 ## 3. API Protection
 
 - helmet defaults; CORS limited to `DASHBOARD_URL` + `goparttime.net` origins (`credentials: true`).
-- **Rate limit**: 100 req / 15 min / IP across the whole `/api/` prefix (`express-rate-limit`; `trust proxy 1`).
+- **Rate limit**: 300 req / 15 min / IP across the whole `/api/` prefix (`express-rate-limit`; `trust proxy 1`), plus worker-portal per-route limiters (request-code 20 / 10 min / IP, verify-code 30 / 10 min / IP) on top of the per-ticket 3-codes / 10 min throttle.
 - Body limit 1 MB JSON.
 - Path-traversal guard on insight image serving (rejects `..`/`/`).
 - `sanitize()` strips `<>@&` (used for task content in Discord-facing text).

@@ -13,11 +13,13 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 | dev | `npm run dev` | Vite on **:5173**, proxy `/api` → `VITE_API_TARGET \|\| 'https://161.118.164.85'` (working tree has an uncommitted change `http:` → `https:`) |
 | build | `npm run build` | `tsc && vite build` → `dist/` |
 
-## 2. Routing (App.tsx, 13 routes)
+## 2. Routing (App.tsx, 15 routes)
 
 | Path | Page | Notes |
 |---|---|---|
-| `/login` | Login | public |
+| `/login` | Login | public (admin) |
+| `/worker-login` | WorkerLogin | public (worker ticket-code login) |
+| `/worker` | WorkerDashboard | WorkerProtectedRoute (worker JWT), no admin Layout |
 | `/` | Dashboard | ProtectedRoute + Layout |
 | `/tasks` | Tasks | |
 | `/accepted` | AcceptedTasks | |
@@ -40,6 +42,13 @@ React 18 + TypeScript 5.7 + Vite 6 + Tailwind 3 + TanStack React Query 5 + Recha
 - Response interceptor: on 401 → remove token + `window.location.href='/login'` (hard redirect).
 - `ProtectedRoute`: spinner while loading; redirect to `/login` with `state.from`; Login returns there after success.
 - Single account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD` server-side).
+
+## 3b. Worker Auth (useWorkerAuth.tsx, api/worker.ts, WorkerProtectedRoute.tsx) — added 2026-09-22, NOT yet deployed
+
+- Separate token `rtm_worker_token` + identity `rtm_worker_identity` in **localStorage**; separate axios instance (`baseURL /api/v1/worker`) so worker 401s never clear the admin token (and vice versa). Worker 401 → clear worker token → hard redirect to `/worker-login` only when on a `/worker*` path (verify-code failures excluded).
+- `WorkerProtectedRoute`: same spinner/redirect pattern, target `/worker-login`.
+- Flow: `WorkerLogin` fetches `GET /worker/tickets` (dropdown with task counts) → `POST /worker/request-code` → code shown in the Discord ticket → `POST /worker/verify-code` → token stored → navigate `/worker`.
+- `WorkerDashboard`: stat cards (Total/Posts/Comments/Completed/Active/Cancelled from `GET /worker/me`), status+type filters, 15/page server pagination, click-to-open task detail (sanitized fields + reminder sent/completed/due timeline).
 
 ## 4. API Client (`src/api/client.ts`)
 
