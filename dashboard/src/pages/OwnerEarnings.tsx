@@ -25,8 +25,8 @@ export function OwnerEarnings() {
   });
 
   const historyQuery = useQuery({
-    queryKey: ['daily-earnings-history'],
-    queryFn: () => getDailyEarningsHistory(7),
+    queryKey: ['daily-earnings-history', 30],
+    queryFn: () => getDailyEarningsHistory(30),
     refetchOnWindowFocus: true,
   });
 
@@ -66,14 +66,14 @@ export function OwnerEarnings() {
         setShowReferrals={setShowReferralsDaily}
       />
 
-      {/* Last 7 Days toggle */}
+      {/* Last 30 Days toggle */}
       <div className="glass-card p-6 border-primary-800/30">
         <button
           onClick={() => setShowHistory(!showHistory)}
           className="flex items-center gap-1 text-primary-400 text-sm font-semibold hover:text-white transition-colors"
         >
           {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          Last 7 Days
+          Last 30 Days
         </button>
 
         {showHistory && (
@@ -230,7 +230,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
 
 function HistoryTable({ rows }: { rows: any[] }) {
   if (!rows || rows.length === 0) {
-    return <p className="text-dark-400 text-sm">No earnings data for the last 7 days.</p>;
+    return <p className="text-dark-400 text-sm">No earnings data for the last 30 days.</p>;
   }
 
   return (

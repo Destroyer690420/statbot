@@ -73,7 +73,7 @@ Modular redesign split across 17 clean components:
 - Date formatters in `payout/utils.ts`.
 
 ### OwnerEarnings
-Daily + Weekly `EarningsCard` (Tasks, Revenue, Worker Cost, Net Earnings; collapsible Deductions + Referral Activity), Last-7-Days HistoryTable; Refresh; Lock Panel → `/settings`.
+Daily + Weekly `EarningsCard` (Tasks, Revenue, Worker Cost, Net Earnings; collapsible Deductions + Referral Activity), Last-30-Days HistoryTable; Refresh; Lock Panel → `/settings`.
 
 ### Referrals
 List with search + pagination (15/page); **no create UI** (empty state directs to `/referral add` bot command); edit modal (inviter/invitee **IDs** + names + ticket select from live channels; snowflake-validated; inviter change re-derives type + chain server-side); delete with confirm; ticket display resolves `<#id>`/snowflake → live channel name via `getTickets()`. No Pending Invites section (removed 2026-09-10 — detected joins auto-approve server-side; the `getInviteDetections`/`approveInviteDetection`/`rejectInviteDetection`/`updateInviteDetection` client helpers are now **unused by UI**).
