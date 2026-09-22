@@ -3,8 +3,6 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-22
-### Implemented (NOT yet deployed)
-- **Worker portal** (ticket-code login + scoped read-only dashboard). Backend: `src/services/worker-auth.service.ts`, `src/services/worker.service.ts`, `src/api/middleware/workerAuth.ts`, `src/api/routes/worker.ts` mounted at `/api/v1/worker` (`GET /tickets`, `POST /request-code`, `POST /verify-code`, `GET /me`, `GET /tasks`, `GET /tasks/:id`); 6-digit Discord ticket codes (SHA-256, Redis 5-min TTL + memory fallback, throttled + lockout), 7-day `scope:'worker'` JWTs. Frontend: `/worker-login` + `/worker` routes with separate `rtm_worker_token` auth. No DB migration, no new infra. Verified locally: typecheck + build clean, 335/335 jest (30 suites, 4 new in `worker-auth.test.ts`), dashboard build clean.
 ### Deployed
 - **v1.5.0 reverted, v1.4.9 restored live** (`161.118.164.85`) at commit `34d634d` (history-preserving `git revert` of `5d8ce3e` + `4738baa`; full rebuild; backup `rtm-backup-20260922-revert150.tar.gz`; no migration apply — the unused `AutomationTaskLog.media` column stays in live DB, harmless; pushed to GitHub; host + local bundles/scratch cleaned). Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `mediaBadge` 0 refs in live `dist/`, `blockableSubs` intact, served v1.4.9 hash-matches local. Manager must downgrade Tampermonkey script #2 to v1.4.9 and reload tabs. Locally: typecheck + build clean, 331/331 jest (29 suites), userscripts identical/ASCII/`node --check` clean.
 

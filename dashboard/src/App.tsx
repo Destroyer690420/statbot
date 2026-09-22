@@ -1,13 +1,9 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './hooks/useAuth';
-import { WorkerAuthProvider } from './hooks/useWorkerAuth';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { WorkerProtectedRoute } from './components/WorkerProtectedRoute';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
-import { WorkerLogin } from './pages/WorkerLogin';
-import { WorkerDashboard } from './pages/WorkerDashboard';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
 import { AcceptedTasks } from './pages/AcceptedTasks';
@@ -37,17 +33,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <WorkerAuthProvider>
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/worker-login" element={<WorkerLogin />} />
-
-            <Route path="/worker" element={
-              <WorkerProtectedRoute>
-                <WorkerDashboard />
-              </WorkerProtectedRoute>
-            } />
 
             <Route path="/" element={
               <ProtectedRoute>
@@ -152,7 +140,6 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Router>
-        </WorkerAuthProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
