@@ -256,7 +256,7 @@ Hardcoded model: revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30; c
 
 ---
 
-## 16b. Worker Portal — `src/api/routes/worker.ts` (mounted `/api/v1/worker`; deployed 2026-09-22 at `4c75858`)
+## 16b. Worker Portal — `src/api/routes/worker.ts` (mounted `/api/v1/worker`; implemented 2026-09-22, NOT yet deployed)
 
 Ticket-code login: worker picks a ticket → bot DMs the ticket channel a 6-digit code (SHA-256 stored, Redis `worker:otp:<channelId>` 5-min TTL with in-memory fallback; max 3 codes / 10 min per ticket; 5 wrong attempts lock the code). Correct code → 7-day JWT scoped to that `channelId`. All data endpoints enforce the scope — a worker can only ever see their own ticket's tasks.
 
