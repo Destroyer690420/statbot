@@ -8,8 +8,6 @@ import {
   formatDigestMessage,
   isEligibleLogStatus,
   MAX_BLOCK_BUTTONS,
-  MAX_TASKS_PER_SUB,
-  mediaBadge,
   parseBlastButtonId,
   DigestTaskLog,
 } from '../services/automation/blast-digest';
@@ -37,9 +35,9 @@ describe('buildBlastDigest', () => {
       { scanned: 4, eligible: 3, blocked: 1 },
     );
     expect(d.subs).toEqual([
-      { sub: 'cats', count: 2, ids: ['1', '2'], tasks: [{ id: '1', media: null }, { id: '2', media: null }], eligible: 2, reasons: [] },
-      { sub: 'dogs', count: 1, ids: ['3'], tasks: [{ id: '3', media: null }], eligible: 1, reasons: [] },
-      { sub: 'blockedsub', count: 1, ids: ['4'], tasks: [{ id: '4', media: null }], eligible: 0, reasons: ['BLOCKED'] },
+      { sub: 'cats', count: 2, ids: ['1', '2'], eligible: 2, reasons: [] },
+      { sub: 'dogs', count: 1, ids: ['3'], eligible: 1, reasons: [] },
+      { sub: 'blockedsub', count: 1, ids: ['4'], eligible: 0, reasons: ['BLOCKED'] },
     ]);
     expect(d.newSubs).toEqual([]);
     expect(d.scanned).toBe(4);
@@ -55,9 +53,9 @@ describe('buildBlastDigest', () => {
     );
     expect(d.newSubs).toEqual(['brandnew']);
     expect(d.subs).toEqual([
-      { sub: 'cats', count: 1, ids: ['1'], tasks: [{ id: '1', media: null }], eligible: 1, reasons: [] },
-      { sub: 'brandnew', count: 1, ids: ['2'], tasks: [{ id: '2', media: null }], eligible: 1, reasons: [] },
-      { sub: 'unknown', count: 1, ids: ['3'], tasks: [{ id: '3', media: null }], eligible: 0, reasons: ['NO_SUBREDDIT'] },
+      { sub: 'cats', count: 1, ids: ['1'], eligible: 1, reasons: [] },
+      { sub: 'brandnew', count: 1, ids: ['2'], eligible: 1, reasons: [] },
+      { sub: 'unknown', count: 1, ids: ['3'], eligible: 0, reasons: ['NO_SUBREDDIT'] },
     ]);
   });
 
@@ -81,8 +79,8 @@ describe('buildBlastDigest', () => {
       { scanned: 4, eligible: 1, blocked: 0 },
     );
     expect(d.subs).toEqual([
-      { sub: 'unknown', count: 1, ids: ['1'], tasks: [{ id: '1', media: null }], eligible: 0, reasons: ['NO_SUBREDDIT'] },
-      { sub: 'ok', count: 1, ids: ['2'], tasks: [{ id: '2', media: null }], eligible: 1, reasons: [] },
+      { sub: 'unknown', count: 1, ids: ['1'], eligible: 0, reasons: ['NO_SUBREDDIT'] },
+      { sub: 'ok', count: 1, ids: ['2'], eligible: 1, reasons: [] },
     ]);
     expect(d.newSubs).toEqual(['ok']);
   });
@@ -102,11 +100,10 @@ describe('buildBlastDigest', () => {
       { scanned: 5, eligible: 1, blocked: 2 },
     );
     const msg = formatDigestMessage(d);
-    expect(msg).toContain('✅ r/cats x1 — tap Blast to release');
-    expect(msg).toContain('📝 `1`');
-    expect(msg).toContain('⛔ r/junk x2 [BLOCKED]');
-    expect(msg).toContain('⛔ r/somevid x1 [comment]');
-    expect(msg).toContain('⛔ unknown subreddit x1 [NO_SUBREDDIT]');
+    expect(msg).toContain('• r/cats x1 (1)');
+    expect(msg).toContain('• r/junk x2 [BLOCKED] (2, 3)');
+    expect(msg).toContain('• r/somevid x1 [comment] (4)');
+    expect(msg).toContain('• unknown subreddit x1 [NO_SUBREDDIT] (5)');
     expect(d.newSubs).toEqual([]);
   });
 
@@ -120,7 +117,7 @@ describe('buildBlastDigest', () => {
     );
     const msg = formatDigestMessage(d);
     expect(msg).toContain('0 eligible');
-    expect(msg).toContain('⛔ r/junk x2 [BLOCKED]');
+    expect(msg).toContain('• r/junk x2 [BLOCKED] (1, 2)');
     expect(msg).toContain('Nothing eligible');
     expect(d.newSubs).toEqual([]);
   });
@@ -319,80 +316,13 @@ describe('buildReleaseInputs', () => {
       log('3', 'https://old.reddit.com/r/Birds/', 'ELIGIBLE', 'comment'),
     ]);
     expect(inputs).toEqual([
-      { subTaskId: '3', type: 'comment', subreddit: 'birds', title: null, media: null },
-      { subTaskId: '1', type: 'post', subreddit: 'cats', title: null, media: null },
+      { subTaskId: '3', type: 'comment', subreddit: 'birds', title: null },
+      { subTaskId: '1', type: 'post', subreddit: 'cats', title: null },
     ]);
   });
 
   it('returns empty when nothing is eligible', () => {
     expect(buildReleaseInputs([log('1', 'x', 'FAILED')])).toEqual([]);
     expect(buildReleaseInputs([])).toEqual([]);
-  });
-});
-
-describe('mediaBadge', () => {
-  it('maps image/video to badges, everything else to text', () => {
-    expect(mediaBadge('image')).toBe('🖼️');
-    expect(mediaBadge('video')).toBe('🎬');
-    expect(mediaBadge(null)).toBe('📝');
-    expect(mediaBadge(undefined)).toBe('📝');
-    expect(mediaBadge('bogus')).toBe('📝');
-  });
-});
-
-describe('per-task media lines', () => {
-  function mediaLog(id: string, sub: string, media: string | null): DigestTaskLog {
-    return { externalTaskId: id, taskType: 'post', subreddit: sub, status: 'ELIGIBLE', media };
-  }
-
-  it('renders one badge line per task under its sub header', () => {
-    const d = buildBlastDigest(
-      'c1',
-      [mediaLog('1', 'cats', 'image'), mediaLog('2', 'cats', 'video'), mediaLog('3', 'cats', null)],
-      [],
-      [],
-      { scanned: 3, eligible: 3, blocked: 0 },
-    );
-    const msg = formatDigestMessage(d);
-    expect(msg).toContain('✅ r/cats x3');
-    expect(msg).toContain('🖼️ `1`');
-    expect(msg).toContain('🎬 `2`');
-    expect(msg).toContain('📝 `3`');
-  });
-
-  it('collapses past MAX_TASKS_PER_SUB with a +N more line', () => {
-    const logs = Array.from({ length: MAX_TASKS_PER_SUB + 4 }, (_, i) => mediaLog(String(i), 'cats', null));
-    const d = buildBlastDigest('c1', logs, [], [], {
-      scanned: logs.length,
-      eligible: logs.length,
-      blocked: 0,
-    });
-    const msg = formatDigestMessage(d);
-    expect(msg).toContain('+4 more');
-    expect(msg).toContain('✅ r/cats x12');
-  });
-
-  it('keeps headers and closer when truncating huge digests', () => {
-    const logs = Array.from({ length: 300 }, (_, i) => mediaLog(String(i), 'sub' + i, i % 2 ? 'image' : 'video'));
-    const d = buildBlastDigest('c1', logs, [], [], { scanned: 300, eligible: 300, blocked: 0 });
-    const msg = formatDigestMessage(d);
-    expect(msg.length).toBeLessThanOrEqual(2000);
-    expect(msg).toContain('Drop c1: 300 eligible');
-    expect(msg).toContain('Tapping Blast releases');
-  });
-
-  it('carries media through blockable subs and release inputs', () => {
-    const d = buildBlastDigest('c1', [mediaLog('1', 'cats', 'video')], [], [], {
-      scanned: 1,
-      eligible: 1,
-      blocked: 0,
-    });
-    expect(d.blockableSubs).toEqual(['cats']);
-    const asLogs: DigestTaskLog[] = d.subs.flatMap((s) =>
-      s.tasks.map((t) => ({ externalTaskId: t.id, taskType: 'post', subreddit: 'cats', status: 'ELIGIBLE', media: t.media })),
-    );
-    expect(buildReleaseInputs(asLogs)).toEqual([
-      { subTaskId: '1', type: 'post', subreddit: 'cats', title: null, media: 'video' },
-    ]);
   });
 });

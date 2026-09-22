@@ -435,8 +435,6 @@ model AutomationTaskLog {
   workerId      String?
   failureReason String?
   createdAt     DateTime @default(now())
-  /** v1.5.0 listing-marker media badge ('image' | 'video'). Null = text/unknown. */
-  media         String?
 
   @@index([cycleId])
   @@index([externalTaskId])

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.5.0
+// @version      1.4.9
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,14 +18,6 @@
 // ==/UserScript==
 
 /**
-   * v1.5.0 - Per-task media badges: the parser detects image / video /
-   * none from listing markers (precompiled string tests on the already-
-   * sliced task windows - microseconds per task, zero new requests, no
-   * DOM, no awaits; any doubt returns 'none'). Media rides /burst +
-   * /sightings payloads and the digest shows one badge line per task.
-   * Speed contract unchanged - detection can never slow or break
-   * scanning. Otherwise identical to v1.4.9 below.
-   *
    * v1.4.9 - Faster auto report: drops land at xx:10 +-20s, so the
    * early-window countdown drops from 45s to 20s (tail stays 10s) -
    * digest DM lands ~xx:10:40-xx:11 instead of ~xx:15. Countdown
@@ -193,7 +185,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.5.0';
+  const VERSION = '1.4.9';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -730,7 +722,6 @@
         type: t.type,
         subreddit: t.subreddit || null,
         title: t.title || null,
-        media: t.media || 'none',
       });
     }
     return out.slice(0, 20);
@@ -769,41 +760,6 @@
 
   // --- Task-list parsing (page flight data, same shape the backend parses) --
   // Live bytes escape quotes with one backslash; tolerate two (copies vary).
-
-  // v1.5.0 media markers: precompiled once, string-only, no DOM, no
-  // awaits. Tested against the already-sliced task windows (microseconds
-  // per task). ANY failure returns 'none' - media must never slow or
-  // break scanning. Video first: video posts can carry poster images.
-  const VIDEO_MARKER_RE = /<video[\s>]|\.mp4|\.m3u8|video_url|videoUrl|\\?"video\\?"\s*:/i;
-  const IMAGE_MARKER_RE = /<img[\s>]|static\.goparttime\.net|\\?"images"\\?\s*:\s*\[(?!\s*\])/i;
-
-  function detectMedia(after, before) {
-    // 'image' | 'video' | 'none'. Fail-open by contract: unknown,
-    // malformed, or marker-less input is 'none', never an exception.
-    try {
-      const a = typeof after === 'string' ? after : '';
-      const b = typeof before === 'string' ? before : '';
-      if (VIDEO_MARKER_RE.test(a) || VIDEO_MARKER_RE.test(b)) return 'video';
-      if (IMAGE_MARKER_RE.test(a) || IMAGE_MARKER_RE.test(b)) return 'image';
-      return 'none';
-    } catch (e) {
-      return 'none';
-    }
-  }
-
-  function summarizeMedia(list) {
-    // Compact marker census for the report ('i2v1n5'). Pure count, never
-    // throws - verification only, the server logs it at debug level.
-    let i = 0, v = 0, n = 0;
-    try {
-      for (const t of list || []) {
-        if (t && t.media === 'image') i++;
-        else if (t && t.media === 'video') v++;
-        else n++;
-      }
-    } catch (e) { /* ignore - counts stay as-is */ }
-    return 'i' + i + 'v' + v + 'n' + n;
-  }
 
   function fetchPageHtml() {
     // cache:'no-store': a background fetch may otherwise be served the
@@ -900,7 +856,7 @@
       const before = html.slice(Math.max(0, idx - 4000), idx);
       const subreddit = extractSubWindow(after) || extractSubWindow(before);
       const title = extractTitleWindow(after) || extractTitleWindow(before);
-      out.push({ subTaskId: Number(subId), type, subreddit, title, media: detectMedia(after, before) });
+      out.push({ subTaskId: Number(subId), type, subreddit, title });
     }
     return out;
   }
@@ -939,7 +895,7 @@
         const key = String(t.subTaskId);
         if (postSeen[key]) continue;
         postSeen[key] = true;
-        posts.push({ subTaskId: Number(t.subTaskId), type: t.type, subreddit: t.subreddit || null, title: t.title || null, media: t.media || 'none' });
+        posts.push({ subTaskId: Number(t.subTaskId), type: t.type, subreddit: t.subreddit || null, title: t.title || null });
       }
       const rest = posts.filter((t) => {
         for (const e of eligible) {
@@ -959,7 +915,6 @@
             version: VERSION,
             tasks: ordered,
             scanRequestId: reqId,
-            mediaSummary: summarizeMedia(ordered),
           }),
           sleep(POST_TIMEOUT_MS).then(() => { throw new Error('manual scan report timed out'); }),
         ]);
@@ -1064,7 +1019,7 @@
           const key = String(t.subTaskId);
           if (postSeen[key]) continue;
           postSeen[key] = true;
-          posts.push({ subTaskId: Number(t.subTaskId), type: t.type, subreddit: t.subreddit || null, title: t.title || null, media: t.media || 'none' });
+          posts.push({ subTaskId: Number(t.subTaskId), type: t.type, subreddit: t.subreddit || null, title: t.title || null });
         }
         if (posts.length > 0) {
           latchedPosts = posts;
@@ -1092,7 +1047,6 @@
                 companionId: getCompanionId(),
                 version: VERSION,
                 tasks: [],
-                mediaSummary: 'i0v0n0',
               });
               if (emptyRes && emptyRes.success) {
                 emptyReportedHour = hourKey;
@@ -1154,7 +1108,6 @@
               companionId: getCompanionId(),
               version: VERSION,
               tasks: ordered,
-              mediaSummary: summarizeMedia(ordered),
             }),
             sleep(POST_TIMEOUT_MS).then(() => { throw new Error('burst report timed out'); }),
           ]);

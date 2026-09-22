@@ -672,9 +672,3 @@ ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'REDDIT_SESSION_UPDATED';
 -- reclaim). Schema-only, no data statements.
 ALTER TABLE "AutomationClaim" ADD COLUMN IF NOT EXISTS "leasedBy" TEXT;
 ALTER TABLE "AutomationClaim" ADD COLUMN IF NOT EXISTS "leasedAt" TIMESTAMP(3);
-
--- ----------------------------------------------------------------------------
--- v1.5.0 per-task media badges. One nullable column on AutomationTaskLog;
--- the digest reads it for badge lines. Null = text/unknown (no backfill).
--- Apply manually via psql (never prisma migrate deploy). Schema-only.
-ALTER TABLE "AutomationTaskLog" ADD COLUMN IF NOT EXISTS "media" TEXT;

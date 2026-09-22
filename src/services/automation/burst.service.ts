@@ -14,8 +14,6 @@ export interface BurstTaskInput {
   type: 'post' | 'comment';
   subreddit: string | null;
   title: string | null;
-  /** v1.5.0 listing-marker media badge. Null/omitted = unknown/text. */
-  media?: string | null;
 }
 
 /** Returned when a settled auto-report validated fine but only a manual start may blast. */
@@ -94,7 +92,6 @@ async function validateInputs(inputs: BurstTaskInput[], cycleId: string): Promis
       taskType: detected.type,
       subreddit: detected.subreddit,
       status: v.reason,
-      media: t.media === 'image' || t.media === 'video' ? t.media : null,
     });
     if (v.eligible) eligible.push(detected);
     else if (v.reason === 'BLOCKED') blocked++;
