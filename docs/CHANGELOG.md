@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-09-22
+### Deployed
+- **v1.5.0 reverted, v1.4.9 restored live** (`161.118.164.85`) at commit `34d634d` (history-preserving `git revert` of `5d8ce3e` + `4738baa`; full rebuild; backup `rtm-backup-20260922-revert150.tar.gz`; no migration apply — the unused `AutomationTaskLog.media` column stays in live DB, harmless; pushed to GitHub; host + local bundles/scratch cleaned). Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `mediaBadge` 0 refs in live `dist/`, `blockableSubs` intact, served v1.4.9 hash-matches local. Manager must downgrade Tampermonkey script #2 to v1.4.9 and reload tabs. Locally: typecheck + build clean, 331/331 jest (29 suites), userscripts identical/ASCII/`node --check` clean.
+
 ## 2026-09-21
 ### Deployed
 - **`/task` worker auto-detect fix live** (`161.118.164.85`) at commit `c282411` (app-only rebuild; backup `rtm-backup-taskfix-20260921-183249.tar.gz`; no DB migration; no slash-command redeploy — no signatures changed; NOT pushed to GitHub; host + local bundles/scratch cleaned). Root cause: `/task` excluded only the invoking admin from channel members while admins bypass channel overwrites and appear in every ticket — always tripping the "Multiple non-bot users found" error. Now excludes all staff via `getAllAdminIds()` (admins/managers/moderators) like every other detection site; error names the conflicting users; `members.fetch()` failure no longer throws. Verified live: health healthy (DB+Redis), boot "All systems online!", `getAllAdminIds` in live `dist/bot/commands/task.js`, dashboard 200. Locally: typecheck + build clean, 331/331 jest (29 suites).
