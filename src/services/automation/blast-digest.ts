@@ -15,6 +15,13 @@ export interface DigestTaskLog {
   taskType: string;
   subreddit: string | null;
   status: string;
+  /** v1.5.0 listing-marker badge ('image' | 'video'). Null = text/unknown. */
+  media?: string | null;
+}
+
+export interface DigestTask {
+  id: string;
+  media: string | null;
 }
 
 export interface DigestSub {
@@ -23,6 +30,8 @@ export interface DigestSub {
   count: number;
   /** Up to 3 sample task ids for the message. */
   ids: string[];
+  /** Every task in this group, first-seen order (for media lines). */
+  tasks: DigestTask[];
   /** Eligible tasks in this group (the releasable ones). */
   eligible: number;
   /** Distinct non-eligible reasons in this group (empty = fully eligible). */
@@ -104,13 +113,14 @@ export function buildBlastDigest(
     const norm = normalizeSubreddit(log.subreddit) || UNKNOWN_SUB;
     let entry = bySub.get(norm);
     if (!entry) {
-      entry = { sub: norm, count: 0, ids: [], eligible: 0, reasons: [] };
+      entry = { sub: norm, count: 0, ids: [], tasks: [], eligible: 0, reasons: [] };
       bySub.set(norm, entry);
       subs.push(entry);
       seenReasons.set(norm, new Set<string>());
     }
     entry.count += 1;
     if (entry.ids.length < 3) entry.ids.push(log.externalTaskId);
+    entry.tasks.push({ id: log.externalTaskId, media: log.media === 'image' || log.media === 'video' ? log.media : null });
     if (isEligibleLogStatus(log.status)) {
       entry.eligible += 1;
     } else {
@@ -142,28 +152,80 @@ export function buildBlastDigest(
   return { cycleId, scanned: counts.scanned, eligible: counts.eligible, blocked: counts.blocked, subs, newSubs, blockableSubs };
 }
 
-/** One-line-per-sub breakdown, capped to fit a 2000-char DM. */
+/** Per-task media badge for digest lines. */
+export function mediaBadge(media: string | null | undefined): string {
+  if (media === 'image') return '🖼️';
+  if (media === 'video') return '🎬';
+  return '📝';
+}
+
+/** Max task lines per subreddit group (overflow collapses to "+N more"). */
+export const MAX_TASKS_PER_SUB = 8;
+
+/** Scannable digest: one header per sub group, one badge line per task.
+ *  Discord caps DMs at 2000 chars — task lines are cut first (overflow
+ *  per group, then whole trailing groups); headers, counts, and the
+ *  closer are never cut. */
 export function formatDigestMessage(digest: BlastDigest): string {
-  const lines: string[] = [
-    `Drop ${digest.cycleId}: ${digest.eligible} eligible (${digest.scanned} scanned, ${digest.blocked} blocked)`,
-  ];
+  const header = `Drop ${digest.cycleId}: ${digest.eligible} eligible (${digest.scanned} scanned, ${digest.blocked} blocked)`;
+  const closer =
+    digest.newSubs.length > 0
+      ? [
+          `NEW - never seen before: ${digest.newSubs.slice(0, 10).map((s) => `r/${s}`).join(', ')}${digest.newSubs.length > 10 ? ` (+${digest.newSubs.length - 10} more)` : ''}`,
+          'Hold + review, or block a sub above. Tapping Blast releases the eligible set.',
+        ]
+      : digest.eligible === 0
+        ? ['Nothing eligible - everything scanned is tagged above. No blast needed; Hold to dismiss.']
+        : ['No new subreddits. Tap Blast to release, Hold to skip this round.'];
   if (digest.subs.length === 0) {
-    lines.push('No posts listed this drop.');
+    return truncateDigest([header, 'No posts listed this drop.', ...closer]);
   }
+  const lines: string[] = [header, ''];
   for (const s of digest.subs) {
-    const name = s.sub === UNKNOWN_SUB ? 'unknown subreddit' : `r/${s.sub}`;
-    const tags = s.reasons.length > 0 ? ` [${s.reasons.join(', ')}]` : '';
-    lines.push(`• ${name} x${s.count}${tags} (${s.ids.join(', ')})`);
+    lines.push(subHeaderLine(s));
+    const shown = s.tasks.slice(0, MAX_TASKS_PER_SUB);
+    for (const t of shown) lines.push(`${mediaBadge(t.media)} \`${t.id}\``);
+    if (s.tasks.length > shown.length) lines.push(`+${s.tasks.length - shown.length} more`);
+    lines.push('');
   }
-  if (digest.newSubs.length > 0) {
-    lines.push(`NEW - never seen before: ${digest.newSubs.map((s) => `r/${s}`).join(', ')}`);
-    lines.push('Hold + review, or block a sub above. Tapping Blast releases the eligible set.');
-  } else if (digest.eligible === 0) {
-    lines.push('Nothing eligible - everything scanned is tagged above. No blast needed; Hold to dismiss.');
-  } else {
-    lines.push('No new subreddits. Tap Blast to release, Hold to skip this round.');
+  lines.push(...closer);
+  return truncateDigest(lines);
+}
+
+function subHeaderLine(s: DigestSub): string {
+  const name = s.sub === UNKNOWN_SUB ? 'unknown subreddit' : `r/${s.sub}`;
+  const tags = s.reasons.length > 0 ? ` [${s.reasons.join(', ')}]` : '';
+  if (s.eligible > 0) return `✅ ${name} x${s.count}${tags} — tap Blast to release`;
+  return `⛔ ${name} x${s.count}${tags}`;
+}
+
+const GROUP_HEADER_RE = /^(✅|⛔) /u;
+
+function truncateDigest(lines: string[]): string {
+  const join = (arr: string[]): string => arr.join('\n');
+  let arr = lines.slice();
+  let text = join(arr);
+  if (text.length <= 1900) return text;
+  // Phase 1: cut task/badge lines from the end (headers survive).
+  const badgeStart = /^(🖼️|🎬|📝|\+)/u;
+  while (text.length > 1900) {
+    const idx = arr.map((l) => badgeStart.test(l)).lastIndexOf(true);
+    if (idx < 0) break;
+    arr.splice(idx, 1);
+    text = join(arr);
   }
-  let text = lines.join('\n');
+  // Phase 2 (pathological group counts — the /burst cap makes this
+  // unreachable in practice): drop whole trailing groups, oldest
+  // context first, so the header and closer always survive.
+  while (text.length > 1900) {
+    const headerIdx = arr.map((l) => GROUP_HEADER_RE.test(l)).lastIndexOf(true);
+    if (headerIdx < 0) break;
+    let end = headerIdx + 1;
+    while (end < arr.length && arr[end] !== '' && !GROUP_HEADER_RE.test(arr[end])) end++;
+    arr.splice(headerIdx, end - headerIdx);
+    if (arr[headerIdx] === '') arr.splice(headerIdx, 1);
+    text = join(arr);
+  }
   if (text.length > 1900) text = `${text.slice(0, 1900)}…`;
   return text;
 }
@@ -263,5 +325,6 @@ export function buildReleaseInputs(logs: DigestTaskLog[]): BurstTaskInput[] {
       type: (l.taskType === 'comment' ? 'comment' : 'post') as 'post' | 'comment',
       subreddit: normalizeSubreddit(l.subreddit),
       title: null,
+      media: l.media === 'image' || l.media === 'video' ? l.media : null,
     }));
 }

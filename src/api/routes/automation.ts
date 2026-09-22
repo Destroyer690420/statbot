@@ -114,6 +114,9 @@ const burstTaskSchema = z.object({
   type: z.enum(['post', 'comment']),
   subreddit: z.string().max(64).optional().nullable(),
   title: z.string().max(300).optional().nullable(),
+  /** v1.5.0 per-task media badge from listing markers. Fail-open: old
+   *  watcher versions omit it entirely; anything unparseable is 'none'. */
+  media: z.enum(['image', 'video', 'none']).optional().nullable(),
 });
 
 const burstSchema = z.object({
@@ -126,6 +129,9 @@ const burstSchema = z.object({
    *  The first report carrying an id consumes it and gets a per-request
    *  digest DM; later same-id reports merge as normal duplicates. */
   scanRequestId: z.string().max(64).optional().nullable(),
+  /** v1.5.0 marker census ('i2v1n5') for media-detection verification.
+   *  Diagnostics only — logged at debug, never affects flow. */
+  mediaSummary: z.string().max(16).optional().nullable(),
 });
 
 /** Phase-0 instrumentation: one log line per claim verdict with queue wait
@@ -812,13 +818,19 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const companionId = req.body.companionId || null;
       await automationRepository.heartbeat(companionId, req.body.version || null);
       const tasks = req.body.tasks.map(
-        (t: { subTaskId: string; type: 'post' | 'comment'; subreddit?: string | null; title?: string | null }) => ({
+        (t: { subTaskId: string; type: 'post' | 'comment'; subreddit?: string | null; title?: string | null; media?: string | null }) => ({
           subTaskId: t.subTaskId,
           type: t.type,
           subreddit: t.subreddit || null,
           title: t.title || null,
+          media: t.media === 'image' || t.media === 'video' ? t.media : null,
         }),
       );
+      // v1.5.0 media-marker verification: what the watcher claims to have
+      // seen (image/video/none census). Debug level; never affects flow.
+      if (typeof req.body.mediaSummary === 'string' && req.body.mediaSummary.length > 0) {
+        logger.debug('Burst media summary', { mediaSummary: req.body.mediaSummary.slice(0, 16) });
+      }
       const result = await createBurstFlow(discordClient, tasks, 'burst', {
         forceWindow: req.body.force === true,
       });

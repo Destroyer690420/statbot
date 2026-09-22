@@ -159,6 +159,7 @@ export class AutomationRepository {
   async logTask(data: {
     cycleId: string; externalTaskId: string; taskType: string;
     subreddit: string | null; status: string; workerId?: string | null; failureReason?: string | null;
+    media?: string | null;
   }) {
     return getDb().automationTaskLog.create({ data: { ...data } });
   }
