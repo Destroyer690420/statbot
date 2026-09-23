@@ -1,14 +1,15 @@
 /**
- * Pure next-fire math for the hourly auto-scan (IST xx:10:05). Zero
- * imports — safe for unit tests (the trigger service pulls the DB layer,
- * which validates env at import time). IST has no DST; fixed offset.
+ * Pure next-fire math for the hourly auto-scan: the round fires at minute
+ * 10, second 05 of EVERY IST hour (00:10:05, 01:10:05, ..., 23:10:05).
+ * Zero imports — safe for unit tests (the trigger service pulls the DB
+ * layer, which validates env at import time). IST has no DST; fixed offset.
  */
 
 export const HOURLY_SCAN_ID = 'hourly';
 export const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
-/** The round fires at IST 10:05:05 (hour, minute, second). */
-export const SCAN_HOUR = 10;
-export const SCAN_MIN = 5;
+/** Round fires at this minute past every IST hour. */
+export const SCAN_MIN = 10;
+/** Round fires at this second. */
 export const SCAN_SEC = 5;
 /** Boot (or clock jump) landing just after :10:05 still serves the hour. */
 export const LATE_GRACE_MS = 5 * 60 * 1000;
@@ -18,45 +19,44 @@ export const LATE_DELAY_MS = 5 * 1000;
 export interface HourlyScanPlan {
   /** ms from nowMs until the trigger should fire. */
   delayMs: number;
-  /** IST round key being served (target day + hour 10, exactly-once guard). */
+  /** IST round key being served (date + actual hour, exactly-once guard). */
   key: string;
   /** True when nowMs already passed :10:05 but is inside the late grace. */
   late: boolean;
 }
 
-function istParts(epochMs: number): { y: number; mo: number; d: number } {
+function istParts(epochMs: number): { y: number; mo: number; d: number; h: number } {
   const d = new Date(epochMs + IST_OFFSET_MS);
-  return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), d: d.getUTCDate() };
+  return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), d: d.getUTCDate(), h: d.getUTCHours() };
 }
 
-function roundKey(y: number, mo: number, d: number): string {
-  return `${y}-${mo}-${d} ${SCAN_HOUR}`;
+function roundKey(y: number, mo: number, d: number, h: number): string {
+  return `${y}-${mo}-${d} ${h}`;
 }
 
 /**
- * Pure next-fire computation. Late fires, retries, and tomorrow's fire
- * can never share a key. Never throws — callers must never break boot
- * on a clock anomaly.
+ * Pure next-fire computation. The candidate is always this hour's :10:05
+ * in IST wall time; past rounds roll exactly one hour forward (date and
+ * month/year boundaries handled by decomposition, never manual +1 day).
+ * Late fires, retries, and next-hour fires can never share a key. Never
+ * throws — callers must never break boot on a clock anomaly.
  */
 export function planNextHourlyScan(nowMs: number): HourlyScanPlan {
   try {
     const p = istParts(nowMs);
-    const todayKey = roundKey(p.y, p.mo, p.d);
-    const todayTarget =
-      Date.UTC(p.y, p.mo, p.d, SCAN_HOUR, SCAN_MIN, SCAN_SEC) - IST_OFFSET_MS;
-    if (todayTarget > nowMs) {
-      return { delayMs: todayTarget - nowMs, key: todayKey, late: false };
+    const thisHourTarget =
+      Date.UTC(p.y, p.mo, p.d, p.h, SCAN_MIN, SCAN_SEC) - IST_OFFSET_MS;
+    const thisKey = roundKey(p.y, p.mo, p.d, p.h);
+    if (thisHourTarget > nowMs) {
+      return { delayMs: thisHourTarget - nowMs, key: thisKey, late: false };
     }
-    if (nowMs - todayTarget < LATE_GRACE_MS) {
-      return { delayMs: LATE_DELAY_MS, key: todayKey, late: true };
+    if (nowMs - thisHourTarget < LATE_GRACE_MS) {
+      return { delayMs: LATE_DELAY_MS, key: thisKey, late: true };
     }
-    const next = new Date(nowMs + IST_OFFSET_MS + 24 * 60 * 60 * 1000);
-    const ny = next.getUTCFullYear();
-    const nmo = next.getUTCMonth();
-    const nd = next.getUTCDate();
-    const tomorrowTarget =
-      Date.UTC(ny, nmo, nd, SCAN_HOUR, SCAN_MIN, SCAN_SEC) - IST_OFFSET_MS;
-    return { delayMs: Math.max(tomorrowTarget - nowMs, 1000), key: roundKey(ny, nmo, nd), late: false };
+    const n = istParts(nowMs + 60 * 60 * 1000);
+    const nextTarget =
+      Date.UTC(n.y, n.mo, n.d, n.h, SCAN_MIN, SCAN_SEC) - IST_OFFSET_MS;
+    return { delayMs: Math.max(nextTarget - nowMs, 1000), key: roundKey(n.y, n.mo, n.d, n.h), late: false };
   } catch {
     // Clock anomaly: retry in a minute, never crash the chain.
     return { delayMs: 60 * 1000, key: `retry-${Math.floor(nowMs / 60000)}`, late: false };
