@@ -4,7 +4,7 @@
  * of EVERY IST hour. These cases pin hourly behavior across the whole
  * day — morning-only coverage once let a once-daily bug through.
  */
-import { planNextHourlyScan } from '../services/automation/hourly-scan-plan';
+import { isHourlyScanAllowed, planNextHourlyScan } from '../services/automation/hourly-scan-plan';
 
 const MIN = 60 * 1000;
 
@@ -79,5 +79,14 @@ describe('planNextHourlyScan', () => {
     expect(plan.late).toBe(true);
     expect(plan.delayMs).toBe(5 * 1000);
     expect(plan.key).toBe('2026-8-22 10');
+  });
+});
+
+describe('isHourlyScanAllowed', () => {
+  it('allows exactly when a Blast tap could release (enabled, not dry-run)', () => {
+    expect(isHourlyScanAllowed({ enabled: true, dryRun: false })).toBe(true);
+    expect(isHourlyScanAllowed({ enabled: true, dryRun: true })).toBe(false);
+    expect(isHourlyScanAllowed({ enabled: false, dryRun: false })).toBe(false);
+    expect(isHourlyScanAllowed(null)).toBe(false);
   });
 });

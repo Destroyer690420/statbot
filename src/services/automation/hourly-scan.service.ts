@@ -14,6 +14,8 @@ import { automationRepository } from '../../database/repositories';
 import { logger } from '../../utils/logger';
 import {
   HOURLY_SCAN_ID,
+  isHourlyScanAllowed,
+  LATE_GRACE_MS,
   planNextHourlyScan,
 } from './hourly-scan-plan';
 import {
@@ -27,15 +29,15 @@ import {
 const UNCONSUMED_WARN_MS = 3 * 60 * 1000;
 
 let timer: NodeJS.Timeout | null = null;
-let lastKey: string | null = null;
+let lastServed: { key: string; at: number } | null = null;
 
 async function fire(key: string): Promise<void> {
-  if (lastKey === key) return;
-  lastKey = key;
+  if (lastServed?.key === key) return;
+  lastServed = { key, at: Date.now() };
   try {
     const settings = await automationRepository.getSettings().catch(() => null);
-    if (!settings?.enabled || !settings?.pollEnabled) {
-      logger.info('Hourly scan skipped (automation off)', { key });
+    if (!isHourlyScanAllowed(settings)) {
+      logger.info('Hourly scan skipped (releases disabled)', { key });
       return;
     }
     const result = requestScanCommand(HOURLY_SCAN_ID);
@@ -70,7 +72,13 @@ export function startHourlyScanTrigger(): void {
   if (timer) return;
   const schedule = (): void => {
     try {
-      const plan = planNextHourlyScan(Date.now());
+      // Skip-ahead: the round just served (or skipped) must never
+      // re-plan into itself — plan from just past its grace window so
+      // the chain advances instead of 5s-looping inside grace.
+      let plan = planNextHourlyScan(Date.now());
+      if (lastServed && plan.key === lastServed.key) {
+        plan = planNextHourlyScan(lastServed.at + LATE_GRACE_MS + 1000);
+      }
       logger.info('Hourly scan scheduled', {
         key: plan.key,
         firesInSec: Math.round(plan.delayMs / 1000),
@@ -97,5 +105,5 @@ export function stopHourlyScanTrigger(): void {
     clearTimeout(timer);
     timer = null;
   }
-  lastKey = null;
+  lastServed = null;
 }

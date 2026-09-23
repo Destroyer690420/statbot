@@ -25,6 +25,17 @@ export interface HourlyScanPlan {
   late: boolean;
 }
 
+/**
+ * Release gate for the hourly trigger: the digest is useful exactly when
+ * a Blast tap can release it — same condition as the release path
+ * (blast-approval.service: enabled && !dryRun). pollEnabled is NOT
+ * consulted (it gates only the legacy scheduler cycles, not the
+ * watcher-driven flow the digest serves).
+ */
+export function isHourlyScanAllowed(settings: { enabled: boolean; dryRun: boolean } | null): boolean {
+  return !!settings?.enabled && !settings.dryRun;
+}
+
 function istParts(epochMs: number): { y: number; mo: number; d: number; h: number } {
   const d = new Date(epochMs + IST_OFFSET_MS);
   return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), d: d.getUTCDate(), h: d.getUTCHours() };
