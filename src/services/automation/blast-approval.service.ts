@@ -62,10 +62,13 @@ function deliveryError(error: unknown): string {
   }
 }
 
-// Manual (`/scan`) digests are keyed per request, never per hour: an
-// on-demand scan always answers with its own DM and never disturbs the
-// automatic hour state (lastDigest / digestInFlightHour untouched).
+// Manual (`scan` text / hourly) digests are keyed per request, never per
+// hour: an on-demand scan always answers with its own DM and never
+// disturbs the automatic hour state (lastDigest / digestInFlightHour
+// untouched). Bounded: one id per scan, oldest evicted past the cap.
 const manualDigestsSent = new Set<string>();
+const MAX_MANUAL_DIGEST_IDS = 1000;
+const manualInFlight = new Set<string>();
 
 /** True when a manual digest already went out for this request id. */
 export function manualDigestSent(requestId: string): boolean {
@@ -186,9 +189,12 @@ export async function maybeSendDigest(
 }
 
 /**
- * Sends the on-demand (`/scan`) digest DM for a consumed manual report.
- * Always answers — even for an empty scan — and is idempotent per request
- * id, so the second tab's merged duplicate never double-DMs. Never throws.
+ * Sends the on-demand (DM text / hourly) digest DM for a consumed manual
+ * report. Always answers — even for an empty scan. Exactly-once per
+ * request id: overlapping duplicates stay silent via the in-flight set,
+ * and the id is only marked sent after at least one DM actually went out
+ * (a total send failure leaves the door open for a later duplicate to
+ * retry — mirroring the automatic path's sentTo rule). Never throws.
  */
 export async function sendManualDigest(
   discordClient: Client,
@@ -198,15 +204,27 @@ export async function sendManualDigest(
 ): Promise<DigestDelivery> {
   const delivery: DigestDelivery = { sentTo: [], failed: [] };
   if (manualDigestsSent.has(requestId)) return delivery;
-  manualDigestsSent.add(requestId);
-  const banner =
-    requestedBy === 'hourly'
-      ? 'Scheduled hourly scan — same rules as the automatic round.'
-      : `Manual scan${requestedBy ? ` (requested by <@${requestedBy}>)` : ''} — same rules as the automatic round.`;
-  const { delivery: delivered } = await deliverDigest(discordClient, cycleId, banner);
-  delivery.sentTo = delivered.sentTo;
-  delivery.failed = delivered.failed;
-  return delivery;
+  if (manualInFlight.has(requestId)) return delivery;
+  manualInFlight.add(requestId);
+  try {
+    const banner =
+      requestedBy === 'hourly'
+        ? 'Scheduled hourly scan — same rules as the automatic round.'
+        : `Manual scan${requestedBy ? ` (requested by <@${requestedBy}>)` : ''} — same rules as the automatic round.`;
+    const { delivery: delivered } = await deliverDigest(discordClient, cycleId, banner);
+    delivery.sentTo = delivered.sentTo;
+    delivery.failed = delivered.failed;
+    if (delivered.sentTo.length > 0) {
+      manualDigestsSent.add(requestId);
+      if (manualDigestsSent.size > MAX_MANUAL_DIGEST_IDS) {
+        const oldest = manualDigestsSent.values().next().value;
+        if (oldest !== undefined) manualDigestsSent.delete(oldest);
+      }
+    }
+    return delivery;
+  } finally {
+    manualInFlight.delete(requestId);
+  }
 }
 
 // In-progress releases by cycle: two rapid Blast taps (or two approvers)

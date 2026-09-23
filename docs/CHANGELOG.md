@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-09-23
+### Implemented (NOT yet deployed — full rebuild still pending)
+- **DM-pipeline audit fixes (watcher v1.4.10)**: full read-through of the hourly/manual scan + digest chain found 1 real DM bug and 3 latent issues. (1) Manual digest marked the request sent BEFORE the DM went out — a Discord send failure plus duplicate suppression meant a lost DM with no retry; now in-flight-guarded and marked only after a real send (later duplicates can retry). (2) `consumeRequest` didn't record the consume (second-tab routing trap). (3) Unbounded manual-digest id set (capped at 1000). (4) Watcher manual branch now holds the monitor guard (90s watchdog cover, zero flow change). Verified: typecheck + build clean, 340/340 jest (30 suites), userscripts identical/ASCII/`node --check` clean. No DB migration.
+
 ## 2026-09-22
 ### Deployed
 - **Hourly auto-scan (fixed) live** (`161.118.164.85`) at commit `a6f82bf` (app-only rebuild; backup `rtm-backup-20260923-hourlyfix2.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Every hour's :10:05 IST, release-gated, no-reloop chain. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `Hourly scan scheduled` with exact next-round key + seconds, single schedule line. No script update needed. Locally: typecheck + build clean, 340/340 jest (30 suites).

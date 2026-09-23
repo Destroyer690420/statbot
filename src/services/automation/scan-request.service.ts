@@ -1,5 +1,5 @@
 /**
- * On-demand scan requests (`/scan` slash command).
+ * On-demand scan requests (DM-text "scan" + scheduled hourly trigger).
  *
  * The scan itself lives in the manager's browser tabs — the server cannot
  * scan GoPartTime directly. A request created here rides the next
@@ -61,16 +61,17 @@ export function pendingRequest(): ScanRequest | null {
 /**
  * Atomically consumes a request. Returns true only for the first caller —
  * the winning tab's report; later same-id reports merge as duplicates.
+ * Records the consume so wasRequested/isConsumedRequest stay consistent.
  */
 export function consumeRequest(requestId: string): boolean {
   const now = Date.now();
   const req = requests.get(requestId);
   if (!req) return false;
+  requests.delete(requestId);
+  consumed.set(requestId, now);
   if (now - req.requestedAt > SCAN_REQUEST_TTL_MS) {
-    requests.delete(requestId);
     return false;
   }
-  requests.delete(requestId);
   return true;
 }
 
@@ -121,7 +122,7 @@ export function clearRequests(): void {
   consumed.clear();
 }
 
-// Shared trigger logic for every `/scan` surface (slash command, DM text).
+// Shared trigger logic for every on-demand surface (DM text, hourly).
 // Per-user cooldown against accidental double-taps; an already-waiting
 // request is REUSED (never queued twice), so two triggers can never
 // produce two digest DMs.

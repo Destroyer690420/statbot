@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.9
+// @version      1.4.10
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,12 @@
 // ==/UserScript==
 
 /**
+   * v1.4.10 - Manual-scan watchdog cover: the on-demand branch now holds
+   * the monitor guard (busy flag + watchdog timestamp) exactly like the
+   * automatic path, so a stalled manual tick trips the same 90s recovery
+   * instead of sitting invisible. No flow change. Otherwise identical to
+   * v1.4.9 below.
+   *
    * v1.4.9 - Faster auto report: drops land at xx:10 +-20s, so the
    * early-window countdown drops from 45s to 20s (tail stays 10s) -
    * digest DM lands ~xx:10:40-xx:11 instead of ~xx:15. Countdown
@@ -185,7 +191,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.9';
+  const VERSION = '1.4.10';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -949,11 +955,16 @@
     if (!/^\/tasks\/?$/.test(window.location.pathname)) return;
     // v1.4.8 on-demand scan first: one immediate full scan + settled
     // report for the /scan request, then the auto flow resumes next tick.
+    // Holds the monitor guard like the automatic path (watchdog cover).
     if (pendingManualScan && !consumedManualScans[pendingManualScan]) {
+      monitorBusy = true;
       try {
         await runManualScan(settings);
       } catch (e) {
         console.log('[Auto Watcher] manual scan tick failed:', e && e.message);
+      } finally {
+        lastMonitorDoneAt = Date.now();
+        monitorBusy = false;
       }
       return;
     }

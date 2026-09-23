@@ -8,7 +8,9 @@
  * Timing is a self-rescheduling setTimeout chain (no cron dependency):
  * ms-until-next-IST-:10:05, exactly-once per IST hour key, recomputed
  * after every fire and on boot. IST has no DST; the offset is fixed.
- * Gated on the automation master switch (enabled && pollEnabled).
+ * Gated on the release condition (enabled && !dryRun — see
+ * isHourlyScanAllowed): the digest is useful exactly when a Blast tap
+ * can release it.
  */
 import { automationRepository } from '../../database/repositories';
 import { logger } from '../../utils/logger';
