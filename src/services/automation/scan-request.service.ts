@@ -106,6 +106,15 @@ export function wasRequested(requestId: string): boolean {
   return requests.has(requestId) || consumed.has(requestId);
 }
 
+/** True when the id was already consumed by a report (hourly watchdog). */
+export function isConsumedRequest(requestId: string): boolean {
+  try {
+    return consumed.has(requestId);
+  } catch {
+    return false;
+  }
+}
+
 /** Test hook: clears all requests. */
 export function clearRequests(): void {
   requests.clear();

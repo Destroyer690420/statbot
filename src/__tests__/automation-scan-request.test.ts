@@ -7,6 +7,7 @@ import {
   clearRequests,
   clearScanCooldown,
   consumeRequest,
+  isConsumedRequest,
   isKnownRequest,
   isScanRetry,
   pendingRequest,
@@ -61,9 +62,12 @@ describe('wasRequested (manual-report routing)', () => {
   it('is true for live and consumed ids, false for forged ones', () => {
     const req = requestScan('user-1');
     expect(wasRequested(req.requestId)).toBe(true);
+    expect(isConsumedRequest(req.requestId)).toBe(false);
     takeRequest(req.requestId);
     expect(wasRequested(req.requestId)).toBe(true);
+    expect(isConsumedRequest(req.requestId)).toBe(true);
     expect(wasRequested('req-forged-123')).toBe(false);
+    expect(isConsumedRequest('req-forged-123')).toBe(false);
   });
 });
 

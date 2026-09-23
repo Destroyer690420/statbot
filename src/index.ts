@@ -132,6 +132,15 @@ async function main(): Promise<void> {
       logger.error('Automation scheduler failed to start', { error });
     }
 
+    // 7b. Hourly auto-scan trigger (IST xx:10:05 — same shared trigger as
+    // the DM-text "scan"; the digest DM arrives labeled as scheduled).
+    try {
+      const { startHourlyScanTrigger } = await import('./services/automation/hourly-scan.service');
+      startHourlyScanTrigger();
+    } catch (error) {
+      logger.error('Hourly scan trigger failed to start', { error });
+    }
+
     // 8. Burst reply hooks: blast wins convert to accept claims (lazy accept).
     // Manual blasts have no burst row — the hook resolves to null for them.
     try {

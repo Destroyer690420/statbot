@@ -199,7 +199,10 @@ export async function sendManualDigest(
   const delivery: DigestDelivery = { sentTo: [], failed: [] };
   if (manualDigestsSent.has(requestId)) return delivery;
   manualDigestsSent.add(requestId);
-  const banner = `Manual scan${requestedBy ? ` (requested by <@${requestedBy}>)` : ''} — same rules as the automatic round.`;
+  const banner =
+    requestedBy === 'hourly'
+      ? 'Scheduled hourly scan — same rules as the automatic round.'
+      : `Manual scan${requestedBy ? ` (requested by <@${requestedBy}>)` : ''} — same rules as the automatic round.`;
   const { delivery: delivered } = await deliverDigest(discordClient, cycleId, banner);
   delivery.sentTo = delivered.sentTo;
   delivery.failed = delivered.failed;
