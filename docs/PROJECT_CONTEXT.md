@@ -251,7 +251,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-09-23**: **DM-pipeline audit fixes implemented (NOT yet deployed)** — v1.4.10: manual digest in-flight guard + mark-on-success (fixes rare lost-DM on send failure), consumeRequest consistency, bounded id set, watcher monitor-guard cover. Verified: typecheck + build clean, 340/340 jest. Next: full rebuild deploy + script #2 → 1.4.10 + reload tabs.
+- **2026-09-23**: **DEPLOYED DM-pipeline audit fixes** (`161.118.164.85`, git HEAD `6494f0f`; full rebuild; backup `rtm-backup-20260923-auditfix.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", hourly trigger armed for round 18, `manualInFlight` live, served v1.4.10 hash-matches; locally typecheck + build clean, 340/340 jest). Manual digest in-flight + mark-on-success; consume consistency; bounded ids; watcher guard cover. Manager must update script #2 to v1.4.10 + reload tabs.
 - **2026-09-22**: **DEPLOYED hourly auto-scan (fixed)** (`161.118.164.85`, git HEAD `a6f82bf`; app-only rebuild; backup `rtm-backup-20260923-hourlyfix2.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, boot "All systems online!", `Hourly scan scheduled` with exact next-round key + seconds, single schedule line; locally typecheck + build clean, 340/340 jest). Every hour's :10:05 IST, release-gated, no-reloop. No script update needed.
 - **2026-09-22**: **DEPLOYED scheduled hourly auto-scan** (`161.118.164.85`, git HEAD `db38ad0`;
 

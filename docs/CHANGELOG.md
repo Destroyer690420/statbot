@@ -3,8 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-23
-### Implemented (NOT yet deployed — full rebuild still pending)
-- **DM-pipeline audit fixes (watcher v1.4.10)**: full read-through of the hourly/manual scan + digest chain found 1 real DM bug and 3 latent issues. (1) Manual digest marked the request sent BEFORE the DM went out — a Discord send failure plus duplicate suppression meant a lost DM with no retry; now in-flight-guarded and marked only after a real send (later duplicates can retry). (2) `consumeRequest` didn't record the consume (second-tab routing trap). (3) Unbounded manual-digest id set (capped at 1000). (4) Watcher manual branch now holds the monitor guard (90s watchdog cover, zero flow change). Verified: typecheck + build clean, 340/340 jest (30 suites), userscripts identical/ASCII/`node --check` clean. No DB migration.
+### Deployed
+- **DM-pipeline audit fixes live (watcher v1.4.10)** (`161.118.164.85`) at commit `6494f0f` (full rebuild; backup `rtm-backup-20260923-auditfix.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Manual digest in-flight guard + mark-on-success; consume consistency; bounded id set; watcher monitor-guard cover. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `Hourly scan scheduled` for round 18 with exact seconds, `manualInFlight` in live `dist/`, served v1.4.10 hash-matches local. Manager must update Tampermonkey script #2 to v1.4.10 and reload tabs. Locally: typecheck + build clean, 340/340 jest (30 suites), userscripts identical/ASCII/`node --check` clean.
 
 ## 2026-09-22
 ### Deployed
