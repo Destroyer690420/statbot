@@ -3,8 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-09-22
-### Implemented (NOT yet deployed — app rebuild still pending)
-- **Hourly-scan cadence fix (every hour, not once daily)**: the trigger modeled "10:05" as a time of day and fired only at 10:05 AM (owner caught it from the boot log). Rewritten around the IST wall clock — every hour's :10:05, keyed by actual round hour; gate corrected to the release condition (`enabled && !dryRun` - `pollEnabled` is off live and gates only legacy cycles, so the master-switch gate would have skipped every round); chain skips ahead past grace after each fire (no 5s re-loop - caught live in boot logs); tests now pin afternoon/evening/midnight (the gap that let it through). Verified: typecheck + build clean, 339/339 jest (30 suites). Server only — no userscript change, no DB migration.
+### Deployed
+- **Hourly auto-scan (fixed) live** (`161.118.164.85`) at commit `a6f82bf` (app-only rebuild; backup `rtm-backup-20260923-hourlyfix2.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). Every hour's :10:05 IST, release-gated, no-reloop chain. Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `Hourly scan scheduled` with exact next-round key + seconds, single schedule line. No script update needed. Locally: typecheck + build clean, 340/340 jest (30 suites).
 ### Deployed
 - **Scheduled hourly auto-scan live** (`161.118.164.85`) at commit `db38ad0` (app-only rebuild; backup `rtm-backup-20260922-hourlyscan.tar.gz`; no DB migration; pushed to GitHub; host + local bundles/scratch cleaned). IST xx:10:05 via shared scan request (labeled "Scheduled hourly scan"). Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `Hourly scan scheduled` in boot log with correct next-fire, trigger in live `dist/`. No script update needed. Locally: typecheck + build clean, 337/337 jest (30 suites).
 ### Reverted (same day, per owner request)
