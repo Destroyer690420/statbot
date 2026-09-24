@@ -23,6 +23,8 @@
 | `DASHBOARD_URL` | Allowed CORS origin (dashboard) | No | `http://localhost:5173` | `src/api/server.ts` |
 | `GOPARTTIME_API_KEY` | Shared Bearer secret for the userscript | No | `''` (endpoint disabled → 503) | `src/api/middleware/extensionAuth.ts`, userscript settings |
 | `OWNER_PIN` | PIN for the owner panel (4-digit) | No | `'7977'` | `src/api/routes/owner.ts` |
+| `WORKER_JWT_SECRET` | Separate HS256 secret for worker-portal JWTs (never the admin secret) | No | `''` (portal disabled unless ≥32 chars) | `src/services/worker-auth.service.ts`, `middleware/workerAuth.ts` |
+| `WORKER_PORTAL_ENABLED` | Kill switch for the worker portal (`true` = on) | No | `''` (off) | `src/api/routes/worker.ts` |
 
 ## 2. Dashboard Variables (`dashboard/`)
 

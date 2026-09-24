@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './hooks/useAuth';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -19,6 +20,24 @@ import { Commissions } from './pages/payout/Commissions';
 import { Referrals } from './pages/Referrals';
 import { OwnerEarnings } from './pages/OwnerEarnings';
 import { NotFound } from './pages/NotFound';
+import { WorkerAuthProvider } from './hooks/useWorkerAuth';
+import { WorkerProtectedRoute } from './components/WorkerProtectedRoute';
+import { WorkerLayout } from './components/WorkerLayout';
+
+const WorkerLogin = lazy(() => import('./pages/worker/WorkerLogin'));
+const WorkerHome = lazy(() => import('./pages/worker/WorkerHome'));
+const WorkerTasks = lazy(() => import('./pages/worker/WorkerTasks'));
+const WorkerTaskDetail = lazy(() => import('./pages/worker/WorkerTaskDetail'));
+const WorkerWallet = lazy(() => import('./pages/worker/WorkerWallet'));
+const WorkerHowTo = lazy(() => import('./pages/worker/WorkerHowTo'));
+
+function WorkerFallback() {
+  return (
+    <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+    </div>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -136,6 +155,50 @@ export default function App() {
                 </Layout>
               </ProtectedRoute>
             } />
+
+            {/* Worker portal (read-only, OTP login — never wrapped in the admin ProtectedRoute) */}
+            <Route path="/worker" element={
+              <WorkerAuthProvider>
+                <Outlet />
+              </WorkerAuthProvider>
+            }>
+              <Route path="login" element={
+                <Suspense fallback={<WorkerFallback />}>
+                  <WorkerLogin />
+                </Suspense>
+              } />
+              <Route element={
+                <WorkerProtectedRoute>
+                  <WorkerLayout />
+                </WorkerProtectedRoute>
+              }>
+                <Route index element={
+                  <Suspense fallback={<WorkerFallback />}>
+                    <WorkerHome />
+                  </Suspense>
+                } />
+                <Route path="tasks" element={
+                  <Suspense fallback={<WorkerFallback />}>
+                    <WorkerTasks />
+                  </Suspense>
+                } />
+                <Route path="tasks/:id" element={
+                  <Suspense fallback={<WorkerFallback />}>
+                    <WorkerTaskDetail />
+                  </Suspense>
+                } />
+                <Route path="wallet" element={
+                  <Suspense fallback={<WorkerFallback />}>
+                    <WorkerWallet />
+                  </Suspense>
+                } />
+                <Route path="how-to" element={
+                  <Suspense fallback={<WorkerFallback />}>
+                    <WorkerHowTo />
+                  </Suspense>
+                } />
+              </Route>
+            </Route>
 
             <Route path="*" element={<NotFound />} />
           </Routes>

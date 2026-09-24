@@ -22,7 +22,14 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as { username: string; iat: number };
+    const decoded = jwt.verify(token, env.JWT_SECRET, {
+      algorithms: ['HS256'],
+    }) as { username?: unknown; iat: number };
+    if (typeof decoded.username !== 'string' || decoded.username !== env.DASHBOARD_USERNAME) {
+      logger.warn('JWT with unexpected username claim rejected');
+      res.status(401).json({ success: false, message: 'Invalid or expired token.' });
+      return;
+    }
     req.userId = decoded.username;
     next();
   } catch {

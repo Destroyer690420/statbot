@@ -58,7 +58,13 @@ router.post('/verify', (req: Request, res: Response): void => {
   }
 
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET);
+    const decoded = jwt.verify(token, env.JWT_SECRET, {
+      algorithms: ['HS256'],
+    }) as { username?: unknown };
+    if (typeof decoded.username !== 'string' || decoded.username !== env.DASHBOARD_USERNAME) {
+      res.json({ success: true, data: { valid: false } });
+      return;
+    }
     res.json({ success: true, data: { valid: true, decoded } });
   } catch {
     res.json({ success: true, data: { valid: false } });

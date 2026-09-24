@@ -34,6 +34,13 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 
 **No test coverage** for: services (task/payout/commission/reminder/goparttime/owner-earnings/analytics), repositories, API routes, bot commands/events, scheduler/worker, or the dashboard (no frontend tests exist).
 
+### Worker portal suites (2026-09-24)
+| File | Covers |
+|---|---|
+| `worker-view.test.ts` (28) | payout states (ARCHIVED=paid incl. no-item anomaly, COMPLETED=awaiting, failed precedence), every derived status/tab, format-check mapping (infra states hidden), todo/completed sorting, completion-time rule, home counts, action-needed cap, wallet math + IST boundary bucketing, DTO whitelist vs `WORKER_FORBIDDEN_FIELDS`, money format |
+| `worker-auth.test.ts` (21) | admin middleware (valid passes; missing/wrong username, worker-shaped, worker-secret tokens → 401), workerAuth (valid passes; admin/expired/wrong-aud-iss-alg/typeless/denylisted → 401), OTP alphabet/length/grouping, case-insensitive verify, HMAC-only storage, single-use, TTL expiry, 5-attempt invalidation, single-active + cooldown, 5/hour cap, 10-fail lock, constant-time compare, fail-closed outside test env, Discord message shape + expiry cleanup, JWT claims (7d, aud/iss, no admin-secret fallback) |
+| `worker-isolation.test.ts` (25) | HTTP end-to-end over a mocked DB/Discord client: status, type-ahead (short-q empty, ≤5 results, exact `{channelId,name}` keys, case-insensitive, task-less excluded), request-code (mention-only message, no code/identity in response, single-active 429, generic 404s, 502 with no stored code), newest-task identity + multi-assignee warning, verify (wrong/code reuse, success deletes message, invalidation deletes message), logout denylist, per-endpoint isolation loop (no B markers, no forbidden keys), identical 404s, scoped search/pagination, worker-scoped `/me`+`/wallet`, wallet parity vs `payoutService.findEligibleTasks`, kill-switch 404s |
+
 ## 3. Manual Testing Procedures
 
 ### After backend changes

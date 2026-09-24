@@ -8,7 +8,8 @@
 
 | Surface | Scheme | Detail |
 |---|---|---|
-| Dashboard API | JWT (HS256, `JWT_SECRET`, 24h expiry) | issued by `POST /auth/login` from `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`; payload `{username, iat}`; `Authorization: Bearer` |
+| Dashboard API | JWT (HS256 pinned, `JWT_SECRET`, 24h expiry, `username` must equal `DASHBOARD_USERNAME`) | issued by `POST /auth/login`; payload `{username, iat}`; `Authorization: Bearer`; `POST /auth/verify` enforces the same checks (returns `{valid:false}` otherwise) |
+| Worker portal API | Worker JWT (HS256 pinned, **separate** `WORKER_JWT_SECRET` ≥32 chars, 7d expiry) | issued by `POST /worker/auth/verify-code`; claims `typ:'worker'`, `sub` (worker Discord ID), `tid` (login ticket), `name`, `jti`, `aud:'statbot-worker'`, `iss:'statbot'`; Redis denylist on logout; identity comes ONLY from `sub` |
 | Discord commands | Discord user IDs in env (`ADMIN_USER_IDS`, `MANAGER_USER_IDS`) | per-command checks via `src/utils/permissions.ts` |
 | GoPartTime extension | Shared secret `GOPARTTIME_API_KEY` as Bearer | `crypto.timingSafeEqual` compare; 503 when unconfigured; 401 mismatch; sets `req.userId='goparttime-extension'` |
 
@@ -33,7 +34,7 @@ Managers (`MANAGER_USER_IDS`) are used **only** by the bot, never the API.
 
 1. **Unauthenticated endpoints**: `GET /owner/daily-earnings`, `/history`, `/weekly-earnings` (no JWT, no PIN); `GET /uploads/insights/:taskId/:filename` (public by design); `GET /health`.
 2. **Owner PIN**: default `'7977'` in `env.ts`; `/owner/verify` returns 200 even for wrong PIN (`{success:false}`) — client relies on `success`; the `/owner-earnings` dashboard route is JWT-only (any logged-in admin who knows the URL can open it; PIN is a soft gate).
-3. **JWT holder is trusted for "admin" only when username == DASHBOARD_USERNAME** — the token itself carries no roles; any future multi-user JWT would need role claims.
+3. **JWT holder is trusted for "admin" only when username == DASHBOARD_USERNAME** — enforced in `authMiddleware` (HS256 pinned; any other username → 401), so worker tokens (separate secret, no admin username) can never pass admin routes.
 4. **Rate limit** also throttles `/health` and `/auth/login` (operational nuance, not a vuln).
 5. Insight images are unauthenticated and TTL'd 60h (accepted design tradeoff).
 6. Shared `GOPARTTIME_API_KEY` for all workers — no per-user identity on the extension channel.
@@ -73,3 +74,11 @@ Managers (`MANAGER_USER_IDS`) are used **only** by the bot, never the API.
 - Delete the stray credential-bearing debug scripts and SSH key.
 - Consider per-worker extension tokens; role claims in JWTs.
 - Fix stale `.env.example`.
+
+## 11. Worker Portal Model (implemented, NOT deployed — 2026-09-24)
+
+- **Separate secret**: worker JWTs use `WORKER_JWT_SECRET` (portal disabled unless set and ≥32 chars); the admin middleware pins HS256 and requires `username === DASHBOARD_USERNAME`, and `/verify` matches — a worker token fails every admin route.
+- **Identity from `sub` only**: the sole client-supplied identifier is `channelId` on the unauthenticated login endpoints. All data queries filter `assignedUserId = sub`; a foreign task returns the same 404 as a missing one. No endpoint accepts a worker id.
+- **Whitelist DTOs** (`src/utils/worker-view.ts`): responses never spread DB rows. Forbidden everywhere (responses, errors, logs-to-client): other workers' IDs/names/tickets/tasks/earnings, GoPartTime USD `payment`, owner revenue/margins/commissions, batch totals (`totalWorkers/totalAmount`), notes, `contentHtml`, `taskImages`, screenshot URLs, delivery/assignment internals, reviewer identity, audit logs, `jobId`/`reminderMessageId`.
+- **Accepted ticket-OTP risks**: anyone who can read a ticket (worker + staff) can see a posted code, and anyone can trigger a code for a findable ticket — bounded by the single-active-code rule, 60s cooldown, 5 codes/ticket/hour, 5-attempt invalidation, 10-failure hourly lock, message deletion on success/invalidation/expiry, and per-IP rate limits. Codes are HMAC-SHA256'd (never stored raw); Redis failure fails closed (503); codes/tokens/secrets are never logged.
+- **Kill switch**: `WORKER_PORTAL_ENABLED` (default off). When off, `/worker/*` (except `/auth/status`) returns 404.

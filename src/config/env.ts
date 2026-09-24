@@ -43,6 +43,11 @@ const envSchema = z.object({
   // Owner panel PIN
   OWNER_PIN: z.string().default('7977'),
 
+  // Worker portal (read-only self-service for workers via ticket-OTP login).
+  // Optional: empty/disabled by default so a missing var never bricks boot.
+  WORKER_JWT_SECRET: z.string().optional().default(''),
+  WORKER_PORTAL_ENABLED: z.string().optional().default(''),
+
   // GoPartTime automation vault (AES-256-GCM hex key, 32 bytes). Empty = vault disabled.
   GOPARTTIME_SESSION_KEY: z.string().default(''),
   // Real GoPartTime acceptance behind a flag. Default false = dry-run only.

@@ -247,6 +247,29 @@ Hardcoded model: revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30; c
 
 ---
 
+## 15b. Worker Portal — `src/api/routes/worker.ts` (factory `createWorkerRoutes(discordClient)`)
+
+Read-only self-service portal for workers. **Implemented, NOT deployed** (2026-09-24). Identity is the Discord user ID (`Task.assignedUserId`); every data query is scoped `assignedUserId = token.sub`. All responses carry `Cache-Control: no-store` and are built from explicit whitelist DTOs (see `src/utils/worker-view.ts`). Kill switch `WORKER_PORTAL_ENABLED`: when off, `/auth/status` reports `{ enabled:false }` and every other `/worker/*` path returns 404. Mounted at `/api/v1/worker` BEFORE `uploadRoutes`/`reminderRoutes` (the reminder router 401s unmatched `/api/v1/*` paths).
+
+Auth: ticket-OTP login. The bot posts an 8-char code (alphabet `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, HMAC-SHA256 stored in Redis with 5-min TTL, fail-closed 503) into the worker's ticket; the worker enters it on the site and receives a worker JWT (separate `WORKER_JWT_SECRET`, claims `typ/sub/tid/name/jti`, `aud:'statbot-worker'`, `iss:'statbot'`, 7d, Redis denylist on logout).
+
+| Method | Path | Auth | Purpose | Errors |
+|---|---|---|---|---|
+| GET | `/worker/auth/status` | public | `{ enabled, guildId }` (always available) | — |
+| GET | `/worker/auth/tickets?q=` | public (60 req/10 min/IP) | Type-ahead: `q` ≥3 chars, case-insensitive contains on ticket name, max 5, only `{ channelId, name }`, only channels in the guild that have tasks | — |
+| POST | `/worker/auth/request-code` | public (10/10 min/IP) | `{ channelId }` → posts the code in the ticket; `{ expiresInSeconds, cooldownSeconds }` (never the code/identity) | 404 generic ticket message; 429 active/cooldown/hourly-cap/lock; 502 Discord send failed; 503 store down |
+| POST | `/worker/auth/verify-code` | public (30/10 min/IP) | `{ channelId, code }` (single-use) → `{ token, expiresIn, workerName, ticketName }` | 401 wrong/expired/invalidated; 429 locked; 503 |
+| POST | `/worker/auth/logout` | worker JWT | Denylists the token's `jti` until exp | 401 |
+| GET | `/worker/me` | worker JWT | `{ workerId, name, ticket{channelId,channelName,discordUrl}, weekLabel, rates{post,comment} }` | 401 |
+| GET | `/worker/home` | worker JWT | `{ stats, actionNeeded[≤5], walletSnapshot }` | 401 |
+| GET | `/worker/tasks?tab=&sub=&type=&q=&page=&limit=` | worker JWT | Whitelisted task DTOs + `total/page/limit/counts` (limit ≤50, default 20; `sub` only on the completed tab) | 400 bad query; 401 |
+| GET | `/worker/tasks/:id` | worker JWT | DTO + timeline (same 404 whether missing or another worker's) | 404 |
+| GET | `/worker/wallet` | worker JWT | This/last IST week, awaiting (all weeks), lifetime paid, rates, worker-scoped payment history | 401 |
+
+Throttles (Redis): one active code per ticket; 60s cooldown; 5 codes/ticket/hour; 5 wrong attempts invalidate the code; >10 failed verifications/hour lock the ticket for 1h. The bot deletes its code message on success/invalidation/lockout/expiry (best-effort).
+
+---
+
 ## 16. Uploads — `src/api/routes/uploads.ts` (NO auth; mounted before reminders)
 
 | Method | Path | Purpose | Notes |

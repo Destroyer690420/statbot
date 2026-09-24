@@ -111,3 +111,18 @@ Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payou
 - `w-4.5 h-4.5` classes have no Tailwind definition (icons render default size).
 - `animate-in fade-in`/`zoom-in-95` classes inert (tailwindcss-animate not installed).
 - Theme picker non-functional; OwnerEarnings route JWT-only; `getUpcomingReminders`/`getHealth`/`getExportCsvUrl`/`createReferral` client fns unused.
+
+## 10. Worker Portal (`/worker/*` — implemented, NOT deployed, 2026-09-24)
+
+Read-only self-service portal (same Tailwind theme + glass-card style, mobile-first). Lazy-loaded pages, never wrapped in the admin `ProtectedRoute`; own `workerApi` axios instance with token key `rtm_worker_token` (a 401 clears only the worker token → `/worker/login`; never touches `rtm_token`). An admin token cannot open worker pages (worker API rejects it with 401).
+
+| Path | Page | Notes |
+|---|---|---|
+| `/worker/login` | WorkerLogin | public; ticket finder (3+ chars, ≤5 matches, debounced, last ticket in `rtm_worker_last_ticket`) → 8-char code entry (autofocus, auto-uppercase, `one-time-code`, expiry countdown, cooldown-gated Resend, Change ticket); skips ahead when a valid worker token exists; shows "Worker portal is not available" when disabled |
+| `/worker` | WorkerHome | greeting, stat cards (Total/Completed/Paid/Insights to submit + Awaiting/In progress/Failed), Action-needed list with countdowns, wallet snapshot; refetch 60s |
+| `/worker/tasks` | WorkerTasks | To-do/Completed/Failed toggles with count badges, Completed sub-filter All/Awaiting/Paid, Post/Comment filter, debounced search, server pagination, insight chips (20h/70h), payout chips |
+| `/worker/tasks/:id` | WorkerTaskDetail | status + next action, timeline, per-reminder insight checklist, payout block |
+| `/worker/wallet` | WorkerWallet | this/last IST week cards, awaiting (all weeks), lifetime paid, rates line, estimated note, expandable payment history |
+| `/worker/how-to` | WorkerHowTo | static guide from `dashboard/src/content/workerGuide.ts` (id/title/steps/tips/warnings) with sticky section list |
+
+`WorkerLayout`: top bar (worker name, "My ticket" Discord deep link, logout via `/auth/logout`) + mobile bottom-tab nav with exactly four tabs (Home, Tasks, Wallet, How to). Worker pages set `<meta name="robots" content="noindex">` while mounted. Never `dangerouslySetInnerHTML`; `manifest.json`/`sw.js` untouched.

@@ -24,6 +24,7 @@ import createPayoutRoutes from './routes/payouts';
 import payoutSettingsRoutes from './routes/settings';
 import commissionRoutes from './routes/commissions';
 import ownerRoutes from './routes/owner';
+import createWorkerRoutes from './routes/worker';
 
 /**
  * Create and configure the Express API server.
@@ -106,6 +107,10 @@ export function createApiServer(discordClient: Client): express.Application {
   app.use('/api/v1/commissions', commissionRoutes);
   // Owner routes (hidden panel)
   app.use('/api/v1/owner', ownerRoutes);
+  // Worker portal (ticket-OTP login + scoped read-only data).
+  // MUST come before uploadRoutes/reminderRoutes: the reminder router 401s
+  // any unmatched /api/v1/* path.
+  app.use('/api/v1/worker', createWorkerRoutes(discordClient));
   // Upload routes for serving insight images (MUST come before reminderRoutes)
   app.use('/api/v1', uploadRoutes);
 
