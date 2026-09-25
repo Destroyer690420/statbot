@@ -1,6 +1,6 @@
 # API.md — REST API Reference
 
-> All endpoints are mounted under `/api/v1` on Express (`src/api/server.ts`), port `env.PORT` (default 3000), behind nginx at production. Verified 2026-08-11.
+> All endpoints are mounted under `/api/v1` on Express (`src/api/server.ts`), port `env.PORT` (default 3000), behind nginx at production. Verified 2026-09-25.
 > Envelope: success `{ success: true, data }`, errors `{ success: false, message, errors?: string[] }`.
 
 ---
@@ -172,13 +172,13 @@ All computed in memory over `taskService.findAll` (`src/services/analytics.servi
 
 | Method | Path | Purpose | Body | Response | Errors |
 |---|---|---|---|---|---|
-| GET | `/outreach` | Full daily page state | — | `{ istDate: 'YYYY-MM-DD' (IST), message, tickets: [{ channelId, channelName, guildId, taskStatus: 'idle'\|'active'\|'awaiting-submission', workerName, selected, messageSentAt, available: boolean, post: number, comment: number }] }` (sorted by channel name; stale daily cycles lazily reset; `post`/`comment` are counts of tasks created today IST — `0` shows cross, `>0` shows number) | 500 |
+| GET | `/outreach` | Full daily page state | — | `{ istDate: 'YYYY-MM-DD' (IST), message, tickets: [{ channelId, channelName, guildId, taskStatus: 'idle'\|'active'\|'awaiting-submission', workerName, selected, messageSentAt, available: boolean, post: number, comment: number, portalAccessed: boolean, portalLastSeenAt: string \| null }] }` (sorted by channel name; stale daily cycles lazily reset; `post`/`comment` are counts of tasks created today IST — `0` shows cross, `>0` shows number; `portalAccessed` is per ticket and never resets) | 500 |
 | PUT | `/outreach/selection` | Persist checkbox selection | `{ selections: [{ channelId, selected }] }` (max 500) | `{ updated }` (transactional upserts; selection survives day changes) | 400; 500 |
 | POST | `/outreach/send` | Open a blast with N slots across selected tickets (skips capped workers) | `{ slots: 1..500 }` | `{ blast, sent[], skipped[] }` | 400; 500 |
 | GET | `/outreach/settings` | Current message | — | `{ message }` (defaults to `DEFAULT_OUTREACH_MESSAGE`) | 500 |
 | PUT | `/outreach/settings` | Update message | `{ message: 1..2000 chars }` | `{ message }` | 400; 500 |
 
-Availability semantics: a ticket becomes `available` only when its worker (non-bot, non-admin) sends any message in it **after** today's `Send Message` (first reply only). Post/Comment are **counts** of tasks created today (IST) in the channel — any status.
+Availability semantics: a ticket becomes `available` only when its worker (non-bot, non-admin) sends any message in it **after** today's `Send Message` (first reply only). Post/Comment are **counts** of tasks created today (IST) in the channel — any status. Portal access is an independent all-time per-ticket fact: `portalAccessed=true` after any successful ticket-OTP login and `portalLastSeenAt` is that login's timestamp.
 
 ---
 
@@ -249,9 +249,9 @@ Hardcoded model: revenue ₹250/post, ₹100/comment; worker cost ₹60/₹30; c
 
 ## 15b. Worker Portal — `src/api/routes/worker.ts` (factory `createWorkerRoutes(discordClient)`)
 
-Read-only self-service portal for workers. **Deployed 2026-09-24; worker UI visually redesigned and redeployed 2026-09-25 at `e5b413e`.** Identity is the Discord user ID (`Task.assignedUserId`); every data query is scoped `assignedUserId = token.sub`. All responses carry `Cache-Control: no-store` and are built from explicit whitelist DTOs (see `src/utils/worker-view.ts`). Kill switch `WORKER_PORTAL_ENABLED`: when off, `/auth/status` reports `{ enabled:false }` and every other `/worker/*` path returns 404. Mounted at `/api/v1/worker` BEFORE `uploadRoutes`/`reminderRoutes` (the reminder router 401s unmatched `/api/v1/*` paths). The 2026-09-25 pass changed dashboard presentation only; no endpoint, parameter, DTO, or auth contract changed.
+Read-only self-service portal for workers. **Deployed 2026-09-24; worker UI visually redesigned and redeployed 2026-09-25 at `e5b413e`.** Identity is the Discord user ID (`Task.assignedUserId`); every data query is scoped `assignedUserId = token.sub`. All responses carry `Cache-Control: no-store` and are built from explicit whitelist DTOs (see `src/utils/worker-view.ts`). Kill switch `WORKER_PORTAL_ENABLED`: when off, `/auth/status` reports `{ enabled:false }` and every other `/worker/*` path returns 404. Mounted at `/api/v1/worker` BEFORE `uploadRoutes`/`reminderRoutes` (the reminder router 401s unmatched `/api/v1/*` paths). The 2026-09-25 pass changed dashboard presentation only; no endpoint, parameter, DTO, or auth contract changed. A separate 2026-09-25 local change adds admin-only per-ticket access timestamps to the existing outreach response; it is not deployed and does not alter any worker endpoint.
 
-Auth: ticket-OTP login. The bot posts an 8-char code (alphabet `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, HMAC-SHA256 stored in Redis with 5-min TTL, fail-closed 503) into the worker's ticket; the worker enters it on the site and receives a worker JWT (separate `WORKER_JWT_SECRET`, claims `typ/sub/tid/name/jti`, `aud:'statbot-worker'`, `iss:'statbot'`, 7d, Redis denylist on logout).
+Auth: ticket-OTP login. The bot posts an 8-char code (alphabet `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, HMAC-SHA256 stored in Redis with 5-min TTL, fail-closed 503) into the worker's ticket; the worker enters it on the site and receives a worker JWT (separate `WORKER_JWT_SECRET`, claims `typ/sub/tid/name/jti`, `aud:'statbot-worker'`, `iss:'statbot'`, 7d, Redis denylist on logout). A successful verification also upserts `WorkerPortalAccess` for that ticket (`firstSeenAt` write-once, `lastSeenAt` refreshed); the tracking write is best-effort and never fails login.
 
 | Method | Path | Auth | Purpose | Errors |
 |---|---|---|---|---|

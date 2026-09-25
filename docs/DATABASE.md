@@ -1,6 +1,6 @@
 # DATABASE.md — Database Architecture
 
-> Verified against `prisma/schema.prisma`, `prisma/migrations/migration.sql`, `src/database/*`, and git history on 2026-08-11. Credentials are NEVER documented; only names.
+> Verified against `prisma/schema.prisma`, `prisma/migrations/migration.sql`, `src/database/*`, and git history on 2026-09-25. Credentials are NEVER documented; only names.
 
 ---
 
@@ -17,11 +17,11 @@
 
 ## 2. Migration System (IMPORTANT)
 
-- **Single hand-maintained, idempotent file**: `prisma/migrations/migration.sql` (373 lines). No `migration_lock.toml`, no timestamped folders.
+- **Single hand-maintained, idempotent file**: `prisma/migrations/migration.sql`. No `migration_lock.toml`, no timestamped folders.
 - **Applied manually** (psql/SQL client). **NOT** via `prisma migrate deploy` or `migrate dev` — the Dockerfile only runs `prisma generate` + `npm run build`; no pipeline applies DDL.
 - Style rules: appended sections use `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` / `ALTER TYPE ... ADD VALUE IF NOT EXISTS` so the file can be re-run safely.
 - **Future sessions**: edit BOTH `schema.prisma` AND append an idempotent block to `migration.sql`, matching column-by-column.
-- Historical evolution (from git): initial 272-line file (2026-07-26, `1f01cc2`) → CommissionBatch week-columns append (`072aca9`) → GoPartTime columns + Accepted Tasks append (`445e7cf`, 2026-08-03) → two-level-referral append (`9348d2d`) then removed (`ac441e2`, 2026-08-09 — current file has no trace of it) → **outreach tables append (`TicketOutreach`, `OutreachSettings` + `OUTREACH_MESSAGE_SENT` enum value, 2026-08-18)** → **invite approval-queue append (`InviteDetection` table + indexes + `INVITE_DETECTED`/`INVITE_APPROVED`/`INVITE_REJECTED` enum values, 2026-09-03, deployed `e60ed28` via excerpt script)**.
+- Historical evolution (from git): initial 272-line file (2026-07-26, `1f01cc2`) → CommissionBatch week-columns append (`072aca9`) → GoPartTime columns + Accepted Tasks append (`445e7cf`, 2026-08-03) → two-level-referral append (`9348d2d`) then removed (`ac441e2`, 2026-08-09 — current file has no trace of it) → **outreach tables append (`TicketOutreach`, `OutreachSettings` + `OUTREACH_MESSAGE_SENT` enum value, 2026-08-18)** → **invite approval-queue append (`InviteDetection` table + indexes + `INVITE_DETECTED`/`INVITE_APPROVED`/`INVITE_REJECTED` enum values, 2026-09-03, deployed `e60ed28` via excerpt script)** → automation/blast/format-check/session-vault appends → **Worker Portal access table append (`WorkerPortalAccess`, 2026-09-25, implemented but not deployed)**.
 - Data import history: Firestore → PostgreSQL via one-time scripts (see §10).
 
 ---
@@ -188,6 +188,13 @@ erDiagram
         timestamp availableAt "nullable; first worker reply of cycle"
         timestamp updatedAt
     }
+    WorkerPortalAccess {
+        string channelId PK "per-ticket portal access"
+        string workerId "worker who last logged in from ticket"
+        timestamp firstSeenAt "first successful portal login"
+        timestamp lastSeenAt "most recent successful portal login"
+        timestamp updatedAt
+    }
     OutreachSettings {
         string id PK "default 'outreach-message'"
         string message "configurable daily message"
@@ -336,7 +343,7 @@ Consequence: you **cannot delete a Task that has payout/commission items** (REST
 
 ---
 
-## 5. Indexes & Uniques (26 indexes + 1 unique)
+## 5. Indexes & Uniques (48 non-unique + 3 unique index statements)
 
 | Index | Columns |
 |---|---|
@@ -345,7 +352,8 @@ Consequence: you **cannot delete a Task that has payout/commission items** (REST
 | Reminder: `taskId`, `(sent, completed)`, `reminderMessageId` | |
 | AuditLog: `(taskId, createdAt)`, `createdAt` | |
 | PayoutBatch: `batchNumber`, `(weekStart, weekEnd)`, `weekEnd` | |
-| PayoutItem: `batchId`, `taskId` | |
+| PayoutItem: `batchId`, `taskId` | no `workerId` index (known performance gap) |
+| WorkerPortalAccess: `channelId` | primary key |
 | Referral: `inviterId`, `(inviteeId, inviterId)`, `createdAt` | |
 | CommissionBatch: `batchNumber` | |
 | CommissionItem: `batchId`, `(referralId, inviterId, commissionKind)`, `(inviterId, sourceTaskId, commissionKind)` | |
@@ -434,7 +442,7 @@ Stored on disk: `<cwd>/uploads/insights/<taskId>/<reminderId>.<ext>`; DB columns
 
 ## 13. Known Database Issues
 
-1. Generated client locally stale (see KNOWN_ISSUES.md) — `src/generated/prisma/enums.ts` lacks `ACCEPTED` and 5 AuditAction values present in the schema (regenerate).
+1. Generated Prisma client is gitignored; run `npx prisma generate` after any schema change or strict TypeScript will use a stale client locally (Docker regenerates during build).
 2. `findCompleted`/`findCompletedOrArchived` do date filtering/sorting in JS (performance risk at scale).
 3. `alreadyPaid` payout summary is global (all-time) — not week-scoped (matches code; intended?).
 4. Payout/completion time is derived from the most recent completed reminder's `completedAt` (fallback `updatedAt`) rather than being stored on the task.

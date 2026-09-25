@@ -2,6 +2,7 @@
 
 Verified 2026-08-18 — **deployed** (`4f1b84c` live on `161.118.164.85`; tables applied, route mounted, verified).
 Blast campaigns added 2026-09-09 — **deployed** (`d3153f3` live; `OutreachBlast`/`OutreachBlastMessage`/`OutreachReply` tables applied, verified).
+Worker Portal access column added 2026-09-25 — **implemented locally, NOT deployed** (`WorkerPortalAccess` table + admin Daily Outreach indicator; migration not yet applied to production).
 
 ## 1. What It Is
 
@@ -34,6 +35,18 @@ Daily cycle = IST day. At **00:00 IST** the Available/Post/Comment state lazily 
 | `availableAt` | First worker message of the cycle (cycle-scoped) |
 | `updatedAt` | — |
 
+### `WorkerPortalAccess` (one row per ticket channel)
+
+| Field | Meaning |
+|---|---|
+| `channelId` | Discord ticket channel ID, **primary key** — access is tracked per ticket, not per worker |
+| `workerId` | Worker who most recently completed ticket-OTP login from this ticket |
+| `firstSeenAt` | First successful Worker Portal login from this ticket; never changed by later logins |
+| `lastSeenAt` | Most recent successful Worker Portal login from this ticket |
+| `updatedAt` | — |
+
+A successful OTP verification upserts this row once. The write is best-effort: a tracking failure logs a warning but never fails login. There is no historical backfill; tickets used before 2026-09-25 remain untracked until the next successful login.
+
 ### `OutreachSettings` (singleton `id = 'outreach-message'`)
 
 | Field | Meaning |
@@ -41,7 +54,7 @@ Daily cycle = IST day. At **00:00 IST** the Available/Post/Comment state lazily 
 | `message` | Daily broadcast text (1–2000 chars; default `DEFAULT_OUTREACH_MESSAGE` in `src/config/constants.ts`: `'Hey, I have got a post and a comment for you. wanna do it? message me once you are free'`) |
 | `updatedAt` / `updatedBy` | audit trail of edits |
 
-Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXISTS` + `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_MESSAGE_SENT'` — appended to `prisma/migrations/migration.sql` (idempotent, applied manually per Decision 2).
+Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE INDEX IF NOT EXISTS` + `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_MESSAGE_SENT'`; Worker Portal access adds an idempotent `WorkerPortalAccess` table block (2026-09-25, not yet applied in production) — all appended to `prisma/migrations/migration.sql` (idempotent, applied manually per Decision 2).
 
 ## 4. Status Semantics (service + row builder)
 
@@ -55,12 +68,14 @@ Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXIST
 | `messageSentAt` | stored (null → Send Message enabled) |
 | `available` | `availableAt != null` AND set in the current cycle (i.e. after today's send) |
 | `post` / `comment` | **counts** of tasks of that type with `createdAt` inside today's IST window (any status — the manager decides what counts). `0` → cross, `>0` → count number |
+| `portalAccessed` | `true` when `WorkerPortalAccess` has a row for this ticket (ever completed a successful portal login from it); independent of the daily outreach cycle |
+| `portalLastSeenAt` | ISO timestamp of that ticket's most recent successful portal login; never resets at midnight |
 | `stale` | cycle needs reset (see §2) — GET re-applies the reset lazily |
 
 ## 5. Backend
 
 - **Service** `src/services/outreach.service.ts`: `getStatus(client)` (+ open-blast state), `saveSelection(selections)`, `sendBlast(client, slotsTotal, senderId)` (new blast per send; skips capped/worker-less tickets, records message IDs; audit `OUTREACH_MESSAGE_SENT`), `onWorkerMessage(channelId, authorId, client)` (daily Available + first-n blast replies, close + bulk delete on fill, cap re-check at reply), `countPostsAssignedToday` (2-post IST cap basis), `getMessage` / `updateMessage` (OutreachSettings).
-- **Repository** `src/database/repositories/outreach.repository.ts` (Prisma, upserts/transactions; blast/message/reply CRUD).
+- **Repositories** `src/database/repositories/outreach.repository.ts` (Prisma, upserts/transactions; blast/message/reply CRUD) and `worker-portal-access.repository.ts` (per-ticket `recordSuccessfulLogin` upsert + `findAll`).
 - **Routes** `src/api/routes/outreach.ts` (factory `createOutreachRoutes(discordClient)`; all `requireDashboardAdmin` — middleware extracted to `src/api/middleware/auth.ts`, shared with discord routes):
   - `GET /api/v1/outreach` → `{ istDate, message, tickets[], blast }`
   - `PUT /api/v1/outreach/selection` `{ selections: [{channelId, selected}] }` (max 500)
@@ -71,7 +86,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXIST
 ## 6. Dashboard (`dashboard/src/pages/DailyOutreach.tsx`)
 
 - Route `/outreach`; sidebar item **Daily Outreach** (`Users` icon) between Accepted and Archives; title branch in `Layout.tsx`.
-- Table (desktop) + cards (mobile, Tasks pattern); columns Ticket | Worker | Available | Post | Comment. **Rows = selected tickets only** (`tickets.filter(t => t.selected)` — the API returns all tickets with their `selected` flag; the modal needs the full list to add new ones).
+- Table (desktop) + cards (mobile, Tasks pattern); columns Ticket | Worker | **Portal** | Available | Post | Comment. **Rows = selected tickets only** (`tickets.filter(t => t.selected)` — the API returns all tickets with their `selected` flag; the modal needs the full list to add new ones). Portal is a green tick when `portalAccessed`, muted dash otherwise; tooltip shows the last successful login time. Mobile cards and the Select Tickets modal show the same Portal indicator.
 - Toolbar: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; lists all tickets with current state; draft until **Save Selection** → `PUT /outreach/selection`), `Send Message` (slots prompt modal → `POST /outreach/send {slots}`; inline ✅/❌ result + skipped note), Refresh.
 - Blast banner (when a blast is OPEN): `x/y replied`, auto-updates every 30s.
 - Burst-reply highlight: tickets that replied in the current burst render green (Tasks-section tint language) and sort to the top, desktop + mobile; greens reset on the next burst (`blastReplied` from `GET /outreach`).
@@ -87,7 +102,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXIST
 
 ## 7. Tests
 
-`src/__tests__/outreach.test.ts` (pure functions only — importing the service would pull env/DB): IST boundary math, `isStaleDailyCycle`, `buildOutreachRows` (selection, availability gating, post/comment derivation, no-tickets case), `formatOutreachMessage` (placeholder replaced, all occurrences, prepend fallback, null worker). 19 tests; suite total 185.
+`src/__tests__/outreach.test.ts` (pure functions only — importing the service would pull env/DB): IST boundary math, `isStaleDailyCycle`, `buildOutreachRows` (selection, availability gating, per-ticket portal access, post/comment derivation, no-tickets case), `formatOutreachMessage` (placeholder replaced, all occurrences, prepend fallback, null worker). `src/__tests__/worker-portal-access.test.ts` covers repository upsert/select behavior.
 `src/__tests__/outreach-blast.test.ts`: slot-winner math (`isSlotWinner`), close condition (`isBlastFull`), cap boundary (`isAtDailyCap`).
 
 ## 8. Limitations / Notes
@@ -96,6 +111,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` × 2 + `CREATE UNIQUE INDEX IF NOT EXIST
 - Blast shortfall stays open: if fewer than `slotsTotal` reply, late replies still count until the next Send (which supersedes) or day end.
 - A worker hitting the 2-post cap after replying stops consuming slots; capped repliers never count.
 - `selected` is remembered forever unless changed; the manager must actively uncheck.
+- Portal access is per ticket, updates only on successful ticket-OTP login, and has no historical backfill; the tick means "has logged in from this ticket", never "currently online".
 
 ## 9. Blast campaigns (2026-09-09)
 

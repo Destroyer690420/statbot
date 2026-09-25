@@ -32,14 +32,15 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 | `plain-task-message.test.ts` | `buildTaskMessagePlan` metadata/content chunking; `buildInstructionMessage` post/comment variants |
 | `html-to-discord.test.ts` | HTML→markdown mapping (bold, links, lists, blockquotes, code, headings, img ignored) |
 
-**No test coverage** for: services (task/payout/commission/reminder/goparttime/owner-earnings/analytics), repositories, API routes, bot commands/events, scheduler/worker, or the dashboard (no frontend tests exist).
+**No test coverage** for: most services (task/payout/commission/reminder/goparttime/owner-earnings/analytics), most repositories, bot commands/events, scheduler/worker, or the dashboard (no frontend tests exist). Worker Portal access repository behavior is covered by `worker-portal-access.test.ts`.
 
-### Worker portal suites (2026-09-24)
+### Worker portal suites (2026-09-25)
 | File | Covers |
 |---|---|
 | `worker-view.test.ts` (28) | payout states (ARCHIVED=paid incl. no-item anomaly, COMPLETED=awaiting, failed precedence), every derived status/tab, format-check mapping (infra states hidden), todo/completed sorting, completion-time rule, home counts, action-needed cap, wallet math + IST boundary bucketing, DTO whitelist vs `WORKER_FORBIDDEN_FIELDS`, money format |
 | `worker-auth.test.ts` (21) | admin middleware (valid passes; missing/wrong username, worker-shaped, worker-secret tokens → 401), workerAuth (valid passes; admin/expired/wrong-aud-iss-alg/typeless/denylisted → 401), OTP alphabet/length/grouping, case-insensitive verify, HMAC-only storage, single-use, TTL expiry, 5-attempt invalidation, single-active + cooldown, 5/hour cap, 10-fail lock, constant-time compare, fail-closed outside test env, Discord message shape + expiry cleanup, JWT claims (7d, aud/iss, no admin-secret fallback) |
-| `worker-isolation.test.ts` (25) | HTTP end-to-end over a mocked DB/Discord client: status, type-ahead (short-q empty, ≤5 results, exact `{channelId,name}` keys, case-insensitive, task-less excluded), request-code (mention-only message, no code/identity in response, single-active 429, generic 404s, 502 with no stored code), newest-task identity + multi-assignee warning, verify (wrong/code reuse, success deletes message, invalidation deletes message), logout denylist, per-endpoint isolation loop (no B markers, no forbidden keys), identical 404s, scoped search/pagination, worker-scoped `/me`+`/wallet`, wallet parity vs `payoutService.findEligibleTasks`, kill-switch 404s |
+| `worker-isolation.test.ts` (26) | HTTP end-to-end over a mocked DB/Discord client: status, type-ahead (short-q empty, ≤5 results, exact `{channelId,name}` keys, case-insensitive, task-less excluded), request-code (mention-only message, no code/identity in response, single-active 429, generic 404s, 502 with no stored code), newest-task identity + multi-assignee warning, verify (wrong/code reuse, success deletes message, invalidation deletes message, per-ticket access upsert, tracking-write failure tolerance), logout denylist, per-endpoint isolation loop (no B markers, no forbidden or admin-only access fields), identical 404s, scoped search/pagination, worker-scoped `/me`+`/wallet`, wallet parity vs `payoutService.findEligibleTasks`, kill-switch 404s |
+| `worker-portal-access.test.ts` (2) | repository upsert preserves firstSeenAt while refreshing lastSeenAt/workerId; admin read selects only channel/worker/timestamps |
 
 ## 3. Manual Testing Procedures
 
@@ -55,6 +56,7 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 3. Worker visual pass: check `/worker/login`, `/worker`, `/worker/tasks`, `/worker/tasks/:id`, `/worker/wallet`, and `/worker/how-to` at 360px, 768px, 1024px, and 1440px widths. Confirm mobile bottom navigation, desktop sidebar, Home KPI 2×2 mobile grid with no horizontal carousel, task filters, status pills, skeletons, How-to jump navigation, reduced-motion behavior, and no horizontal page overflow.
 4. Confirm worker API calls, query keys, route paths, and auth boundaries are unchanged with `git diff`/browser network inspection; the visual pass must not add a data endpoint.
 5. Production verification after dashboard deploy: root and all worker SPA routes return 200, new hashed assets return 200, `/api/v1/health` is healthy, `/api/v1/worker/auth/status` is enabled, and unauthenticated `/api/v1/worker/me` returns 401.
+6. Worker Portal access indicator (after the migration is applied): open `/outreach`; selected and unselected tickets show Portal state; a successful ticket-OTP login creates/refreshes that ticket's row and turns its tick green on the next refresh; failed logins do not change it; the tooltip shows the last successful login time; logout/expiry does not clear the tick.
 
 ## 4. Regression Checklist (important flows)
 

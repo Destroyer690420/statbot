@@ -75,10 +75,11 @@ Managers (`MANAGER_USER_IDS`) are used **only** by the bot, never the API.
 - Consider per-worker extension tokens; role claims in JWTs.
 - Fix stale `.env.example`.
 
-## 11. Worker Portal Model (deployed 2026-09-24; visual redesign deployed 2026-09-25)
+## 11. Worker Portal Model (deployed 2026-09-24; visual redesign deployed 2026-09-25; access telemetry implemented locally 2026-09-25, not deployed)
 
 - **Separate secret**: worker JWTs use `WORKER_JWT_SECRET` (portal disabled unless set and ≥32 chars); the admin middleware pins HS256 and requires `username === DASHBOARD_USERNAME`, and `/verify` matches — a worker token fails every admin route.
 - **Identity from `sub` only**: the sole client-supplied identifier is `channelId` on the unauthenticated login endpoints. All data queries filter `assignedUserId = sub`; a foreign task returns the same 404 as a missing one. No endpoint accepts a worker id.
 - **Whitelist DTOs** (`src/utils/worker-view.ts`): responses never spread DB rows. Forbidden everywhere (responses, errors, logs-to-client): other workers' IDs/names/tickets/tasks/earnings, GoPartTime USD `payment`, owner revenue/margins/commissions, batch totals (`totalWorkers/totalAmount`), notes, `contentHtml`, `taskImages`, screenshot URLs, delivery/assignment internals, reviewer identity, audit logs, `jobId`/`reminderMessageId`.
 - **Accepted ticket-OTP risks**: anyone who can read a ticket (worker + staff) can see a posted code, and anyone can trigger a code for a findable ticket — bounded by the single-active-code rule, 60s cooldown, 5 codes/ticket/hour, 5-attempt invalidation, 10-failure hourly lock, message deletion on success/invalidation/expiry, and per-IP rate limits. Codes are HMAC-SHA256'd (never stored raw); Redis failure fails closed (503); codes/tokens/secrets are never logged.
 - **Kill switch**: `WORKER_PORTAL_ENABLED` (default off). When off, `/worker/*` (except `/auth/status`) returns 404.
+- **Portal access telemetry (admin-only)**: successful ticket-OTP logins are recorded per ticket in `WorkerPortalAccess` (`firstSeenAt`/`lastSeenAt`); the fields are returned only through the admin-protected outreach endpoint and are never included in worker DTOs, tokens, OTPs, or worker logs.

@@ -139,3 +139,11 @@
 - **Reason**: Workers need self-service visibility into their own tasks/insights/earnings; read-only keeps the Discord reminder flow authoritative; a separate secret + claim checks + whitelist DTOs close every defect class of the reverted attempt.
 - **Consequences**: New `WORKER_JWT_SECRET`/`WORKER_PORTAL_ENABLED` envs (optional, portal disabled unless set); no schema/migration; bot must be able to send + delete its own messages in tickets.
 - **Status**: Implemented + deployed 2026-09-24 (git HEAD `5cc0f8c`; no migration; verified live); visual-only UI redesign deployed 2026-09-25 (git HEAD `e5b413e`; no migration; verified live).
+
+## Decision 18: Worker Portal access tracking is per ticket, successful logins only
+
+- **Context**: The owner needs a tick in the admin Daily Outreach page for tickets whose workers have used the Worker Portal. The portal issues a 7-day token after ticket-OTP login; no live session registry exists, and logout only denylists the current `jti`.
+- **Decision**: Track access in a new `WorkerPortalAccess` table keyed by Discord `channelId` (not worker ID), so each ticket has an independent status even when one worker owns several tickets. `firstSeenAt` is write-once; `lastSeenAt` and `workerId` update only after a successful ticket-OTP verification. The admin `/outreach` response adds `portalAccessed` and `portalLastSeenAt`; the dashboard shows a tick plus a last-login tooltip. No write occurs for normal browsing.
+- **Reason**: The login ticket is the real access boundary; this matches the owner's requested per-ticket tick, avoids per-request writes, and never treats a long-lived token as a live session.
+- **Consequences**: Additive idempotent migration; login tracking is best-effort and cannot block authentication; outreach read is fail-open if the table is not yet applied. No historical backfill exists because the previous release kept no access ledger. Admin-only fields never enter worker DTOs.
+- **Status**: Implemented locally 2026-09-25; NOT deployed (migration and app/dashboard rebuild pending).
