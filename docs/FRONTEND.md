@@ -146,4 +146,4 @@ Read-only self-service portal, visually redesigned on 2026-09-25 without changin
 - `cd dashboard && npm run build` passes (`tsc && vite build`).
 - Root `npm run typecheck`, root `npm run build`, and `npm test -- --runInBand` pass (33 suites, 414 tests).
 - Root `npm run lint` remains blocked by the pre-existing missing ESLint 9 flat config; no lint configuration was changed in this visual pass.
-- Live dashboard deployment verified 2026-09-25 at commit `41a73dd`: worker routes return SPA 200, new hashed assets return 200, `/api/v1/health` is healthy, worker auth status remains enabled, and unauthenticated `/api/v1/worker/me` remains 401.
+- Live dashboard deployment verified 2026-09-25 at commit `e5b413e`: worker routes return SPA 200, new hashed assets return 200, `/api/v1/health` is healthy, worker auth status remains enabled, and unauthenticated `/api/v1/worker/me` remains 401.
