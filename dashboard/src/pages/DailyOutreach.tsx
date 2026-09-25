@@ -12,6 +12,8 @@ interface OutreachTicket {
   available: boolean;
   post: number;
   comment: number;
+  portalAccessed: boolean;
+  portalLastSeenAt: string | null;
 }
 
 function StatusIcon({ ok }: { ok: boolean }) {
@@ -19,6 +21,24 @@ function StatusIcon({ ok }: { ok: boolean }) {
     <Check className="w-5 h-5 text-green-400" />
   ) : (
     <X className="w-5 h-5 text-dark-600" />
+  );
+}
+
+function PortalIcon({ accessed, lastSeenAt }: { accessed: boolean; lastSeenAt: string | null }) {
+  const label = accessed
+    ? lastSeenAt
+      ? `Portal login: ${new Date(lastSeenAt).toLocaleString()}`
+      : 'Portal accessed'
+    : 'No portal login recorded';
+  return (
+    <span
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${accessed ? 'bg-green-500/10 text-green-400' : 'bg-dark-800 text-dark-600'}`}
+      title={label}
+      role="img"
+      aria-label={label}
+    >
+      {accessed ? <Check className="w-4 h-4" aria-hidden="true" /> : <span aria-hidden="true">—</span>}
+    </span>
   );
 }
 
@@ -171,6 +191,10 @@ export function DailyOutreach() {
         </div>
       </div>
 
+      <p className="text-xs text-dark-500">
+        Portal ✓ means the worker has completed at least one Worker Panel login from that ticket.
+      </p>
+
       {sendNote && (
         <p className={`text-sm ${sendNote.ok ? 'text-green-400' : 'text-red-400'}`}>
           {sendNote.ok ? '✅ ' : '❌ '}{sendNote.text}
@@ -238,6 +262,7 @@ export function DailyOutreach() {
               <tr className="border-b border-dark-700/50 bg-dark-800/50">
                 <th className="px-6 py-4 font-semibold text-dark-200">Ticket</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Worker</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Portal</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Available</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Post</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Comment</th>
@@ -246,13 +271,13 @@ export function DailyOutreach() {
             <tbody className="divide-y divide-dark-700/50">
               {statusQuery.isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center">
+                  <td colSpan={6} className="px-6 py-10 text-center">
                     <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : visibleTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-dark-400">
+                  <td colSpan={6} className="px-6 py-10 text-center text-dark-400">
                     No tickets selected yet — open Select Tickets to add.
                   </td>
                 </tr>
@@ -277,6 +302,9 @@ export function DailyOutreach() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-dark-200">{t.workerName || '—'}</td>
+                    <td className="px-6 py-4">
+                      <PortalIcon accessed={t.portalAccessed} lastSeenAt={t.portalLastSeenAt} />
+                    </td>
                     <td className="px-6 py-4"><StatusIcon ok={t.available} /></td>
                     <td className="px-6 py-4"><CountCell count={t.post} /></td>
                     <td className="px-6 py-4"><CountCell count={t.comment} /></td>
@@ -306,10 +334,14 @@ export function DailyOutreach() {
                   : 'glass-card border border-dark-700/50 overflow-hidden'
               }
             >
-              <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+              <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-mono text-sm text-dark-100 truncate">#{t.channelName || t.channelId}</p>
                   <p className="text-xs text-dark-400 mt-0.5">{t.workerName || '—'}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <span className="text-[10px] font-semibold text-dark-500 uppercase tracking-wider">Portal</span>
+                  <PortalIcon accessed={t.portalAccessed} lastSeenAt={t.portalLastSeenAt} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-1 px-4 py-2 border-t border-dark-700/30">
@@ -373,7 +405,10 @@ export function DailyOutreach() {
                         <span className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider">busy</span>
                       )}
                     </span>
-                    <span className="text-xs text-dark-500 ml-3 shrink-0">{t.workerName || '—'}</span>
+                    <span className="ml-3 flex shrink-0 items-center gap-2">
+                      <span className="text-xs text-dark-500">{t.workerName || '—'}</span>
+                      <PortalIcon accessed={t.portalAccessed} lastSeenAt={t.portalLastSeenAt} />
+                    </span>
                   </label>
                 ))
               )}

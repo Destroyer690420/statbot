@@ -86,6 +86,7 @@ function buildState(failChannel: MockChannel): FixtureState {
     batches: [
       { id: 'batch-1', batchNumber: 5, weekStart: d('2026-08-22T18:30:00Z'), weekEnd: d('2026-08-29T18:29:59.999Z'), totalWorkers: 2, totalTasks: 2, totalPosts: 2, totalComments: 0, totalAmount: 9999 },
     ],
+    portalAccess: [],
   };
 }
 
@@ -103,6 +104,7 @@ describe('worker isolation (HTTP)', () => {
   let chanBob: MockChannel;
   let chanFail: MockChannel;
   let chanMulti: MockChannel;
+  let fixtureState: FixtureState;
 
   const api = async (path: string, init?: RequestInit, token?: string) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -140,7 +142,8 @@ describe('worker isolation (HTTP)', () => {
     channels = [chanAlice, chanBob, chanEmpty, chanFail, chanMulti, ...extras];
     const client = makeMockDiscordClient(channels);
 
-    mockDb = createMockDb(buildState(chanFail));
+    fixtureState = buildState(chanFail);
+    mockDb = createMockDb(fixtureState);
 
     const app = express();
     app.use(express.json());
@@ -252,11 +255,32 @@ describe('worker isolation (HTTP)', () => {
     expect(good.body.data.workerName).toBe('Alice Worker');
     expect(good.body.data.ticketName).toBe('ticket-0001');
     expect(JSON.stringify(good.body)).not.toContain(A);
+    expect(fixtureState.portalAccess).toEqual(
+      expect.arrayContaining([expect.objectContaining({ channelId: 'chan-alice', workerId: A })]),
+    );
     // Bot message deleted on successful login.
     expect(chanAlice.deletedMessages).toContain(chanAlice.messageIds[0]);
     // Single-use.
     const reuse = await api('/auth/verify-code', { method: 'POST', body: JSON.stringify({ channelId: 'chan-alice', code }) });
     expect(reuse.status).toBe(401);
+  });
+
+  test('portal-access tracking failure does not fail a successful login', async () => {
+    const channel = channels[5];
+    const originalUpsert = mockDb.workerPortalAccess.upsert;
+    mockDb.workerPortalAccess.upsert = async () => {
+      throw new Error('tracking unavailable');
+    };
+    try {
+      const requested = await api('/auth/request-code', { method: 'POST', body: JSON.stringify({ channelId: channel.id }) });
+      expect(requested.status).toBe(200);
+      const code = channel.sentMessages[0].content.replace(/.*\*\*([A-Z0-9-]+)\*\*.*/, '$1');
+      const verified = await api('/auth/verify-code', { method: 'POST', body: JSON.stringify({ channelId: channel.id, code }) });
+      expect(verified.status).toBe(200);
+      expect(verified.body.data.token).toBeTruthy();
+    } finally {
+      mockDb.workerPortalAccess.upsert = originalUpsert;
+    }
   });
 
   test('invalidation deletes the bot message too', async () => {
@@ -307,6 +331,9 @@ describe('worker isolation (HTTP)', () => {
         }
         const keys = collectKeys(body);
         for (const f of WORKER_FORBIDDEN_FIELDS) {
+          expect(keys).not.toContain(f);
+        }
+        for (const f of ['portalAccessed', 'portalLastSeenAt', 'firstSeenAt', 'lastSeenAt']) {
           expect(keys).not.toContain(f);
         }
         // Cache privacy.

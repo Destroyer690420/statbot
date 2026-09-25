@@ -672,3 +672,19 @@ ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'REDDIT_SESSION_UPDATED';
 -- reclaim). Schema-only, no data statements.
 ALTER TABLE "AutomationClaim" ADD COLUMN IF NOT EXISTS "leasedBy" TEXT;
 ALTER TABLE "AutomationClaim" ADD COLUMN IF NOT EXISTS "leasedAt" TIMESTAMP(3);
+
+-- ──────────────────────────────────────────────────────────────
+-- Migration: Worker Portal access by ticket
+-- ──────────────────────────────────────────────────────────────
+-- One row per Discord ticket channel. A successful ticket-OTP login creates
+-- the row and later logins update only lastSeenAt/workerId. The admin Daily
+-- Outreach page reads this small table to show which tickets have portal
+-- access. Schema-only, no data statements, no historical backfill.
+CREATE TABLE IF NOT EXISTS "WorkerPortalAccess" (
+  "channelId" TEXT NOT NULL,
+  "workerId" TEXT NOT NULL,
+  "firstSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "WorkerPortalAccess_pkey" PRIMARY KEY ("channelId")
+);

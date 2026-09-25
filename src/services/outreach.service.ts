@@ -1,5 +1,5 @@
 import { Client, TextChannel } from 'discord.js';
-import { outreachRepository, taskRepository } from '../database/repositories';
+import { outreachRepository, taskRepository, workerPortalAccessRepository } from '../database/repositories';
 import { auditLogService } from './audit.service';
 import { getIstDayBoundaries, isStaleDailyCycle } from '../utils/ist-time';
 import { buildOutreachRows, formatOutreachMessage, OutreachRowInput, OutreachRow, TicketTaskStatus } from '../utils/outreach-rows';
@@ -46,6 +46,7 @@ export interface BlastHooks {
 
 class OutreachService {
   private blastHooks: BlastHooks = {};
+  private portalAccessUnavailableLogged = false;
   /**
    * Serializes worker-message handling in Discord-arrival order. The chain
    * link happens synchronously here (no awaits before it), so near-simultaneous
@@ -94,11 +95,21 @@ class OutreachService {
       type: string;
     }[];
 
+    const portalRows = await workerPortalAccessRepository.findAll().catch((error) => {
+      if (!this.portalAccessUnavailableLogged) {
+        logger.warn('Worker portal access rows unavailable', { error });
+        this.portalAccessUnavailableLogged = true;
+      }
+      return [];
+    });
+    const portalByChannel = new Map(portalRows.map((entry) => [entry.channelId, entry]));
+
     const workerNames = await this.resolveWorkerNames(discordClient, channels);
 
     const inputs: OutreachRowInput[] = [];
     for (const channel of channels) {
       const row = rowsByChannel.get(channel.id);
+      const portal = portalByChannel.get(channel.id);
 
       const awaiting = await taskRepository.findAwaitingSubmissionInChannel(channel.id);
       const any = awaiting || (await taskRepository.findAnyGoparttimeInChannel(channel.id));
@@ -112,6 +123,8 @@ class OutreachService {
         selected: row?.selected ?? false,
         messageSentAt: row?.messageSentAt ? row.messageSentAt.toISOString() : null,
         availableAt: row?.availableAt ? row.availableAt.toISOString() : null,
+        portalAccessed: portal !== undefined,
+        portalLastSeenAt: portal ? portal.lastSeenAt.toISOString() : null,
         tasksToday,
       });
     }

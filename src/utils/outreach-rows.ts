@@ -9,6 +9,8 @@ export interface OutreachRowInput {
   selected: boolean;
   messageSentAt: string | null;
   availableAt: string | null;
+  portalAccessed: boolean;
+  portalLastSeenAt: string | null;
   tasksToday: { channelId: string; type: string }[];
 }
 
@@ -23,6 +25,8 @@ export interface OutreachRow {
   available: boolean;
   post: number;
   comment: number;
+  portalAccessed: boolean;
+  portalLastSeenAt: string | null;
 }
 
 /**
@@ -45,6 +49,8 @@ export function buildOutreachRows(inputs: OutreachRowInput[]): OutreachRow[] {
       available: t.availableAt !== null && t.messageSentAt !== null,
       post: today.filter((x) => x.type === 'POST').length,
       comment: today.filter((x) => x.type === 'COMMENT').length,
+      portalAccessed: t.portalAccessed,
+      portalLastSeenAt: t.portalLastSeenAt,
     };
   });
 

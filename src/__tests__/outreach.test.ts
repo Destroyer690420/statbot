@@ -53,6 +53,8 @@ describe('buildOutreachRows', () => {
     selected: true,
     messageSentAt: '2026-08-17T19:00:00.000Z',
     availableAt: null,
+    portalAccessed: false,
+    portalLastSeenAt: null,
     tasksToday: [],
   };
 
@@ -129,6 +131,26 @@ describe('buildOutreachRows', () => {
     expect(rows[0].workerName).toBe('Worker A');
     expect(rows[1].selected).toBe(false);
     expect(rows[1].workerName).toBeNull();
+  });
+
+  it('tracks portal access per ticket independently of the daily cycle', () => {
+    const rows = buildOutreachRows([
+      base,
+      {
+        ...base,
+        channelId: 'c2',
+        channelName: 'ticket-0002',
+        portalAccessed: true,
+        portalLastSeenAt: '2026-08-01T10:30:00.000Z',
+      },
+    ]);
+    const first = rows.find((row) => row.channelId === 'c1')!;
+    const second = rows.find((row) => row.channelId === 'c2')!;
+    expect(first.portalAccessed).toBe(false);
+    expect(first.portalLastSeenAt).toBeNull();
+    expect(second.portalAccessed).toBe(true);
+    expect(second.portalLastSeenAt).toBe('2026-08-01T10:30:00.000Z');
+    expect(second.available).toBe(false);
   });
 
   it('serializes messageSentAt when present', () => {

@@ -363,6 +363,14 @@ model TicketOnboarding {
   updatedAt     DateTime  @updatedAt
 }
 
+model WorkerPortalAccess {
+  channelId   String   @id
+  workerId    String
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model BlockedSubreddit {
   subreddit String   @id
   reason    String?

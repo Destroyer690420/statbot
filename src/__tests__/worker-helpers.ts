@@ -62,11 +62,20 @@ export interface FixtureBatch {
   totalAmount: number;
 }
 
+export interface FixturePortalAccess {
+  channelId: string;
+  workerId: string;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  updatedAt: Date;
+}
+
 export interface FixtureState {
   tasks: FixtureTask[];
   reminders: FixtureReminder[];
   items: FixtureItem[];
   batches: FixtureBatch[];
+  portalAccess: FixturePortalAccess[];
   postRate: number;
   commentRate: number;
 }
@@ -229,6 +238,20 @@ export function createMockDb(state: FixtureState): Record<string, any> {
     },
     payoutSettings: {
       findUnique: async () => ({ commentRate: state.commentRate, postRate: state.postRate }),
+    },
+    workerPortalAccess: {
+      findMany: async (args: any = {}) =>
+        state.portalAccess.filter((row) => matchesWhere(row as any, args.where)).map((row) => applySelect(row as any, args.select)),
+      upsert: async (args: any) => {
+        const existing = state.portalAccess.find((row) => row.channelId === args.where.channelId);
+        if (existing) {
+          Object.assign(existing, args.update);
+          return existing;
+        }
+        const created = { ...args.create };
+        state.portalAccess.push(created);
+        return created;
+      },
     },
   };
 }

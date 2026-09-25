@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 import { getDb } from '../../database/db';
+import { workerPortalAccessRepository } from '../../database/repositories';
 import { validateQuery } from '../middleware/validate';
 import { workerAuthMiddleware, WorkerAuthRequest } from '../middleware/workerAuth';
 import {
@@ -361,6 +362,12 @@ export default function createWorkerRoutes(discordClient: any): Router {
       const workerId = identity?.workerId ?? ticket.workerId;
       const workerName = identity?.workerName ?? ticket.workerName;
       const token = signWorkerToken({ workerId, channelId: ticket.channel.id, name: workerName });
+
+      try {
+        await workerPortalAccessRepository.recordSuccessfulLogin(ticket.channel.id, workerId);
+      } catch (error) {
+        logger.warn('Worker portal access tracking failed', { channelId: ticket.channel.id, error });
+      }
 
       logger.info('Worker OTP verified', { channelId: ticket.channel.id });
       res.json({
