@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-25 — worker panel visual redesign live at git HEAD `e5b413e`** (dashboard-only rebuild; backup `rtm-backup-20260925-153710-worker-ui-final.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, all worker SPA routes and new hashed assets 200, auth status enabled, unauthenticated worker `/me` 401). Previous: 2026-09-24 worker portal live at `5cc0f8c`; 2026-09-22 worker portal reverted (reverts `4339cea`+`5d23ad5` live).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-25 — worker panel visual redesign + Tasks responsive fix live at git HEAD `36afcb4`** (dashboard-only rebuild; backup `rtm-backup-20260925-160239-worker-tasks-responsive.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, all worker SPA routes and new hashed assets 200, auth status enabled, unauthenticated worker `/me` 401). Previous: 2026-09-24 worker portal live at `5cc0f8c`; 2026-09-22 worker portal reverted (reverts `4339cea`+`5d23ad5` live).
 
 ---
 

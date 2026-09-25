@@ -134,7 +134,7 @@ Read-only self-service portal, visually redesigned on 2026-09-25 without changin
 |---|---|---|
 | `/worker/login` | WorkerLogin | public; ticket finder (3+ chars, ≤5 matches, debounced, last ticket in `rtm_worker_last_ticket`) → 8-character code entry (autofocus, auto-uppercase, `one-time-code`, expiry countdown, cooldown-gated Resend, Change ticket); inline results and selected-ticket chip; skips ahead when a valid worker token exists; shows "Worker portal is not available" when disabled |
 | `/worker` | WorkerHome | greeting, four primary KPI cards, three secondary totals, urgent action cards with countdowns, wallet teaser; refetch 60s. Activity-chart follow-up is explicitly not built because it needs a new endpoint |
-| `/worker/tasks` | WorkerTasks | To-do/Completed/Failed tabs with counts, Completed sub-filter, mobile filter sheet/desktop inline filters, debounced server search, page-based pagination, insight and payout chips, responsive task-card grid |
+| `/worker/tasks` | WorkerTasks | To-do/Completed/Failed tabs with counts, Completed sub-filter, mobile filter sheet/desktop inline filters with fixed-width type select, debounced server search, page-based pagination, insight and payout chips, responsive task-card grid with `min-w-0`/overflow containment for narrow phones |
 | `/worker/tasks/:id` | WorkerTaskDetail | status + next-action callout, copyable Reddit link, reminder checklist, payout block, done/future timeline stepper; no inferred current-step state |
 | `/worker/wallet` | WorkerWallet | gradient awaiting-payment hero, This/Last week cards, lifetime paid, rates, billing notice, expandable worker-scoped payment history |
 | `/worker/how-to` | WorkerHowTo | unchanged guide content with numbered sequence sections, checklist treatment for non-sequential sections, mobile jump chips, desktop table of contents with IntersectionObserver active state |
@@ -146,4 +146,4 @@ Read-only self-service portal, visually redesigned on 2026-09-25 without changin
 - `cd dashboard && npm run build` passes (`tsc && vite build`).
 - Root `npm run typecheck`, root `npm run build`, and `npm test -- --runInBand` pass (33 suites, 414 tests).
 - Root `npm run lint` remains blocked by the pre-existing missing ESLint 9 flat config; no lint configuration was changed in this visual pass.
-- Live dashboard deployment verified 2026-09-25 at commit `e5b413e`: worker routes return SPA 200, new hashed assets return 200, `/api/v1/health` is healthy, worker auth status remains enabled, and unauthenticated `/api/v1/worker/me` remains 401.
+- Live dashboard deployment verified 2026-09-25 at commit `36afcb4`: worker routes return SPA 200, new hashed assets return 200, `/api/v1/health` is healthy, worker auth status remains enabled, and unauthenticated `/api/v1/worker/me` remains 401. Tasks fixes specifically prevent desktop search/filter flex collapse and narrow-mobile horizontal overflow.
