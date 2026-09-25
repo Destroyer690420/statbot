@@ -9,7 +9,7 @@ type Tab = 'todo' | 'completed' | 'failed';
 
 function SearchControl({ value, onChange, id }: { value: string; onChange: (value: string) => void; id: string }) {
   return (
-    <div className="relative min-w-0 flex-1">
+    <div className="relative min-w-0 flex-1 basis-0">
       <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-worker-text-faint" aria-hidden="true" />
       <input
         id={id}
@@ -23,13 +23,13 @@ function SearchControl({ value, onChange, id }: { value: string; onChange: (valu
   );
 }
 
-function TypeControl({ value, onChange, id }: { value: string; onChange: (value: string) => void; id: string }) {
+function TypeControl({ value, onChange, id, mobile = false }: { value: string; onChange: (value: string) => void; id: string; mobile?: boolean }) {
   return (
     <select
       id={id}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="worker-input min-w-[132px] appearance-none px-3"
+      className={`worker-input appearance-none px-3 ${mobile ? 'w-full' : '!w-[150px] flex-none'}`}
       aria-label="Filter by type"
     >
       <option value="">All types</option>
@@ -97,7 +97,7 @@ export default function WorkerTasks() {
       </div>
 
       <div className="sticky top-16 z-20 -mx-1 bg-worker-bg/95 px-1 py-2 backdrop-blur sm:-mx-2 sm:px-2" role="tablist" aria-label="Task status">
-        <div className="relative grid w-full min-w-[312px] grid-cols-3 gap-1 rounded-xl border border-worker-border bg-worker-surface p-1 sm:min-w-0">
+        <div className="relative grid w-full min-w-0 grid-cols-3 gap-1 rounded-xl border border-worker-border bg-worker-surface p-1">
           <span
             aria-hidden="true"
             className={`absolute bottom-1 left-1 top-1 w-[calc((100%_-_0.5rem)/3)] rounded-lg bg-worker-accent transition-transform duration-150 motion-reduce:transition-none ${
@@ -128,7 +128,7 @@ export default function WorkerTasks() {
       </div>
 
       {tab === 'completed' ? (
-        <div className="flex w-full gap-1 rounded-xl border border-worker-border bg-worker-surface p-1 sm:w-auto" role="group" aria-label="Payment filter">
+        <div className="grid w-full min-w-0 grid-cols-3 gap-1 rounded-xl border border-worker-border bg-worker-surface p-1 sm:flex sm:w-auto" role="group" aria-label="Payment filter">
           {[
             { key: 'all', label: 'All' },
             { key: 'awaiting', label: 'Awaiting payment' },
@@ -142,9 +142,9 @@ export default function WorkerTasks() {
                 setSub(item.key);
                 setPage(1);
               }}
-              className={`worker-segment ${sub === item.key ? 'worker-segment-active' : ''}`}
+              className={`worker-segment flex min-w-0 items-center justify-center px-2 sm:px-3 ${sub === item.key ? 'worker-segment-active' : ''}`}
             >
-              {item.label}
+              <span className="truncate">{item.label}</span>
             </button>
           ))}
         </div>
@@ -190,7 +190,7 @@ export default function WorkerTasks() {
             </div>
             <div className="space-y-3">
               <SearchControl id="worker-task-search-mobile" value={search} onChange={setSearch} />
-              <TypeControl id="worker-task-type-mobile" value={type} onChange={handleTypeChange} />
+              <TypeControl id="worker-task-type-mobile" value={type} onChange={handleTypeChange} mobile />
             </div>
             <button type="button" onClick={() => setFiltersOpen(false)} className="worker-primary-button mt-5 w-full">
               Show tasks
@@ -217,9 +217,9 @@ export default function WorkerTasks() {
           icon={<Filter className="h-5 w-5" aria-hidden="true" />}
         />
       ) : (
-        <ul id="worker-task-list" role="tabpanel" className="grid gap-3 md:grid-cols-2 min-[1440px]:grid-cols-3">
+        <ul id="worker-task-list" role="tabpanel" className="grid min-w-0 gap-3 md:grid-cols-2 min-[1440px]:grid-cols-3">
           {tasks.map((task: any) => (
-            <li key={task.id}>
+            <li key={task.id} className="min-w-0">
               <WorkerTaskCard task={task} nowMs={nowMs} />
             </li>
           ))}

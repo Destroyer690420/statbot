@@ -123,7 +123,7 @@ export function WorkerTaskCard({
   const typeLabel = task.type || 'Task';
 
   return (
-    <WorkerCard className="worker-card-interactive h-full p-4 sm:p-5">
+    <WorkerCard className="worker-card-interactive min-w-0 overflow-hidden h-full p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-display text-base font-semibold tracking-tight text-worker-text sm:text-[17px]">{task.displayId}</p>
@@ -136,7 +136,7 @@ export function WorkerTaskCard({
         ) : null}
       </div>
 
-      {task.title ? <p className="mt-3 line-clamp-2 text-sm leading-6 text-worker-text-muted">{task.title}</p> : null}
+      {task.title ? <p className="mt-3 line-clamp-2 break-words text-sm leading-6 text-worker-text-muted">{task.title}</p> : null}
 
       {variant !== 'action' ? (
         <div className="mt-4 grid grid-cols-3 gap-3 border-y border-worker-border py-3">
@@ -152,7 +152,7 @@ export function WorkerTaskCard({
         <div className={`mt-4 flex items-start gap-2.5 rounded-lg border-l-2 bg-worker-warning/10 px-3 py-2.5 ${overdue ? 'border-worker-danger' : 'border-worker-warning'}`}>
           <BellRing className={`mt-0.5 h-4 w-4 shrink-0 ${overdue ? 'text-worker-danger' : 'text-worker-warning'}`} aria-hidden="true" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium leading-5 text-worker-text">{action}</p>
+            <p className="break-words text-xs font-medium leading-5 text-worker-text">{action}</p>
             {dueAt ? <p className={`mt-1 text-xs font-semibold ${overdue ? 'text-worker-danger' : 'text-worker-warning'}`}>{countdownText(nowMs, dueAt)}</p> : null}
           </div>
         </div>
