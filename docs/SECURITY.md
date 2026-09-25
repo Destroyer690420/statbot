@@ -75,7 +75,7 @@ Managers (`MANAGER_USER_IDS`) are used **only** by the bot, never the API.
 - Consider per-worker extension tokens; role claims in JWTs.
 - Fix stale `.env.example`.
 
-## 11. Worker Portal Model (deployed 2026-09-24; visual redesign deployed 2026-09-25; access telemetry implemented locally 2026-09-25, not deployed)
+## 11. Worker Portal Model (deployed 2026-09-24; visual redesign deployed 2026-09-25; access telemetry deployed 2026-09-25 at `675c618`)
 
 - **Separate secret**: worker JWTs use `WORKER_JWT_SECRET` (portal disabled unless set and ≥32 chars); the admin middleware pins HS256 and requires `username === DASHBOARD_USERNAME`, and `/verify` matches — a worker token fails every admin route.
 - **Identity from `sub` only**: the sole client-supplied identifier is `channelId` on the unauthenticated login endpoints. All data queries filter `assignedUserId = sub`; a foreign task returns the same 404 as a missing one. No endpoint accepts a worker id.

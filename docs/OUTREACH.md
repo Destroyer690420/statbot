@@ -2,7 +2,7 @@
 
 Verified 2026-08-18 — **deployed** (`4f1b84c` live on `161.118.164.85`; tables applied, route mounted, verified).
 Blast campaigns added 2026-09-09 — **deployed** (`d3153f3` live; `OutreachBlast`/`OutreachBlastMessage`/`OutreachReply` tables applied, verified).
-Worker Portal access column added 2026-09-25 — **implemented locally, NOT deployed** (`WorkerPortalAccess` table + admin Daily Outreach indicator; migration not yet applied to production).
+Worker Portal access column added 2026-09-25 — **deployed** at `675c618` (code `0122775`): `WorkerPortalAccess` table applied to production (empty, no backfill) + admin Daily Outreach indicator live.
 
 ## 1. What It Is
 
@@ -54,7 +54,7 @@ A successful OTP verification upserts this row once. The write is best-effort: a
 | `message` | Daily broadcast text (1–2000 chars; default `DEFAULT_OUTREACH_MESSAGE` in `src/config/constants.ts`: `'Hey, I have got a post and a comment for you. wanna do it? message me once you are free'`) |
 | `updatedAt` / `updatedBy` | audit trail of edits |
 
-Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE INDEX IF NOT EXISTS` + `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_MESSAGE_SENT'`; Worker Portal access adds an idempotent `WorkerPortalAccess` table block (2026-09-25, not yet applied in production) — all appended to `prisma/migrations/migration.sql` (idempotent, applied manually per Decision 2).
+Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE INDEX IF NOT EXISTS` + `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_MESSAGE_SENT'`; Worker Portal access adds an idempotent `WorkerPortalAccess` table block (2026-09-25, applied in production at `675c618`) — all appended to `prisma/migrations/migration.sql` (idempotent, applied manually per Decision 2).
 
 ## 4. Status Semantics (service + row builder)
 
