@@ -97,7 +97,13 @@ export default function WorkerTasks() {
       </div>
 
       <div className="sticky top-16 z-20 -mx-1 bg-worker-bg/95 px-1 py-2 backdrop-blur sm:-mx-2 sm:px-2" role="tablist" aria-label="Task status">
-        <div className="flex min-w-max gap-1 rounded-xl border border-worker-border bg-worker-surface p-1 sm:min-w-0">
+        <div className="relative grid w-full min-w-[312px] grid-cols-3 gap-1 rounded-xl border border-worker-border bg-worker-surface p-1 sm:min-w-0">
+          <span
+            aria-hidden="true"
+            className={`absolute bottom-1 left-1 top-1 w-[calc((100%_-_0.5rem)/3)] rounded-lg bg-worker-accent transition-transform duration-150 motion-reduce:transition-none ${
+              tab === 'todo' ? 'translate-x-0' : tab === 'completed' ? 'translate-x-full' : 'translate-x-[200%]'
+            }`}
+          />
           {tabs.map((item) => {
             const active = tab === item.key;
             return (
@@ -111,7 +117,7 @@ export default function WorkerTasks() {
                   setTab(item.key);
                   setPage(1);
                 }}
-                className={`worker-segment flex min-w-[104px] flex-1 items-center justify-center gap-2 sm:min-w-0 ${active ? 'worker-segment-active' : ''}`}
+                className={`worker-segment relative z-10 flex min-w-0 items-center justify-center gap-2 ${active ? 'text-white' : ''}`}
               >
                 <span>{item.label}</span>
                 <span className={`text-xs tabular-nums ${active ? 'text-white/75' : 'text-worker-text-faint'}`}>{counts[item.key] ?? 0}</span>
