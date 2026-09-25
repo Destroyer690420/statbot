@@ -1,61 +1,41 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { Search, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, Search, SlidersHorizontal, X } from 'lucide-react';
 import { getWorkerTasks, workerErrorMessage } from '../../api/workerApi';
-import { formatMoney, formatIST, countdownText, tonePill } from '../../utils/workerFormat';
+import { WorkerEmptyState, WorkerErrorState, WorkerSkeleton } from '../../components/worker/WorkerUI';
+import { WorkerTaskCard } from '../../components/worker/WorkerTaskCard';
 
 type Tab = 'todo' | 'completed' | 'failed';
 
-function InsightChips({ task, nowMs }: { task: any; nowMs: number }) {
-  if (task.tab === 'failed') return null;
-  const chips: { label: string; cls: string }[] = [];
-  const rem = task.reminders || [];
-  const isPost = String(task.type).toUpperCase() === 'POST';
-  const r20 = rem.find((r: any) => String(r.type).includes('20H'));
-  const r70 = rem.find((r: any) => String(r.type).includes('70H'));
-  const chipFor = (r: any, label: string) => {
-    if (!r) return;
-    if (r.completed) {
-      chips.push({ label: `${label} \u2713`, cls: 'bg-green-500/10 text-green-400 border-green-500/20' });
-    } else if (r.sent && new Date(r.dueAt).getTime() < nowMs) {
-      chips.push({ label: `${label} \u26A0 overdue`, cls: 'bg-red-500/10 text-red-400 border-red-500/20' });
-    } else if (r.sent) {
-      chips.push({ label: `${label} \u23F3 ${countdownText(nowMs, r.dueAt)}`, cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' });
-    } else {
-      chips.push({ label: `${label} \u23F3 due ${formatIST(r.dueAt)}`, cls: 'bg-dark-500/10 text-dark-300 border-dark-600/40' });
-    }
-  };
-  chipFor(r20, '20h');
-  if (isPost) chipFor(r70, '70h');
-  if (chips.length === 0) return null;
+function SearchControl({ value, onChange, id }: { value: string; onChange: (value: string) => void; id: string }) {
   return (
-    <div className="flex flex-wrap gap-1.5 mt-2">
-      {chips.map((c, i) => (
-        <span key={i} className={`px-2 py-0.5 rounded-full text-[11px] border ${c.cls}`}>
-          {c.label}
-        </span>
-      ))}
+    <div className="relative min-w-0 flex-1">
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-worker-text-faint" aria-hidden="true" />
+      <input
+        id={id}
+        type="text"
+        placeholder="Search tasks"
+        className="worker-input pl-10"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </div>
   );
 }
 
-function PayoutChip({ task }: { task: any }) {
-  if (task.tab !== 'completed') return null;
-  const p = task.payout;
-  if (!p || p.state === 'none') return null;
-  if (p.state === 'paid') {
-    return (
-      <span className="px-2 py-0.5 rounded-full text-[11px] border bg-green-500/10 text-green-400 border-green-500/20">
-        Paid {formatMoney(p.amount)}
-        {p.paidAt ? ` · ${formatIST(p.paidAt)}` : ''}
-      </span>
-    );
-  }
+function TypeControl({ value, onChange, id }: { value: string; onChange: (value: string) => void; id: string }) {
   return (
-    <span className="px-2 py-0.5 rounded-full text-[11px] border bg-blue-500/10 text-blue-400 border-blue-500/20">
-      Awaiting ~{formatMoney(p.amount)} est.
-    </span>
+    <select
+      id={id}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="worker-input min-w-[132px] appearance-none px-3"
+      aria-label="Filter by type"
+    >
+      <option value="">All types</option>
+      <option value="POST">Post</option>
+      <option value="COMMENT">Comment</option>
+    </select>
   );
 }
 
@@ -67,18 +47,19 @@ export default function WorkerTasks() {
   const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(1);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       setDebounced(search);
       setPage(1);
     }, 400);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [search]);
 
   useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 30000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(timer);
   }, []);
 
   const params: Record<string, string | number> = { tab, page, limit: 20 };
@@ -96,178 +77,164 @@ export default function WorkerTasks() {
   const counts = data?.counts || { todo: 0, completed: 0, failed: 0 };
   const total = data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / 20));
-
+  const activeFilterCount = (type ? 1 : 0) + (search.trim() ? 1 : 0);
   const tabs: { key: Tab; label: string }[] = [
     { key: 'todo', label: 'To-do' },
     { key: 'completed', label: 'Completed' },
     { key: 'failed', label: 'Failed' },
   ];
 
-  return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-bold text-white">Tasks</h1>
+  const handleTypeChange = (value: string) => {
+    setType(value);
+    setPage(1);
+  };
 
-      <div className="segmented-control" role="tablist">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            role="tab"
-            onClick={() => {
-              setTab(t.key);
-              setPage(1);
-            }}
-            className={`segmented-control-item min-h-[44px] ${tab === t.key ? 'active' : ''}`}
-          >
-            {t.label} ({counts[t.key] ?? 0})
-          </button>
-        ))}
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div>
+        <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl lg:hidden">Tasks</h1>
+        <p className="mt-1 hidden text-sm text-worker-text-muted lg:block">Keep track of what needs your attention and what has been paid.</p>
       </div>
 
-      {tab === 'completed' && (
-        <div className="segmented-control" role="tablist" aria-label="Payment filter">
+      <div className="sticky top-16 z-20 -mx-1 bg-worker-bg/95 px-1 py-2 backdrop-blur sm:-mx-2 sm:px-2" role="tablist" aria-label="Task status">
+        <div className="flex min-w-max gap-1 rounded-xl border border-worker-border bg-worker-surface p-1 sm:min-w-0">
+          {tabs.map((item) => {
+            const active = tab === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-controls="worker-task-list"
+                onClick={() => {
+                  setTab(item.key);
+                  setPage(1);
+                }}
+                className={`worker-segment flex min-w-[104px] flex-1 items-center justify-center gap-2 sm:min-w-0 ${active ? 'worker-segment-active' : ''}`}
+              >
+                <span>{item.label}</span>
+                <span className={`text-xs tabular-nums ${active ? 'text-white/75' : 'text-worker-text-faint'}`}>{counts[item.key] ?? 0}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {tab === 'completed' ? (
+        <div className="flex w-full gap-1 rounded-xl border border-worker-border bg-worker-surface p-1 sm:w-auto" role="group" aria-label="Payment filter">
           {[
             { key: 'all', label: 'All' },
             { key: 'awaiting', label: 'Awaiting payment' },
             { key: 'paid', label: 'Paid' },
-          ].map((s) => (
+          ].map((item) => (
             <button
-              key={s.key}
+              key={item.key}
+              type="button"
+              aria-pressed={sub === item.key}
               onClick={() => {
-                setSub(s.key);
+                setSub(item.key);
                 setPage(1);
               }}
-              className={`segmented-control-item min-h-[44px] ${sub === s.key ? 'active' : ''}`}
+              className={`worker-segment ${sub === item.key ? 'worker-segment-active' : ''}`}
             >
-              {s.label}
+              {item.label}
             </button>
           ))}
         </div>
-      )}
+      ) : null}
 
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-dark-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search tasks…"
-            className="w-full h-11 pl-10 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-xl text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <select
-          value={type}
-          onChange={(e) => {
-            setType(e.target.value);
-            setPage(1);
-          }}
-          className="h-11 px-3 bg-dark-800/80 border border-dark-700/80 rounded-xl text-sm text-white"
-          aria-label="Filter by type"
-        >
-          <option value="">All types</option>
-          <option value="POST">Post</option>
-          <option value="COMMENT">Comment</option>
-        </select>
+      <div className="hidden items-center gap-2 lg:flex">
+        <SearchControl id="worker-task-search-desktop" value={search} onChange={setSearch} />
+        <TypeControl id="worker-task-type-desktop" value={type} onChange={handleTypeChange} />
       </div>
 
-      {tab === 'failed' && (
-        <p className="text-xs text-dark-400 glass-card p-3">
-          These were deleted from Reddit within 10 minutes, so they are never paid and no insights are needed.
+      <div className="flex items-center justify-between gap-3 lg:hidden">
+        <button type="button" onClick={() => setFiltersOpen(true)} className="worker-secondary-button flex-1 justify-center">
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          Filters
+          {activeFilterCount > 0 ? <span className="rounded-full bg-worker-accent px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums">{activeFilterCount}</span> : null}
+        </button>
+        {search || type ? (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setType('');
+              setPage(1);
+            }}
+            className="worker-ghost-button px-2"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+
+      {filtersOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-worker-bg/80 p-0 backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true" aria-label="Task filters" onClick={() => setFiltersOpen(false)}>
+          <div className="w-full rounded-t-xl border-t border-worker-border bg-worker-surface p-5 pb-8" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-display text-base font-semibold text-worker-text">Filter tasks</p>
+                <p className="mt-1 text-xs text-worker-text-muted">Search and narrow the current list.</p>
+              </div>
+              <button type="button" onClick={() => setFiltersOpen(false)} className="worker-icon-button" aria-label="Close filters">
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <SearchControl id="worker-task-search-mobile" value={search} onChange={setSearch} />
+              <TypeControl id="worker-task-type-mobile" value={type} onChange={handleTypeChange} />
+            </div>
+            <button type="button" onClick={() => setFiltersOpen(false)} className="worker-primary-button mt-5 w-full">
+              Show tasks
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'failed' ? (
+        <p className="rounded-xl border border-worker-border bg-worker-surface-2 px-4 py-3 text-sm leading-6 text-worker-text-muted">
+          These were removed from Reddit within 10 minutes, so they are never paid and do not need an insight.
         </p>
-      )}
+      ) : null}
 
       {isLoading ? (
-        <div className="space-y-3">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-28 glass-card animate-pulse" />
-          ))}
+        <div className="grid gap-3 md:grid-cols-2 min-[1440px]:grid-cols-3" aria-label="Loading tasks">
+          {[0, 1, 2, 3, 4, 5].map((item) => <WorkerSkeleton key={item} className="h-64" />)}
         </div>
       ) : isError || !data?.success ? (
-        <div className="glass-card p-6 text-center space-y-3">
-          <p className="text-sm text-red-400">{workerErrorMessage(data, 'Could not load tasks.')}</p>
-          <button onClick={() => refetch()} className="btn-secondary min-h-[44px]">
-            Retry
-          </button>
-        </div>
+        <WorkerErrorState message={workerErrorMessage(data, 'Could not load tasks.')} onRetry={() => refetch()} />
       ) : tasks.length === 0 ? (
-        <div className="glass-card p-6 text-center">
-          <p className="text-sm text-dark-300">
-            {tab === 'todo'
-              ? 'No tasks yet — they appear here once one is assigned to you.'
-              : `No ${tab} tasks.`}
-          </p>
-        </div>
+        <WorkerEmptyState
+          message={tab === 'todo' ? "No tasks yet. They'll show up here once one is assigned to you." : `No ${tab} tasks.`}
+          icon={<Filter className="h-5 w-5" aria-hidden="true" />}
+        />
       ) : (
-        <ul className="space-y-3">
+        <ul id="worker-task-list" role="tabpanel" className="grid gap-3 md:grid-cols-2 min-[1440px]:grid-cols-3">
           {tasks.map((task: any) => (
-            <li key={task.id} className="glass-card p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold text-white truncate">{task.displayId}</p>
-                  <p className="text-xs text-dark-400 truncate">
-                    {task.type} · {task.subreddit ? `r/${task.subreddit}` : 'Reddit'} ·{' '}
-                    {formatIST(task.createdAt)}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] border ${tonePill(task.workerStatus?.tone)}`}
-                >
-                  {task.workerStatus?.label || task.status}
-                </span>
-              </div>
-              {task.title && <p className="text-xs text-dark-300 mt-1 line-clamp-2">{task.title}</p>}
-              {task.workerStatus?.action && (
-                <p className="text-xs text-yellow-300 mt-1.5">{task.workerStatus.action}</p>
-              )}
-              <InsightChips task={task} nowMs={nowMs} />
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                <PayoutChip task={task} />
-              </div>
-              <div className="flex items-center gap-3 mt-3">
-                {task.redditLink && (
-                  <a
-                    href={task.redditLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary-400 flex items-center gap-1 min-h-[44px]"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Reddit link
-                  </a>
-                )}
-                <Link
-                  to={`/worker/tasks/${encodeURIComponent(task.id)}`}
-                  className="text-xs text-primary-400 min-h-[44px] flex items-center"
-                >
-                  Details →
-                </Link>
-              </div>
+            <li key={task.id}>
+              <WorkerTaskCard task={task} nowMs={nowMs} />
             </li>
           ))}
         </ul>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="btn-secondary min-h-[44px] disabled:opacity-40"
-          >
-            Prev
+      {totalPages > 1 ? (
+        <div className="flex items-center justify-between gap-3 border-t border-worker-border pt-4">
+          <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="worker-secondary-button">
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Previous
           </button>
-          <span className="text-xs text-dark-400">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-            className="btn-secondary min-h-[44px] disabled:opacity-40"
-          >
+          <span className="text-xs text-worker-text-muted">Page {page} of {totalPages}</span>
+          <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="worker-secondary-button">
             Next
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-      )}
+      ) : null}
+
+      <p className="text-center text-xs text-worker-text-faint">Showing up to 20 tasks per page.</p>
     </div>
   );
 }

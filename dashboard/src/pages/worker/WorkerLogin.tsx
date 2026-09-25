@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Clock3, ExternalLink, Hash, MessageCircle, Search, Send, ShieldCheck, X } from 'lucide-react';
 import {
   getWorkerStatus,
   getWorkerTickets,
@@ -8,6 +9,7 @@ import {
   WORKER_LAST_TICKET_KEY,
 } from '../../api/workerApi';
 import { useWorkerAuth } from '../../hooks/useWorkerAuth';
+import { WorkerCard, WorkerSkeleton } from '../../components/worker/WorkerUI';
 
 interface TicketOption {
   channelId: string;
@@ -19,7 +21,6 @@ export default function WorkerLogin() {
   const { token, login } = useWorkerAuth();
   const [status, setStatus] = useState<{ enabled: boolean; guildId: string } | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
-
   const [query, setQuery] = useState(() => localStorage.getItem(WORKER_LAST_TICKET_KEY + '_q') || '');
   const [options, setOptions] = useState<TicketOption[]>([]);
   const [selected, setSelected] = useState<TicketOption | null>(null);
@@ -34,7 +35,6 @@ export default function WorkerLogin() {
   const [nowMs, setNowMs] = useState(Date.now());
   const codeInputRef = useRef<HTMLInputElement>(null);
 
-  // If a valid token already exists, skip the login page.
   useEffect(() => {
     if (!token) return;
     navigate('/worker', { replace: true });
@@ -49,27 +49,25 @@ export default function WorkerLogin() {
       .finally(() => setStatusLoading(false));
   }, []);
 
-  // Debounced ticket type-ahead (3+ chars).
   useEffect(() => {
     if (query.trim().length < 3) {
       setOptions([]);
       return;
     }
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       getWorkerTickets(query.trim())
         .then((res) => {
           if (res?.success) setOptions(res.data || []);
         })
         .catch(() => setOptions([]));
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [query]);
 
-  // Tick for countdowns.
   useEffect(() => {
     if (step !== 'code') return;
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, [step]);
 
   useEffect(() => {
@@ -89,19 +87,18 @@ export default function WorkerLogin() {
         setStep('code');
         localStorage.setItem(WORKER_LAST_TICKET_KEY, channelId);
         localStorage.setItem(WORKER_LAST_TICKET_KEY + '_q', query);
-        setMessage('Code sent — open Discord and copy it from your ticket.');
+        setMessage('Code sent. Open Discord and copy it from your ticket.');
         setIsError(false);
       }
     } catch (err: unknown) {
       const anyErr = err as { response?: { status?: number; data?: { remainingSeconds?: number } } };
       const remaining = anyErr?.response?.data?.remainingSeconds;
       if (anyErr?.response?.status === 429 && remaining) {
-        // Single-active-code / cooldown: move to the code step with timers.
         const now = Date.now();
         setExpiresAt(now + remaining * 1000);
         setResendAt(now + remaining * 1000);
         setStep('code');
-        setMessage(workerErrorMessage(err, 'A code was already sent — check Discord.'));
+        setMessage(workerErrorMessage(err, 'A code was already sent. Check Discord.'));
         setIsError(false);
       } else {
         setMessage(workerErrorMessage(err, 'Could not send the code. Try again.'));
@@ -112,8 +109,8 @@ export default function WorkerLogin() {
     }
   };
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerify = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!selected || verifying) return;
     const normalized = code.toUpperCase().replace(/[\s-]+/g, '');
     if (normalized.length !== 8) {
@@ -137,121 +134,166 @@ export default function WorkerLogin() {
 
   const expirySecs = expiresAt ? Math.max(0, Math.ceil((expiresAt - nowMs) / 1000)) : 0;
   const resendSecs = resendAt ? Math.max(0, Math.ceil((resendAt - nowMs) / 1000)) : 0;
-  const discordUrl =
-    status?.guildId && selected ? `https://discord.com/channels/${status.guildId}/${selected.channelId}` : null;
+  const discordUrl = status?.guildId && selected ? `https://discord.com/channels/${status.guildId}/${selected.channelId}` : null;
 
-  const onCodeChange = (v: string) => {
-    setCode(v.toUpperCase().replace(/[^A-Z0-9\s-]/gi, '').slice(0, 9));
+  const onCodeChange = (value: string) => {
+    setCode(value.toUpperCase().replace(/[^A-Z0-9\s-]/gi, '').slice(0, 9));
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 flex flex-col justify-center py-12 px-4 sm:px-6 relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary-600/20 blur-[120px] pointer-events-none" />
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <h2 className="text-center text-2xl font-extrabold text-white tracking-tight">Worker Panel</h2>
-        <p className="mt-2 text-center text-sm text-dark-400">See your tasks, insights and earnings</p>
-      </div>
+    <div className="min-h-screen bg-worker-bg px-4 py-8 sm:px-6 sm:py-12">
+      <main className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[400px] flex-col justify-center">
+        <div className="mb-7 text-center">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl border border-worker-border bg-worker-surface text-worker-accent">
+            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <h1 className="mt-4 font-display text-2xl font-bold tracking-tight text-worker-text sm:text-3xl">Worker panel</h1>
+          <p className="mt-2 text-sm text-worker-text-muted">Your tasks, insights and payments in one place.</p>
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="glass-card py-8 px-4 shadow-2xl sm:rounded-2xl sm:px-10 border border-dark-700/50">
+        <WorkerCard className="p-5 sm:p-7">
           {statusLoading ? (
-            <div className="space-y-3">
-              <div className="h-11 bg-dark-800 rounded-xl animate-pulse" />
-              <div className="h-11 bg-dark-800 rounded-xl animate-pulse" />
+            <div className="space-y-3" aria-label="Loading worker portal">
+              <WorkerSkeleton className="h-12 w-full" />
+              <WorkerSkeleton className="h-12 w-full" />
+              <WorkerSkeleton className="h-11 w-full" />
             </div>
           ) : status && !status.enabled ? (
-            <p className="text-center text-sm text-dark-300">Worker portal is not available.</p>
+            <div className="py-5 text-center">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-worker-surface-2 text-worker-text-faint">
+                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <p className="mt-3 text-sm text-worker-text-muted">Worker portal is not available.</p>
+            </div>
           ) : step === 'ticket' ? (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-dark-200 mb-2">
-                  Type your ticket number (e.g. 0074)
+                <label htmlFor="worker-ticket-search" className="mb-2 block text-sm font-semibold text-worker-text">
+                  Find your ticket
                 </label>
-                <input
-                  type="text"
-                  className="input-field w-full min-h-[44px]"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="ticket-0074 or 0074"
-                  autoComplete="off"
-                />
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-worker-text-faint" aria-hidden="true" />
+                  <input
+                    id="worker-ticket-search"
+                    type="text"
+                    className="worker-input pl-10"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Type your ticket number, e.g. 0074"
+                    autoComplete="off"
+                  />
+                </div>
+                <p className="mt-2 text-xs text-worker-text-muted">Search by the ticket number shared with you.</p>
               </div>
-              {query.trim().length >= 3 && options.length === 0 && (
-                <p className="text-xs text-dark-400">No matching tickets. Keep typing your ticket number.</p>
-              )}
-              {options.length > 0 && (
-                <ul className="space-y-2">
-                  {options.map((o) => (
-                    <li key={o.channelId}>
+
+              {query.trim().length >= 3 && options.length === 0 ? (
+                <p className="rounded-lg border border-worker-border bg-worker-surface-2 px-3 py-2.5 text-sm text-worker-text-muted">
+                  No ticket found. Check the number and try again.
+                </p>
+              ) : null}
+
+              {options.length > 0 ? (
+                <ul className="space-y-2" aria-label="Matching tickets">
+                  {options.map((option) => (
+                    <li key={option.channelId}>
                       <button
                         type="button"
-                        onClick={() => setSelected(o)}
-                        className={`w-full text-left px-4 py-3 min-h-[44px] rounded-xl border transition-all ${
-                          selected?.channelId === o.channelId
-                            ? 'bg-primary-600/20 border-primary-500/50 text-white'
-                            : 'bg-dark-800 border-dark-700 text-dark-200 hover:border-dark-500'
+                        onClick={() => setSelected(option)}
+                        className={`flex min-h-[48px] w-full items-center gap-2 rounded-lg border px-3 text-left text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent ${
+                          selected?.channelId === option.channelId
+                            ? 'border-worker-accent/50 bg-worker-accent/10 text-worker-text'
+                            : 'border-worker-border bg-worker-surface-2 text-worker-text-muted hover:border-worker-text-faint hover:text-worker-text'
                         }`}
                       >
-                        #{o.name}
+                        <Hash className="h-4 w-4 shrink-0 text-worker-text-faint" aria-hidden="true" />
+                        <span className="truncate">{option.name}</span>
                       </button>
                     </li>
                   ))}
                 </ul>
-              )}
-              {message && (
-                <p className={`text-sm text-center ${isError ? 'text-red-400' : 'text-green-400'}`}>{message}</p>
-              )}
+              ) : null}
+
+              {selected ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-worker-accent/30 bg-worker-accent/10 px-3 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Hash className="h-4 w-4 shrink-0 text-worker-accent" aria-hidden="true" />
+                    <span className="truncate text-sm font-medium text-worker-text">{selected.name}</span>
+                  </div>
+                  <button type="button" onClick={() => setSelected(null)} className="worker-icon-button -mr-2 -my-1" aria-label="Change selected ticket">
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
+
+              {message ? (
+                <p role={isError ? 'alert' : 'status'} className={`text-sm ${isError ? 'text-worker-danger' : 'text-worker-success'}`}>
+                  {message}
+                </p>
+              ) : null}
+
               <button
                 type="button"
                 disabled={!selected || sending}
                 onClick={() => selected && sendCode(selected.channelId)}
-                className="btn-primary w-full min-h-[44px]"
+                className="worker-primary-button w-full"
               >
                 {sending ? 'Sending…' : 'Send code to my ticket in Discord'}
+                {!sending ? <Send className="h-4 w-4" aria-hidden="true" /> : null}
               </button>
             </div>
           ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-dark-200 text-center">
-                We posted a code in <span className="font-semibold text-white">#{selected?.name}</span>. Open
-                Discord, copy the code and enter it here.
-              </p>
-              {discordUrl && (
-                <a
-                  href={discordUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-secondary w-full min-h-[44px] flex items-center justify-center"
-                >
-                  Open my ticket in Discord
-                </a>
-              )}
-              <form onSubmit={handleVerify} className="space-y-4">
-                <input
-                  ref={codeInputRef}
-                  type="text"
-                  inputMode="text"
-                  autoComplete="one-time-code"
-                  autoFocus
-                  className="input-field w-full text-center text-xl tracking-[0.3em] uppercase min-h-[44px]"
-                  value={code}
-                  onChange={(e) => onCodeChange(e.target.value)}
-                  placeholder="ABCD-2345"
-                  maxLength={9}
-                />
-                <p className="text-xs text-center text-dark-400">
-                  {expirySecs > 0
-                    ? `Code expires in ${Math.floor(expirySecs / 60)}:${String(expirySecs % 60).padStart(2, '0')}`
-                    : 'Code expired — request a new one.'}
+            <div className="space-y-5">
+              <div>
+                <p className="text-sm leading-6 text-worker-text-muted">
+                  We posted a code in <span className="font-semibold text-worker-text">{selected?.name}</span>. Open Discord, copy the code and enter it here.
                 </p>
-                {message && (
-                  <p className={`text-sm text-center ${isError ? 'text-red-400' : 'text-green-400'}`}>{message}</p>
-                )}
-                <button type="submit" disabled={verifying} className="btn-primary w-full min-h-[44px]">
-                  {verifying ? 'Verifying…' : 'Verify & open my panel'}
+              </div>
+
+              <form onSubmit={handleVerify} className="space-y-4">
+                <div>
+                  <label htmlFor="worker-code" className="mb-2 block text-sm font-semibold text-worker-text">
+                    Enter your 8-character code
+                  </label>
+                  <input
+                    ref={codeInputRef}
+                    id="worker-code"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    className="worker-input text-center font-semibold uppercase tracking-[0.28em]"
+                    value={code}
+                    onChange={(event) => onCodeChange(event.target.value)}
+                    placeholder="ABCD-2345"
+                    maxLength={9}
+                  />
+                </div>
+                <div className="flex items-center justify-center gap-1.5 text-xs text-worker-text-muted" role="timer">
+                  <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                  {expirySecs > 0
+                    ? `Expires in ${Math.floor(expirySecs / 60)}:${String(expirySecs % 60).padStart(2, '0')}`
+                    : 'Code expired. Request a new one.'}
+                </div>
+                {message ? (
+                  <p role={isError ? 'alert' : 'status'} className={`text-sm ${isError ? 'text-worker-danger' : 'text-worker-success'}`}>
+                    {message}
+                  </p>
+                ) : null}
+                <button type="submit" disabled={verifying} className="worker-primary-button w-full">
+                  {verifying ? 'Verifying…' : 'Verify and open my panel'}
+                  {!verifying ? <ShieldCheck className="h-4 w-4" aria-hidden="true" /> : null}
                 </button>
               </form>
-              <div className="flex items-center justify-between text-sm">
+
+              {discordUrl ? (
+                <a href={discordUrl} target="_blank" rel="noopener noreferrer" className="worker-secondary-button w-full">
+                  <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                  Open my ticket in Discord
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+              ) : null}
+
+              <div className="flex items-center justify-between gap-2 border-t border-worker-border pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -259,7 +301,7 @@ export default function WorkerLogin() {
                     setCode('');
                     setMessage('');
                   }}
-                  className="text-primary-400 hover:text-primary-300 min-h-[44px] px-2"
+                  className="worker-ghost-button px-2"
                 >
                   Change ticket
                 </button>
@@ -267,15 +309,15 @@ export default function WorkerLogin() {
                   type="button"
                   disabled={resendSecs > 0 || sending || !selected}
                   onClick={() => selected && sendCode(selected.channelId)}
-                  className="text-primary-400 hover:text-primary-300 disabled:opacity-40 min-h-[44px] px-2"
+                  className="worker-ghost-button px-2"
                 >
                   {resendSecs > 0 ? `Resend in ${resendSecs}s` : 'Resend code'}
                 </button>
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </WorkerCard>
+      </main>
     </div>
   );
 }

@@ -33,8 +33,8 @@ const WorkerHowTo = lazy(() => import('./pages/worker/WorkerHowTo'));
 
 function WorkerFallback() {
   return (
-    <div className="min-h-screen bg-dark-950 flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+    <div className="flex min-h-screen items-center justify-center bg-worker-bg">
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-worker-border border-t-worker-accent" aria-label="Loading worker page" />
     </div>
   );
 }

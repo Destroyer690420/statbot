@@ -46,14 +46,16 @@ export function countdownText(nowMs: number, dueAt: string | null): string {
 export function tonePill(tone: string): string {
   switch (tone) {
     case 'success':
-      return 'bg-green-500/10 text-green-400 border-green-500/20';
+      return 'border-worker-success/25 bg-worker-success/10 text-worker-success';
     case 'warning':
-      return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
+      return 'border-worker-warning/25 bg-worker-warning/10 text-worker-warning';
     case 'danger':
-      return 'bg-red-500/10 text-red-400 border-red-500/20';
+      return 'border-worker-danger/25 bg-worker-danger/10 text-worker-danger';
     case 'info':
-      return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+      return 'border-worker-info/25 bg-worker-info/10 text-worker-info';
+    case 'muted':
+      return 'border-worker-border bg-worker-surface-2 text-worker-text-muted';
     default:
-      return 'bg-dark-500/10 text-dark-300 border-dark-600/40';
+      return 'border-worker-border bg-worker-surface-2 text-worker-text-muted';
   }
 }

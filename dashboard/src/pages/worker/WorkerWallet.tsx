@@ -1,22 +1,29 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { CalendarDays, CheckCircle2, ChevronDown, Clock3, Info, Wallet } from 'lucide-react';
 import { getWorkerWallet, workerErrorMessage } from '../../api/workerApi';
-import { formatMoney, formatISTDate } from '../../utils/workerFormat';
+import { formatISTDate, formatMoney } from '../../utils/workerFormat';
+import { WorkerCard, WorkerErrorState, WorkerSkeleton } from '../../components/worker/WorkerUI';
 
-function WeekCard({ title, week }: { title: string; week: any }) {
+function WeekCard({ title, week, current = false }: { title: string; week: any; current?: boolean }) {
   return (
-    <div className="glass-card p-4">
-      <h2 className="font-semibold text-white">{title}</h2>
-      <p className="text-xs text-dark-400">{week.weekLabel}</p>
-      <p className="text-2xl font-extrabold text-white mt-2">{formatMoney(week.total)}</p>
-      <p className="text-xs text-dark-400 mt-1">
-        {week.tasks} tasks · {week.posts} posts · {week.comments} comments
-      </p>
-      <div className="flex justify-between text-xs mt-2">
-        <span className="text-green-400">Paid {formatMoney(week.paid)}</span>
-        <span className="text-blue-400">Awaiting ~{formatMoney(week.awaiting)} est.</span>
+    <WorkerCard className={`p-4 sm:p-5 ${current ? 'border-worker-accent/35' : ''}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium text-worker-text-muted">{title}</p>
+          <p className="mt-1 text-xs text-worker-text-faint">{week.weekLabel}</p>
+        </div>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${current ? 'bg-worker-accent/10 text-worker-accent' : 'bg-worker-surface-2 text-worker-text-faint'}`}>
+          <CalendarDays className="h-4 w-4" aria-hidden="true" />
+        </div>
       </div>
-    </div>
+      <p className="mt-5 font-display text-2xl font-bold tabular-nums text-worker-text sm:text-3xl">{formatMoney(week.total)}</p>
+      <p className="mt-1 text-xs leading-5 text-worker-text-muted">{week.tasks} tasks · {week.posts} posts · {week.comments} comments</p>
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-worker-border pt-3 text-xs">
+        <span className="text-worker-success">Paid {formatMoney(week.paid)}</span>
+        <span className="text-worker-warning">Awaiting ~{formatMoney(week.awaiting)} est.</span>
+      </div>
+    </WorkerCard>
   );
 }
 
@@ -29,90 +36,132 @@ export default function WorkerWallet() {
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-32 glass-card animate-pulse" />
-        ))}
+      <div className="mx-auto max-w-5xl space-y-4">
+        <WorkerSkeleton className="h-64 w-full" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((item) => <WorkerSkeleton key={item} className="h-48" />)}
+        </div>
+        <WorkerSkeleton className="h-72 w-full" />
       </div>
     );
   }
 
   if (isError || !data?.success) {
-    return (
-      <div className="glass-card p-6 text-center space-y-3">
-        <p className="text-sm text-red-400">{workerErrorMessage(data, 'Could not load your wallet.')}</p>
-        <button onClick={() => refetch()} className="btn-secondary min-h-[44px]">
-          Retry
-        </button>
-      </div>
-    );
+    return <WorkerErrorState message={workerErrorMessage(data, 'Could not load your wallet.')} onRetry={() => refetch()} />;
   }
 
-  const w = data.data;
+  const wallet = data.data;
+  const payments = Array.isArray(wallet.payments) ? wallet.payments : [];
+
+  const scrollToHistory = () => {
+    const target = document.getElementById('payment-history');
+    if (!target) return;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-bold text-white">Wallet</h1>
-
-      <WeekCard title="This week" week={w.thisWeek} />
-      <WeekCard title="Last week" week={w.lastWeek} />
-
-      <div className="glass-card p-4">
-        <h2 className="font-semibold text-white">Awaiting payment (all weeks)</h2>
-        <p className="text-2xl font-extrabold text-white mt-1">~{formatMoney(w.awaitingAll.estimated)}</p>
-        <p className="text-xs text-dark-400">{w.awaitingAll.count} tasks · estimated at today&apos;s rates</p>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div>
+        <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl lg:hidden">Wallet</h1>
+        <p className="mt-1 hidden text-sm text-worker-text-muted lg:block">A clear view of completed work, estimated payouts and payment history.</p>
       </div>
 
-      <div className="glass-card p-4">
-        <h2 className="font-semibold text-white">Lifetime paid</h2>
-        <p className="text-2xl font-extrabold text-green-400 mt-1">{formatMoney(w.lifetimePaid)}</p>
-        <p className="text-xs text-dark-400 mt-2">
-          ₹{w.rates.post} per post · ₹{w.rates.comment} per comment
-        </p>
-        <p className="text-xs text-dark-500 mt-2">
-          Payments are made by your manager, usually weekly. You&apos;ll get a message in your ticket when a
-          payment is credited. Amounts marked estimated use today&apos;s rates.
-        </p>
+      <WorkerCard className="overflow-hidden border-0 bg-wallet-gradient p-6 text-white sm:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-white/75">Awaiting payment</p>
+            <p className="mt-3 font-display text-4xl font-bold tabular-nums sm:text-5xl">~{formatMoney(wallet.awaitingAll.estimated)}</p>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
+            <Wallet className="h-5 w-5" aria-hidden="true" />
+          </div>
+        </div>
+        <p className="mt-3 text-sm text-white/75">{wallet.awaitingAll.count} tasks · estimated at today&apos;s rates</p>
+        <p className="mt-5 max-w-md text-sm leading-6 text-white/80">Paid manually by your manager, usually weekly.</p>
+        <button type="button" onClick={scrollToHistory} className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70">
+          View payment history
+        </button>
+      </WorkerCard>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <WeekCard title="This week" week={wallet.thisWeek} current />
+        <WeekCard title="Last week" week={wallet.lastWeek} />
+        <WorkerCard className="p-4 sm:col-span-2 sm:p-5 lg:col-span-1">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-worker-text-muted">Lifetime paid</p>
+              <p className="mt-1 text-xs text-worker-text-faint">All recorded payments</p>
+            </div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-worker-success/10 text-worker-success">
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            </div>
+          </div>
+          <p className="mt-5 font-display text-2xl font-bold tabular-nums text-worker-success sm:text-3xl">{formatMoney(wallet.lifetimePaid)}</p>
+          <p className="mt-3 text-xs leading-5 text-worker-text-muted">Actual amounts credited by your manager.</p>
+        </WorkerCard>
       </div>
 
-      <div className="glass-card p-4">
-        <h2 className="font-semibold text-white mb-2">Payment history</h2>
-        {w.payments.length === 0 ? (
-          <p className="text-sm text-dark-400">No payments yet.</p>
+      <div className="rounded-xl border border-worker-border bg-worker-surface-2 px-4 py-3 text-sm leading-6 text-worker-text-muted">
+        <p>Rates: <span className="font-semibold tabular-nums text-worker-text">₹{wallet.rates.post} per post</span> · <span className="font-semibold tabular-nums text-worker-text">₹{wallet.rates.comment} per comment</span></p>
+      </div>
+
+      <div className="flex items-start gap-3 rounded-xl border border-worker-border bg-worker-surface px-4 py-3 text-sm leading-6 text-worker-text-muted">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-worker-accent" aria-hidden="true" />
+        <p>Payments are made by your manager, usually weekly. You&apos;ll get a message in your ticket when a payment is credited.</p>
+      </div>
+
+      <section id="payment-history" className="scroll-mt-24">
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-worker-text-muted">Statement list</p>
+            <h2 className="mt-1 font-display text-lg font-semibold text-worker-text">Payment history</h2>
+          </div>
+          <Clock3 className="h-4 w-4 text-worker-text-faint" aria-hidden="true" />
+        </div>
+        {payments.length === 0 ? (
+          <WorkerCard className="p-6">
+            <p className="text-sm text-worker-text-muted">No payments yet.</p>
+          </WorkerCard>
         ) : (
-          <ul className="space-y-2">
-            {w.payments.map((p: any) => (
-              <li key={p.batchNumber} className="rounded-xl border border-dark-700 bg-dark-800/60">
-                <button
-                  onClick={() => setOpenBatch(openBatch === p.batchNumber ? null : p.batchNumber)}
-                  className="w-full text-left px-3 py-3 min-h-[44px]"
-                  aria-expanded={openBatch === p.batchNumber}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-white">Batch #{p.batchNumber}</span>
-                    <span className="text-sm font-bold text-white">{formatMoney(p.total)}</span>
-                  </div>
-                  <p className="text-xs text-dark-400 mt-0.5">
-                    {p.weekLabel} · {p.taskCount} tasks · {p.paidAt ? formatISTDate(p.paidAt) : ''}
-                  </p>
-                </button>
-                {openBatch === p.batchNumber && (
-                  <ul className="px-3 pb-3 space-y-1">
-                    {p.tasks.map((t: any) => (
-                      <li key={t.taskId} className="flex justify-between text-xs text-dark-300">
-                        <span>
-                          {t.displayId} · {t.type}
-                        </span>
-                        <span>{formatMoney(t.amount)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
+          <ul className="divide-y divide-worker-border overflow-hidden rounded-xl border border-worker-border bg-worker-surface">
+            {payments.map((payment: any) => {
+              const expanded = openBatch === payment.batchNumber;
+              const detailsId = `payment-batch-${payment.batchNumber}`;
+              return (
+                <li key={payment.batchNumber}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenBatch(expanded ? null : payment.batchNumber)}
+                    className="flex min-h-[76px] w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors duration-150 hover:bg-worker-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-worker-accent sm:px-5"
+                    aria-expanded={expanded}
+                    aria-controls={detailsId}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-worker-text">Batch #{payment.batchNumber}</span>
+                      <span className="mt-1 block truncate text-xs text-worker-text-muted">{payment.weekLabel} · {payment.taskCount} tasks · {payment.paidAt ? formatISTDate(payment.paidAt) : ''}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-3">
+                      <span className="font-display text-base font-semibold tabular-nums text-worker-text">{formatMoney(payment.total)}</span>
+                      <ChevronDown className={`h-4 w-4 text-worker-text-faint transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    </span>
+                  </button>
+                  {expanded ? (
+                    <ul id={detailsId} className="space-y-2 border-t border-worker-border bg-worker-surface-2 px-4 py-3 sm:px-5">
+                      {(payment.tasks || []).map((task: any) => (
+                        <li key={task.taskId} className="flex items-center justify-between gap-3 text-xs">
+                          <span className="min-w-0 truncate text-worker-text-muted">{task.displayId} · {task.type}</span>
+                          <span className="shrink-0 font-semibold tabular-nums text-worker-text">{formatMoney(task.amount)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
-      </div>
+      </section>
     </div>
   );
 }

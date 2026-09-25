@@ -3,6 +3,22 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --wp-bg: #0B0E14;
+    --wp-surface: #12161F;
+    --wp-surface-2: #171C27;
+    --wp-border: #232A38;
+    --wp-text: #E7EAF2;
+    --wp-text-muted: #93A0B4;
+    --wp-text-faint: #5C6779;
+    --wp-accent: #7C86FF;
+    --wp-accent-hover: #8F98FF;
+    --wp-success: #34D399;
+    --wp-warning: #F5B454;
+    --wp-danger: #FB7185;
+    --wp-info: #7C86FF;
+  }
+
   * {
     margin: 0;
     padding: 0;
@@ -80,5 +96,74 @@
 
   .pay-all-banner {
     @apply glass-card p-4 sm:p-5 bg-gradient-to-r from-primary-950/40 to-dark-900/60 border-primary-700/20;
+  }
+
+  .worker-card {
+    @apply rounded-xl border border-worker-border bg-worker-surface transition-colors duration-150;
+  }
+
+  .worker-card-interactive {
+    @apply hover:bg-worker-surface-2;
+  }
+
+  .worker-primary-button {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-worker-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-worker-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent focus-visible:ring-offset-2 focus-visible:ring-offset-worker-bg disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .worker-secondary-button {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-worker-border bg-transparent px-4 py-2.5 text-sm font-semibold text-worker-text-muted transition-colors duration-150 hover:border-worker-accent/50 hover:bg-worker-surface-2 hover:text-worker-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent focus-visible:ring-offset-2 focus-visible:ring-offset-worker-bg disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .worker-ghost-button {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-worker-accent transition-colors duration-150 hover:bg-worker-accent/10 hover:text-worker-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent focus-visible:ring-offset-2 focus-visible:ring-offset-worker-bg disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .worker-input {
+    @apply min-h-[44px] w-full rounded-xl border border-worker-border bg-worker-surface px-4 py-2.5 text-sm text-worker-text outline-none transition-colors duration-150 placeholder:text-worker-text-faint hover:border-worker-text-faint focus:border-worker-accent focus:ring-2 focus:ring-worker-accent/30;
+  }
+
+  .worker-segment {
+    @apply min-h-[44px] rounded-lg px-3 py-2 text-sm font-medium text-worker-text-muted transition-colors duration-150 hover:text-worker-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent;
+  }
+
+  .worker-segment-active {
+    @apply bg-worker-accent text-white hover:text-white;
+  }
+
+  .worker-icon-button {
+    @apply inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-worker-text-muted transition-colors duration-150 hover:bg-worker-surface-2 hover:text-worker-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent focus-visible:ring-offset-2 focus-visible:ring-offset-worker-bg;
+  }
+
+  .worker-skeleton {
+    @apply rounded-xl border border-worker-border bg-worker-surface-2 motion-safe:animate-pulse;
+  }
+
+  .worker-route-fade {
+    animation: worker-route-fade 150ms ease-out both;
+  }
+}
+
+@keyframes worker-route-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .worker-route-fade {
+    animation: none;
+  }
+
+  .worker-card,
+  .worker-primary-button,
+  .worker-secondary-button,
+  .worker-ghost-button,
+  .worker-input,
+  .worker-segment,
+  .worker-icon-button {
+    transition-duration: 0.01ms;
   }
 }
