@@ -125,7 +125,7 @@ Read-only self-service portal, visually redesigned on 2026-09-25 without changin
 
 ### Responsive shell
 
-- `<768px`: sticky worker identity/ticket header, four-item bottom navigation, 16px page gutters, horizontally scrollable Home KPI row, bottom-sheet Tasks filters.
+- `<768px`: sticky worker identity/ticket header, four-item bottom navigation, 16px page gutters, contained 2×2 Home KPI grid with no horizontal carousel, bottom-sheet Tasks filters.
 - `768–1023px`: bottom navigation remains; content grids expand to two columns where appropriate.
 - `≥1024px`: 220px left sidebar replaces bottom navigation; slim page-title header remains; Home/Tasks/Wallet use `max-w-5xl`, detail/How-to use `max-w-3xl`; Tasks grid is two columns and becomes three at `≥1440px`.
 - New route cross-fade, tab transitions, skeleton pulses, and overdue status dot honor `prefers-reduced-motion`.
@@ -133,7 +133,7 @@ Read-only self-service portal, visually redesigned on 2026-09-25 without changin
 | Path | Page | Notes |
 |---|---|---|
 | `/worker/login` | WorkerLogin | public; ticket finder (3+ chars, ≤5 matches, debounced, last ticket in `rtm_worker_last_ticket`) → 8-character code entry (autofocus, auto-uppercase, `one-time-code`, expiry countdown, cooldown-gated Resend, Change ticket); inline results and selected-ticket chip; skips ahead when a valid worker token exists; shows "Worker portal is not available" when disabled |
-| `/worker` | WorkerHome | greeting, four primary KPI cards, three secondary totals, urgent action cards with countdowns, wallet teaser; refetch 60s. Activity-chart follow-up is explicitly not built because it needs a new endpoint |
+| `/worker` | WorkerHome | greeting, cohesive overview panel with four primary KPI cells (2×2 on phones, 4-across on desktop), compact task-mix strip, urgent action cards with countdowns, wallet teaser; no horizontal KPI carousel; refetch 60s. Activity-chart follow-up is explicitly not built because it needs a new endpoint |
 | `/worker/tasks` | WorkerTasks | To-do/Completed/Failed tabs with counts, Completed sub-filter, mobile filter sheet/desktop inline filters with fixed-width type select, debounced server search, page-based pagination, insight and payout chips, responsive task-card grid with `min-w-0`/overflow containment for narrow phones |
 | `/worker/tasks/:id` | WorkerTaskDetail | status + next-action callout, copyable Reddit link, reminder checklist, payout block, done/future timeline stepper; no inferred current-step state |
 | `/worker/wallet` | WorkerWallet | gradient awaiting-payment hero, This/Last week cards, lifetime paid, rates, billing notice, expandable worker-scoped payment history |
@@ -146,4 +146,4 @@ Read-only self-service portal, visually redesigned on 2026-09-25 without changin
 - `cd dashboard && npm run build` passes (`tsc && vite build`).
 - Root `npm run typecheck`, root `npm run build`, and `npm test -- --runInBand` pass (33 suites, 414 tests).
 - Root `npm run lint` remains blocked by the pre-existing missing ESLint 9 flat config; no lint configuration was changed in this visual pass.
-- Live dashboard deployment verified 2026-09-25 at commit `36afcb4`: worker routes return SPA 200, new hashed assets return 200, `/api/v1/health` is healthy, worker auth status remains enabled, and unauthenticated `/api/v1/worker/me` remains 401. Tasks fixes specifically prevent desktop search/filter flex collapse and narrow-mobile horizontal overflow.
+- Live dashboard deployment verified 2026-09-25 at commit `a667715`: worker routes return SPA 200, new hashed assets return 200, `/api/v1/health` is healthy, worker auth status remains enabled, and unauthenticated `/api/v1/worker/me` remains 401. Home now has no horizontal KPI carousel; Tasks fixes prevent desktop search/filter flex collapse and narrow-mobile horizontal overflow.

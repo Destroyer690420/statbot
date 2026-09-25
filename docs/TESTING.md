@@ -52,7 +52,7 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 ### After dashboard changes
 1. `cd dashboard && npm run build`
 2. `npm run dev` → verify pages against the live API target.
-3. Worker visual pass: check `/worker/login`, `/worker`, `/worker/tasks`, `/worker/tasks/:id`, `/worker/wallet`, and `/worker/how-to` at 360px, 768px, 1024px, and 1440px widths. Confirm mobile bottom navigation, desktop sidebar, task filters, status pills, skeletons, How-to jump navigation, reduced-motion behavior, and no horizontal page overflow.
+3. Worker visual pass: check `/worker/login`, `/worker`, `/worker/tasks`, `/worker/tasks/:id`, `/worker/wallet`, and `/worker/how-to` at 360px, 768px, 1024px, and 1440px widths. Confirm mobile bottom navigation, desktop sidebar, Home KPI 2×2 mobile grid with no horizontal carousel, task filters, status pills, skeletons, How-to jump navigation, reduced-motion behavior, and no horizontal page overflow.
 4. Confirm worker API calls, query keys, route paths, and auth boundaries are unchanged with `git diff`/browser network inspection; the visual pass must not add a data endpoint.
 5. Production verification after dashboard deploy: root and all worker SPA routes return 200, new hashed assets return 200, `/api/v1/health` is healthy, `/api/v1/worker/auth/status` is enabled, and unauthenticated `/api/v1/worker/me` returns 401.
 
