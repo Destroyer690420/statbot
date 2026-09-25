@@ -1,6 +1,6 @@
 # FRONTEND.md — Admin Dashboard
 
-> Verified against `dashboard/src/**`, `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/nginx.conf` on 2026-08-18.
+> Verified against `dashboard/src/**`, `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/nginx.conf` on 2026-09-25 (worker visual redesign section re-verified after deployment).
 
 ---
 
@@ -112,17 +112,38 @@ Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payou
 - `animate-in fade-in`/`zoom-in-95` classes inert (tailwindcss-animate not installed).
 - Theme picker non-functional; OwnerEarnings route JWT-only; `getUpcomingReminders`/`getHealth`/`getExportCsvUrl`/`createReferral` client fns unused.
 
-## 10. Worker Portal (`/worker/*` — implemented, NOT deployed, 2026-09-24)
+## 10. Worker Portal (`/worker/*` — visual redesign deployed 2026-09-25)
 
-Read-only self-service portal (same Tailwind theme + glass-card style, mobile-first). Lazy-loaded pages, never wrapped in the admin `ProtectedRoute`; own `workerApi` axios instance with token key `rtm_worker_token` (a 401 clears only the worker token → `/worker/login`; never touches `rtm_token`). An admin token cannot open worker pages (worker API rejects it with 401).
+Read-only self-service portal, visually redesigned on 2026-09-25 without changing its API, routes, data contracts, permissions, or business rules. Lazy-loaded pages remain outside the admin `ProtectedRoute`; the dedicated `workerApi` axios instance and `rtm_worker_token` behavior are unchanged. The admin token still cannot open worker pages.
+
+### Design system
+
+- Worker-only Tailwind tokens live in `dashboard/tailwind.config.js` under `theme.extend.colors.worker`; CSS variables `--wp-*` and reusable classes are in `dashboard/src/index.css`.
+- Sora is used for display/heading/number text; Inter remains the body face. Money and counts use `tabular-nums`.
+- Worker cards use one 12px radius, 1px `--wp-border` borders, surface-color elevation, and no broad shadow stack. The wallet hero is the only worker gradient.
+- Shared presentational primitives are in `dashboard/src/components/worker/WorkerUI.tsx` and `WorkerTaskCard.tsx`; the existing route entry files remain in place.
+
+### Responsive shell
+
+- `<768px`: sticky worker identity/ticket header, four-item bottom navigation, 16px page gutters, horizontally scrollable Home KPI row, bottom-sheet Tasks filters.
+- `768–1023px`: bottom navigation remains; content grids expand to two columns where appropriate.
+- `≥1024px`: 220px left sidebar replaces bottom navigation; slim page-title header remains; Home/Tasks/Wallet use `max-w-5xl`, detail/How-to use `max-w-3xl`; Tasks grid is two columns and becomes three at `≥1440px`.
+- New route cross-fade, tab transitions, skeleton pulses, and overdue status dot honor `prefers-reduced-motion`.
 
 | Path | Page | Notes |
 |---|---|---|
-| `/worker/login` | WorkerLogin | public; ticket finder (3+ chars, ≤5 matches, debounced, last ticket in `rtm_worker_last_ticket`) → 8-char code entry (autofocus, auto-uppercase, `one-time-code`, expiry countdown, cooldown-gated Resend, Change ticket); skips ahead when a valid worker token exists; shows "Worker portal is not available" when disabled |
-| `/worker` | WorkerHome | greeting, stat cards (Total/Completed/Paid/Insights to submit + Awaiting/In progress/Failed), Action-needed list with countdowns, wallet snapshot; refetch 60s |
-| `/worker/tasks` | WorkerTasks | To-do/Completed/Failed toggles with count badges, Completed sub-filter All/Awaiting/Paid, Post/Comment filter, debounced search, server pagination, insight chips (20h/70h), payout chips |
-| `/worker/tasks/:id` | WorkerTaskDetail | status + next action, timeline, per-reminder insight checklist, payout block |
-| `/worker/wallet` | WorkerWallet | this/last IST week cards, awaiting (all weeks), lifetime paid, rates line, estimated note, expandable payment history |
-| `/worker/how-to` | WorkerHowTo | static guide from `dashboard/src/content/workerGuide.ts` (id/title/steps/tips/warnings) with sticky section list |
+| `/worker/login` | WorkerLogin | public; ticket finder (3+ chars, ≤5 matches, debounced, last ticket in `rtm_worker_last_ticket`) → 8-character code entry (autofocus, auto-uppercase, `one-time-code`, expiry countdown, cooldown-gated Resend, Change ticket); inline results and selected-ticket chip; skips ahead when a valid worker token exists; shows "Worker portal is not available" when disabled |
+| `/worker` | WorkerHome | greeting, four primary KPI cards, three secondary totals, urgent action cards with countdowns, wallet teaser; refetch 60s. Activity-chart follow-up is explicitly not built because it needs a new endpoint |
+| `/worker/tasks` | WorkerTasks | To-do/Completed/Failed tabs with counts, Completed sub-filter, mobile filter sheet/desktop inline filters, debounced server search, page-based pagination, insight and payout chips, responsive task-card grid |
+| `/worker/tasks/:id` | WorkerTaskDetail | status + next-action callout, copyable Reddit link, reminder checklist, payout block, done/future timeline stepper; no inferred current-step state |
+| `/worker/wallet` | WorkerWallet | gradient awaiting-payment hero, This/Last week cards, lifetime paid, rates, billing notice, expandable worker-scoped payment history |
+| `/worker/how-to` | WorkerHowTo | unchanged guide content with numbered sequence sections, checklist treatment for non-sequential sections, mobile jump chips, desktop table of contents with IntersectionObserver active state |
 
-`WorkerLayout`: top bar (worker name, "My ticket" Discord deep link, logout via `/auth/logout`) + mobile bottom-tab nav with exactly four tabs (Home, Tasks, Wallet, How to). Worker pages set `<meta name="robots" content="noindex">` while mounted. Never `dangerouslySetInnerHTML`; `manifest.json`/`sw.js` untouched.
+`WorkerLayout` preserves the existing `/auth/logout` call and four navigation destinations. Worker pages set `<meta name="robots" content="noindex">` while mounted. Never `dangerouslySetInnerHTML`; `manifest.json`/`sw.js` untouched.
+
+### Verification
+
+- `cd dashboard && npm run build` passes (`tsc && vite build`).
+- Root `npm run typecheck`, root `npm run build`, and `npm test -- --runInBand` pass (33 suites, 414 tests).
+- Root `npm run lint` remains blocked by the pre-existing missing ESLint 9 flat config; no lint configuration was changed in this visual pass.
+- Live dashboard deployment verified 2026-09-25 at commit `a48e404`: worker routes return SPA 200, new hashed assets return 200, `/api/v1/health` is healthy, worker auth status remains enabled, and unauthenticated `/api/v1/worker/me` remains 401.

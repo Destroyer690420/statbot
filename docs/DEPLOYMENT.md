@@ -1,6 +1,6 @@
 # DEPLOYMENT.md — Deployment & Infrastructure
 
-> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-24 — worker portal live at git HEAD `5cc0f8c`** (full app + dashboard rebuild; backup `rtm-backup-20260924-workerportal.tar.gz`; no DB migration; server `.env` gained `WORKER_JWT_SECRET` + `WORKER_PORTAL_ENABLED=true`; NOT pushed to GitHub; verified: health healthy, boot "All systems online!", portal enabled, type-ahead live, worker bundle served). Previous: 2026-09-22 worker portal reverted (reverts `4339cea`+`5d23ad5` live).
+> Verified against `Dockerfile`, `docker-compose.yml`, `dashboard/Dockerfile`, `dashboard/nginx.conf`, `ecosystem.config.js`, `prisma.config.ts` on 2026-08-11. No secrets/values documented. **Deployment status last verified: 2026-09-25 — worker panel visual redesign live at git HEAD `a48e404`** (dashboard-only rebuild; backup `rtm-backup-20260925-152715-worker-ui.tar.gz`; no DB migration; pushed to GitHub; verified: health healthy, all worker SPA routes and new hashed assets 200, auth status enabled, unauthenticated worker `/me` 401). Previous: 2026-09-24 worker portal live at `5cc0f8c`; 2026-09-22 worker portal reverted (reverts `4339cea`+`5d23ad5` live).
 
 ---
 
