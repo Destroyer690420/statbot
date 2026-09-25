@@ -121,7 +121,7 @@ export default function WorkerHowTo() {
                     {section.steps.map((step) => (
                       <li key={step} className="flex items-start gap-2.5 text-sm leading-6 text-worker-text-muted">
                         <Check className="mt-1 h-3.5 w-3.5 shrink-0 text-worker-success" aria-hidden="true" />
-                        <span>{step}</span>
+                        <span className="max-w-[70ch]">{step}</span>
                       </li>
                     ))}
                   </ul>
@@ -131,7 +131,7 @@ export default function WorkerHowTo() {
                       {section.tips.map((tip) => (
                         <li key={tip} className="flex items-start gap-2.5 text-xs leading-5 text-worker-success">
                           <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          <span>Tip: {tip}</span>
+                          <span className="max-w-[70ch]">Tip: {tip}</span>
                         </li>
                       ))}
                     </ul>
@@ -142,7 +142,7 @@ export default function WorkerHowTo() {
                       {section.warnings.map((warning) => (
                         <li key={warning} className="flex items-start gap-2.5 text-xs leading-5 text-worker-warning">
                           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          <span>{warning}</span>
+                          <span className="max-w-[70ch]">{warning}</span>
                         </li>
                       ))}
                     </ul>
