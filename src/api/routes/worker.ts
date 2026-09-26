@@ -19,6 +19,9 @@ import {
   scheduleOtpExpiryCleanup,
   denylistWorkerToken,
   clearOtpRecord,
+  inviterOtpKey,
+  buildInviterLoginMessage,
+  WORKER_TOKEN_EXPIRES_IN,
   WORKER_OTP_TTL_SECONDS,
   WORKER_OTP_COOLDOWN_SECONDS,
   WorkerRedisUnavailableError,
@@ -304,6 +307,212 @@ export default function createWorkerRoutes(discordClient: any): Router {
   const verifySchema = z.object({
     channelId: z.string().min(1).max(64),
     code: z.string().min(4).max(32),
+  });
+
+  // ─── Inviter login (no ticket) ────────────────────────────────────────
+  // A pure inviter never receives a task, so there is no ticket — and no
+  // Task.assignedUserId — to log in with. Their identity comes from Discord
+  // instead: they give their username, the bot DMs a one-time code, and that DM
+  // proves account ownership (stronger than a channel anyone can read).
+
+  const inviterRequestLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many requests. Please try again later.' },
+  });
+  const inviterVerifyLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many requests. Please try again later.' },
+  });
+
+  const inviterRequestSchema = z.object({
+    username: z.string().trim().min(2).max(40),
+  });
+  const inviterVerifySchema = z.object({
+    username: z.string().trim().min(2).max(40),
+    code: z.string().min(4).max(32),
+  });
+
+  /** Resolve a guild member by username (cache first, then a query fetch). */
+  async function resolveInviterMember(discordClient: any, username: string): Promise<any | null> {
+    const guild = discordClient?.guilds?.cache?.get?.(env.GUILD_ID) ?? discordClient?.guilds?.cache?.first?.();
+    if (!guild) return null;
+    const needle = username.replace(/^@/, '').trim().toLowerCase();
+    if (!needle) return null;
+
+    try {
+      const cached = guild.members?.cache?.find(
+        (m: any) =>
+          String(m?.user?.username ?? '').toLowerCase() === needle ||
+          String(m?.user?.globalName ?? m?.displayName ?? '').toLowerCase() === needle,
+      );
+      if (cached) return cached;
+    } catch {
+      // fall through to a fetch
+    }
+
+    if (typeof guild.members?.fetch !== 'function') return null;
+    const fetched = await guild.members.fetch({ query: needle, limit: 5 }).catch(() => null);
+    if (!fetched) return null;
+    for (const member of fetched.values()) {
+      const uname = String(member?.user?.username ?? '').toLowerCase();
+      const dname = String(member?.user?.globalName ?? member?.displayName ?? '').toLowerCase();
+      if (uname === needle || dname === needle) return member;
+    }
+    return null;
+  }
+
+  router.post('/auth/inviter/request-code', inviterRequestLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+      const parsed = inviterRequestSchema.safeParse(req.body || {});
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: 'Enter your Discord username.' });
+        return;
+      }
+
+      const member = await resolveInviterMember(discordClient, parsed.data.username);
+      if (!member?.user?.id) {
+        // Deliberately identical to the success response: never reveal whether
+        // an account exists, is in the server, or has invites.
+        logger.info('Inviter login: username not resolved', {});
+        res.json({
+          success: true,
+          data: { expiresInSeconds: WORKER_OTP_TTL_SECONDS, cooldownSeconds: WORKER_OTP_COOLDOWN_SECONDS },
+        });
+        return;
+      }
+
+      const userId: string = member.user.id;
+      const otpKeyForUser = inviterOtpKey(userId);
+
+      let plan;
+      try {
+        plan = await planIssueCode(otpKeyForUser);
+      } catch (error) {
+        if (error instanceof WorkerRedisUnavailableError) {
+          res.status(503).json({ success: false, message: 'Service temporarily unavailable. Please try again.' });
+          return;
+        }
+        throw error;
+      }
+      if (!plan.ok) {
+        if (plan.reason === 'active') {
+          res.status(429).json({ success: false, message: 'A code was already sent — check your Discord DMs.', remainingSeconds: plan.remainingSeconds });
+          return;
+        }
+        if (plan.reason === 'cooldown') {
+          res.status(429).json({ success: false, message: 'Please wait before requesting a new code.', remainingSeconds: plan.remainingSeconds });
+          return;
+        }
+        if (plan.reason === 'locked') {
+          res.status(429).json({ success: false, message: 'Too many attempts. Try again later.' });
+          return;
+        }
+        res.status(429).json({ success: false, message: 'Too many codes requested. Try again later.' });
+        return;
+      }
+
+      // Deliver BEFORE storing: a DM failure must not leave a stored code.
+      let messageId: string | null = null;
+      try {
+        const sent: any = await member.user.send(buildInviterLoginMessage(plan.code));
+        messageId = sent?.id ?? null;
+      } catch (error) {
+        logger.info('Inviter login: DM delivery failed, suggest the slash command', { userId });
+        try {
+          await clearOtpRecord(otpKeyForUser);
+        } catch {
+          // ignore
+        }
+        res.status(502).json({
+          success: false,
+          message: 'We could not DM you. Run /logincode in the Discord server instead, then enter that code here.',
+        });
+        return;
+      }
+
+      try {
+        await storeIssuedCode(otpKeyForUser, plan.code, messageId);
+      } catch (error) {
+        if (error instanceof WorkerRedisUnavailableError) {
+          try {
+            await clearOtpRecord(otpKeyForUser);
+          } catch {
+            // ignore
+          }
+          res.status(503).json({ success: false, message: 'Service temporarily unavailable. Please try again.' });
+          return;
+        }
+        throw error;
+      }
+
+      logger.info('Inviter login code issued', {});
+      res.json({
+        success: true,
+        data: { expiresInSeconds: WORKER_OTP_TTL_SECONDS, cooldownSeconds: WORKER_OTP_COOLDOWN_SECONDS },
+      });
+    } catch (error) {
+      logger.error('POST /worker/auth/inviter/request-code failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  router.post('/auth/inviter/verify-code', inviterVerifyLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+      const parsed = inviterVerifySchema.safeParse(req.body || {});
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: 'Your Discord username and the code are required.' });
+        return;
+      }
+      const member = await resolveInviterMember(discordClient, parsed.data.username).catch(() => null);
+      if (!member?.user?.id) {
+        res.status(401).json({ success: false, message: 'That code is not valid.' });
+        return;
+      }
+      const userId: string = member.user.id;
+
+      let result: Awaited<ReturnType<typeof verifyOtpCode>>;
+      try {
+        result = await verifyOtpCode(inviterOtpKey(userId), parsed.data.code);
+      } catch (error) {
+        if (error instanceof WorkerRedisUnavailableError) {
+          res.status(503).json({ success: false, message: 'Service temporarily unavailable. Please try again.' });
+          return;
+        }
+        throw error;
+      }
+      if (!result.ok) {
+        if (result.reason === 'mismatch') {
+          res.status(401).json({ success: false, message: 'That code is not correct.', attemptsLeft: result.attemptsLeft });
+          return;
+        }
+        if (result.reason === 'invalidated') {
+          res.status(401).json({ success: false, message: 'Too many wrong attempts. Request a new code.' });
+          return;
+        }
+        if (result.reason === 'locked') {
+          res.status(429).json({ success: false, message: 'Too many attempts. Try again later.' });
+          return;
+        }
+        res.status(401).json({ success: false, message: 'That code is not valid.' });
+        return;
+      }
+
+      const displayName: string | null = member.user.globalName ?? member.displayName ?? member.user.username ?? null;
+      const token = signWorkerToken({ workerId: userId, channelId: '', name: displayName, scope: 'inviter' });
+
+      // A DM has no channel to clean up, and no ticket means no portal-access row.
+      logger.info('Inviter logged in', {});
+      res.json({ success: true, data: { token, expiresIn: WORKER_TOKEN_EXPIRES_IN, workerName: displayName, scope: 'inviter' } });
+    } catch (error) {
+      logger.error('POST /worker/auth/inviter/verify-code failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
   });
 
   // ─── POST /auth/verify-code — single-use, returns the worker JWT ───

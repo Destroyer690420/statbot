@@ -1,6 +1,6 @@
 import { getDb } from '../database/db';
 import { toTask } from '../database/converters';
-import { payoutRepository } from '../database/repositories';
+import { payoutRepository, referralRepository } from '../database/repositories';
 import { payoutService } from './payout.service';
 import { settingsService } from './settings.service';
 import { logger } from '../utils/logger';
@@ -155,28 +155,39 @@ function weekLabelFor(weekStart: Date, weekEnd: Date): string {
 export async function getMeData(workerId: string, ticketChannelId: string): Promise<{
   workerId: string;
   name: string | null;
-  ticket: { channelId: string; channelName: string | null; discordUrl: string };
+  /** Null for an inviter-scope login: an inviter has no ticket. */
+  ticket: { channelId: string; channelName: string | null; discordUrl: string } | null;
+  scope: 'ticket' | 'inviter';
+  capabilities: { hasTasks: boolean; hasInvites: boolean };
   weekLabel: string;
   rates: { post: number; comment: number };
 }> {
-  const [bundle, identity, nameRow] = await Promise.all([
+  const hasTicket = Boolean(ticketChannelId);
+  const [bundle, identity, nameRow, taskCount, inviteCount] = await Promise.all([
     loadWorkerBundle(workerId),
-    resolveWorkerIdentityForChannel(ticketChannelId),
+    hasTicket ? resolveWorkerIdentityForChannel(ticketChannelId) : Promise.resolve(null),
     getDb().task.findFirst({
       where: { assignedUserId: workerId },
       orderBy: { createdAt: 'desc' },
       select: { assignedUserName: true },
     }),
+    getDb().task.count({ where: { assignedUserId: workerId } }),
+    referralRepository.countActiveByInviterId(workerId),
   ]);
   const current = payoutService.getCurrentPayoutWeek();
   return {
     workerId,
     name: nameRow?.assignedUserName ?? null,
-    ticket: {
-      channelId: ticketChannelId,
-      channelName: identity?.channelName ?? null,
-      discordUrl: `https://discord.com/channels/${env.GUILD_ID}/${ticketChannelId}`,
-    },
+    ticket: hasTicket
+      ? {
+          channelId: ticketChannelId,
+          channelName: identity?.channelName ?? null,
+          discordUrl: `https://discord.com/channels/${env.GUILD_ID}/${ticketChannelId}`,
+        }
+      : null,
+    scope: hasTicket ? 'ticket' : 'inviter',
+    // Drives the role-aware panel: a pure inviter has invites but no tasks.
+    capabilities: { hasTasks: taskCount > 0, hasInvites: inviteCount > 0 },
     weekLabel: payoutService.getWeekLabel(current.weekStart, current.weekEnd),
     rates: { post: bundle.rates.postRate, comment: bundle.rates.commentRate },
   };

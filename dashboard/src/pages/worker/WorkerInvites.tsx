@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { CheckCircle2, Check, Clock3, Hash, Info, UserPlus, Users } from 'lucide-react';
+import { CheckCircle2, Check, Clock3, Hash, Info, TrendingUp, UserPlus, Users } from 'lucide-react';
 import { getWorkerInvites, workerErrorMessage } from '../../api/workerApi';
-import { formatMoney } from '../../utils/workerFormat';
+import { formatISTDate, formatMoney } from '../../utils/workerFormat';
 import {
   WorkerCard,
   WorkerEmptyState,
@@ -61,8 +61,8 @@ export default function WorkerInvites() {
     return (
       <div className="mx-auto max-w-5xl space-y-4">
         <WorkerSkeleton className="h-20 w-full" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((item) => (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((item) => (
             <WorkerSkeleton key={item} className="h-48" />
           ))}
         </div>
@@ -81,8 +81,10 @@ export default function WorkerInvites() {
   const paid = Number(summary?.paid ?? 0);
   const directPaid = Number(summary?.directPaid ?? 0);
   const teamPaid = Number(summary?.teamPaid ?? 0);
+  const paidThisWeek = Number(summary?.paidThisWeek ?? 0);
   const pending = Number(summary?.directPending ?? 0);
   const qualified = Number(summary?.qualified ?? 0);
+  const weekLabel = formatISTDate(new Date());
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -101,10 +103,17 @@ export default function WorkerInvites() {
           icon={<Users className="h-4 w-4" aria-hidden="true" />}
         />
         <SummaryCard
-          label="Total earned"
-          hint="Paid to you for invites"
-          value={formatMoney(paid)}
+          label="Paid this week"
+          hint={`Week of ${weekLabel}`}
+          value={formatMoney(paidThisWeek)}
           tone="success"
+          icon={<TrendingUp className="h-4 w-4" aria-hidden="true" />}
+          foot={<span>Commission paid to you since {weekLabel}.</span>}
+        />
+        <SummaryCard
+          label="Total paid"
+          hint="All time, from invites"
+          value={formatMoney(paid)}
           icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
           foot={
             teamPaid > 0 ? (
@@ -119,7 +128,7 @@ export default function WorkerInvites() {
         />
         <SummaryCard
           label="Awaiting payment"
-          hint="Earned, not paid yet"
+          hint="Unlocked, not paid yet"
           value={formatMoney(pending)}
           tone={pending > 0 ? 'warning' : 'neutral'}
           icon={<Clock3 className="h-4 w-4" aria-hidden="true" />}
@@ -146,7 +155,7 @@ export default function WorkerInvites() {
           />
         ) : (
           <ul className="divide-y divide-worker-border overflow-hidden rounded-xl border border-worker-border bg-worker-surface">
-            {invitees.map((invitee: { name: string; ticket: string | null; tasks: number; threshold: number; qualified: boolean }) => (
+            {invitees.map((invitee: { name: string; ticket: string | null; tasks: number; threshold: number; qualified: boolean; earned: number }) => (
               <li
                 key={`${invitee.name}-${invitee.ticket ?? 'no-ticket'}`}
                 className="flex min-h-[72px] items-center justify-between gap-4 px-4 py-3 sm:px-5"
@@ -158,12 +167,19 @@ export default function WorkerInvites() {
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-worker-text">{invitee.name}</span>
                     {invitee.ticket ? (
-                      <span className="mt-0.5 flex items-center gap-1 text-xs text-worker-text-muted">
-                        <Hash className="h-3 w-3 shrink-0" aria-hidden="true" />
-                        <span className="truncate font-mono">{invitee.ticket}</span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-worker-text-muted">
+                        <span className="flex min-w-0 items-center gap-1">
+                          <Hash className="h-3 w-3 shrink-0" aria-hidden="true" />
+                          <span className="truncate font-mono">{invitee.ticket}</span>
+                        </span>
+                        {invitee.earned > 0 ? (
+                          <span className="text-worker-success">{formatMoney(invitee.earned)} earned</span>
+                        ) : null}
                       </span>
                     ) : (
-                      <span className="mt-0.5 block text-xs text-worker-text-faint">No ticket yet</span>
+                      <span className="mt-0.5 block text-xs text-worker-text-faint">
+                        No ticket yet{invitee.earned > 0 ? ` · ${formatMoney(invitee.earned)} earned` : ''}
+                      </span>
                     )}
                   </span>
                 </span>

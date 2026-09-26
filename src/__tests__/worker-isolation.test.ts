@@ -21,6 +21,8 @@ import {
   makeMockDiscordClient,
   collectKeys,
   MockChannel,
+  MockMember,
+  makeMockMember,
 } from './worker-helpers';
 import { WORKER_FORBIDDEN_FIELDS } from '../utils/worker-view';
 
@@ -39,6 +41,10 @@ const INVITEE1 = '500000000000000005';
 const INVITEE2 = '500000000000000006';
 /** Bob's invitee: reachable by A only as an anonymous multi-level total. */
 const DOWNSTREAM = '600000000000000007';
+/** A pure inviter: referrals but zero tasks (no ticket => ticket-less login). */
+const P = '700000000000000008';
+const P_INVITEE1 = '700000000000000009';
+const P_INVITEE2 = '700000000000000010';
 
 function buildState(failChannel: MockChannel): FixtureState {
   const d = (s: string) => new Date(s);
@@ -105,6 +111,9 @@ function buildState(failChannel: MockChannel): FixtureState {
       { id: 'REF-A3', inviterId: A, inviterName: 'Alice Worker', inviteeId: '500000000000000008', inviteeName: 'ClosedInviteSecret', inviterType: 'normal', status: 'closed', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: 'ticket-0099', indirectSpecialInviterId: null, createdAt: d('2026-07-01T00:00:00Z'), updatedAt: d('2026-07-01T00:00:00Z') },
       // Bob's referral: A only ever sees its money as an anonymous total.
       { id: 'REF-B1', inviterId: B, inviterName: 'Bobson McOther', inviteeId: DOWNSTREAM, inviteeName: 'ReferralSecret', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: '<#chan-bob>', indirectSpecialInviterId: A, createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-01T00:00:00Z') },
+      // —— P: a pure inviter. Referrals, commissions, and NO tasks at all. ——
+      { id: 'REF-P1', inviterId: P, inviterName: 'Pure Inviter', inviteeId: P_INVITEE1, inviteeName: 'PureInviteOne', inviterType: 'normal', status: 'qualified', oneTimeCommissionPaid: true, oneTimeCommissionPaidAt: d('2026-08-11T00:00:00Z'), perTaskCommissionActive: false, ticketId: '<#chan-p1>', indirectSpecialInviterId: null, createdAt: d('2026-07-05T00:00:00Z'), updatedAt: d('2026-08-11T00:00:00Z') },
+      { id: 'REF-P2', inviterId: P, inviterName: 'Pure Inviter', inviteeId: P_INVITEE2, inviteeName: 'PureInviteTwo', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: null, indirectSpecialInviterId: null, createdAt: d('2026-08-02T00:00:00Z'), updatedAt: d('2026-08-02T00:00:00Z') },
     ],
     commissionItems: [
       { id: 'ci-a1', batchId: 'cb-1', referralId: 'REF-A1', inviterId: A, invitedWorkerId: INVITEE1, sourceTaskId: null, commissionKind: 'one_time', amount: 100, createdAt: d('2026-08-10T00:00:00Z') },
@@ -113,8 +122,20 @@ function buildState(failChannel: MockChannel): FixtureState {
       { id: 'ci-team', batchId: 'cb-2', referralId: 'REF-B1', inviterId: A, invitedWorkerId: DOWNSTREAM, sourceTaskId: 'tB3', commissionKind: 'per_task_indirect', amount: 10, createdAt: d('2026-08-12T00:00:00Z') },
       // Bob's own commission: must never be counted for Alice.
       { id: 'ci-b1', batchId: 'cb-1', referralId: 'REF-B1', inviterId: B, invitedWorkerId: DOWNSTREAM, sourceTaskId: null, commissionKind: 'one_time', amount: 555, createdAt: d('2026-08-10T00:00:00Z') },
+      // P's commissions: one from an old batch, one from the current payout week.
+      { id: 'ci-p1', batchId: 'cb-old', referralId: 'REF-P1', inviterId: P, invitedWorkerId: P_INVITEE1, sourceTaskId: null, commissionKind: 'one_time', amount: 100, createdAt: d('2026-07-20T00:00:00Z'), batchWeekStart: d('2026-07-12T00:00:00Z') },
+      { id: 'ci-p2', batchId: 'cb-this', referralId: 'REF-P2', inviterId: P, invitedWorkerId: P_INVITEE2, sourceTaskId: null, commissionKind: 'one_time', amount: 250, createdAt: d('2026-08-20T00:00:00Z'), batchWeekStart: currentIstPayoutWeekStart() },
     ],
   };
+}
+
+/** Start of the current IST Sunday→Saturday payout week, as the app computes it. */
+function currentIstPayoutWeekStart(): Date {
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const ist = new Date(Date.now() + istOffset);
+  return new Date(
+    Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - ist.getUTCDay()) - istOffset,
+  );
 }
 
 const B_MARKERS = [B, 'Bobson McOther', 'ticket-0002', 'chan-bob', 'tB1', 'tB2', 'tB3', 'ZzzSecretSubB', 'Bob secret title', '77', '9999', 'ReferralSecret'];
@@ -126,6 +147,9 @@ describe('worker isolation (HTTP)', () => {
   let svc: typeof import('../services/worker-auth.service');
   let loggerMod: typeof import('../utils/logger');
   let tokenA: string;
+  let inviterToken: string;
+  let pureInviter: MockMember;
+  let blocked: MockMember;
   let channels: MockChannel[];
   let chanAlice: MockChannel;
   let chanBob: MockChannel;
@@ -167,7 +191,10 @@ describe('worker isolation (HTTP)', () => {
     chanMulti = makeMockChannel('chan-multi', 'ticket-0011');
     const extras = [3, 4, 5, 6, 7, 8].map((n) => makeMockChannel(`chan-x${n}`, `ticket-000${n}`));
     channels = [chanAlice, chanBob, chanEmpty, chanFail, chanMulti, ...extras];
-    const client = makeMockDiscordClient(channels);
+    // The pure inviter P and a member whose DMs are closed.
+    pureInviter = makeMockMember(P, 'pureinviter', { globalName: 'Pure Inviter' });
+    blocked = makeMockMember(B, 'dmblocked', { failDm: true });
+    const client = makeMockDiscordClient(channels, [pureInviter, blocked]);
 
     fixtureState = buildState(chanFail);
     mockDb = createMockDb(fixtureState);
@@ -401,6 +428,9 @@ describe('worker isolation (HTTP)', () => {
       expect(me.body.data.ticket.channelId).toBe('chan-alice');
       expect(me.body.data.ticket.discordUrl).toBe('https://discord.com/channels/guild-1/chan-alice');
       expect(me.body.data.rates).toEqual({ post: 60, comment: 30 });
+      expect(me.body.data.scope).toBe('ticket');
+      // Alice does tasks and invites.
+      expect(me.body.data.capabilities).toEqual({ hasTasks: true, hasInvites: true });
 
       const wallet = await api('/wallet', undefined, tokenA);
       expect(wallet.body.data.lifetimePaid).toBe(60);
@@ -432,22 +462,24 @@ describe('worker isolation (HTTP)', () => {
       // Ticket numbers resolved from a channel mention and a plain name;
       // ordered by task progress, so the qualified invitee comes first.
       expect(invitees).toEqual([
-        { name: 'Invited Two', ticket: 'ticket-0022', tasks: 2, threshold: 2, qualified: true },
-        { name: 'Invited One', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false },
+        { name: 'Invited Two', ticket: 'ticket-0022', tasks: 2, threshold: 2, qualified: true, earned: 0 },
+        { name: 'Invited One', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false, earned: 120 },
       ]);
+      // A's own items are all in an old batch, so nothing landed this week.
+      expect(summary.paidThisWeek).toBe(0);
 
       const json = JSON.stringify(res.body);
       // No ids, no referral internals, no rates, no closed rows.
-      for (const forbidden of [A, INVITEE1, INVITEE2, DOWNSTREAM, 'REF-A1', 'REF-A2', 'REF-B1', 'ClosedInviteSecret', 'one_time', 'per_task_indirect', 'normalInviteBonus']) {
+      for (const forbidden of [A, INVITEE1, INVITEE2, DOWNSTREAM, P, P_INVITEE1, P_INVITEE2, 'REF-A1', 'REF-A2', 'REF-B1', 'REF-P1', 'ClosedInviteSecret', 'PureInvite', 'one_time', 'per_task_indirect', 'normalInviteBonus']) {
         expect(json).not.toContain(forbidden);
       }
       // B's downstream invitee stays anonymous even though their task paid A.
       expect(json).not.toContain('ReferralSecret');
       expect(json).not.toContain('tB3');
       // Keys are exactly the whitelisted shape.
-      expect(Object.keys(summary).sort()).toEqual(['directPaid', 'directPending', 'invited', 'paid', 'qualified', 'teamPaid', 'withTicket']);
+      expect(Object.keys(summary).sort()).toEqual(['directPaid', 'directPending', 'invited', 'paid', 'paidThisWeek', 'qualified', 'teamPaid', 'withTicket']);
       for (const row of invitees) {
-        expect(Object.keys(row).sort()).toEqual(['name', 'qualified', 'tasks', 'threshold', 'ticket']);
+        expect(Object.keys(row).sort()).toEqual(['earned', 'name', 'qualified', 'tasks', 'threshold', 'ticket']);
       }
     });
 
@@ -457,8 +489,114 @@ describe('worker isolation (HTTP)', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.invitees).toEqual([]);
       expect(res.body.data.summary).toEqual({
-        invited: 0, withTicket: 0, qualified: 0, paid: 0, directPaid: 0, directPending: 0, teamPaid: 0,
+        invited: 0, withTicket: 0, qualified: 0, paid: 0, directPaid: 0, directPending: 0, teamPaid: 0, paidThisWeek: 0,
       });
+    });
+  });
+
+  describe('inviter login (no ticket)', () => {
+    test('request-code DMs the code and never reveals whether a username exists', async () => {
+      const known = await api('/auth/inviter/request-code', { method: 'POST', body: JSON.stringify({ username: 'pureinviter' }) });
+      expect(known.status).toBe(200);
+      expect(known.body.data.expiresInSeconds).toBe(300);
+
+      // Exactly one DM, containing a formatted code and no identity echo.
+      expect(pureInviter.dms).toHaveLength(1);
+      expect(pureInviter.dms[0]).toMatch(/[A-Z0-9]{4}-[A-Z0-9]{4}/);
+      expect(known.body.data).not.toHaveProperty('code');
+      expect(JSON.stringify(known.body)).not.toContain(P);
+
+      // Unknown username: byte-identical response shape, no DM, no leak.
+      const unknown = await api('/auth/inviter/request-code', { method: 'POST', body: JSON.stringify({ username: 'ghostuser' }) });
+      expect(unknown.status).toBe(200);
+      expect(unknown.body).toEqual(known.body);
+      expect(pureInviter.dms).toHaveLength(1);
+    });
+
+    test('a second request during the cooldown is refused (429)', async () => {
+      const res = await api('/auth/inviter/request-code', { method: 'POST', body: JSON.stringify({ username: 'pureinviter' }) });
+      expect(res.status).toBe(429);
+      expect(res.body.remainingSeconds).toBeGreaterThan(0);
+      expect(pureInviter.dms).toHaveLength(1);
+    });
+
+    test('verify-code: wrong code 401, the DM code logs the pure inviter in', async () => {
+      const wrong = await api('/auth/inviter/verify-code', { method: 'POST', body: JSON.stringify({ username: 'pureinviter', code: 'ZZZZZZZZ' }) });
+      expect(wrong.status).toBe(401);
+
+      const code = pureInviter.dms[0].match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)![0];
+      const ok = await api('/auth/inviter/verify-code', { method: 'POST', body: JSON.stringify({ username: 'pureinviter', code }) });
+      expect(ok.status).toBe(200);
+      expect(ok.body.data.scope).toBe('inviter');
+      inviterToken = ok.body.data.token as string;
+
+      // Single use: the same code cannot mint a second token.
+      const again = await api('/auth/inviter/verify-code', { method: 'POST', body: JSON.stringify({ username: 'pureinviter', code }) });
+      expect(again.status).toBe(401);
+    });
+
+    test('a wrong username cannot redeem another account\'s code', async () => {
+      const res = await api('/auth/inviter/verify-code', { method: 'POST', body: JSON.stringify({ username: 'someoneelse', code: 'ABCD2345' }) });
+      expect(res.status).toBe(401);
+    });
+
+    test('the inviter token sees only their own referral data and no tasks', async () => {
+      const me = await api('/me', undefined, inviterToken);
+      expect(me.status).toBe(200);
+      expect(me.body.data.workerId).toBe(P);
+      // No ticket at all — that is the whole point of this login.
+      expect(me.body.data.ticket).toBeNull();
+      expect(me.body.data.scope).toBe('inviter');
+      expect(me.body.data.capabilities).toEqual({ hasTasks: false, hasInvites: true });
+
+      const invites = await api('/invites', undefined, inviterToken);
+      expect(invites.status).toBe(200);
+      expect(invites.body.data.summary).toMatchObject({
+        invited: 2,
+        paid: 350,
+        directPaid: 350,
+        paidThisWeek: 250,
+      });
+      expect(invites.body.data.invitees.map((r: { name: string }) => r.name).sort()).toEqual([
+        'PureInviteOne', 'PureInviteTwo',
+      ]);
+
+      // Empty task surfaces, never anyone else's data.
+      const tasks = await api('/tasks?tab=todo', undefined, inviterToken);
+      expect(tasks.status).toBe(200);
+      expect(tasks.body.data).toEqual([]);
+      expect(tasks.body.total).toBe(0);
+      const wallet = await api('/wallet', undefined, inviterToken);
+      expect(wallet.status).toBe(200);
+      expect(wallet.body.data.lifetimePaid).toBe(0);
+
+      const json = JSON.stringify([me.body, invites.body, tasks.body, wallet.body]);
+      for (const marker of [A, B, INVITEE1, INVITEE2, DOWNSTREAM, WX, WY, 'Alice Worker', 'Bobson McOther', 'Ironman']) {
+        expect(json).not.toContain(marker);
+      }
+      const keys = collectKeys(invites.body);
+      for (const f of WORKER_FORBIDDEN_FIELDS) {
+        expect(keys).not.toContain(f);
+      }
+    });
+
+    test('DM failure points the inviter at the slash command and stores no code', async () => {
+      blocked.dms.length = 0;
+      const res = await api('/auth/inviter/request-code', { method: 'POST', body: JSON.stringify({ username: 'dmblocked' }) });
+      expect(res.status).toBe(502);
+      expect(res.body.message).toContain('/logincode');
+      expect(blocked.dms).toHaveLength(0);
+      // Nothing was stored, so no code can be redeemed for that account.
+      const attempt = await api('/auth/inviter/verify-code', { method: 'POST', body: JSON.stringify({ username: 'dmblocked', code: 'ABCD2345' }) });
+      expect(attempt.status).toBe(401);
+    });
+
+    test('logout denylists an inviter token too', async () => {
+      const out = await api('/auth/logout', { method: 'POST' }, inviterToken);
+      expect(out.status).toBe(200);
+      const after = await api('/invites', undefined, inviterToken);
+      expect(after.status).toBe(401);
+      inviterToken = '';
     });
   });
 

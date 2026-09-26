@@ -30,7 +30,10 @@ export const OTP_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export interface WorkerTokenPayload {
   typ: 'worker';
   sub: string;
+  /** Login ticket channel id. Empty string for an inviter-scope token. */
   tid: string;
+  /** `ticket` = normal worker login; `inviter` = ticket-less inviter login. */
+  scope: 'ticket' | 'inviter';
   name: string | null;
   jti: string;
   aud: string;
@@ -156,6 +159,15 @@ function lockKey(channelId: string): string {
 }
 function denyKey(jti: string): string {
   return `worker:deny:${jti}`;
+}
+
+/**
+ * OTP namespace for the ticket-less inviter login. Reuses every ticket guard
+ * (TTL, cooldown, hourly cap, attempt lockout) under its own key prefix, so an
+ * inviter code can never collide with — or be locked by — a ticket code.
+ */
+export function inviterOtpKey(userId: string): string {
+  return `inviter:${userId}`;
 }
 
 // ─── OTP store ───────────────────────────────────────────────────────
@@ -455,7 +467,12 @@ export async function verifyOtpCode(channelId: string, code: string): Promise<Ve
 
 // ─── Worker JWT ──────────────────────────────────────────────────────
 
-export function signWorkerToken(args: { workerId: string; channelId: string; name: string | null }): string {
+export function signWorkerToken(args: {
+  workerId: string;
+  channelId: string;
+  name: string | null;
+  scope?: 'ticket' | 'inviter';
+}): string {
   const secret = getWorkerSecret();
   if (!secret || secret.length < 32) throw new Error('Worker portal is not configured.');
   return jwt.sign(
@@ -463,6 +480,7 @@ export function signWorkerToken(args: { workerId: string; channelId: string; nam
       typ: 'worker',
       sub: args.workerId,
       tid: args.channelId,
+      scope: args.scope ?? 'ticket',
       name: args.name,
       jti: crypto.randomUUID(),
     },
@@ -487,9 +505,18 @@ export function verifyWorkerToken(token: string): WorkerTokenPayload {
   if (decoded.typ !== 'worker' || typeof decoded.sub !== 'string' || !decoded.sub) {
     throw new Error('Invalid worker token.');
   }
-  if (typeof decoded.tid !== 'string' || !decoded.tid) throw new Error('Invalid worker token.');
+  // Tokens issued before the inviter login carry no `scope` claim: treat them
+  // as ticket tokens so already-issued 7-day tokens keep working.
+  const scope: 'ticket' | 'inviter' = decoded.scope === 'inviter' ? 'inviter' : 'ticket';
+  // Only ticket tokens must carry a channel; an inviter has no ticket at all.
+  if (scope === 'ticket' && (typeof decoded.tid !== 'string' || !decoded.tid)) {
+    throw new Error('Invalid worker token.');
+  }
+  if (decoded.tid !== undefined && typeof decoded.tid !== 'string') {
+    throw new Error('Invalid worker token.');
+  }
   if (typeof decoded.jti !== 'string' || !decoded.jti) throw new Error('Invalid worker token.');
-  return decoded as unknown as WorkerTokenPayload;
+  return { ...(decoded as unknown as WorkerTokenPayload), scope };
 }
 
 export async function denylistWorkerToken(jti: string, expiresAtMs: number): Promise<void> {
@@ -536,6 +563,20 @@ export function buildOtpMessage(workerId: string, code: string): string {
   return (
     `<@${workerId}> \u{1F510} Your Worker Panel login code is **${grouped}**. ` +
     `It expires in 5 minutes. Never share it \u2014 staff will never ask for it. ` +
+    `If you didn't request this, ignore it.`
+  );
+}
+
+/**
+ * Inviter-login DM. Sent privately (never in a channel) because an inviter has
+ * no ticket to post in, and a DM is also stronger proof of account ownership
+ * than a channel anyone can read.
+ */
+export function buildInviterLoginMessage(code: string): string {
+  return (
+    `\u{1F510} Your Worker Panel login code is **${formatOtpCode(code)}**. ` +
+    `It expires in 5 minutes. Never share it \u2014 staff will never ask for it. ` +
+    `Open the Worker Panel, choose "I only invite", and enter this code. ` +
     `If you didn't request this, ignore it.`
   );
 }

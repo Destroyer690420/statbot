@@ -104,7 +104,12 @@ describe('getInvitesForWorker', () => {
         findMany: jest.fn(async (args: any = {}) =>
           items
             .filter((i) => i.inviterId === args.where?.inviterId)
-            .map((i) => ({ referralId: i.referralId, commissionKind: i.commissionKind, amount: i.amount })),
+            .map((i) => ({
+              referralId: i.referralId,
+              commissionKind: i.commissionKind,
+              amount: i.amount,
+              batch: { weekStart: i.batchWeekStart ?? null },
+            })),
         ),
         findFirst: jest.fn(async () => null),
       },
@@ -124,7 +129,7 @@ describe('getInvitesForWorker', () => {
     const dto = await getInvitesForWorker(ME);
 
     expect(dto.invitees).toEqual([
-      { name: 'Invitee', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false },
+      { name: 'Invitee', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false, earned: 0 },
     ]);
     expect(taskFindMany).toHaveBeenCalledWith({
       where: { channelId: { in: ['1234567890123456789'] } },
@@ -198,10 +203,34 @@ describe('getInvitesForWorker', () => {
     expect(dto.summary).toMatchObject({ invited: 1, directPaid: 120, teamPaid: 35, paid: 155 });
     // The multi-level money is never attributed to a row.
     expect(dto.invitees).toEqual([
-      { name: 'Invitee', ticket: null, tasks: 0, threshold: 2, qualified: false },
+      { name: 'Invitee', ticket: null, tasks: 0, threshold: 2, qualified: false, earned: 120 },
     ]);
     expect(JSON.stringify(dto)).not.toContain('per_task_indirect');
     expect(JSON.stringify(dto)).not.toContain('REF-SOMEONE-ELSE');
+  });
+
+  it('counts only what was paid inside the current payout week as paidThisWeek', async () => {
+    const now = new Date();
+    // Start of the current IST payout week (Sunday 00:00 IST), as a Date.
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(now.getTime() + istOffset);
+    const weekStart = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - ist.getUTCDay()) - istOffset);
+    const lastWeek = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const nextWeek = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    referrals = [referral({ id: 'REF-MINE' })];
+    items = [
+      { referralId: 'REF-MINE', commissionKind: 'one_time', amount: 100, inviterId: ME, batchWeekStart: weekStart },
+      { referralId: 'REF-MINE', commissionKind: 'per_task', amount: 20, inviterId: ME, batchWeekStart: lastWeek },
+      { referralId: 'REF-SOMEONE-ELSE', commissionKind: 'per_task_indirect', amount: 35, inviterId: ME, batchWeekStart: nextWeek },
+      // No batch week at all (defensive: must not be counted as this week).
+      { referralId: 'REF-MINE', commissionKind: 'per_task', amount: 5, inviterId: ME },
+    ];
+
+    const dto = await getInvitesForWorker(ME);
+
+    expect(dto.summary.paidThisWeek).toBe(100);
+    expect(dto.summary.paid).toBe(160);
   });
 
   it('counts completed tasks per invitee and stops at the threshold', async () => {
@@ -311,7 +340,12 @@ describe('getInvitesForWorker', () => {
     expect(mockDb.referral.findMany).toHaveBeenCalledWith({ where: { inviterId: ME } });
     expect(mockDb.commissionItem.findMany).toHaveBeenCalledWith({
       where: { inviterId: ME },
-      select: { referralId: true, commissionKind: true, amount: true },
+      select: {
+        referralId: true,
+        commissionKind: true,
+        amount: true,
+        batch: { select: { weekStart: true } },
+      },
     });
     const json = JSON.stringify(dto);
     expect(json).not.toContain(String(OTHER));

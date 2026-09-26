@@ -867,6 +867,8 @@ export interface WorkerInviteInput {
   /** Completed tasks, already capped at the threshold (the bonus pays once). */
   tasks: number;
   threshold: number;
+  /** Money already disbursed for this person. */
+  paid: number;
 }
 
 export interface WorkerInvitesTotals {
@@ -877,6 +879,8 @@ export interface WorkerInvitesTotals {
   directPaid: number;
   directPending: number;
   teamPaid: number;
+  /** Disbursed inside the current IST payout week (batch week attribution). */
+  paidThisWeek: number;
 }
 
 export interface WorkerInviteeDto {
@@ -885,6 +889,7 @@ export interface WorkerInviteeDto {
   tasks: number;
   threshold: number;
   qualified: boolean;
+  earned: number;
 }
 
 export interface WorkerInvitesDto {
@@ -897,22 +902,23 @@ function roundMoney(amount: number): number {
 }
 
 /**
- * Referral view for the signed-in inviter.
+ * Referral view for the signed-in inviter — the whole panel for someone who
+ * only invites and never receives a task.
  *
- * Per invitee the headline is task progress toward the bonus, not money: the
- * count is capped at that referral's threshold because the bonus pays once and
- * further tasks change nothing for a normal inviter. Money already received
- * comes from that inviter's CommissionItem rows and `directPending` from the
- * payable engine's not-yet-created items, so the totals stay on the same
- * engine the pay buttons use. Multi-level earnings are a single anonymous
- * `teamPaid` total — the downstream workers behind them are never named to the
- * inviter, and no Discord ids cross this boundary (only display names, ticket
- * numbers and counts).
+ * Per invitee: task progress capped at the threshold (the bonus pays once, so
+ * a bigger number would be noise) plus what they have actually earned from that
+ * person. Totals: money already received comes from that inviter's
+ * CommissionItem rows, `directPending` from the payable engine's not-yet-created
+ * items, and `paidThisWeek` attributed to the disbursing batch's IST payout
+ * week. Multi-level earnings are a single anonymous `teamPaid` total — the
+ * downstream workers behind them are never named to the inviter, and no Discord
+ * ids cross this boundary (only display names, ticket numbers, counts, money).
  */
 export function buildInvitesSummary(input: {
   directPaid: number;
   directPending: number;
   teamPaid: number;
+  paidThisWeek: number;
   invitees: WorkerInviteInput[];
 }): WorkerInvitesDto {
   const invitees = input.invitees
@@ -925,9 +931,10 @@ export function buildInvitesSummary(input: {
         tasks,
         threshold,
         qualified: tasks >= threshold,
+        earned: roundMoney(i.paid),
       };
     })
-    .sort((a, b) => b.tasks - a.tasks || a.name.localeCompare(b.name));
+    .sort((a, b) => b.tasks - a.tasks || b.earned - a.earned || a.name.localeCompare(b.name));
 
   const directPaid = roundMoney(input.directPaid);
   const teamPaid = roundMoney(input.teamPaid);
@@ -941,6 +948,7 @@ export function buildInvitesSummary(input: {
       directPaid,
       directPending: roundMoney(input.directPending),
       teamPaid,
+      paidThisWeek: roundMoney(input.paidThisWeek),
     },
     invitees,
   };

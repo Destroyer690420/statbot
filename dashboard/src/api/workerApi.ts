@@ -51,6 +51,17 @@ export async function verifyWorkerCode(channelId: string, code: string) {
   return data;
 }
 
+/** Ticket-less inviter login: the bot DMs a one-time code to this account. */
+export async function requestInviterCode(username: string) {
+  const { data } = await workerApi.post('/auth/inviter/request-code', { username });
+  return data;
+}
+
+export async function verifyInviterCode(username: string, code: string) {
+  const { data } = await workerApi.post('/auth/inviter/verify-code', { username, code });
+  return data;
+}
+
 export async function logoutWorker() {
   const { data } = await workerApi.post('/auth/logout');
   return data;

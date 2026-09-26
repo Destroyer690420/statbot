@@ -2,6 +2,7 @@ import { getDb } from '../database/db';
 import { toReferral } from '../database/converters';
 import { commissionRepository, referralRepository } from '../database/repositories';
 import { commissionService } from './commission.service';
+import { payoutService } from './payout.service';
 import { buildInvitesSummary, WorkerInviteInput, WorkerInvitesDto } from '../utils/worker-view';
 import { TaskStatus } from '../types';
 import { logger } from '../utils/logger';
@@ -105,17 +106,28 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
   const paidByReferral = new Map<string, number>();
   let directPaid = 0;
   let teamPaid = 0;
+  let paidThisWeek = 0;
 
   // CommissionItem rows already written == money actually disbursed: commission
   // batches stamp paidAt at creation, so an item's existence is the paid record
   // and no extra batch lookup is needed. Items whose referral this worker does
   // not own are multi-level earnings.
+  //
+  // "Paid this week" is the batch's own IST payout week — i.e. when the money
+  // was actually disbursed. A payout run today for last week's work therefore
+  // counts as this week, which is the honest reading of "paid this week".
+  const week = payoutService.getCurrentPayoutWeek();
   for (const item of await commissionRepository.findItemsByInviterId(workerId)) {
-    if (ownReferralIds.has(item.referralId)) {
+    const own = ownReferralIds.has(item.referralId);
+    if (own) {
       paidByReferral.set(item.referralId, (paidByReferral.get(item.referralId) ?? 0) + item.amount);
       directPaid += item.amount;
     } else {
       teamPaid += item.amount;
+    }
+    const batchWeekStart = item.batch?.weekStart;
+    if (batchWeekStart && batchWeekStart >= week.weekStart && batchWeekStart <= week.weekEnd) {
+      paidThisWeek += item.amount;
     }
   }
 
@@ -143,8 +155,9 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
       ticketName: parseTicketName(referral.ticketId) ?? (channelId ? namesByChannel.get(channelId) ?? null : null),
       tasks: completedByInvitee.get(referral.inviteeId) ?? 0,
       threshold,
+      paid: paidByReferral.get(referral.id) ?? 0,
     };
   });
 
-  return buildInvitesSummary({ directPaid, directPending, teamPaid, invitees });
+  return buildInvitesSummary({ directPaid, directPending, teamPaid, paidThisWeek, invitees });
 }

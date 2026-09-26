@@ -97,6 +97,8 @@ export interface FixtureCommissionItem {
   commissionKind: string;
   amount: number;
   createdAt: Date;
+  /** Payout week of the batch this item was paid in (drives `paidThisWeek`). */
+  batchWeekStart?: Date | null;
 }
 
 export interface FixtureState {
@@ -171,6 +173,10 @@ function matchesWhere(row: Record<string, any>, where: Record<string, any> | und
         if (mode === 'insensitive') {
           if (!hay.toLowerCase().includes(needle.toLowerCase())) return false;
         } else if (!hay.includes(needle)) return false;
+        continue;
+      }
+      if ('not' in cond) {
+        if (val === (cond as { not: unknown }).not) return false;
         continue;
       }
       if ('gte' in cond || 'lte' in cond || 'gt' in cond || 'lt' in cond) {
@@ -299,18 +305,26 @@ export function createMockDb(state: FixtureState): Record<string, any> {
         const row = state.referrals.find((r) => matchesWhere(r as any, args.where));
         return row ? applySelect(row as any, args.select) : null;
       },
+      count: async (args: any = {}) => state.referrals.filter((r) => matchesWhere(r as any, args.where)).length,
     },
     commissionItem: {
       findMany: async (args: any = {}) => {
         const rows = state.commissionItems.filter((i) => matchesWhere(i as any, args.where));
-        return applyOrderBy(rows as unknown as Record<string, any>[], args.orderBy).map((i) =>
-          applySelect(i as any, args.select),
-        );
+        return applyOrderBy(rows as unknown as Record<string, any>[], args.orderBy).map((i) => {
+          const base = applySelect(i as any, args.select);
+          if (args?.select?.batch) base.batch = { weekStart: i.batchWeekStart ?? null };
+          return base;
+        });
       },
       findFirst: async (args: any = {}) => {
         const row = state.commissionItems.find((i) => matchesWhere(i as any, args.where));
         return row ? applySelect(row as any, args.select) : null;
       },
+    },
+    commissionBatch: {
+      findMany: async (args: any = {}) => state.batches.filter((b) => matchesWhere(b as any, args.where)),
+      findUnique: async () => null,
+      findFirst: async () => null,
     },
     commissionRates: {
       findUnique: async () => ({
@@ -373,9 +387,45 @@ export function channelToDiscord(channel: MockChannel): any {
   };
 }
 
-export function makeMockDiscordClient(channels: MockChannel[]): any {
+export interface MockMember {
+  id: string;
+  username: string;
+  globalName?: string | null;
+  dms: string[];
+  failDm?: boolean;
+}
+
+export function makeMockMember(id: string, username: string, opts?: { globalName?: string | null; failDm?: boolean }): MockMember {
+  return { id, username, globalName: opts?.globalName ?? null, dms: [], failDm: opts?.failDm ?? false };
+}
+
+export function makeMockDiscordClient(channels: MockChannel[], members: MockMember[] = []): any {
   const live = new Map(channels.map((c) => [c.id, channelToDiscord(c)]));
   const guildChannels = new Map(channels.map((c) => [c.id, live.get(c.id)]));
+  const memberObjects = members.map((m) => ({
+    user: {
+      id: m.id,
+      username: m.username,
+      globalName: m.globalName ?? undefined,
+      bot: false,
+      send: async (content: string) => {
+        if (m.failDm) throw new Error('cannot send DM');
+        m.dms.push(content);
+        return { id: `dm-${m.id}-${m.dms.length}` };
+      },
+    },
+    displayName: m.globalName ?? m.username,
+  }));
+  const membersByName = (query: string) =>
+    new Map(
+      memberObjects
+        .filter(
+          (mem) =>
+            mem.user.username.toLowerCase().includes(query.toLowerCase()) ||
+            String(mem.user.globalName ?? '').toLowerCase().includes(query.toLowerCase()),
+        )
+        .map((mem) => [mem.user.id, mem]),
+    );
   return {
     channels: {
       fetch: async (id: string) => live.get(id) ?? null,
@@ -384,9 +434,23 @@ export function makeMockDiscordClient(channels: MockChannel[]): any {
       cache: {
         get: (id: string) =>
           id === 'guild-1'
-            ? { id: 'guild-1', channels: { cache: guildChannels, fetch: async () => guildChannels } }
+            ? {
+                id: 'guild-1',
+                channels: { cache: guildChannels, fetch: async () => guildChannels },
+                members: {
+                  cache: { find: (fn: (m: any) => boolean) => memberObjects.find(fn) },
+                  fetch: async (opts: { query?: string }) => membersByName(opts?.query ?? ''),
+                },
+              }
             : undefined,
-        first: () => ({ id: 'guild-1', channels: { cache: guildChannels, fetch: async () => guildChannels } }),
+        first: () => ({
+          id: 'guild-1',
+          channels: { cache: guildChannels, fetch: async () => guildChannels },
+          members: {
+            cache: { find: (fn: (m: any) => boolean) => memberObjects.find(fn) },
+            fetch: async (opts: { query?: string }) => membersByName(opts?.query ?? ''),
+          },
+        }),
       },
     },
   };

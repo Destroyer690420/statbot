@@ -17,6 +17,7 @@ import { data as helpData } from './commands/help';
 import { data as referralData } from './commands/referral';
 import { data as mystatsData } from './commands/mystats';
 import { data as myinvitesData } from './commands/myinvites';
+import { data as logincodeData } from './commands/logincode';
 
 const commands = [
   taskData.toJSON(),
@@ -33,6 +34,7 @@ const commands = [
   referralData.toJSON(),
   mystatsData.toJSON(),
   myinvitesData.toJSON(),
+  logincodeData.toJSON(),
 ];
 
 async function deployCommands() {

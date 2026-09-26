@@ -1,15 +1,15 @@
 import { useEffect } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { BookOpen, ExternalLink, Hash, Home, ListTodo, LogOut, UserPlus, Wallet } from 'lucide-react';
 import { useWorkerAuth } from '../hooks/useWorkerAuth';
 
 const TABS = [
-  { to: '/worker', label: 'Home', icon: Home, end: true },
-  { to: '/worker/tasks', label: 'Tasks', icon: ListTodo, end: false },
-  { to: '/worker/wallet', label: 'Wallet', icon: Wallet, end: false },
-  { to: '/worker/invites', label: 'Invites', icon: UserPlus, end: false },
-  { to: '/worker/how-to', label: 'How to', icon: BookOpen, end: false },
-];
+  { to: '/worker', label: 'Home', icon: Home, end: true, needs: 'tasks' },
+  { to: '/worker/tasks', label: 'Tasks', icon: ListTodo, end: false, needs: 'tasks' },
+  { to: '/worker/wallet', label: 'Wallet', icon: Wallet, end: false, needs: 'tasks' },
+  { to: '/worker/invites', label: 'Invites', icon: UserPlus, end: false, needs: 'invites' },
+  { to: '/worker/how-to', label: 'How to', icon: BookOpen, end: false, needs: null },
+] as const;
 
 function useNoIndex() {
   useEffect(() => {
@@ -89,11 +89,27 @@ function WorkerNavLink({
 
 export function WorkerLayout() {
   useNoIndex();
-  const { workerName, ticket, logout } = useWorkerAuth();
+  const { workerName, ticket, logout, capabilities } = useWorkerAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const firstName = workerName?.trim().split(/\s+/)[0] || 'Worker';
   const currentTitle = pageTitle(location.pathname);
+
+  // A pure inviter has no tasks at all, so the work tabs would be permanently
+  // empty for them: show only what this account can actually use. While
+  // capabilities are still loading, show everything to avoid a nav flicker.
+  const tabs = TABS.filter((tab) => {
+    if (!capabilities) return true;
+    if (tab.needs === 'tasks') return capabilities.hasTasks;
+    if (tab.needs === 'invites') return capabilities.hasInvites;
+    return true;
+  });
+  const isPureInviter = capabilities !== null && !capabilities.hasTasks && capabilities.hasInvites;
+
+  // Land a ticket-less inviter straight on the invites dashboard.
+  if (isPureInviter && location.pathname === '/worker') {
+    return <Navigate to="/worker/invites" replace />;
+  }
 
   const handleLogout = async () => {
     await logout();
@@ -108,7 +124,7 @@ export function WorkerLayout() {
           <p className="mt-1 font-display text-lg font-bold text-worker-text">Task desk</p>
         </div>
         <nav className="flex-1 space-y-1 px-3 py-5" aria-label="Worker navigation">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <WorkerNavLink key={tab.to} {...tab} />
           ))}
         </nav>
@@ -174,7 +190,7 @@ export function WorkerLayout() {
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-worker-border bg-worker-surface/95 backdrop-blur lg:hidden" aria-label="Worker navigation">
         <div className="mx-auto grid max-w-2xl grid-cols-5">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <WorkerNavLink key={tab.to} {...tab} mobile />
           ))}
         </div>

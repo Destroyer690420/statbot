@@ -17,6 +17,13 @@ export class ReferralRepository {
     });
   }
 
+  /** Non-closed referrals only — what the worker panel counts as "invites". */
+  async countActiveByInviterId(inviterId: string) {
+    return getDb().referral.count({
+      where: { inviterId, status: { not: 'closed' } },
+    });
+  }
+
   async findByInviteeId(inviteeId: string) {
     return getDb().referral.findMany({
       where: { inviteeId },
