@@ -10,6 +10,7 @@ import { taskRepository, payoutRepository } from '../database/repositories';
 import { getDb } from '../database/db';
 import { generateBatchId, generatePayoutItemId } from '../utils/id-generator';
 import { settingsService } from './settings.service';
+import { reminderService } from './reminder.service';
 import { auditLogService } from './audit.service';
 import { toTask, toPayoutBatch, toPayoutItem } from '../database/converters';
 import { logger } from '../utils/logger';
@@ -65,7 +66,6 @@ class PayoutService {
   }
 
   async getTaskCompletionTime(taskId: string): Promise<Date | null> {
-    const { reminderService } = require('./reminder.service');
     const reminders: any[] = await reminderService.findByTaskId(taskId);
     const completed = reminders
       .filter((r: any) => r.completed && r.completedAt)

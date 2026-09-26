@@ -33,6 +33,8 @@ class InsightStorageService {
       const taskDirs = await fs.readdir(UPLOADS_DIR);
       for (const taskId of taskDirs) {
         const taskDir = path.join(UPLOADS_DIR, taskId);
+        // Read once and reuse the listing for both the per-file sweep and the
+        // emptiness check, instead of readdir-ing the directory a second time.
         const files = await fs.readdir(taskDir);
         for (const file of files) {
           const filePath = path.join(taskDir, file);
@@ -41,14 +43,14 @@ class InsightStorageService {
             if (stat.mtimeMs < cutoff) {
               await fs.unlink(filePath);
               deleted++;
+              files.splice(files.indexOf(file), 1);
             }
           } catch {
             // Skip files that fail to stat or unlink
           }
         }
         try {
-          const remaining = await fs.readdir(taskDir);
-          if (remaining.length === 0) {
+          if (files.length === 0) {
             await fs.rmdir(taskDir);
           }
         } catch {

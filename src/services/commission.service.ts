@@ -13,6 +13,7 @@ import {
 import { taskRepository, referralRepository, commissionRepository, settingsRepository } from '../database/repositories';
 import { getDb } from '../database/db';
 import { generateReferralId, generateBatchId, generateCommissionItemId } from '../utils/id-generator';
+import { reminderService } from './reminder.service';
 import { auditLogService } from './audit.service';
 import { toTask, toReferral, toCommissionBatch } from '../database/converters';
 import { logger } from '../utils/logger';
@@ -156,7 +157,6 @@ class CommissionService {
   }
 
   private async getTaskCompletionTime(taskId: string): Promise<Date | null> {
-    const { reminderService } = require('./reminder.service');
     const reminders: any[] = await reminderService.findByTaskId(taskId);
     const completed = reminders
       .filter((r: any) => r.completed && r.completedAt)

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getTasks, deleteTask, updateTask, downloadCsv, getTask } from '../api/client';
@@ -60,17 +60,30 @@ export function Tasks() {
   };
 
   const tasks = tasksData?.data || [];
-  
-  const filteredTasks = tasks.filter((task: any) => 
-    displayTaskId(task.id, task.type, task.externalTaskId).toLowerCase().includes(searchTerm.toLowerCase()) || 
-    task.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (task.redditUrl || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (task.channelId && task.channelId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (task.channelName && task.channelName.toLowerCase().includes(searchTerm.toLowerCase()))
+
+  // Needle is lowercased once, and the filter is memoized: previously the
+  // needle was re-lowercased 5x per row (5000 calls per keystroke at 1000 rows)
+  // and the whole list was re-filtered on every render.
+  const needle = searchTerm.trim().toLowerCase();
+  const filteredTasks = useMemo(
+    () =>
+      needle
+        ? tasks.filter((task: any) =>
+            displayTaskId(task.id, task.type, task.externalTaskId).toLowerCase().includes(needle) ||
+            task.id.toLowerCase().includes(needle) ||
+            (task.redditUrl || '').toLowerCase().includes(needle) ||
+            (task.channelId && task.channelId.toLowerCase().includes(needle)) ||
+            (task.channelName && task.channelName.toLowerCase().includes(needle))
+          )
+        : tasks,
+    [tasks, needle],
   );
 
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
-  const paginatedTasks = filteredTasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginatedTasks = useMemo(
+    () => filteredTasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredTasks, page],
+  );
 
   const getRowClass = (cancelledReason?: string | null) => {
     if (cancelledReason === 'deleted') return 'bg-red-900/10 hover:bg-red-900/20 transition-colors';

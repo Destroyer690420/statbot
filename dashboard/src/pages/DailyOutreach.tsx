@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getOutreach, saveOutreachSelection, sendOutreachMessage } from '../api/client';
 import { Loader2, RefreshCw, Check, X, Users, Send, Save } from 'lucide-react';
@@ -68,12 +68,21 @@ export function DailyOutreach() {
   const blast: { id: string; slotsTotal: number; slotsFilled: number; status: string } | null =
     statusQuery.data?.data?.blast || null;
   // Channels that replied in the current burst (resets on the next burst).
-  const replied = new Set<string>(statusQuery.data?.data?.blastReplied || []);
-  const selectedCount = tickets.filter((t) => t.selected).length;
+  // Memoized: this page polls every 30s and previously rebuilt the Set,
+  // re-filtered and re-sorted the whole ticket list on every render.
+  const replied = useMemo(
+    () => new Set<string>(statusQuery.data?.data?.blastReplied || []),
+    [statusQuery.data],
+  );
+  const selectedCount = useMemo(() => tickets.filter((t) => t.selected).length, [tickets]);
   // Winners float to the top (stable within groups) so only green rows need opening.
-  const visibleTickets = tickets
-    .filter((t) => t.selected)
-    .sort((a, b) => Number(replied.has(b.channelId)) - Number(replied.has(a.channelId)));
+  const visibleTickets = useMemo(
+    () =>
+      tickets
+        .filter((t) => t.selected)
+        .sort((a, b) => Number(replied.has(b.channelId)) - Number(replied.has(a.channelId))),
+    [tickets, replied],
+  );
 
   const openSelect = () => {
     setDraft(new Map(tickets.map((t) => [t.channelId, t.selected])));

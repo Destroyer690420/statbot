@@ -1,3 +1,19 @@
+// Intl formatter construction is one of the most expensive operations in a
+// render loop, and these run per date per task card. Built once at module load.
+const IST_DATE_TIME = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  day: 'numeric',
+  month: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+const IST_DATE_ONLY = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+
 export function formatMoney(amount: number): string {
   const rounded = Math.round((amount || 0) * 100) / 100;
   const str = Number.isInteger(rounded)
@@ -10,25 +26,14 @@ export function formatIST(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(d);
+  return IST_DATE_TIME.format(d);
 }
 
 export function formatISTDate(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(d);
+  return IST_DATE_ONLY.format(d);
 }
 
 export function countdownText(nowMs: number, dueAt: string | null): string {

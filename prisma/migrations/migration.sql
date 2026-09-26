@@ -688,3 +688,15 @@ CREATE TABLE IF NOT EXISTS "WorkerPortalAccess" (
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "WorkerPortalAccess_pkey" PRIMARY KEY ("channelId")
 );
+
+-- ============================================================
+-- Migration: Performance indexes (batch A)
+-- ============================================================
+-- Three lookups that were full sequential scans on live data:
+--   1. PayoutItem.workerId  - worker portal wallet read (no index at all)
+--   2. AutomationBurst.cycleId - companion claim poll runs every 2 seconds
+--   3. Task(source,status,channelId) - per-ticket GoPartTime task state
+-- Schema-only, no data statements, safe to re-run.
+CREATE INDEX IF NOT EXISTS "PayoutItem_workerId_idx" ON "PayoutItem"("workerId");
+CREATE INDEX IF NOT EXISTS "AutomationBurst_cycleId_idx" ON "AutomationBurst"("cycleId");
+CREATE INDEX IF NOT EXISTS "Task_source_status_channelId_idx" ON "Task"("source", "status", "channelId");

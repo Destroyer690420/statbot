@@ -126,18 +126,27 @@ function splitCodeBlock(raw: string, target: number): string[] {
   const lines = inner.split('\n');
   const parts: string[] = [];
   let current: string[] = [];
+  // Running length of `current.join('\n')`, so the fit test is O(1) per line
+  // instead of re-joining the whole buffer (which was O(n^2) per block).
+  let currentLen = 0;
 
   const flush = () => {
     if (current.length === 0) return;
     parts.push(current.join('\n'));
     current = [];
+    currentLen = 0;
   };
 
   for (const line of lines) {
-    if (current.join('\n').length + (current.length > 0 ? 1 : 0) + line.length > target) {
+    const candidate = currentLen + (current.length > 0 ? 1 : 0) + line.length;
+    if (candidate > target) {
       flush();
+      current.push(line);
+      currentLen = line.length;
+    } else {
+      current.push(line);
+      currentLen = candidate;
     }
-    current.push(line);
   }
   flush();
 

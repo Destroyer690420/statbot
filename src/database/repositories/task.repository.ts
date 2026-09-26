@@ -162,6 +162,58 @@ export class TaskRepository {
     });
   }
 
+  /**
+   * Batched projection of the two fields callers need to decorate a row with a
+   * task reference. Used by the audit-log enrich, which previously issued one
+   * `findById` per log row.
+   */
+  async findManyByIds(ids: string[]): Promise<{ id: string; externalTaskId: string | null; type: string }[]> {
+    return getDb().task.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, externalTaskId: true, type: true },
+    });
+  }
+
+  /**
+   * Bulk equivalent of calling `findAwaitingSubmissionInChannel` +
+   * `findAnyGoparttimeInChannel` once per ticket channel.
+   *
+   * Returns two sets of channel ids instead of two round-trips per channel:
+   *  - `awaiting`: has a GoPartTime task in PENDING/ACCEPTED with no submitted URL
+   *  - `active`:   has any GoPartTime task that is not ARCHIVED/CANCELLED
+   *
+   * The per-channel `taskStatus` derivation is `awaiting ? 'awaiting-submission'
+   * : active ? 'active' : 'idle'`, which is exactly what callers computed from
+   * the two `findFirst` probes — only the query count changes (2 instead of
+   * 2 x channels).
+   */
+  async findChannelTaskStatusSets(): Promise<{ awaiting: Set<string>; active: Set<string> }> {
+    const [awaitingRows, activeRows] = await Promise.all([
+      getDb().task.findMany({
+        where: {
+          source: 'goparttime',
+          status: { in: ['PENDING' as any, 'ACCEPTED' as any] },
+          submittedRedditUrl: null,
+        },
+        select: { channelId: true },
+        distinct: ['channelId'],
+      }),
+      getDb().task.findMany({
+        where: {
+          source: 'goparttime',
+          status: { notIn: ['ARCHIVED' as any, 'CANCELLED' as any] },
+        },
+        select: { channelId: true },
+        distinct: ['channelId'],
+      }),
+    ]);
+
+    return {
+      awaiting: new Set(awaitingRows.map((r) => r.channelId)),
+      active: new Set(activeRows.map((r) => r.channelId)),
+    };
+  }
+
   async updateAssignment(taskId: string, data: { assignmentStatus?: string; assignmentError?: string | null }) {
     return getDb().task.update({
       where: { id: taskId },

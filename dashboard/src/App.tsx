@@ -5,24 +5,29 @@ import { AuthProvider } from './hooks/useAuth';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
-import { Tasks } from './pages/Tasks';
-import { AcceptedTasks } from './pages/AcceptedTasks';
-import { DailyOutreach } from './pages/DailyOutreach';
-import { Automation } from './pages/Automation';
-import { TaskDetails } from './pages/TaskDetails';
-import { Analytics } from './pages/Analytics';
-import { Archives } from './pages/Archives';
-import { Settings } from './pages/Settings';
 import { PayoutLayout } from './pages/payout/PayoutLayout';
-import { TaskPayments } from './pages/payout/TaskPayments';
-import { Commissions } from './pages/payout/Commissions';
-import { Referrals } from './pages/Referrals';
-import { OwnerEarnings } from './pages/OwnerEarnings';
 import { NotFound } from './pages/NotFound';
 import { WorkerAuthProvider } from './hooks/useWorkerAuth';
 import { WorkerProtectedRoute } from './components/WorkerProtectedRoute';
 import { WorkerLayout } from './components/WorkerLayout';
+
+// Admin pages are code-split. They were previously all in the entry chunk, which
+// pulled Recharts (via Dashboard/Analytics) and every page's code into the
+// initial download for worker-portal users too. Route elements are unchanged;
+// each page is fetched on first navigation.
+const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
+const Tasks = lazy(() => import('./pages/Tasks').then((m) => ({ default: m.Tasks })));
+const AcceptedTasks = lazy(() => import('./pages/AcceptedTasks').then((m) => ({ default: m.AcceptedTasks })));
+const DailyOutreach = lazy(() => import('./pages/DailyOutreach').then((m) => ({ default: m.DailyOutreach })));
+const Automation = lazy(() => import('./pages/Automation').then((m) => ({ default: m.Automation })));
+const TaskDetails = lazy(() => import('./pages/TaskDetails').then((m) => ({ default: m.TaskDetails })));
+const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.Analytics })));
+const Archives = lazy(() => import('./pages/Archives').then((m) => ({ default: m.Archives })));
+const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
+const TaskPayments = lazy(() => import('./pages/payout/TaskPayments').then((m) => ({ default: m.TaskPayments })));
+const Commissions = lazy(() => import('./pages/payout/Commissions').then((m) => ({ default: m.Commissions })));
+const Referrals = lazy(() => import('./pages/Referrals').then((m) => ({ default: m.Referrals })));
+const OwnerEarnings = lazy(() => import('./pages/OwnerEarnings').then((m) => ({ default: m.OwnerEarnings })));
 
 const WorkerLogin = lazy(() => import('./pages/worker/WorkerLogin'));
 const WorkerHome = lazy(() => import('./pages/worker/WorkerHome'));
@@ -36,6 +41,14 @@ function WorkerFallback() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-worker-bg">
       <div className="h-10 w-10 animate-spin rounded-full border-2 border-worker-border border-t-worker-accent" aria-label="Loading worker page" />
+    </div>
+  );
+}
+
+function PageFallback() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-dark-700 border-t-primary-500" aria-label="Loading page" />
     </div>
   );
 }
@@ -54,6 +67,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Router>
+          {/* Single boundary for the lazily-loaded admin pages. Worker routes
+              keep their own inner Suspense below, which takes precedence. */}
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/login" element={<Login />} />
 
@@ -208,6 +224,7 @@ export default function App() {
 
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </Router>
       </AuthProvider>
     </QueryClientProvider>

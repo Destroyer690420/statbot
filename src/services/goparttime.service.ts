@@ -140,22 +140,27 @@ class GoPartTimeService {
 
   /**
    * Lists all text channels as tickets with their GoPartTime task state.
+   *
+   * Task state is resolved with 2 bulk queries rather than 2 probes per channel;
+   * the derived `taskStatus` values are identical.
    */
   async listTickets(discordClient: Client): Promise<TicketInfo[]> {
     const tickets: TicketInfo[] = [];
+    const { awaiting, active } = await taskRepository.findChannelTaskStatusSets();
 
     for (const guild of discordClient.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
         if (!(channel instanceof TextChannel)) continue;
 
-        const awaiting = await taskRepository.findAwaitingSubmissionInChannel(channel.id);
-        const any = awaiting || (await taskRepository.findAnyGoparttimeInChannel(channel.id));
-
         tickets.push({
           channelId: channel.id,
           channelName: channel.name,
           guildId: channel.guildId,
-          taskStatus: awaiting ? 'awaiting-submission' : any ? 'active' : 'idle',
+          taskStatus: awaiting.has(channel.id)
+            ? 'awaiting-submission'
+            : active.has(channel.id)
+              ? 'active'
+              : 'idle',
         });
       }
     }

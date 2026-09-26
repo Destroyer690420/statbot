@@ -74,7 +74,7 @@ export function createApiServer(discordClient: Client): express.Application {
 
   // ─── Body Parsing ──────────────────────────────────────────
   app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.urlencoded({ extended: false }));
 
   // ─── Request Logging ───────────────────────────────────────
   app.use((req, _res, next) => {

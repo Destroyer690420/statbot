@@ -142,6 +142,9 @@ model Task {
   @@index([channelName, status])
   @@index([assignedUserId, status])
   @@index([createdAt])
+  // Index-only lookups for the GoPartTime per-ticket task state: source is an
+  // equality, status an IN/NOT IN, and channelId comes straight from the index.
+  @@index([source, status, channelId])
   @@unique([source, externalTaskId])
 }
 
@@ -218,6 +221,9 @@ model PayoutItem {
 
   @@index([batchId])
   @@index([taskId])
+  // Worker portal wallet reads filter on workerId; without this the lookup is
+  // a sequential scan of every PayoutItem row ever written.
+  @@index([workerId])
 }
 
 model Referral {
@@ -502,6 +508,8 @@ model AutomationBurst {
   updatedAt   DateTime @updatedAt
 
   @@index([status])
+  // listBurstsByCycle(cycleId) runs on the companion's 2-second claim poll.
+  @@index([cycleId])
 }
 model InviteDetection {
   id              String    @id

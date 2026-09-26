@@ -19,4 +19,20 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    target: 'es2020',
+    cssCodeSplit: true,
+    reportCompressedSize: true,
+    rollupOptions: {
+      output: {
+        // Split long-lived vendor code out of the app chunks so a deploy that
+        // only changes page code does not invalidate the framework cache.
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          query: ['@tanstack/react-query'],
+          charts: ['recharts'],
+        },
+      },
+    },
+  },
 });

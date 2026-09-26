@@ -245,18 +245,23 @@ export function successEmbed(message: string): EmbedBuilder {
 }
 
 /**
+ * `Intl.DateTimeFormat` construction is expensive and this is called once per
+ * worker in batch payout notifications, so the formatter is built once.
+ */
+const IST_DATE_TIME_FORMAT = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  day: 'numeric',
+  month: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
+/**
  * Format a Date in IST for payout notifications (e.g. "Sep 20, 4:32 PM IST").
  */
 export function formatIST(date: Date): string {
-  const parts = new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(date);
-  return `${parts} IST`;
+  return `${IST_DATE_TIME_FORMAT.format(date)} IST`;
 }
 
 export interface PayoutNotificationData {

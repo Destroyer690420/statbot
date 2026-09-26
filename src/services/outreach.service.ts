@@ -106,19 +106,28 @@ class OutreachService {
 
     const workerNames = await this.resolveWorkerNames(discordClient, channels);
 
+    // Per-ticket GoPartTime task state in 2 queries instead of 2 per channel.
+    // Pure read path (this is `getStatus`, the Daily Outreach page) — the blast
+    // send path (beginBlast/sendBlastMessages/sendBlast) is not involved.
+    const { awaiting: awaitingChannels, active: activeChannels } =
+      await taskRepository.findChannelTaskStatusSets();
+
     const inputs: OutreachRowInput[] = [];
     for (const channel of channels) {
       const row = rowsByChannel.get(channel.id);
       const portal = portalByChannel.get(channel.id);
 
-      const awaiting = await taskRepository.findAwaitingSubmissionInChannel(channel.id);
-      const any = awaiting || (await taskRepository.findAnyGoparttimeInChannel(channel.id));
+      const taskStatus: TicketTaskStatus = awaitingChannels.has(channel.id)
+        ? 'awaiting-submission'
+        : activeChannels.has(channel.id)
+          ? 'active'
+          : 'idle';
 
       inputs.push({
         channelId: channel.id,
         channelName: channel.name,
         guildId: channel.guildId,
-        taskStatus: awaiting ? 'awaiting-submission' : any ? 'active' : 'idle',
+        taskStatus,
         workerName: workerNames.get(channel.id) ?? null,
         selected: row?.selected ?? false,
         messageSentAt: row?.messageSentAt ? row.messageSentAt.toISOString() : null,

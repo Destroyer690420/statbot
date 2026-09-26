@@ -51,20 +51,29 @@ class AuditLogService {
    * consumers can render a display ID instead of the internal one.
    */
   private async enrich(logs: AuditLog[]): Promise<AuditLog[]> {
-    const enriched: AuditLog[] = [];
-    for (const log of logs) {
+    // One batched task read for the whole page instead of one per log row.
+    // Same taskId -> {externalTaskId, type} mapping as before.
+    const taskIds = [...new Set(logs.map((l) => l.taskId).filter((id): id is string => Boolean(id)))];
+    const tasksById = new Map<string, { externalTaskId: string | null; type: TaskType }>();
+    if (taskIds.length > 0) {
+      const tasks = await taskRepository.findManyByIds(taskIds);
+      for (const task of tasks) {
+        tasksById.set(task.id, { externalTaskId: task.externalTaskId, type: task.type as TaskType });
+      }
+    }
+
+    return logs.map((log) => {
       let externalTaskId: string | null = null;
       let taskType: TaskType | null = null;
       if (log.taskId) {
-        const task = await taskRepository.findById(log.taskId);
+        const task = tasksById.get(log.taskId);
         if (task) {
           externalTaskId = task.externalTaskId;
-          taskType = task.type as TaskType;
+          taskType = task.type;
         }
       }
-      enriched.push({ ...log, externalTaskId, taskType });
-    }
-    return enriched;
+      return { ...log, externalTaskId, taskType };
+    });
   }
 }
 
