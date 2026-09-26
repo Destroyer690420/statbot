@@ -17,7 +17,6 @@ import { logger } from '../../utils/logger';
 import {
   HOURLY_SCAN_ID,
   isHourlyScanAllowed,
-  LATE_GRACE_MS,
   planNextHourlyScan,
 } from './hourly-scan-plan';
 import {
@@ -74,13 +73,15 @@ export function startHourlyScanTrigger(): void {
   if (timer) return;
   const schedule = (): void => {
     try {
-      // Skip-ahead: the round just served (or skipped) must never
-      // re-plan into itself — plan from just past its grace window so
-      // the chain advances instead of 5s-looping inside grace.
-      let plan = planNextHourlyScan(Date.now());
-      if (lastServed && plan.key === lastServed.key) {
-        plan = planNextHourlyScan(lastServed.at + LATE_GRACE_MS + 1000);
-      }
+      // Plan from the real clock, and hand the planner the round we already
+      // served so it can never hand that hour back. The delay must stay
+      // relative to Date.now(): the previous version re-planned from
+      // `lastServed.at + LATE_GRACE_MS + 1000` and armed that delay as if it
+      // were measured from now, so every post-fire round landed ~5 min early
+      // (:05 instead of :10 — before the drop) and then spun on 5s no-op
+      // re-plans until the next hour. The skip is what makes the chain move
+      // straight on to the next :10:05.
+      const plan = planNextHourlyScan(Date.now(), lastServed?.key ?? null);
       logger.info('Hourly scan scheduled', {
         key: plan.key,
         firesInSec: Math.round(plan.delayMs / 1000),

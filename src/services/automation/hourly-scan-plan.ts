@@ -51,19 +51,30 @@ function roundKey(y: number, mo: number, d: number, h: number): string {
  * month/year boundaries handled by decomposition, never manual +1 day).
  * Late fires, retries, and next-hour fires can never share a key. Never
  * throws — callers must never break boot on a clock anomaly.
+ *
+ * `skipKey` is the round key the caller has ALREADY served. That hour is
+ * then never returned again (neither on time nor through the late grace),
+ * and — critically — `delayMs` stays relative to `nowMs` in every branch.
+ * Never re-plan from any other reference (e.g. `lastServed.at + grace`):
+ * a delay measured from a stale instant is armed as if it came from now, and
+ * the chain then fires minutes early.
  */
-export function planNextHourlyScan(nowMs: number): HourlyScanPlan {
+export function planNextHourlyScan(nowMs: number, skipKey?: string | null): HourlyScanPlan {
   try {
     const p = istParts(nowMs);
     const thisHourTarget =
       Date.UTC(p.y, p.mo, p.d, p.h, SCAN_MIN, SCAN_SEC) - IST_OFFSET_MS;
     const thisKey = roundKey(p.y, p.mo, p.d, p.h);
-    if (thisHourTarget > nowMs) {
-      return { delayMs: thisHourTarget - nowMs, key: thisKey, late: false };
+    if (thisKey !== skipKey) {
+      if (thisHourTarget > nowMs) {
+        return { delayMs: thisHourTarget - nowMs, key: thisKey, late: false };
+      }
+      if (nowMs - thisHourTarget < LATE_GRACE_MS) {
+        return { delayMs: LATE_DELAY_MS, key: thisKey, late: true };
+      }
     }
-    if (nowMs - thisHourTarget < LATE_GRACE_MS) {
-      return { delayMs: LATE_DELAY_MS, key: thisKey, late: true };
-    }
+    // Adding exactly one hour always advances the IST hour by one, so this
+    // is genuinely the next round (date/month/year rollover included).
     const n = istParts(nowMs + 60 * 60 * 1000);
     const nextTarget =
       Date.UTC(n.y, n.mo, n.d, n.h, SCAN_MIN, SCAN_SEC) - IST_OFFSET_MS;
