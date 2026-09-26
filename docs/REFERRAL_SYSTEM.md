@@ -128,15 +128,20 @@ A worker sees their own invite list and what they earned from it on the worker p
 |---|---|
 | `summary.invited` / `withTicket` / `qualified` | derived from the listed rows; `status === 'closed'` referrals are never listed, `qualified` counts rows that reached their threshold |
 | `summary.directPaid` | sum of that inviter's `CommissionItem` rows (`one_time` + `per_task`) on referrals they own — an item's existence *is* the paid record, because commission batches stamp `paidAt` at creation |
-| `summary.directPending` | sum of what `commissionService.getPayableItems` would create next (threshold met, no item yet) |
-| `summary.teamPaid` | their `per_task_indirect` earnings on referrals they do **not** own, as one anonymous total |
+| `summary.directPending` | sum of what `commissionService.getPayableItems` would create next on their own referrals (threshold met, no item yet) |
+| `summary.chainPending` | the same for `commissionService.getIndirectPayableItems` — multi-level share, non-zero **only for the three special inviters** |
+| `summary.teamPaid` | their `per_task_indirect` earnings already disbursed, as one anonymous total |
 | `summary.paid` | `directPaid + teamPaid` |
-| `invitees[].name` / `.ticket` / `.tasks` / `.threshold` / `.qualified` | display name, ticket **number**, completed tasks **capped at the threshold**, and whether the bonus is unlocked |
+| `summary.lastBatch` | `{ amount, batchNumber, paidAt }` of the most recent batch that paid them; every kind in that batch counts, older batches do not. Nulls when never paid |
+| `invitees[].name` / `.ticket` / `.tasks` / `.threshold` / `.qualified` / `.earned` | display name, ticket **number**, completed tasks **capped at the threshold**, whether the bonus is unlocked, and money already disbursed for that person |
+
+- **`directPending + chainPending` is the figure that matches the admin panel.** `getBreakdown()` adds indirect items for special inviters, so omitting the chain share made the worker panel under-report a special inviter by a lot (observed 2026-09-26: ₹210 direct vs ₹440 chain = ₹650, exactly the admin's `totalCommission`). Normal inviters have no chain pending, so their number was always complete and is unchanged.
+- **Nothing about special inviters is exposed to anyone else.** `chainPending` is structurally zero for normal inviters, and every chain-related line in the UI is gated on `teamPaid > 0 || chainPending > 0`, which only a special inviter can satisfy. A normal inviter's panel contains no chain wording at all.
 
 - **Per-row metric is task progress, not money** (owner change, 2026-09-26): the bonus pays once at the threshold, so a per-invitee rupee figure is always 0 until the manager runs a payout and stops moving afterwards. `tasks` therefore counts COMPLETED + ARCHIVED tasks excluding any `cancelledReason` — the same rule as the engine's `getCompletedTasksForUser` — and is clamped to `threshold` (`specialInviteTaskThreshold` for special inviters, `normalInviteTaskThreshold` = 2 otherwise), read from `CommissionRates` so it follows the real rate instead of a hardcoded 2. All invitees are counted in one batched query.
 - **Ticket number resolution**: `Referral.ticketId` is a channel mention (`<#id>`) for auto-detected referrals, a bare snowflake, or a plain channel name for `/referral add`. Ids are resolved against channel names already recorded on `Task` rows (one batched query); a plain name is used as-is; anything unresolvable returns `null` ("No ticket yet") so an id or raw mention can never reach a worker.
 - **Withheld by design**: invitee Discord ids, referral/commission ids, `commissionKind`, `inviterType`, commission rates, and the identity/ticket/task behind `teamPaid`. Enforced by `WORKER_FORBIDDEN_FIELDS` + `worker-isolation.test.ts`.
-- **Not covered here**: indirect *pending* money is not computed for workers (only paid), so a large chain costs fewer queries than it would with a full indirect payable walk.
+- **Not covered here**: multi-level **pending** is computed for everyone (it is a single `getIndirectPayableItems` call that returns fast when the inviter has no indirect referrals), so a large chain costs the same walk the admin breakdown already performs on demand.
 
 ## 8. Owner-Earnings Integration
 

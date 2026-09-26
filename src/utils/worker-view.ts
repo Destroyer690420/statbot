@@ -877,10 +877,17 @@ export interface WorkerInvitesTotals {
   qualified: number;
   paid: number;
   directPaid: number;
+  /** Unlocked on their own referrals, not yet disbursed. */
   directPending: number;
+  /**
+   * Unlocked multi-level ("invite chain") money, not yet disbursed. Non-zero
+   * only for the three special inviters, so the UI shows it to them alone and
+   * a normal inviter never learns the mechanism exists.
+   */
+  chainPending: number;
   teamPaid: number;
-  /** Disbursed inside the current IST payout week (batch week attribution). */
-  paidThisWeek: number;
+  /** The most recent commission batch that actually paid this inviter. */
+  lastBatch: { amount: number; batchNumber: number | null; paidAt: string | null };
 }
 
 export interface WorkerInviteeDto {
@@ -906,19 +913,20 @@ function roundMoney(amount: number): number {
  * only invites and never receives a task.
  *
  * Per invitee: task progress capped at the threshold (the bonus pays once, so
- * a bigger number would be noise) plus what they have actually earned from that
+ * a bigger number would be noise) plus what they have already earned from that
  * person. Totals: money already received comes from that inviter's
- * CommissionItem rows, `directPending` from the payable engine's not-yet-created
- * items, and `paidThisWeek` attributed to the disbursing batch's IST payout
- * week. Multi-level earnings are a single anonymous `teamPaid` total — the
- * downstream workers behind them are never named to the inviter, and no Discord
- * ids cross this boundary (only display names, ticket numbers, counts, money).
+ * CommissionItem rows, `directPending`/`chainPending` from the payable engine's
+ * not-yet-created items, and `lastBatch` is what their most recent payout
+ * actually contained. Multi-level earnings are a single anonymous figure
+ * (`teamPaid` / `chainPending`) — the downstream workers behind them are never
+ * named to the inviter, and no Discord ids cross this boundary.
  */
 export function buildInvitesSummary(input: {
   directPaid: number;
   directPending: number;
+  chainPending: number;
   teamPaid: number;
-  paidThisWeek: number;
+  lastBatch: { amount: number; batchNumber: number | null; paidAt: string | null };
   invitees: WorkerInviteInput[];
 }): WorkerInvitesDto {
   const invitees = input.invitees
@@ -947,8 +955,13 @@ export function buildInvitesSummary(input: {
       paid: roundMoney(directPaid + teamPaid),
       directPaid,
       directPending: roundMoney(input.directPending),
+      chainPending: roundMoney(input.chainPending),
       teamPaid,
-      paidThisWeek: roundMoney(input.paidThisWeek),
+      lastBatch: {
+        amount: roundMoney(input.lastBatch?.amount ?? 0),
+        batchNumber: input.lastBatch?.batchNumber ?? null,
+        paidAt: input.lastBatch?.paidAt ?? null,
+      },
     },
     invitees,
   };

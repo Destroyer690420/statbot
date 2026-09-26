@@ -12,10 +12,12 @@ jest.mock('../utils/logger', () => ({
 
 const mockGetCommissionRates = jest.fn();
 const mockGetPayableItems = jest.fn();
+const mockGetIndirectPayableItems = jest.fn();
 jest.mock('../services/commission.service', () => ({
   commissionService: {
     getCommissionRates: (...args: unknown[]) => mockGetCommissionRates(...args),
     getPayableItems: (...args: unknown[]) => mockGetPayableItems(...args),
+    getIndirectPayableItems: (...args: unknown[]) => mockGetIndirectPayableItems(...args),
   },
 }));
 
@@ -70,6 +72,7 @@ describe('getInvitesForWorker', () => {
     taskRows = [];
     mockGetCommissionRates.mockResolvedValue(RATES);
     mockGetPayableItems.mockResolvedValue([]);
+    mockGetIndirectPayableItems.mockResolvedValue([]);
 
     taskFindMany = jest.fn(async (args: any = {}) => {
       const where = args?.where ?? {};
@@ -108,7 +111,7 @@ describe('getInvitesForWorker', () => {
               referralId: i.referralId,
               commissionKind: i.commissionKind,
               amount: i.amount,
-              batch: { weekStart: i.batchWeekStart ?? null },
+              batch: { batchNumber: i.batchNumber ?? null, paidAt: i.batchPaidAt ?? null },
             })),
         ),
         findFirst: jest.fn(async () => null),
@@ -209,28 +212,56 @@ describe('getInvitesForWorker', () => {
     expect(JSON.stringify(dto)).not.toContain('REF-SOMEONE-ELSE');
   });
 
-  it('counts only what was paid inside the current payout week as paidThisWeek', async () => {
-    const now = new Date();
-    // Start of the current IST payout week (Sunday 00:00 IST), as a Date.
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const ist = new Date(now.getTime() + istOffset);
-    const weekStart = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - ist.getUTCDay()) - istOffset);
-    const lastWeek = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const nextWeek = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-
+  it('reports the most recent batch that paid this inviter as lastBatch', async () => {
     referrals = [referral({ id: 'REF-MINE' })];
     items = [
-      { referralId: 'REF-MINE', commissionKind: 'one_time', amount: 100, inviterId: ME, batchWeekStart: weekStart },
-      { referralId: 'REF-MINE', commissionKind: 'per_task', amount: 20, inviterId: ME, batchWeekStart: lastWeek },
-      { referralId: 'REF-SOMEONE-ELSE', commissionKind: 'per_task_indirect', amount: 35, inviterId: ME, batchWeekStart: nextWeek },
-      // No batch week at all (defensive: must not be counted as this week).
-      { referralId: 'REF-MINE', commissionKind: 'per_task', amount: 5, inviterId: ME },
+      { referralId: 'REF-MINE', commissionKind: 'one_time', amount: 100, inviterId: ME, batchNumber: 7, batchPaidAt: new Date('2026-08-01T00:00:00Z') },
+      { referralId: 'REF-MINE', commissionKind: 'per_task', amount: 20, inviterId: ME, batchNumber: 9, batchPaidAt: new Date('2026-09-22T14:19:00Z') },
+      // Same newest batch: must add into it, not replace it.
+      { referralId: 'REF-SOMEONE-ELSE', commissionKind: 'per_task_indirect', amount: 35, inviterId: ME, batchNumber: 9, batchPaidAt: new Date('2026-09-22T14:19:00Z') },
+      // An older batch must not win.
+      { referralId: 'REF-MINE', commissionKind: 'per_task', amount: 5, inviterId: ME, batchNumber: 8, batchPaidAt: new Date('2026-08-15T00:00:00Z') },
+      // No batch at all (defensive: ignored by lastBatch but still counted as paid).
+      { referralId: 'REF-MINE', commissionKind: 'per_task', amount: 1, inviterId: ME },
     ];
 
     const dto = await getInvitesForWorker(ME);
 
-    expect(dto.summary.paidThisWeek).toBe(100);
-    expect(dto.summary.paid).toBe(160);
+    expect(dto.summary.lastBatch).toEqual({
+      amount: 55,
+      batchNumber: 9,
+      paidAt: new Date('2026-09-22T14:19:00Z').toISOString(),
+    });
+    expect(dto.summary.paid).toBe(161);
+  });
+
+  it('leaves lastBatch empty for an inviter who has never been paid', async () => {
+    referrals = [referral({ id: 'REF-MINE' })];
+    const dto = await getInvitesForWorker(ME);
+    expect(dto.summary.lastBatch).toEqual({ amount: 0, batchNumber: null, paidAt: null });
+  });
+
+  it('adds multi-level pending money only where it exists, and keeps it out of direct', async () => {
+    referrals = [referral({ id: 'REF-MINE' })];
+    mockGetPayableItems.mockResolvedValue([{ commissionKind: 'one_time', amount: 100, sourceTaskId: null }]);
+    mockGetIndirectPayableItems.mockResolvedValue([
+      { commissionKind: 'per_task_indirect', amount: 40, sourceTaskId: 't1' },
+      { commissionKind: 'per_task_indirect', amount: 5, sourceTaskId: 't2' },
+    ]);
+
+    const dto = await getInvitesForWorker(ME);
+
+    expect(dto.summary.directPending).toBe(100);
+    expect(dto.summary.chainPending).toBe(45);
+    // The chain share is never attributed to the inviter's own invitee rows.
+    expect(dto.invitees.every((i) => i.earned === 0)).toBe(true);
+  });
+
+  it('skips the multi-level walk for an inviter with no referrals at all', async () => {
+    referrals = [];
+    const dto = await getInvitesForWorker(ME);
+    expect(dto.summary.chainPending).toBe(0);
+    expect(mockGetIndirectPayableItems).not.toHaveBeenCalled();
   });
 
   it('counts completed tasks per invitee and stops at the threshold', async () => {
@@ -344,7 +375,7 @@ describe('getInvitesForWorker', () => {
         referralId: true,
         commissionKind: true,
         amount: true,
-        batch: { select: { weekStart: true } },
+        batch: { select: { batchNumber: true, paidAt: true } },
       },
     });
     const json = JSON.stringify(dto);

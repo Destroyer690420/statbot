@@ -2,7 +2,6 @@ import { getDb } from '../database/db';
 import { toReferral } from '../database/converters';
 import { commissionRepository, referralRepository } from '../database/repositories';
 import { commissionService } from './commission.service';
-import { payoutService } from './payout.service';
 import { buildInvitesSummary, WorkerInviteInput, WorkerInvitesDto } from '../utils/worker-view';
 import { TaskStatus } from '../types';
 import { logger } from '../utils/logger';
@@ -106,17 +105,15 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
   const paidByReferral = new Map<string, number>();
   let directPaid = 0;
   let teamPaid = 0;
-  let paidThisWeek = 0;
+  // "Paid in the last batch": the most recent commission batch that actually
+  // paid this inviter. More meaningful than a week window — the owner reads it
+  // as "this is what landed in my last payout".
+  const lastBatch = { amount: 0, batchNumber: null as number | null, paidAt: null as string | null };
 
   // CommissionItem rows already written == money actually disbursed: commission
   // batches stamp paidAt at creation, so an item's existence is the paid record
   // and no extra batch lookup is needed. Items whose referral this worker does
   // not own are multi-level earnings.
-  //
-  // "Paid this week" is the batch's own IST payout week — i.e. when the money
-  // was actually disbursed. A payout run today for last week's work therefore
-  // counts as this week, which is the honest reading of "paid this week".
-  const week = payoutService.getCurrentPayoutWeek();
   for (const item of await commissionRepository.findItemsByInviterId(workerId)) {
     const own = ownReferralIds.has(item.referralId);
     if (own) {
@@ -125,19 +122,30 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
     } else {
       teamPaid += item.amount;
     }
-    const batchWeekStart = item.batch?.weekStart;
-    if (batchWeekStart && batchWeekStart >= week.weekStart && batchWeekStart <= week.weekEnd) {
-      paidThisWeek += item.amount;
+    const batchNumber = item.batch?.batchNumber ?? null;
+    if (batchNumber === null) continue;
+    if (lastBatch.batchNumber === null || batchNumber > lastBatch.batchNumber) {
+      lastBatch.batchNumber = batchNumber;
+      lastBatch.amount = 0;
+      lastBatch.paidAt = item.batch?.paidAt ? new Date(item.batch.paidAt).toISOString() : null;
     }
+    if (batchNumber === lastBatch.batchNumber) lastBatch.amount += item.amount;
   }
 
+  // Pending money the next payout will create. `chainPending` is the
+  // multi-level share and is non-zero only for the three special inviters, so
+  // a normal inviter's total is exactly their own direct pending and the UI has
+  // nothing chain-related to show them.
   let directPending = 0;
+  let chainPending = 0;
   const rates = referrals.length > 0 ? await commissionService.getCommissionRates() : null;
   if (rates) {
     for (const referral of referrals) {
       const payable = await commissionService.getPayableItems(referral, rates);
       for (const item of payable) directPending += item.amount;
     }
+    const chainPayable = await commissionService.getIndirectPayableItems(workerId, rates);
+    for (const item of chainPayable) chainPending += item.amount;
   }
 
   const [namesByChannel, completedByInvitee] = await Promise.all([
@@ -159,5 +167,5 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
     };
   });
 
-  return buildInvitesSummary({ directPaid, directPending, teamPaid, paidThisWeek, invitees });
+  return buildInvitesSummary({ directPaid, directPending, chainPending, teamPaid, lastBatch, invitees });
 }

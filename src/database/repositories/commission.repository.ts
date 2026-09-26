@@ -87,9 +87,9 @@ export class CommissionRepository {
 
   /**
    * Every commission credited to one inviter, direct and multi-level
-   * (`per_task_indirect`) alike, with the batch's payout week so callers can
-   * attribute earnings to a week. Scoped to that inviter and projected down to
-   * the few fields a worker-facing total needs.
+   * (`per_task_indirect`) alike, with the batch that paid it so callers can
+   * report "paid in batch #N". Scoped to that inviter and projected down to the
+   * few fields a worker-facing total needs.
    */
   async findItemsByInviterId(inviterId: string) {
     return getDb().commissionItem.findMany({
@@ -98,7 +98,7 @@ export class CommissionRepository {
         referralId: true,
         commissionKind: true,
         amount: true,
-        batch: { select: { weekStart: true } },
+        batch: { select: { batchNumber: true, paidAt: true } },
       },
     });
   }

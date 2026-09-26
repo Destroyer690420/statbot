@@ -116,26 +116,17 @@ function buildState(failChannel: MockChannel): FixtureState {
       { id: 'REF-P2', inviterId: P, inviterName: 'Pure Inviter', inviteeId: P_INVITEE2, inviteeName: 'PureInviteTwo', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: null, indirectSpecialInviterId: null, createdAt: d('2026-08-02T00:00:00Z'), updatedAt: d('2026-08-02T00:00:00Z') },
     ],
     commissionItems: [
-      { id: 'ci-a1', batchId: 'cb-1', referralId: 'REF-A1', inviterId: A, invitedWorkerId: INVITEE1, sourceTaskId: null, commissionKind: 'one_time', amount: 100, createdAt: d('2026-08-10T00:00:00Z') },
-      { id: 'ci-a2', batchId: 'cb-1', referralId: 'REF-A1', inviterId: A, invitedWorkerId: INVITEE1, sourceTaskId: 'tI21', commissionKind: 'per_task', amount: 20, createdAt: d('2026-08-10T00:00:00Z') },
+      { id: 'ci-a1', batchId: 'cb-1', referralId: 'REF-A1', inviterId: A, invitedWorkerId: INVITEE1, sourceTaskId: null, commissionKind: 'one_time', amount: 100, createdAt: d('2026-08-10T00:00:00Z'), batchNumber: 4, batchPaidAt: d('2026-08-10T00:00:00Z') },
+      { id: 'ci-a2', batchId: 'cb-1', referralId: 'REF-A1', inviterId: A, invitedWorkerId: INVITEE1, sourceTaskId: 'tI21', commissionKind: 'per_task', amount: 20, createdAt: d('2026-08-10T00:00:00Z'), batchNumber: 4, batchPaidAt: d('2026-08-10T00:00:00Z') },
       // Multi-level credit on somebody else's referral (Bob's invitee, Bob's task).
-      { id: 'ci-team', batchId: 'cb-2', referralId: 'REF-B1', inviterId: A, invitedWorkerId: DOWNSTREAM, sourceTaskId: 'tB3', commissionKind: 'per_task_indirect', amount: 10, createdAt: d('2026-08-12T00:00:00Z') },
+      { id: 'ci-team', batchId: 'cb-2', referralId: 'REF-B1', inviterId: A, invitedWorkerId: DOWNSTREAM, sourceTaskId: 'tB3', commissionKind: 'per_task_indirect', amount: 10, createdAt: d('2026-08-12T00:00:00Z'), batchNumber: 6, batchPaidAt: d('2026-08-12T00:00:00Z') },
       // Bob's own commission: must never be counted for Alice.
       { id: 'ci-b1', batchId: 'cb-1', referralId: 'REF-B1', inviterId: B, invitedWorkerId: DOWNSTREAM, sourceTaskId: null, commissionKind: 'one_time', amount: 555, createdAt: d('2026-08-10T00:00:00Z') },
       // P's commissions: one from an old batch, one from the current payout week.
-      { id: 'ci-p1', batchId: 'cb-old', referralId: 'REF-P1', inviterId: P, invitedWorkerId: P_INVITEE1, sourceTaskId: null, commissionKind: 'one_time', amount: 100, createdAt: d('2026-07-20T00:00:00Z'), batchWeekStart: d('2026-07-12T00:00:00Z') },
-      { id: 'ci-p2', batchId: 'cb-this', referralId: 'REF-P2', inviterId: P, invitedWorkerId: P_INVITEE2, sourceTaskId: null, commissionKind: 'one_time', amount: 250, createdAt: d('2026-08-20T00:00:00Z'), batchWeekStart: currentIstPayoutWeekStart() },
+      { id: 'ci-p1', batchId: 'cb-old', referralId: 'REF-P1', inviterId: P, invitedWorkerId: P_INVITEE1, sourceTaskId: null, commissionKind: 'one_time', amount: 100, createdAt: d('2026-07-20T00:00:00Z'), batchNumber: 3, batchPaidAt: d('2026-07-12T00:00:00Z') },
+      { id: 'ci-p2', batchId: 'cb-this', referralId: 'REF-P2', inviterId: P, invitedWorkerId: P_INVITEE2, sourceTaskId: null, commissionKind: 'one_time', amount: 250, createdAt: d('2026-08-20T00:00:00Z'), batchNumber: 9, batchPaidAt: d('2026-08-20T00:00:00Z') },
     ],
   };
-}
-
-/** Start of the current IST Sunday→Saturday payout week, as the app computes it. */
-function currentIstPayoutWeekStart(): Date {
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const ist = new Date(Date.now() + istOffset);
-  return new Date(
-    Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - ist.getUTCDay()) - istOffset,
-  );
 }
 
 const B_MARKERS = [B, 'Bobson McOther', 'ticket-0002', 'chan-bob', 'tB1', 'tB2', 'tB3', 'ZzzSecretSubB', 'Bob secret title', '77', '9999', 'ReferralSecret'];
@@ -465,8 +456,11 @@ describe('worker isolation (HTTP)', () => {
         { name: 'Invited Two', ticket: 'ticket-0022', tasks: 2, threshold: 2, qualified: true, earned: 0 },
         { name: 'Invited One', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false, earned: 120 },
       ]);
-      // A's own items are all in an old batch, so nothing landed this week.
-      expect(summary.paidThisWeek).toBe(0);
+      // A's newest paying batch is #6, which contained only the chain item, so
+      // lastBatch is that batch alone — not the sum of every batch.
+      expect(summary.lastBatch.batchNumber).toBe(6);
+      expect(summary.lastBatch.amount).toBe(10);
+      expect(summary.chainPending).toBe(0);
 
       const json = JSON.stringify(res.body);
       // No ids, no referral internals, no rates, no closed rows.
@@ -477,7 +471,7 @@ describe('worker isolation (HTTP)', () => {
       expect(json).not.toContain('ReferralSecret');
       expect(json).not.toContain('tB3');
       // Keys are exactly the whitelisted shape.
-      expect(Object.keys(summary).sort()).toEqual(['directPaid', 'directPending', 'invited', 'paid', 'paidThisWeek', 'qualified', 'teamPaid', 'withTicket']);
+      expect(Object.keys(summary).sort()).toEqual(['chainPending', 'directPaid', 'directPending', 'invited', 'lastBatch', 'paid', 'qualified', 'teamPaid', 'withTicket']);
       for (const row of invitees) {
         expect(Object.keys(row).sort()).toEqual(['earned', 'name', 'qualified', 'tasks', 'threshold', 'ticket']);
       }
@@ -489,7 +483,8 @@ describe('worker isolation (HTTP)', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.invitees).toEqual([]);
       expect(res.body.data.summary).toEqual({
-        invited: 0, withTicket: 0, qualified: 0, paid: 0, directPaid: 0, directPending: 0, teamPaid: 0, paidThisWeek: 0,
+        invited: 0, withTicket: 0, qualified: 0, paid: 0, directPaid: 0, directPending: 0, chainPending: 0, teamPaid: 0,
+        lastBatch: { amount: 0, batchNumber: null, paidAt: null },
       });
     });
   });
@@ -555,7 +550,8 @@ describe('worker isolation (HTTP)', () => {
         invited: 2,
         paid: 350,
         directPaid: 350,
-        paidThisWeek: 250,
+        chainPending: 0,
+        lastBatch: { amount: 250, batchNumber: 9 },
       });
       expect(invites.body.data.invitees.map((r: { name: string }) => r.name).sort()).toEqual([
         'PureInviteOne', 'PureInviteTwo',

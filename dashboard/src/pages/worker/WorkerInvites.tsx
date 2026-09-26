@@ -81,10 +81,18 @@ export default function WorkerInvites() {
   const paid = Number(summary?.paid ?? 0);
   const directPaid = Number(summary?.directPaid ?? 0);
   const teamPaid = Number(summary?.teamPaid ?? 0);
-  const paidThisWeek = Number(summary?.paidThisWeek ?? 0);
-  const pending = Number(summary?.directPending ?? 0);
+  const directPending = Number(summary?.directPending ?? 0);
+  const chainPending = Number(summary?.chainPending ?? 0);
+  const pending = directPending + chainPending;
   const qualified = Number(summary?.qualified ?? 0);
-  const weekLabel = formatISTDate(new Date());
+  const lastBatch = summary?.lastBatch ?? null;
+  const lastBatchAmount = Number(lastBatch?.amount ?? 0);
+  const lastBatchNumber = lastBatch?.batchNumber ?? null;
+  const lastBatchPaidAt = lastBatch?.paidAt ?? null;
+  // Only the three special inviters ever have chain money, so every
+  // chain-related line is gated on these — a normal inviter's panel contains no
+  // trace of the mechanism.
+  const hasChainMoney = teamPaid > 0 || chainPending > 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -103,12 +111,16 @@ export default function WorkerInvites() {
           icon={<Users className="h-4 w-4" aria-hidden="true" />}
         />
         <SummaryCard
-          label="Paid this week"
-          hint={`Week of ${weekLabel}`}
-          value={formatMoney(paidThisWeek)}
+          label="Paid in last batch"
+          hint={
+            lastBatchNumber === null
+              ? 'No payment yet'
+              : `Batch #${lastBatchNumber}${lastBatchPaidAt ? ` · ${formatISTDate(lastBatchPaidAt)}` : ''}`
+          }
+          value={formatMoney(lastBatchAmount)}
           tone="success"
           icon={<TrendingUp className="h-4 w-4" aria-hidden="true" />}
-          foot={<span>Commission paid to you since {weekLabel}.</span>}
+          foot={<span>{lastBatchNumber === null ? 'Your first referral payment will appear here.' : 'What that payout contained.'}</span>}
         />
         <SummaryCard
           label="Total paid"
@@ -116,10 +128,9 @@ export default function WorkerInvites() {
           value={formatMoney(paid)}
           icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
           foot={
-            teamPaid > 0 ? (
+            hasChainMoney ? (
               <span>
-                {formatMoney(directPaid)} from your invites
-                {teamPaid > 0 ? ` · ${formatMoney(teamPaid)} from your whole invite chain` : ''}
+                {formatMoney(directPaid)} from your invites · {formatMoney(teamPaid)} from your whole invite chain
               </span>
             ) : (
               <span>Actual amounts credited by your manager.</span>
@@ -132,16 +143,25 @@ export default function WorkerInvites() {
           value={formatMoney(pending)}
           tone={pending > 0 ? 'warning' : 'neutral'}
           icon={<Clock3 className="h-4 w-4" aria-hidden="true" />}
-          foot={<span>Added to your next referral payment.</span>}
+          foot={
+            hasChainMoney && chainPending > 0 ? (
+              <span>
+                {formatMoney(directPending)} from your invites · {formatMoney(chainPending)} from your invite chain
+              </span>
+            ) : (
+              <span>Added to your next referral payment.</span>
+            )
+          }
         />
       </div>
 
-      {teamPaid > 0 ? (
+      {hasChainMoney ? (
         <div className="flex items-start gap-3 rounded-xl border border-worker-border bg-worker-surface px-4 py-3 text-sm leading-6 text-worker-text-muted">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-worker-accent" aria-hidden="true" />
           <p>
-            Your total includes {formatMoney(teamPaid)} earned from the people invited by everyone you invited. That
-            money is shown as one amount — it is not tied to a single ticket below.
+            Your totals include {formatMoney(teamPaid + chainPending)} earned from the people invited by everyone you
+            invited, across both what you have been paid and what is still pending. That money is shown as one amount —
+            it is not tied to a single ticket below.
           </p>
         </div>
       ) : null}

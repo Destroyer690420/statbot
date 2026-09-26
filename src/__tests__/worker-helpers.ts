@@ -97,8 +97,9 @@ export interface FixtureCommissionItem {
   commissionKind: string;
   amount: number;
   createdAt: Date;
-  /** Payout week of the batch this item was paid in (drives `paidThisWeek`). */
-  batchWeekStart?: Date | null;
+  /** Batch that paid this item: number + when (drives the `lastBatch` card). */
+  batchNumber?: number | null;
+  batchPaidAt?: Date | null;
 }
 
 export interface FixtureState {
@@ -312,7 +313,7 @@ export function createMockDb(state: FixtureState): Record<string, any> {
         const rows = state.commissionItems.filter((i) => matchesWhere(i as any, args.where));
         return applyOrderBy(rows as unknown as Record<string, any>[], args.orderBy).map((i) => {
           const base = applySelect(i as any, args.select);
-          if (args?.select?.batch) base.batch = { weekStart: i.batchWeekStart ?? null };
+          if (args?.select?.batch) base.batch = { batchNumber: i.batchNumber ?? null, paidAt: i.batchPaidAt ?? null };
           return base;
         });
       },

@@ -419,14 +419,15 @@ describe('task DTO whitelist', () => {
 });
 
 describe('invites summary', () => {
-  const base = { directPaid: 0, directPending: 0, teamPaid: 0, paidThisWeek: 0 };
+  const base = { directPaid: 0, directPending: 0, chainPending: 0, teamPaid: 0, lastBatch: { amount: 0, batchNumber: null, paidAt: null } };
 
   it('derives the counts from the listed rows and never trusts the caller', () => {
     const dto = buildInvitesSummary({
       directPaid: 120,
       directPending: 100,
+      chainPending: 40,
       teamPaid: 10,
-      paidThisWeek: 40,
+      lastBatch: { amount: 40, batchNumber: 7, paidAt: '2026-09-20T10:00:00.000Z' },
       invitees: [
         { inviteeName: 'Invited Two', ticketName: 'ticket-0022', tasks: 1, threshold: 2, paid: 0 },
         { inviteeName: 'Invited One', ticketName: 'ticket-0021', tasks: 2, threshold: 2, paid: 120 },
@@ -441,8 +442,9 @@ describe('invites summary', () => {
       paid: 130,
       directPaid: 120,
       directPending: 100,
+      chainPending: 40,
       teamPaid: 10,
-      paidThisWeek: 40,
+      lastBatch: { amount: 40, batchNumber: 7, paidAt: '2026-09-20T10:00:00.000Z' },
     });
     // Closest to the bonus first, then alphabetical.
     expect(dto.invitees.map((i) => i.name)).toEqual(['Invited One', 'Invited Two', 'Invited Three']);
@@ -507,19 +509,22 @@ describe('invites summary', () => {
     expect(dto.summary.invited).toBe(0);
     expect(dto.summary.qualified).toBe(0);
     expect(dto.summary.paid).toBe(0);
-    expect(dto.summary.paidThisWeek).toBe(0);
+    expect(dto.summary.chainPending).toBe(0);
+    expect(dto.summary.lastBatch).toEqual({ amount: 0, batchNumber: null, paidAt: null });
   });
 
   it('rounds money to paise and carries no forbidden field', () => {
     const dto = buildInvitesSummary({
       directPaid: 33.333,
       directPending: 0,
+      chainPending: 10.005,
       teamPaid: 0,
-      paidThisWeek: 10.005,
+      lastBatch: { amount: 10.005, batchNumber: 3, paidAt: '2026-09-01T00:00:00.000Z' },
       invitees: [{ inviteeName: 'X', ticketName: 'ticket-1', tasks: 1, threshold: 2, paid: 10.005 }],
     });
     expect(dto.summary.directPaid).toBe(33.33);
-    expect(dto.summary.paidThisWeek).toBe(10.01);
+    expect(dto.summary.chainPending).toBe(10.01);
+    expect(dto.summary.lastBatch.amount).toBe(10.01);
     expect(dto.invitees[0].earned).toBe(10.01);
 
     const keys = collectKeys(dto);
@@ -529,6 +534,18 @@ describe('invites summary', () => {
     expect(Object.keys(dto.invitees[0]).sort()).toEqual([
       'earned', 'name', 'qualified', 'tasks', 'threshold', 'ticket',
     ]);
+  });
+
+  it('tolerates a missing lastBatch so an unpaid inviter cannot break the page', () => {
+    const dto = buildInvitesSummary({
+      directPaid: 0,
+      directPending: 0,
+      chainPending: 0,
+      teamPaid: 0,
+      lastBatch: undefined as never,
+      invitees: [],
+    });
+    expect(dto.summary.lastBatch).toEqual({ amount: 0, batchNumber: null, paidAt: null });
   });
 });
 
