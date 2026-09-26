@@ -120,6 +120,23 @@ npx tsx scripts/backfill-indirect-referrers.ts
 
 Dashboard Referrals page shows an "Indirect" badge when `indirectSpecialInviterId` is set.
 
+## 7b. Worker-Facing View (`GET /worker/invites`)
+
+A worker sees their own invite list and what they earned from it on the worker panel's **Invites** tab (implemented 2026-09-25, Decision 19). It reuses the same engine as the pay buttons — no parallel math — so it cannot drift from `/myinvites` or the admin pages.
+
+| Field | Meaning |
+|---|---|
+| `summary.invited` / `withTicket` | derived from the listed rows; `status === 'closed'` referrals are never listed |
+| `summary.directPaid` | sum of that inviter's `CommissionItem` rows (`one_time` + `per_task`) on referrals they own — an item's existence *is* the paid record, because commission batches stamp `paidAt` at creation |
+| `summary.directPending` | sum of what `commissionService.getPayableItems` would create next (threshold met, no item yet) |
+| `summary.teamPaid` | their `per_task_indirect` earnings on referrals they do **not** own, as one anonymous total |
+| `summary.paid` | `directPaid + teamPaid` |
+| `invitees[].name` / `.ticket` / `.paid` | display name, ticket **number**, money already received from that person |
+
+- **Ticket number resolution**: `Referral.ticketId` is a channel mention (`<#id>`) for auto-detected referrals, a bare snowflake, or a plain channel name for `/referral add`. Ids are resolved against channel names already recorded on `Task` rows (one batched query); a plain name is used as-is; anything unresolvable returns `null` ("No ticket yet") so an id or raw mention can never reach a worker.
+- **Withheld by design**: invitee Discord ids, referral/commission ids, `commissionKind`, `inviterType`, commission rates, and the identity/ticket/task behind `teamPaid`. Enforced by `WORKER_FORBIDDEN_FIELDS` + `worker-isolation.test.ts`.
+- **Not covered here**: indirect *pending* money is not computed for workers (only paid), so a large chain costs fewer queries than it would with a full indirect payable walk.
+
 ## 8. Owner-Earnings Integration
 
 `owner-earnings.service` treats active special referrals as a **cost**: per-task commissions (₹20/₹10) subtracted from revenue for referred workers whose referral is direct-special OR carries `indirectSpecialInviterId`; below-threshold referrals subtract the one-time bonus later; already-paid bonuses are skipped (`alreadyPaid`). See `docs/FRONTEND.md` §OwnerEarnings.

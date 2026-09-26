@@ -137,9 +137,10 @@ Read-only self-service portal, visually redesigned on 2026-09-25 without changin
 | `/worker/tasks` | WorkerTasks | To-do/Completed/Failed tabs with counts, Completed sub-filter, mobile filter sheet/desktop inline filters with fixed-width type select, debounced server search, page-based pagination, insight and payout chips, responsive task-card grid with `min-w-0`/overflow containment for narrow phones |
 | `/worker/tasks/:id` | WorkerTaskDetail | status + next-action callout, copyable Reddit link, reminder checklist, payout block, done/future timeline stepper; no inferred current-step state |
 | `/worker/wallet` | WorkerWallet | gradient awaiting-payment hero, This/Last week cards, lifetime paid, rates, billing notice, expandable worker-scoped payment history |
+| `/worker/invites` | WorkerInvites | three summary cards (people invited with ticket coverage, total earned split into own invites vs whole-chain team earnings, awaiting payment), an explainer strip shown only when team earnings exist, and a divided list of invitees with avatar initial, name, ticket number (`#ticket-0036`, "No ticket yet" when unresolved) and the money earned from that person. Empty state explains how invites appear; no per-invitee drill-down and no rates |
 | `/worker/how-to` | WorkerHowTo | unchanged guide content with numbered sequence sections, checklist treatment for non-sequential sections, mobile jump chips, desktop table of contents with IntersectionObserver active state |
 
-`WorkerLayout` preserves the existing `/auth/logout` call and four navigation destinations. Worker pages set `<meta name="robots" content="noindex">` while mounted. Never `dangerouslySetInnerHTML`; `manifest.json`/`sw.js` untouched.
+`WorkerLayout` preserves the existing `/auth/logout` call and its navigation destinations, now **five**: Home, Tasks, Wallet, Invites, How to (sidebar list, `pageTitle` map, and the mobile bottom nav `grid-cols-5`). Worker pages set `<meta name="robots" content="noindex">` while mounted. Never `dangerouslySetInnerHTML`; `manifest.json`/`sw.js` untouched.
 
 ### Verification
 

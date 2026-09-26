@@ -265,6 +265,9 @@ Auth: ticket-OTP login. The bot posts an 8-char code (alphabet `ABCDEFGHJKMNPQRS
 | GET | `/worker/tasks?tab=&sub=&type=&q=&page=&limit=` | worker JWT | Whitelisted task DTOs + `total/page/limit/counts` (limit ≤50, default 20; `sub` only on the completed tab) | 400 bad query; 401 |
 | GET | `/worker/tasks/:id` | worker JWT | DTO + timeline (same 404 whether missing or another worker's) | 404 |
 | GET | `/worker/wallet` | worker JWT | This/last IST week, awaiting (all weeks), lifetime paid, rates, worker-scoped payment history | 401 |
+| GET | `/worker/invites` | worker JWT | `{ summary:{invited, withTicket, paid, directPaid, directPending, teamPaid}, invitees:[{name, ticket, paid}] }` — the signed-in worker's own non-closed referrals only | 401 |
+
+`/worker/invites` semantics: `invited`/`withTicket` are derived from the listed rows (closed referrals are never listed); `directPaid` is the sum of that worker's `CommissionItem` rows on their own referrals; `directPending` is what `commissionService.getPayableItems` would create next (unlocked, not yet disbursed); `teamPaid` is their multi-level `per_task_indirect` earnings on referrals they do **not** own, reported as one anonymous total. `invitee.paid` is the money already received for that person. `invitee.ticket` is the invitee's ticket *number* resolved from the stored reference — a channel mention or snowflake is looked up against recorded task channel names, an unresolvable reference yields `null` rather than an id. No Discord ids, referral ids, commission kinds, rates, or downstream worker identities are ever returned (see `WORKER_FORBIDDEN_FIELDS`).
 
 Throttles (Redis): one active code per ticket; 60s cooldown; 5 codes/ticket/hour; 5 wrong attempts invalidate the code; >10 failed verifications/hour lock the ticket for 1h. The bot deletes its code message on success/invalidation/lockout/expiry (best-effort).
 
