@@ -42,6 +42,29 @@ describe('isLeaseFree', () => {
   it('treats a lease marker without timestamp as free (defensive)', () => {
     expect(isLeaseFree({ leasedBy: 'tab-a', leasedAt: null }, NOW, LEASE_MS)).toBe(true);
   });
+
+  it('is free for the holding tab itself (parked-claim retry)', () => {
+    // The regression this pins: a tab that left its claim PENDING across a
+    // reload / return-to-/tasks must be able to re-lease it on its very next
+    // poll, not wait out the whole lease timeout.
+    expect(
+      isLeaseFree({ leasedBy: 'tab-a', leasedAt: new Date(NOW - 1000) }, NOW, LEASE_MS, 'tab-a'),
+    ).toBe(true);
+  });
+
+  it('still holds a live lease against every other tab', () => {
+    expect(
+      isLeaseFree({ leasedBy: 'tab-a', leasedAt: new Date(NOW - 1000) }, NOW, LEASE_MS, 'tab-b'),
+    ).toBe(false);
+  });
+
+  it('never lets an empty asking tab claim someone else live lease', () => {
+    // An empty tab id carries no identity, so it must not match a holder -
+    // and an empty lease marker is not a holder either (defensive: the route
+    // rejects empty tab ids, so this shape never reaches the picker).
+    expect(isLeaseFree({ leasedBy: null, leasedAt: null }, NOW, LEASE_MS, '')).toBe(true);
+    expect(isLeaseFree({ leasedBy: 'tab-a', leasedAt: new Date(NOW) }, NOW, LEASE_MS, '')).toBe(false);
+  });
 });
 
 describe('pickLeaseCandidate', () => {
@@ -86,5 +109,27 @@ describe('pickLeaseCandidate', () => {
   it('skips malformed entries without throwing', () => {
     const pool = [null, undefined, claim({ id: 'good' })] as never[];
     expect(pickLeaseCandidate(pool, NOW, LEASE_MS)?.id).toBe('good');
+  });
+
+  it('hands the owner its own parked claim instead of stalling', () => {
+    const pool = [claim({ id: 'mine', leasedBy: 'tab-a', leasedAt: new Date(NOW - 2000) })];
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a')?.id).toBe('mine');
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-b')).toBeNull();
+  });
+
+  it('finishes a parked claim before taking newer work (reply order kept)', () => {
+    const pool = [
+      claim({ id: 'parked', leasedBy: 'tab-a', leasedAt: new Date(NOW - 2000), createdAt: new Date(NOW - 60000) }),
+      claim({ id: 'fresh', createdAt: new Date(NOW - 1000) }),
+    ];
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a')?.id).toBe('parked');
+  });
+
+  it('never hands a resolved or expired parked claim back to its owner', () => {
+    const pool = [
+      claim({ id: 'verdicted', status: 'CLAIMED', leasedBy: 'tab-a', leasedAt: new Date(NOW) }),
+      claim({ id: 'gone', expiresAt: new Date(NOW - 1), leasedBy: 'tab-a', leasedAt: new Date(NOW) }),
+    ];
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a')).toBeNull();
   });
 });

@@ -935,13 +935,17 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           postOk: Number.isFinite(telePostOk) ? telePostOk : null,
         });
       }
-      // Phase-1 speed: tell the tab whether any burst is currently open so
-      // it can poll fast (2s) while work is live and idle (30s) otherwise.
+      // Phase-1 speed: tell the tab whether work is live so it can poll fast
+      // (2s) while work is live and idle (30s) otherwise. A burst row is not
+      // the whole signal: the fill closes it on the very same reply that
+      // creates the LAST claim, so gating on it alone dropped the final task
+      // of every blast back to the 30-40s cadence. Any PENDING claim (even
+      // one a tab parked mid-flight) keeps the fast poll alive.
       // Best-effort — a lookup failure must never break the claim poll.
       let burstOpen = false;
       try {
         const openBursts = await automationRepository.listOpenBursts();
-        burstOpen = openBursts.length > 0;
+        burstOpen = openBursts.length > 0 || (await automationRepository.hasPendingClaim());
       } catch {
         burstOpen = false;
       }

@@ -243,6 +243,10 @@ export class AutomationRepository {
    * re-checks PENDING + leasable, so exactly one tab wins the race and the
    * loser gets null (it retries on the next fast poll). Returns the leased
    * row, or null when there is nothing to take right now.
+   *
+   * `tabId` reaches the picker so a tab can re-lease its OWN parked claim
+   * (the reload / return-to-/tasks retry paths) instead of waiting out the
+   * whole lease timeout; every other tab still needs the stale-lease reclaim.
    */
   async leaseNextClaim(tabId: string, leaseTimeoutMs: number = AUTOMATION.CLAIM_LEASE_TIMEOUT_MS) {
     const now = new Date();
@@ -251,7 +255,7 @@ export class AutomationRepository {
       orderBy: { createdAt: 'asc' },
       take: 10,
     });
-    const pick = pickLeaseCandidate(candidates, now.getTime(), leaseTimeoutMs);
+    const pick = pickLeaseCandidate(candidates, now.getTime(), leaseTimeoutMs, tabId);
     if (!pick) return null;
     const leasedAt = new Date();
     const claimed = await getDb().automationClaim.updateMany({
@@ -275,6 +279,20 @@ export class AutomationRepository {
       where: { status: 'PENDING' },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  /**
+   * Cheap "is a claim still waiting?" probe for the companion poll cadence
+   * (indexed on (status, expiresAt), take 1). True while any claim is PENDING
+   * — including one a tab parked mid-flight — so the browser keeps its fast
+   * 2s poll through the whole serve phase, not just while the burst is open.
+   */
+  async hasPendingClaim(): Promise<boolean> {
+    const row = await getDb().automationClaim.findFirst({
+      where: { status: 'PENDING' },
+      select: { id: true },
+    });
+    return row !== null;
   }
 
   /** All claims of a cycle — used to compute burst tasks already held. */
