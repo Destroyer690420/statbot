@@ -864,12 +864,15 @@ export function buildTimeline(
 export interface WorkerInviteInput {
   inviteeName: string;
   ticketName: string | null;
-  paid: number;
+  /** Completed tasks, already capped at the threshold (the bonus pays once). */
+  tasks: number;
+  threshold: number;
 }
 
 export interface WorkerInvitesTotals {
   invited: number;
   withTicket: number;
+  qualified: number;
   paid: number;
   directPaid: number;
   directPending: number;
@@ -879,7 +882,9 @@ export interface WorkerInvitesTotals {
 export interface WorkerInviteeDto {
   name: string;
   ticket: string | null;
-  paid: number;
+  tasks: number;
+  threshold: number;
+  qualified: boolean;
 }
 
 export interface WorkerInvitesDto {
@@ -894,11 +899,15 @@ function roundMoney(amount: number): number {
 /**
  * Referral view for the signed-in inviter.
  *
- * Money already received comes from that inviter's CommissionItem rows;
- * `directPending` is the payable engine's not-yet-created items. Multi-level
- * earnings are a single anonymous `teamPaid` total — the downstream workers
- * behind them are never named to the inviter, and no Discord ids cross this
- * boundary (only display names and ticket numbers).
+ * Per invitee the headline is task progress toward the bonus, not money: the
+ * count is capped at that referral's threshold because the bonus pays once and
+ * further tasks change nothing for a normal inviter. Money already received
+ * comes from that inviter's CommissionItem rows and `directPending` from the
+ * payable engine's not-yet-created items, so the totals stay on the same
+ * engine the pay buttons use. Multi-level earnings are a single anonymous
+ * `teamPaid` total — the downstream workers behind them are never named to the
+ * inviter, and no Discord ids cross this boundary (only display names, ticket
+ * numbers and counts).
  */
 export function buildInvitesSummary(input: {
   directPaid: number;
@@ -907,12 +916,18 @@ export function buildInvitesSummary(input: {
   invitees: WorkerInviteInput[];
 }): WorkerInvitesDto {
   const invitees = input.invitees
-    .map((i) => ({
-      name: i.inviteeName,
-      ticket: i.ticketName,
-      paid: roundMoney(i.paid),
-    }))
-    .sort((a, b) => b.paid - a.paid || a.name.localeCompare(b.name));
+    .map((i) => {
+      const threshold = Math.max(1, Math.trunc(Number(i.threshold) || 1));
+      const tasks = Math.min(Math.max(0, Math.trunc(Number(i.tasks) || 0)), threshold);
+      return {
+        name: i.inviteeName,
+        ticket: i.ticketName,
+        tasks,
+        threshold,
+        qualified: tasks >= threshold,
+      };
+    })
+    .sort((a, b) => b.tasks - a.tasks || a.name.localeCompare(b.name));
 
   const directPaid = roundMoney(input.directPaid);
   const teamPaid = roundMoney(input.teamPaid);
@@ -921,6 +936,7 @@ export function buildInvitesSummary(input: {
     summary: {
       invited: invitees.length,
       withTicket: invitees.filter((i) => i.ticket !== null).length,
+      qualified: invitees.filter((i) => i.qualified).length,
       paid: roundMoney(directPaid + teamPaid),
       directPaid,
       directPending: roundMoney(input.directPending),

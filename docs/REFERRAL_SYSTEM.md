@@ -126,13 +126,14 @@ A worker sees their own invite list and what they earned from it on the worker p
 
 | Field | Meaning |
 |---|---|
-| `summary.invited` / `withTicket` | derived from the listed rows; `status === 'closed'` referrals are never listed |
+| `summary.invited` / `withTicket` / `qualified` | derived from the listed rows; `status === 'closed'` referrals are never listed, `qualified` counts rows that reached their threshold |
 | `summary.directPaid` | sum of that inviter's `CommissionItem` rows (`one_time` + `per_task`) on referrals they own — an item's existence *is* the paid record, because commission batches stamp `paidAt` at creation |
 | `summary.directPending` | sum of what `commissionService.getPayableItems` would create next (threshold met, no item yet) |
 | `summary.teamPaid` | their `per_task_indirect` earnings on referrals they do **not** own, as one anonymous total |
 | `summary.paid` | `directPaid + teamPaid` |
-| `invitees[].name` / `.ticket` / `.paid` | display name, ticket **number**, money already received from that person |
+| `invitees[].name` / `.ticket` / `.tasks` / `.threshold` / `.qualified` | display name, ticket **number**, completed tasks **capped at the threshold**, and whether the bonus is unlocked |
 
+- **Per-row metric is task progress, not money** (owner change, 2026-09-26): the bonus pays once at the threshold, so a per-invitee rupee figure is always 0 until the manager runs a payout and stops moving afterwards. `tasks` therefore counts COMPLETED + ARCHIVED tasks excluding any `cancelledReason` — the same rule as the engine's `getCompletedTasksForUser` — and is clamped to `threshold` (`specialInviteTaskThreshold` for special inviters, `normalInviteTaskThreshold` = 2 otherwise), read from `CommissionRates` so it follows the real rate instead of a hardcoded 2. All invitees are counted in one batched query.
 - **Ticket number resolution**: `Referral.ticketId` is a channel mention (`<#id>`) for auto-detected referrals, a bare snowflake, or a plain channel name for `/referral add`. Ids are resolved against channel names already recorded on `Task` rows (one batched query); a plain name is used as-is; anything unresolvable returns `null` ("No ticket yet") so an id or raw mention can never reach a worker.
 - **Withheld by design**: invitee Discord ids, referral/commission ids, `commissionKind`, `inviterType`, commission rates, and the identity/ticket/task behind `teamPaid`. Enforced by `WORKER_FORBIDDEN_FIELDS` + `worker-isolation.test.ts`.
 - **Not covered here**: indirect *pending* money is not computed for workers (only paid), so a large chain costs fewer queries than it would with a full indirect payable walk.

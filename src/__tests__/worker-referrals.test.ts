@@ -59,6 +59,7 @@ describe('getInvitesForWorker', () => {
   let referrals: Record<string, unknown>[];
   let items: Record<string, unknown>[];
   let taskChannelNames: Record<string, string>;
+  let taskRows: Record<string, unknown>[];
   let taskFindMany: jest.Mock;
 
   beforeEach(() => {
@@ -66,14 +67,31 @@ describe('getInvitesForWorker', () => {
     referrals = [];
     items = [];
     taskChannelNames = {};
+    taskRows = [];
     mockGetCommissionRates.mockResolvedValue(RATES);
     mockGetPayableItems.mockResolvedValue([]);
 
     taskFindMany = jest.fn(async (args: any = {}) => {
-      const ids: string[] = args?.where?.channelId?.in ?? [];
-      return ids
-        .filter((id) => taskChannelNames[id])
-        .map((id) => ({ channelId: id, channelName: taskChannelNames[id] }));
+      const where = args?.where ?? {};
+      const select = args?.select;
+      let rows = taskRows;
+      if (Array.isArray(where.channelId?.in)) {
+        rows = rows.filter((r) => where.channelId.in.includes(r.channelId));
+      }
+      if (Array.isArray(where.assignedUserId?.in)) {
+        rows = rows.filter((r) => where.assignedUserId.in.includes(r.assignedUserId));
+      }
+      if (Array.isArray(where.status?.in)) {
+        rows = rows.filter((r) => where.status.in.includes(r.status));
+      }
+      if (!select) return rows;
+      return rows.map((r) => {
+        const out: Record<string, unknown> = {};
+        for (const key of Object.keys(select)) {
+          out[key] = key === 'channelName' ? taskChannelNames[r.channelId as string] ?? null : r[key];
+        }
+        return out;
+      });
     });
 
     mockDb = {
@@ -94,13 +112,20 @@ describe('getInvitesForWorker', () => {
     };
   });
 
+  function completedTask(partial: Record<string, unknown>) {
+    return { assignedUserId: '500000000000000005', channelId: 'chan-1', status: 'COMPLETED', cancelledReason: null, ...partial };
+  }
+
   it('resolves a stored channel mention to the ticket name', async () => {
     referrals = [referral({ ticketId: '<#1234567890123456789>' })];
     taskChannelNames = { '1234567890123456789': 'ticket-0021' };
+    taskRows = [completedTask({ channelId: '1234567890123456789' })];
 
     const dto = await getInvitesForWorker(ME);
 
-    expect(dto.invitees).toEqual([{ name: 'Invitee', ticket: 'ticket-0021', paid: 0 }]);
+    expect(dto.invitees).toEqual([
+      { name: 'Invitee', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false },
+    ]);
     expect(taskFindMany).toHaveBeenCalledWith({
       where: { channelId: { in: ['1234567890123456789'] } },
       select: { channelId: true, channelName: true },
@@ -110,6 +135,7 @@ describe('getInvitesForWorker', () => {
   it('resolves a bare snowflake the same way', async () => {
     referrals = [referral({ ticketId: '1234567890123456789' })];
     taskChannelNames = { '1234567890123456789': 'ticket-0031' };
+    taskRows = [completedTask({ channelId: '1234567890123456789' })];
 
     const dto = await getInvitesForWorker(ME);
     expect(dto.invitees[0].ticket).toBe('ticket-0031');
@@ -119,8 +145,9 @@ describe('getInvitesForWorker', () => {
     referrals = [referral({ ticketId: '#ticket-0041' })];
     const dto = await getInvitesForWorker(ME);
     expect(dto.invitees[0].ticket).toBe('ticket-0041');
-    // A plain name needs no channel lookup at all.
-    expect(taskFindMany).not.toHaveBeenCalled();
+    // A plain name needs no channel-name lookup (the count query may still run).
+    const channelLookups = taskFindMany.mock.calls.filter((c) => c[0]?.select?.channelName);
+    expect(channelLookups).toHaveLength(0);
   });
 
   it('never leaks an unresolvable reference: no id, no mention, no angle brackets', async () => {
@@ -170,9 +197,79 @@ describe('getInvitesForWorker', () => {
 
     expect(dto.summary).toMatchObject({ invited: 1, directPaid: 120, teamPaid: 35, paid: 155 });
     // The multi-level money is never attributed to a row.
-    expect(dto.invitees).toEqual([{ name: 'Invitee', ticket: null, paid: 120 }]);
+    expect(dto.invitees).toEqual([
+      { name: 'Invitee', ticket: null, tasks: 0, threshold: 2, qualified: false },
+    ]);
     expect(JSON.stringify(dto)).not.toContain('per_task_indirect');
     expect(JSON.stringify(dto)).not.toContain('REF-SOMEONE-ELSE');
+  });
+
+  it('counts completed tasks per invitee and stops at the threshold', async () => {
+    referrals = [referral({ id: 'REF-MINE', inviteeId: '500000000000000005' })];
+    // Five completed + one archived, plus noise that must not count.
+    taskRows = [
+      ...[1, 2, 3, 4].map((n) => completedTask({ id: `t${n}` })),
+      completedTask({ id: 't5', status: 'ARCHIVED' }),
+      completedTask({ id: 't6', status: 'CANCELLED' }),
+      completedTask({ id: 't7', cancelledReason: 'deleted' }),
+      completedTask({ id: 't8', status: 'PENDING' }),
+      completedTask({ id: 'other', assignedUserId: '500000000000000099' }),
+    ];
+
+    const dto = await getInvitesForWorker(ME);
+
+    expect(dto.invitees[0].tasks).toBe(2);
+    expect(dto.invitees[0].threshold).toBe(2);
+    expect(dto.invitees[0].qualified).toBe(true);
+    expect(dto.summary.qualified).toBe(1);
+  });
+
+  it('reports partial progress below the threshold', async () => {
+    referrals = [referral({ id: 'REF-MINE' })];
+    taskRows = [completedTask({ id: 't1' })];
+
+    const dto = await getInvitesForWorker(ME);
+    expect(dto.invitees[0]).toMatchObject({ tasks: 1, threshold: 2, qualified: false });
+    expect(dto.summary.qualified).toBe(0);
+  });
+
+  it('uses the special inviter threshold of 1 when the rate says so', async () => {
+    referrals = [referral({ id: 'REF-SPECIAL', inviterType: 'special' })];
+    taskRows = [completedTask({ id: 't1' }), completedTask({ id: 't2' })];
+
+    const dto = await getInvitesForWorker(ME);
+    expect(dto.invitees[0]).toMatchObject({ tasks: 1, threshold: 1, qualified: true });
+  });
+
+  it('counts every invitee in a single batched task query', async () => {
+    referrals = [
+      referral({ id: 'REF-1', inviteeId: '500000000000000005' }),
+      referral({ id: 'REF-2', inviteeId: '500000000000000006' }),
+      referral({ id: 'REF-3', inviteeId: '500000000000000005' }),
+    ];
+    taskRows = [
+      completedTask({ id: 't1', assignedUserId: '500000000000000005' }),
+      completedTask({ id: 't2', assignedUserId: '500000000000000005' }),
+      completedTask({ id: 't3', assignedUserId: '500000000000000006' }),
+    ];
+
+    await getInvitesForWorker(ME);
+
+    const countQueries = taskFindMany.mock.calls.filter((c) => c[0]?.select?.assignedUserId);
+    expect(countQueries).toHaveLength(1);
+    expect(countQueries[0][0].where.assignedUserId.in.sort()).toEqual([
+      '500000000000000005',
+      '500000000000000006',
+    ]);
+  });
+
+  it('degrades to zero tasks when the count lookup fails', async () => {
+    referrals = [referral({ id: 'REF-MINE', ticketId: 'ticket-0044' })];
+    taskFindMany.mockRejectedValueOnce(new Error('db down'));
+
+    const dto = await getInvitesForWorker(ME);
+    expect(dto.invitees[0].tasks).toBe(0);
+    expect(dto.summary.invited).toBe(1);
   });
 
   it('adds the payable engine output as pending, and skips it when there are no referrals', async () => {

@@ -425,11 +425,15 @@ describe('worker isolation (HTTP)', () => {
       // A's multi-level credit on Bob's referral — anonymous total only.
       expect(summary.teamPaid).toBe(10);
       expect(summary.paid).toBe(130);
+      // REF-A1's invitee has 1 ARCHIVED task (below the 2-task threshold);
+      // REF-A2's invitee has 2 COMPLETED tasks, so it is the only qualified one.
+      expect(summary.qualified).toBe(1);
 
-      // Ticket numbers resolved from a channel mention and a plain name.
+      // Ticket numbers resolved from a channel mention and a plain name;
+      // ordered by task progress, so the qualified invitee comes first.
       expect(invitees).toEqual([
-        { name: 'Invited One', ticket: 'ticket-0021', paid: 120 },
-        { name: 'Invited Two', ticket: 'ticket-0022', paid: 0 },
+        { name: 'Invited Two', ticket: 'ticket-0022', tasks: 2, threshold: 2, qualified: true },
+        { name: 'Invited One', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false },
       ]);
 
       const json = JSON.stringify(res.body);
@@ -441,9 +445,9 @@ describe('worker isolation (HTTP)', () => {
       expect(json).not.toContain('ReferralSecret');
       expect(json).not.toContain('tB3');
       // Keys are exactly the whitelisted shape.
-      expect(Object.keys(summary).sort()).toEqual(['directPaid', 'directPending', 'invited', 'paid', 'teamPaid', 'withTicket']);
+      expect(Object.keys(summary).sort()).toEqual(['directPaid', 'directPending', 'invited', 'paid', 'qualified', 'teamPaid', 'withTicket']);
       for (const row of invitees) {
-        expect(Object.keys(row).sort()).toEqual(['name', 'paid', 'ticket']);
+        expect(Object.keys(row).sort()).toEqual(['name', 'qualified', 'tasks', 'threshold', 'ticket']);
       }
     });
 
@@ -453,7 +457,7 @@ describe('worker isolation (HTTP)', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.invitees).toEqual([]);
       expect(res.body.data.summary).toEqual({
-        invited: 0, withTicket: 0, paid: 0, directPaid: 0, directPending: 0, teamPaid: 0,
+        invited: 0, withTicket: 0, qualified: 0, paid: 0, directPaid: 0, directPending: 0, teamPaid: 0,
       });
     });
   });

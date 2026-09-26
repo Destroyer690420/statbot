@@ -3,6 +3,7 @@ import { toReferral } from '../database/converters';
 import { commissionRepository, referralRepository } from '../database/repositories';
 import { commissionService } from './commission.service';
 import { buildInvitesSummary, WorkerInviteInput, WorkerInvitesDto } from '../utils/worker-view';
+import { TaskStatus } from '../types';
 import { logger } from '../utils/logger';
 
 /**
@@ -20,6 +21,8 @@ import { logger } from '../utils/logger';
 const SNOWFLAKE = /^\d{17,20}$/;
 // Anything wrapped as a Discord channel mention is a reference, never a label.
 const CHANNEL_MENTION = /^<#(.+)>$/;
+/** Mirrors the engine's own fallback when commission rates cannot be read. */
+const DEFAULT_INVITE_THRESHOLD = 2;
 
 /** `<#123…>` or a bare snowflake -> channel id; a plain name -> null. */
 function parseTicketChannelId(ticketId: string | null | undefined): string | null {
@@ -65,6 +68,34 @@ async function resolveTicketNames(ticketIds: (string | null | undefined)[]): Pro
   return names;
 }
 
+/**
+ * Count completed tasks per invitee in ONE query, using the same rule as the
+ * commission engine's `getCompletedTasksForUser`: COMPLETED + ARCHIVED, with
+ * anything carrying a `cancelledReason` excluded. Capped per referral at the
+ * caller's threshold by the pure builder.
+ */
+async function countCompletedTasksByInvitee(inviteeIds: string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (inviteeIds.length === 0) return counts;
+
+  try {
+    const rows = await getDb().task.findMany({
+      where: {
+        assignedUserId: { in: inviteeIds },
+        status: { in: [TaskStatus.COMPLETED, TaskStatus.ARCHIVED] as any },
+      },
+      select: { assignedUserId: true, cancelledReason: true },
+    });
+    for (const row of rows) {
+      if (row.cancelledReason !== null && row.cancelledReason !== undefined) continue;
+      counts.set(row.assignedUserId, (counts.get(row.assignedUserId) ?? 0) + 1);
+    }
+  } catch (error) {
+    logger.warn('Worker invites: invitee task count lookup failed', { error });
+  }
+  return counts;
+}
+
 export async function getInvitesForWorker(workerId: string): Promise<WorkerInvitesDto> {
   const referrals = (await referralRepository.findByInviterId(workerId))
     .map(toReferral)
@@ -89,22 +120,29 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
   }
 
   let directPending = 0;
-  if (referrals.length > 0) {
-    const rates = await commissionService.getCommissionRates();
+  const rates = referrals.length > 0 ? await commissionService.getCommissionRates() : null;
+  if (rates) {
     for (const referral of referrals) {
       const payable = await commissionService.getPayableItems(referral, rates);
       for (const item of payable) directPending += item.amount;
     }
   }
 
-  const namesByChannel = await resolveTicketNames(referrals.map((r) => r.ticketId));
+  const [namesByChannel, completedByInvitee] = await Promise.all([
+    resolveTicketNames(referrals.map((r) => r.ticketId)),
+    countCompletedTasksByInvitee(Array.from(new Set(referrals.map((r) => r.inviteeId)))),
+  ]);
 
   const invitees: WorkerInviteInput[] = referrals.map((referral) => {
     const channelId = parseTicketChannelId(referral.ticketId);
+    const threshold = referral.inviterType === 'special'
+      ? rates?.specialInviteTaskThreshold ?? DEFAULT_INVITE_THRESHOLD
+      : rates?.normalInviteTaskThreshold ?? DEFAULT_INVITE_THRESHOLD;
     return {
       inviteeName: referral.inviteeName?.trim() || 'Invited worker',
       ticketName: parseTicketName(referral.ticketId) ?? (channelId ? namesByChannel.get(channelId) ?? null : null),
-      paid: paidByReferral.get(referral.id) ?? 0,
+      tasks: completedByInvitee.get(referral.inviteeId) ?? 0,
+      threshold,
     };
   });
 

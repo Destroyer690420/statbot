@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { CheckCircle2, Clock3, Hash, Info, UserPlus, Users } from 'lucide-react';
+import { CheckCircle2, Check, Clock3, Hash, Info, UserPlus, Users } from 'lucide-react';
 import { getWorkerInvites, workerErrorMessage } from '../../api/workerApi';
 import { formatMoney } from '../../utils/workerFormat';
 import {
@@ -82,7 +82,7 @@ export default function WorkerInvites() {
   const directPaid = Number(summary?.directPaid ?? 0);
   const teamPaid = Number(summary?.teamPaid ?? 0);
   const pending = Number(summary?.directPending ?? 0);
-  const withTicket = Number(summary?.withTicket ?? 0);
+  const qualified = Number(summary?.qualified ?? 0);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -96,7 +96,7 @@ export default function WorkerInvites() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <SummaryCard
           label="People invited"
-          hint={invited === 0 ? 'No invites yet' : `${withTicket} of ${invited} have a ticket`}
+          hint={invited === 0 ? 'No invites yet' : `${qualified} of ${invited} bonus unlocked`}
           value={String(invited)}
           icon={<Users className="h-4 w-4" aria-hidden="true" />}
         />
@@ -146,7 +146,7 @@ export default function WorkerInvites() {
           />
         ) : (
           <ul className="divide-y divide-worker-border overflow-hidden rounded-xl border border-worker-border bg-worker-surface">
-            {invitees.map((invitee: { name: string; ticket: string | null; paid: number }) => (
+            {invitees.map((invitee: { name: string; ticket: string | null; tasks: number; threshold: number; qualified: boolean }) => (
               <li
                 key={`${invitee.name}-${invitee.ticket ?? 'no-ticket'}`}
                 className="flex min-h-[72px] items-center justify-between gap-4 px-4 py-3 sm:px-5"
@@ -167,11 +167,19 @@ export default function WorkerInvites() {
                     )}
                   </span>
                 </span>
-                <span className="shrink-0 text-right">
-                  <span className="block font-display text-base font-semibold tabular-nums text-worker-text">
-                    {formatMoney(invitee.paid)}
+                <span className="flex shrink-0 items-center gap-2.5">
+                  {invitee.qualified ? (
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-worker-success/10 text-worker-success" title="Bonus unlocked">
+                      <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                    </span>
+                  ) : null}
+                  <span className="text-right">
+                    <span className="block font-display text-base font-semibold tabular-nums text-worker-text">
+                      {invitee.tasks}
+                      <span className="text-worker-text-faint">/{invitee.threshold}</span>
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-worker-text-faint">tasks</span>
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-worker-text-faint">earned</span>
                 </span>
               </li>
             ))}
@@ -181,7 +189,7 @@ export default function WorkerInvites() {
 
       <div className="flex items-start gap-3 rounded-xl border border-worker-border bg-worker-surface-2 px-4 py-3 text-sm leading-6 text-worker-text-muted">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-worker-accent" aria-hidden="true" />
-        <p>Referral bonuses unlock when the person you invited completes their required tasks. Payments are made by your manager.</p>
+        <p>Referral bonuses unlock when the person you invited completes their required tasks, so the count stops once it is reached. Payments are made by your manager.</p>
       </div>
     </div>
   );
