@@ -34,6 +34,11 @@ const A = '100000000000000001';
 const B = '200000000000000002';
 const WX = '300000000000000003';
 const WY = '400000000000000004';
+/** Workers Alice personally invited (A's own referral data — must be visible to A). */
+const INVITEE1 = '500000000000000005';
+const INVITEE2 = '500000000000000006';
+/** Bob's invitee: reachable by A only as an anonymous multi-level total. */
+const DOWNSTREAM = '600000000000000007';
 
 function buildState(failChannel: MockChannel): FixtureState {
   const d = (s: string) => new Date(s);
@@ -49,6 +54,10 @@ function buildState(failChannel: MockChannel): FixtureState {
       { id: 'tA5', type: 'POST', status: 'PENDING', channelId: 'chan-alice', channelName: 'ticket-0001', assignedUserId: A, assignedUserName: 'Alice Worker', createdAt: d('2026-09-03T00:00:00Z'), updatedAt: d('2026-09-03T00:00:00Z'), cancelledReason: 'deleted', subreddit: 'AliceSub', title: 'Alice deleted', externalTaskId: '105' },
       { id: 'tA6', type: 'COMMENT', status: 'COMPLETED', channelId: 'chan-alice', channelName: 'ticket-0001', assignedUserId: A, assignedUserName: 'Alice Worker', createdAt: d('2026-08-21T00:00:00Z'), updatedAt: d('2026-08-26T00:00:00Z'), subreddit: 'AliceSub', title: 'Alice comment 2', externalTaskId: '106' },
       { id: 'tAF', type: 'POST', status: 'ACCEPTED', channelId: failChannel.id, channelName: 'ticket-0010', assignedUserId: A, assignedUserName: 'Alice Worker', createdAt: d('2026-09-04T00:00:00Z'), updatedAt: d('2026-09-04T00:00:00Z'), assignmentStatus: 'SENT', subreddit: 'AliceSub', title: 'Alice preparing', externalTaskId: '107' },
+      // ——— Workers invited by Alice (invitee tasks only feed referral math) ———
+      { id: 'tI21', type: 'POST', status: 'ARCHIVED', channelId: 'chan-inv1', channelName: 'ticket-0021', assignedUserId: INVITEE1, assignedUserName: 'Invited One', createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-05T00:00:00Z'), subreddit: 'InvSub1', title: 'invited one post', externalTaskId: '501' },
+      { id: 'tI22', type: 'COMMENT', status: 'COMPLETED', channelId: 'chan-inv2', channelName: 'ticket-0022', assignedUserId: INVITEE2, assignedUserName: 'Invited Two', createdAt: d('2026-08-02T00:00:00Z'), updatedAt: d('2026-08-06T00:00:00Z'), subreddit: 'InvSub2', title: 'invited two comment', externalTaskId: '502' },
+      { id: 'tI23', type: 'POST', status: 'COMPLETED', channelId: 'chan-inv2', channelName: 'ticket-0022', assignedUserId: INVITEE2, assignedUserName: 'Invited Two', createdAt: d('2026-08-03T00:00:00Z'), updatedAt: d('2026-08-07T00:00:00Z'), subreddit: 'InvSub2', title: 'invited two post two', externalTaskId: '503' },
       // ——— Bob (worker B) ———
       { id: 'tB1', type: 'POST', status: 'PENDING', channelId: 'chan-bob', channelName: 'ticket-0002', assignedUserId: B, assignedUserName: 'Bobson McOther', createdAt: d('2026-09-01T00:00:00Z'), updatedAt: d('2026-09-02T00:00:00Z'), subreddit: 'ZzzSecretSubB', title: 'Bob secret title', externalTaskId: '201' },
       { id: 'tB2', type: 'POST', status: 'ARCHIVED', channelId: 'chan-bob', channelName: 'ticket-0002', assignedUserId: B, assignedUserName: 'Bobson McOther', createdAt: d('2026-08-10T00:00:00Z'), updatedAt: d('2026-08-15T00:00:00Z'), subreddit: 'ZzzSecretSubB', title: 'Bob old post', externalTaskId: '202' },
@@ -87,6 +96,24 @@ function buildState(failChannel: MockChannel): FixtureState {
       { id: 'batch-1', batchNumber: 5, weekStart: d('2026-08-22T18:30:00Z'), weekEnd: d('2026-08-29T18:29:59.999Z'), totalWorkers: 2, totalTasks: 2, totalPosts: 2, totalComments: 0, totalAmount: 9999 },
     ],
     portalAccess: [],
+    referrals: [
+      // Alice's own invite whose ticket is stored as a channel mention.
+      { id: 'REF-A1', inviterId: A, inviterName: 'Alice Worker', inviteeId: INVITEE1, inviteeName: 'Invited One', inviterType: 'normal', status: 'qualified', oneTimeCommissionPaid: true, oneTimeCommissionPaidAt: d('2026-08-10T00:00:00Z'), perTaskCommissionActive: false, ticketId: '<#chan-inv1>', indirectSpecialInviterId: null, createdAt: d('2026-07-20T00:00:00Z'), updatedAt: d('2026-08-10T00:00:00Z') },
+      // Ticket stored as a plain channel name; bonus unlocked but unpaid.
+      { id: 'REF-A2', inviterId: A, inviterName: 'Alice Worker', inviteeId: INVITEE2, inviteeName: 'Invited Two', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: 'ticket-0022', indirectSpecialInviterId: null, createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-01T00:00:00Z') },
+      // Closed referrals are never listed.
+      { id: 'REF-A3', inviterId: A, inviterName: 'Alice Worker', inviteeId: '500000000000000008', inviteeName: 'ClosedInviteSecret', inviterType: 'normal', status: 'closed', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: 'ticket-0099', indirectSpecialInviterId: null, createdAt: d('2026-07-01T00:00:00Z'), updatedAt: d('2026-07-01T00:00:00Z') },
+      // Bob's referral: A only ever sees its money as an anonymous total.
+      { id: 'REF-B1', inviterId: B, inviterName: 'Bobson McOther', inviteeId: DOWNSTREAM, inviteeName: 'ReferralSecret', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: '<#chan-bob>', indirectSpecialInviterId: A, createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-01T00:00:00Z') },
+    ],
+    commissionItems: [
+      { id: 'ci-a1', batchId: 'cb-1', referralId: 'REF-A1', inviterId: A, invitedWorkerId: INVITEE1, sourceTaskId: null, commissionKind: 'one_time', amount: 100, createdAt: d('2026-08-10T00:00:00Z') },
+      { id: 'ci-a2', batchId: 'cb-1', referralId: 'REF-A1', inviterId: A, invitedWorkerId: INVITEE1, sourceTaskId: 'tI21', commissionKind: 'per_task', amount: 20, createdAt: d('2026-08-10T00:00:00Z') },
+      // Multi-level credit on somebody else's referral (Bob's invitee, Bob's task).
+      { id: 'ci-team', batchId: 'cb-2', referralId: 'REF-B1', inviterId: A, invitedWorkerId: DOWNSTREAM, sourceTaskId: 'tB3', commissionKind: 'per_task_indirect', amount: 10, createdAt: d('2026-08-12T00:00:00Z') },
+      // Bob's own commission: must never be counted for Alice.
+      { id: 'ci-b1', batchId: 'cb-1', referralId: 'REF-B1', inviterId: B, invitedWorkerId: DOWNSTREAM, sourceTaskId: null, commissionKind: 'one_time', amount: 555, createdAt: d('2026-08-10T00:00:00Z') },
+    ],
   };
 }
 
@@ -320,6 +347,7 @@ describe('worker isolation (HTTP)', () => {
       '/tasks?tab=failed',
       '/tasks/tA1',
       '/wallet',
+      '/invites',
     ];
     for (const p of paths) {
       test(`GET ${p} leaks nothing`, async () => {
@@ -380,6 +408,53 @@ describe('worker isolation (HTTP)', () => {
       expect(wallet.body.data.payments[0].batchNumber).toBe(5);
       // Only A's own tasks inside the shared batch.
       expect(wallet.body.data.payments[0].tasks.map((t: { taskId: string }) => t.taskId)).toEqual(['tA4']);
+    });
+
+    test('/invites exposes A\'s own referrals, ticket numbers and referral money only', async () => {
+      const res = await api('/invites', undefined, tokenA);
+      expect(res.status).toBe(200);
+      const { summary, invitees } = res.body.data;
+
+      // Closed referrals never appear; counts come from the listed rows.
+      expect(summary.invited).toBe(2);
+      expect(summary.withTicket).toBe(2);
+      // 100 bonus + 20 per-task already disbursed on REF-A1.
+      expect(summary.directPaid).toBe(120);
+      // REF-A2 crossed the 2-task threshold with no CommissionItem yet.
+      expect(summary.directPending).toBe(100);
+      // A's multi-level credit on Bob's referral — anonymous total only.
+      expect(summary.teamPaid).toBe(10);
+      expect(summary.paid).toBe(130);
+
+      // Ticket numbers resolved from a channel mention and a plain name.
+      expect(invitees).toEqual([
+        { name: 'Invited One', ticket: 'ticket-0021', paid: 120 },
+        { name: 'Invited Two', ticket: 'ticket-0022', paid: 0 },
+      ]);
+
+      const json = JSON.stringify(res.body);
+      // No ids, no referral internals, no rates, no closed rows.
+      for (const forbidden of [A, INVITEE1, INVITEE2, DOWNSTREAM, 'REF-A1', 'REF-A2', 'REF-B1', 'ClosedInviteSecret', 'one_time', 'per_task_indirect', 'normalInviteBonus']) {
+        expect(json).not.toContain(forbidden);
+      }
+      // B's downstream invitee stays anonymous even though their task paid A.
+      expect(json).not.toContain('ReferralSecret');
+      expect(json).not.toContain('tB3');
+      // Keys are exactly the whitelisted shape.
+      expect(Object.keys(summary).sort()).toEqual(['directPaid', 'directPending', 'invited', 'paid', 'teamPaid', 'withTicket']);
+      for (const row of invitees) {
+        expect(Object.keys(row).sort()).toEqual(['name', 'paid', 'ticket']);
+      }
+    });
+
+    test('/invites is empty (not an error) for a worker who never invited anyone', async () => {
+      const tokenWx = svc.signWorkerToken({ workerId: WX, channelId: 'chan-multi', name: 'X Old' });
+      const res = await api('/invites', undefined, tokenWx);
+      expect(res.status).toBe(200);
+      expect(res.body.data.invitees).toEqual([]);
+      expect(res.body.data.summary).toEqual({
+        invited: 0, withTicket: 0, paid: 0, directPaid: 0, directPending: 0, teamPaid: 0,
+      });
     });
   });
 

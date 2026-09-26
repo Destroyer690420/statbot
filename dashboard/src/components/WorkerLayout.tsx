@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ExternalLink, Hash, Home, ListTodo, LogOut, Wallet } from 'lucide-react';
+import { BookOpen, ExternalLink, Hash, Home, ListTodo, LogOut, UserPlus, Wallet } from 'lucide-react';
 import { useWorkerAuth } from '../hooks/useWorkerAuth';
 
 const TABS = [
   { to: '/worker', label: 'Home', icon: Home, end: true },
   { to: '/worker/tasks', label: 'Tasks', icon: ListTodo, end: false },
   { to: '/worker/wallet', label: 'Wallet', icon: Wallet, end: false },
+  { to: '/worker/invites', label: 'Invites', icon: UserPlus, end: false },
   { to: '/worker/how-to', label: 'How to', icon: BookOpen, end: false },
 ];
 
@@ -36,6 +37,7 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith('/worker/tasks/')) return 'Task details';
   if (pathname === '/worker/tasks') return 'Tasks';
   if (pathname === '/worker/wallet') return 'Wallet';
+  if (pathname === '/worker/invites') return 'Invites';
   if (pathname === '/worker/how-to') return 'How to';
   return 'Worker panel';
 }
@@ -171,7 +173,7 @@ export function WorkerLayout() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-worker-border bg-worker-surface/95 backdrop-blur lg:hidden" aria-label="Worker navigation">
-        <div className="mx-auto grid max-w-2xl grid-cols-4">
+        <div className="mx-auto grid max-w-2xl grid-cols-5">
           {TABS.map((tab) => (
             <WorkerNavLink key={tab.to} {...tab} mobile />
           ))}

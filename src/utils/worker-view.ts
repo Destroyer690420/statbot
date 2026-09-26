@@ -859,6 +859,77 @@ export function buildTimeline(
   return entries;
 }
 
+// ─── Invites ──────────────────────────────────────────────────────────
+
+export interface WorkerInviteInput {
+  inviteeName: string;
+  ticketName: string | null;
+  paid: number;
+}
+
+export interface WorkerInvitesTotals {
+  invited: number;
+  withTicket: number;
+  paid: number;
+  directPaid: number;
+  directPending: number;
+  teamPaid: number;
+}
+
+export interface WorkerInviteeDto {
+  name: string;
+  ticket: string | null;
+  paid: number;
+}
+
+export interface WorkerInvitesDto {
+  summary: WorkerInvitesTotals;
+  invitees: WorkerInviteeDto[];
+}
+
+function roundMoney(amount: number): number {
+  return Math.round((Number(amount) || 0) * 100) / 100;
+}
+
+/**
+ * Referral view for the signed-in inviter.
+ *
+ * Money already received comes from that inviter's CommissionItem rows;
+ * `directPending` is the payable engine's not-yet-created items. Multi-level
+ * earnings are a single anonymous `teamPaid` total — the downstream workers
+ * behind them are never named to the inviter, and no Discord ids cross this
+ * boundary (only display names and ticket numbers).
+ */
+export function buildInvitesSummary(input: {
+  directPaid: number;
+  directPending: number;
+  teamPaid: number;
+  invitees: WorkerInviteInput[];
+}): WorkerInvitesDto {
+  const invitees = input.invitees
+    .map((i) => ({
+      name: i.inviteeName,
+      ticket: i.ticketName,
+      paid: roundMoney(i.paid),
+    }))
+    .sort((a, b) => b.paid - a.paid || a.name.localeCompare(b.name));
+
+  const directPaid = roundMoney(input.directPaid);
+  const teamPaid = roundMoney(input.teamPaid);
+
+  return {
+    summary: {
+      invited: invitees.length,
+      withTicket: invitees.filter((i) => i.ticket !== null).length,
+      paid: roundMoney(directPaid + teamPaid),
+      directPaid,
+      directPending: roundMoney(input.directPending),
+      teamPaid,
+    },
+    invitees,
+  };
+}
+
 // ─── Formatting ──────────────────────────────────────────────────────
 
 export function formatMoney(amount: number): string {
@@ -917,4 +988,16 @@ export const WORKER_FORBIDDEN_FIELDS = [
   'totalAmount',
   'assignedUserId',
   'externalTaskId',
+  'inviterId',
+  'inviteeId',
+  'invitedWorkerId',
+  'inviterType',
+  'indirectSpecialInviterId',
+  'referralId',
+  'sourceTaskId',
+  'commissionKind',
+  'ticketId',
+  'oneTimeCommissionPaid',
+  'oneTimeCommissionPaidAt',
+  'perTaskCommissionActive',
 ];

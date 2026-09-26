@@ -31,6 +31,7 @@ import {
   getTaskForWorker,
   getWalletForWorker,
 } from '../../services/worker.service';
+import { getInvitesForWorker } from '../../services/worker-referrals.service';
 
 /**
  * Read-only worker portal. Factory (needs the Discord client to post codes),
@@ -483,6 +484,16 @@ export default function createWorkerRoutes(discordClient: any): Router {
       res.json({ success: true, data });
     } catch (error) {
       logger.error('GET /worker/wallet failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  router.get('/invites', workerAuthMiddleware, async (req: WorkerAuthRequest, res: Response): Promise<void> => {
+    try {
+      const data = await getInvitesForWorker(req.worker!.sub);
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('GET /worker/invites failed', { error });
       res.status(500).json({ success: false, message: 'Internal server error.' });
     }
   });

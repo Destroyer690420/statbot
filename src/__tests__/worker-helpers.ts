@@ -70,12 +70,43 @@ export interface FixturePortalAccess {
   updatedAt: Date;
 }
 
+export interface FixtureReferral {
+  id: string;
+  inviterId: string;
+  inviterName: string;
+  inviteeId: string;
+  inviteeName: string;
+  inviterType: string;
+  status: string;
+  oneTimeCommissionPaid: boolean;
+  oneTimeCommissionPaidAt: Date | null;
+  perTaskCommissionActive: boolean;
+  ticketId: string | null;
+  indirectSpecialInviterId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FixtureCommissionItem {
+  id: string;
+  batchId: string;
+  referralId: string;
+  inviterId: string;
+  invitedWorkerId: string;
+  sourceTaskId: string | null;
+  commissionKind: string;
+  amount: number;
+  createdAt: Date;
+}
+
 export interface FixtureState {
   tasks: FixtureTask[];
   reminders: FixtureReminder[];
   items: FixtureItem[];
   batches: FixtureBatch[];
   portalAccess: FixturePortalAccess[];
+  referrals: FixtureReferral[];
+  commissionItems: FixtureCommissionItem[];
   postRate: number;
   commentRate: number;
 }
@@ -218,6 +249,10 @@ export function createMockDb(state: FixtureState): Record<string, any> {
         const first = rows[0] ?? null;
         return first ? applySelect(first, args.select) : null;
       },
+      findUnique: async (args: any = {}) => {
+        const row = taskRows().find((r) => matchesWhere(r, args.where)) ?? null;
+        return row ? applySelect(row, args.select) : null;
+      },
       count: async (args: any = {}) => taskRows().filter((r) => matchesWhere(r, args.where)).length,
     },
     reminder: {
@@ -252,6 +287,43 @@ export function createMockDb(state: FixtureState): Record<string, any> {
         state.portalAccess.push(created);
         return created;
       },
+    },
+    referral: {
+      findMany: async (args: any = {}) => {
+        const rows = state.referrals.filter((r) => matchesWhere(r as any, args.where));
+        return applyOrderBy(rows as unknown as Record<string, any>[], args.orderBy).map((r) =>
+          applySelect(r as any, args.select),
+        );
+      },
+      findFirst: async (args: any = {}) => {
+        const row = state.referrals.find((r) => matchesWhere(r as any, args.where));
+        return row ? applySelect(row as any, args.select) : null;
+      },
+    },
+    commissionItem: {
+      findMany: async (args: any = {}) => {
+        const rows = state.commissionItems.filter((i) => matchesWhere(i as any, args.where));
+        return applyOrderBy(rows as unknown as Record<string, any>[], args.orderBy).map((i) =>
+          applySelect(i as any, args.select),
+        );
+      },
+      findFirst: async (args: any = {}) => {
+        const row = state.commissionItems.find((i) => matchesWhere(i as any, args.where));
+        return row ? applySelect(row as any, args.select) : null;
+      },
+    },
+    commissionRates: {
+      findUnique: async () => ({
+        id: 'commission-rates',
+        normalInviteBonus: 100,
+        normalInviteTaskThreshold: 2,
+        specialInviteBonus: 50,
+        specialInviteTaskThreshold: 1,
+        specialPerComment: 10,
+        specialPerPost: 20,
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+        updatedBy: 'fixture',
+      }),
     },
   };
 }

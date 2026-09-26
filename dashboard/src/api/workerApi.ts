@@ -81,6 +81,11 @@ export async function getWorkerWallet() {
   return data;
 }
 
+export async function getWorkerInvites() {
+  const { data } = await workerApi.get('/invites');
+  return data;
+}
+
 export function workerErrorMessage(err: unknown, fallback: string): string {
   const anyErr = err as { response?: { status?: number; data?: { message?: string } } };
   const msg = anyErr?.response?.data?.message;

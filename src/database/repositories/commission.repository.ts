@@ -85,6 +85,22 @@ export class CommissionRepository {
     return getDb().commissionItem.findMany();
   }
 
+  /**
+   * Every commission credited to one inviter, direct and multi-level
+   * (`per_task_indirect`) alike. Scoped to that inviter and projected down to
+   * the three fields a worker-facing total needs.
+   */
+  async findItemsByInviterId(inviterId: string) {
+    return getDb().commissionItem.findMany({
+      where: { inviterId },
+      select: {
+        referralId: true,
+        commissionKind: true,
+        amount: true,
+      },
+    });
+  }
+
   async createItem(data: {
     id: string;
     batchId: string;

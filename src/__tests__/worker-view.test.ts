@@ -12,6 +12,7 @@ import {
   buildWalletSummary,
   toWorkerTaskDto,
   buildTimeline,
+  buildInvitesSummary,
   formatMoney,
   WORKER_FORBIDDEN_FIELDS,
   TaskLike,
@@ -414,6 +415,56 @@ describe('task DTO whitelist', () => {
     const tl = buildTimeline(t, [], null);
     expect(tl.map((e) => e.key)).toContain('completed');
     expect(JSON.stringify(tl)).not.toContain('secret');
+  });
+});
+
+describe('invites summary', () => {
+  it('derives the counts from the listed rows and never trusts the caller', () => {
+    const dto = buildInvitesSummary({
+      directPaid: 120,
+      directPending: 100,
+      teamPaid: 10,
+      invitees: [
+        { inviteeName: 'Invited Two', ticketName: 'ticket-0022', paid: 0 },
+        { inviteeName: 'Invited One', ticketName: 'ticket-0021', paid: 120 },
+        { inviteeName: 'Invited Three', ticketName: null, paid: 20 },
+      ],
+    });
+
+    expect(dto.summary).toEqual({
+      invited: 3,
+      withTicket: 2,
+      paid: 130,
+      directPaid: 120,
+      directPending: 100,
+      teamPaid: 10,
+    });
+    // Earned first, then alphabetical.
+    expect(dto.invitees.map((i) => i.name)).toEqual(['Invited One', 'Invited Three', 'Invited Two']);
+  });
+
+  it('is an all-zero payload for someone who never invited anyone', () => {
+    const dto = buildInvitesSummary({ directPaid: 0, directPending: 0, teamPaid: 0, invitees: [] });
+    expect(dto.invitees).toEqual([]);
+    expect(dto.summary.invited).toBe(0);
+    expect(dto.summary.paid).toBe(0);
+  });
+
+  it('rounds money to paise and carries no forbidden field', () => {
+    const dto = buildInvitesSummary({
+      directPaid: 33.333,
+      directPending: 0,
+      teamPaid: 0,
+      invitees: [{ inviteeName: 'X', ticketName: 'ticket-1', paid: 10.005 }],
+    });
+    expect(dto.summary.directPaid).toBe(33.33);
+    expect(dto.invitees[0].paid).toBe(10.01);
+
+    const keys = collectKeys(dto);
+    for (const f of WORKER_FORBIDDEN_FIELDS) {
+      expect(keys).not.toContain(f);
+    }
+    expect(Object.keys(dto.invitees[0]).sort()).toEqual(['name', 'paid', 'ticket']);
   });
 });
 

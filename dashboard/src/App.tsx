@@ -29,6 +29,7 @@ const WorkerHome = lazy(() => import('./pages/worker/WorkerHome'));
 const WorkerTasks = lazy(() => import('./pages/worker/WorkerTasks'));
 const WorkerTaskDetail = lazy(() => import('./pages/worker/WorkerTaskDetail'));
 const WorkerWallet = lazy(() => import('./pages/worker/WorkerWallet'));
+const WorkerInvites = lazy(() => import('./pages/worker/WorkerInvites'));
 const WorkerHowTo = lazy(() => import('./pages/worker/WorkerHowTo'));
 
 function WorkerFallback() {
@@ -190,6 +191,11 @@ export default function App() {
                 <Route path="wallet" element={
                   <Suspense fallback={<WorkerFallback />}>
                     <WorkerWallet />
+                  </Suspense>
+                } />
+                <Route path="invites" element={
+                  <Suspense fallback={<WorkerFallback />}>
+                    <WorkerInvites />
                   </Suspense>
                 } />
                 <Route path="how-to" element={
