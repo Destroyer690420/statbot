@@ -2,6 +2,7 @@ import { getDb } from '../database/db';
 import { toReferral } from '../database/converters';
 import { commissionRepository, referralRepository } from '../database/repositories';
 import { commissionService } from './commission.service';
+import { signInviteeDmRef, dmRefMatches } from './worker-auth.service';
 import { buildInvitesSummary, WorkerInviteInput, WorkerInvitesDto } from '../utils/worker-view';
 import { TaskStatus } from '../types';
 import { logger } from '../utils/logger';
@@ -164,8 +165,28 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
       tasks: completedByInvitee.get(referral.inviteeId) ?? 0,
       threshold,
       paid: paidByReferral.get(referral.id) ?? 0,
+      dmRef: signInviteeDmRef(workerId, referral.inviteeId),
     };
   });
 
   return buildInvitesSummary({ directPaid, directPending, chainPending, teamPaid, lastBatch, invitees });
+}
+
+/**
+ * Resolve a `dmRef` back to the invitee it was issued for — but only among the
+ * calling worker's own referrals, so a ref can never reach a stranger. Returns
+ * the invitee id for the caller to hand to Discord; the id is never returned to
+ * the browser.
+ */
+export async function resolveInviteeDmRef(workerId: string, ref: string): Promise<string | null> {
+  if (!ref) return null;
+  const referrals = (await referralRepository.findByInviterId(workerId))
+    .map(toReferral)
+    .filter((r) => r.status !== 'closed');
+  for (const referral of referrals) {
+    if (dmRefMatches(signInviteeDmRef(workerId, referral.inviteeId), ref)) {
+      return referral.inviteeId;
+    }
+  }
+  return null;
 }

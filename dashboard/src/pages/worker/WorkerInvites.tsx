@@ -1,7 +1,7 @@
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
 import { CheckCircle2, Check, Clock3, Hash, Info, TrendingUp, UserPlus, Users } from 'lucide-react';
-import { getWorkerInvites, workerErrorMessage } from '../../api/workerApi';
+import { getInviteeDmUrl, getWorkerInvites, workerErrorMessage } from '../../api/workerApi';
 import { formatISTDate, formatMoney } from '../../utils/workerFormat';
 import {
   WorkerCard,
@@ -56,6 +56,39 @@ export default function WorkerInvites() {
     queryKey: ['worker-invites'],
     queryFn: getWorkerInvites,
   });
+  const [dmFor, setDmFor] = useState<string | null>(null);
+  const [dmError, setDmError] = useState('');
+
+  /**
+   * Open a DM with an invited person. The tab is opened synchronously (browsers
+   * block pop-ups opened after an await) and pointed at the real link once the
+   * server has resolved it from the opaque ref.
+   */
+  const openDm = async (invitee: { name: string; dmRef: string }) => {
+    if (!invitee.dmRef || dmFor) return;
+    setDmFor(invitee.dmRef);
+    setDmError('');
+    const tab = window.open('', '_blank');
+    try {
+      const res = await getInviteeDmUrl(invitee.dmRef);
+      if (res?.success && res.data?.dmUrl) {
+        if (tab) {
+          tab.opener = null;
+          tab.location.href = res.data.dmUrl;
+        } else {
+          window.location.href = res.data.dmUrl;
+        }
+      } else {
+        tab?.close();
+        setDmError(workerErrorMessage(res, `Could not open a DM with ${invitee.name}.`));
+      }
+    } catch (err: unknown) {
+      tab?.close();
+      setDmError(workerErrorMessage(err, `Could not open a DM with ${invitee.name}.`));
+    } finally {
+      setDmFor(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -166,6 +199,12 @@ export default function WorkerInvites() {
         </div>
       ) : null}
 
+      {dmError ? (
+        <p role="alert" className="rounded-xl border border-worker-danger/30 bg-worker-danger/10 px-4 py-3 text-sm text-worker-danger">
+          {dmError}
+        </p>
+      ) : null}
+
       <section>
         <WorkerSectionHeading title="People you invited" detail={invited > 0 ? `${invited}` : undefined} />
         {invitees.length === 0 ? (
@@ -175,7 +214,9 @@ export default function WorkerInvites() {
           />
         ) : (
           <ul className="divide-y divide-worker-border overflow-hidden rounded-xl border border-worker-border bg-worker-surface">
-            {invitees.map((invitee: { name: string; ticket: string | null; tasks: number; threshold: number; qualified: boolean; earned: number }) => (
+            {invitees.map((invitee: { name: string; ticket: string | null; tasks: number; threshold: number; qualified: boolean; earned: number; dmRef: string }) => {
+              const opening = dmFor === invitee.dmRef;
+              return (
               <li
                 key={`${invitee.name}-${invitee.ticket ?? 'no-ticket'}`}
                 className="flex min-h-[72px] items-center justify-between gap-4 px-4 py-3 sm:px-5"
@@ -185,7 +226,19 @@ export default function WorkerInvites() {
                     {invitee.name.trim().charAt(0).toUpperCase() || '?'}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-worker-text">{invitee.name}</span>
+                    {invitee.dmRef ? (
+                      <button
+                        type="button"
+                        onClick={() => openDm(invitee)}
+                        disabled={opening}
+                        title={`Message ${invitee.name} on Discord`}
+                        className="group block max-w-full truncate text-left text-sm font-semibold text-worker-text underline decoration-worker-border decoration-1 underline-offset-2 transition-colors duration-150 hover:decoration-worker-accent hover:text-worker-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent disabled:opacity-60"
+                      >
+                        {invitee.name}
+                      </button>
+                    ) : (
+                      <span className="block truncate text-sm font-semibold text-worker-text">{invitee.name}</span>
+                    )}
                     {invitee.ticket ? (
                       <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-worker-text-muted">
                         <span className="flex min-w-0 items-center gap-1">
@@ -218,7 +271,8 @@ export default function WorkerInvites() {
                   </span>
                 </span>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>

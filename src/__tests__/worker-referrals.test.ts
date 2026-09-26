@@ -21,7 +21,14 @@ jest.mock('../services/commission.service', () => ({
   },
 }));
 
-import { getInvitesForWorker } from '../services/worker-referrals.service';
+// Stubbed so this suite does not have to load env config; the real HMAC is
+// covered in worker-auth.test.ts.
+jest.mock('../services/worker-auth.service', () => ({
+  signInviteeDmRef: (workerId: string, inviteeId: string) => `ref-${workerId}-${inviteeId}`,
+  dmRefMatches: (a: string, b: string) => a === b,
+}));
+
+import { getInvitesForWorker, resolveInviteeDmRef } from '../services/worker-referrals.service';
 
 const ME = '100000000000000001';
 const OTHER = '200000000000000002';
@@ -132,7 +139,7 @@ describe('getInvitesForWorker', () => {
     const dto = await getInvitesForWorker(ME);
 
     expect(dto.invitees).toEqual([
-      { name: 'Invitee', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false, earned: 0 },
+      { name: 'Invitee', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false, earned: 0, dmRef: 'ref-100000000000000001-500000000000000005' },
     ]);
     expect(taskFindMany).toHaveBeenCalledWith({
       where: { channelId: { in: ['1234567890123456789'] } },
@@ -206,7 +213,7 @@ describe('getInvitesForWorker', () => {
     expect(dto.summary).toMatchObject({ invited: 1, directPaid: 120, teamPaid: 35, paid: 155 });
     // The multi-level money is never attributed to a row.
     expect(dto.invitees).toEqual([
-      { name: 'Invitee', ticket: null, tasks: 0, threshold: 2, qualified: false, earned: 120 },
+      { name: 'Invitee', ticket: null, tasks: 0, threshold: 2, qualified: false, earned: 120, dmRef: 'ref-100000000000000001-500000000000000005' },
     ]);
     expect(JSON.stringify(dto)).not.toContain('per_task_indirect');
     expect(JSON.stringify(dto)).not.toContain('REF-SOMEONE-ELSE');
@@ -255,6 +262,36 @@ describe('getInvitesForWorker', () => {
     expect(dto.summary.chainPending).toBe(45);
     // The chain share is never attributed to the inviter's own invitee rows.
     expect(dto.invitees.every((i) => i.earned === 0)).toBe(true);
+  });
+
+  it('signs a per-inviter dmRef and resolves it only for its own inviter', async () => {
+    referrals = [
+      referral({ id: 'REF-MINE', inviteeId: '500000000000000005' }),
+      referral({ id: 'REF-MINE-2', inviteeId: '500000000000000006' }),
+    ];
+
+    const dto = await getInvitesForWorker(ME);
+    const refs = dto.invitees.map((i) => i.dmRef);
+    expect(new Set(refs).size).toBe(2);
+    expect(refs.every((r) => r.startsWith('ref-'))).toBe(true);
+
+    // Resolvable to the real invitee for the owner...
+    const invitee = await resolveInviteeDmRef(ME, refs[0]);
+    expect(['500000000000000005', '500000000000000006']).toContain(String(invitee).replace('ref-ME-', ''));
+
+    // ...and the same ref means nothing to a different inviter.
+    expect(await resolveInviteeDmRef(OTHER, refs[0])).toBeNull();
+    expect(await resolveInviteeDmRef(ME, 'deadbeefdeadbeef')).toBeNull();
+    expect(await resolveInviteeDmRef(ME, '')).toBeNull();
+  });
+
+  it('never exposes an invitee id as a payload field', async () => {
+    referrals = [referral({ id: 'REF-MINE', inviteeId: '500000000000000005' })];
+    const dto = await getInvitesForWorker(ME);
+    // (This suite stubs the signer with a readable value, so only the field
+    // shape is asserted here; worker-auth.test.ts proves the real ref hides it.)
+    expect(Object.keys(dto.invitees[0])).not.toContain('inviteeId');
+    expect(Object.keys(dto.summary)).not.toContain('invitees');
   });
 
   it('skips the multi-level walk for an inviter with no referrals at all', async () => {

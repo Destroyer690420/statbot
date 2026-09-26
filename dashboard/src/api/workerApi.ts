@@ -97,6 +97,12 @@ export async function getWorkerInvites() {
   return data;
 }
 
+/** Ask the server for a Discord DM link with an invited person (by opaque ref). */
+export async function getInviteeDmUrl(ref: string) {
+  const { data } = await workerApi.post('/invites/dm', { ref });
+  return data;
+}
+
 export function workerErrorMessage(err: unknown, fallback: string): string {
   const anyErr = err as { response?: { status?: number; data?: { message?: string } } };
   const msg = anyErr?.response?.data?.message;

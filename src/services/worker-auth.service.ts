@@ -574,11 +574,41 @@ export function buildOtpMessage(workerId: string, code: string): string {
  */
 export function buildInviterLoginMessage(code: string): string {
   return (
-    `\u{1F510} Your Worker Panel login code is **${formatOtpCode(code)}**. ` +
-    `It expires in 5 minutes. Never share it \u2014 staff will never ask for it. ` +
+    `🔐 Your Worker Panel login code is **${formatOtpCode(code)}**. ` +
+    `It expires in 5 minutes. Never share it — staff will never ask for it. ` +
     `Open the Worker Panel, choose "I only invite", and enter this code. ` +
     `If you didn't request this, ignore it.`
   );
+}
+
+// ─── Invitee DM refs ─────────────────────────────────────────────────
+
+/**
+ * Opaque, per-inviter handle for "open a DM with this person I invited".
+ *
+ * The browser must never see an invitee's Discord id (it is a
+ * `WORKER_FORBIDDEN_FIELDS` entry), and Discord has no way to open a DM from a
+ * URL alone — the real DM channel id has to come from the API. So each row
+ * carries an HMAC of `(workerId, inviteeId)` instead: it cannot be reversed,
+ * cannot be replayed by another worker, and is cheap to verify by recomputing
+ * it over the caller's own referrals.
+ */
+export function signInviteeDmRef(workerId: string, inviteeId: string): string {
+  const secret = getWorkerSecret();
+  if (!secret || secret.length < 32) return '';
+  return crypto
+    .createHmac('sha256', secret)
+    .update(`dmref:${workerId}:${inviteeId}`)
+    .digest('hex')
+    .slice(0, 16);
+}
+
+/** Constant-time ref comparison (both sides are fixed-length hex). */
+export function dmRefMatches(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 interface SendableChannel {

@@ -452,10 +452,14 @@ describe('worker isolation (HTTP)', () => {
 
       // Ticket numbers resolved from a channel mention and a plain name;
       // ordered by task progress, so the qualified invitee comes first.
-      expect(invitees).toEqual([
+      expect(invitees).toMatchObject([
         { name: 'Invited Two', ticket: 'ticket-0022', tasks: 2, threshold: 2, qualified: true, earned: 0 },
         { name: 'Invited One', ticket: 'ticket-0021', tasks: 1, threshold: 2, qualified: false, earned: 120 },
       ]);
+      // Every row carries an opaque DM handle rather than an invitee id.
+      for (const row of invitees) {
+        expect(row.dmRef).toMatch(/^[0-9a-f]{16}$/);
+      }
       // A's newest paying batch is #6, which contained only the chain item, so
       // lastBatch is that batch alone — not the sum of every batch.
       expect(summary.lastBatch.batchNumber).toBe(6);
@@ -473,8 +477,30 @@ describe('worker isolation (HTTP)', () => {
       // Keys are exactly the whitelisted shape.
       expect(Object.keys(summary).sort()).toEqual(['chainPending', 'directPaid', 'directPending', 'invited', 'lastBatch', 'paid', 'qualified', 'teamPaid', 'withTicket']);
       for (const row of invitees) {
-        expect(Object.keys(row).sort()).toEqual(['earned', 'name', 'qualified', 'tasks', 'threshold', 'ticket']);
+        expect(Object.keys(row).sort()).toEqual(['dmRef', 'earned', 'name', 'qualified', 'tasks', 'threshold', 'ticket']);
       }
+    });
+
+    test('/invites/dm needs a token and never accepts another worker\'s ref', async () => {
+      const anon = await fetch(`${base}/invites/dm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref: 'a'.repeat(16) }),
+      });
+      expect(anon.status).toBe(401);
+
+      // Alice's real ref, presented by Bob: no invitee is revealed.
+      const invites = await api('/invites', undefined, tokenA);
+      const aliceRef = invites.body.data.invitees[0].dmRef;
+      const asBob = svc.signWorkerToken({ workerId: B, channelId: 'chan-bob', name: 'Bobson McOther' });
+      const cross = await api('/invites/dm', { method: 'POST', body: JSON.stringify({ ref: aliceRef }) }, asBob);
+      expect(cross.status).toBe(404);
+      expect(JSON.stringify(cross.body)).not.toContain(String(INVITEE1));
+      expect(JSON.stringify(cross.body)).not.toContain(String(INVITEE2));
+
+      // A junk ref is equally refused.
+      const junk = await api('/invites/dm', { method: 'POST', body: JSON.stringify({ ref: 'f'.repeat(16) }) }, tokenA);
+      expect(junk.status).toBe(404);
     });
 
     test('/invites is empty (not an error) for a worker who never invited anyone', async () => {

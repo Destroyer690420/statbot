@@ -345,5 +345,57 @@ describe('worker auth + OTP', () => {
       );
       expect(() => svc.verifyWorkerToken(forged)).toThrow();
     });
+
+    it('treats a pre-scope token as a ticket token and only lets inviter tokens omit tid', () => {
+      // Token issued before the scope claim existed.
+      const legacy = jwt.sign(
+        { typ: 'worker', sub: 'abc', tid: 'chan', name: 'Ann', jti: 'x' },
+        env.WORKER_JWT_SECRET,
+        { algorithm: 'HS256', audience: 'statbot-worker', issuer: 'statbot', expiresIn: '1h' },
+      );
+      expect(svc.verifyWorkerToken(legacy).scope).toBe('ticket');
+
+      const inviter = svc.signWorkerToken({ workerId: 'abc', channelId: '', name: 'Ann', scope: 'inviter' });
+      const payload = svc.verifyWorkerToken(inviter);
+      expect(payload.scope).toBe('inviter');
+      expect(payload.tid).toBe('');
+
+      // A ticket token without a channel is still rejected.
+      const broken = jwt.sign(
+        { typ: 'worker', sub: 'abc', tid: '', scope: 'ticket', name: null, jti: 'x' },
+        env.WORKER_JWT_SECRET,
+        { algorithm: 'HS256', audience: 'statbot-worker', issuer: 'statbot', expiresIn: '1h' },
+      );
+      expect(() => svc.verifyWorkerToken(broken)).toThrow();
+    });
+  });
+
+  describe('invitee DM refs', () => {
+    it('is deterministic, opaque, and bound to both the worker and the invitee', () => {
+      const a = svc.signInviteeDmRef('111', '222');
+      expect(a).toMatch(/^[0-9a-f]{16}$/);
+      expect(svc.signInviteeDmRef('111', '222')).toBe(a);
+      // Different invitee, and the same invitee under a different inviter.
+      expect(svc.signInviteeDmRef('111', '333')).not.toBe(a);
+      expect(svc.signInviteeDmRef('999', '222')).not.toBe(a);
+      // The invitee id must not be recoverable from the ref.
+      expect(a).not.toContain('222');
+    });
+
+    it('compares refs safely and rejects mismatches', () => {
+      const a = svc.signInviteeDmRef('111', '222');
+      expect(svc.dmRefMatches(a, svc.signInviteeDmRef('111', '222'))).toBe(true);
+      expect(svc.dmRefMatches(a, svc.signInviteeDmRef('111', '333'))).toBe(false);
+      expect(svc.dmRefMatches(a, '')).toBe(false);
+      expect(svc.dmRefMatches(a, `${a}x`)).toBe(false);
+      expect(svc.dmRefMatches('', '')).toBe(true);
+    });
+
+    it('returns an empty ref when the portal secret is not configured', () => {
+      const original = env.WORKER_JWT_SECRET;
+      (env as { WORKER_JWT_SECRET: string }).WORKER_JWT_SECRET = 'short';
+      expect(svc.signInviteeDmRef('111', '222')).toBe('');
+      (env as { WORKER_JWT_SECRET: string }).WORKER_JWT_SECRET = original;
+    });
   });
 });

@@ -34,7 +34,7 @@ import {
   getTaskForWorker,
   getWalletForWorker,
 } from '../../services/worker.service';
-import { getInvitesForWorker } from '../../services/worker-referrals.service';
+import { getInvitesForWorker, resolveInviteeDmRef } from '../../services/worker-referrals.service';
 
 /**
  * Read-only worker portal. Factory (needs the Discord client to post codes),
@@ -323,6 +323,14 @@ export default function createWorkerRoutes(discordClient: any): Router {
     message: { success: false, message: 'Too many requests. Please try again later.' },
   });
   const inviterVerifyLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many requests. Please try again later.' },
+  });
+  // One DM link per click is one Discord API call, so cap it per IP.
+  const dmLimiter = rateLimit({
     windowMs: 10 * 60 * 1000,
     max: 30,
     standardHeaders: true,
@@ -703,6 +711,52 @@ export default function createWorkerRoutes(discordClient: any): Router {
       res.json({ success: true, data });
     } catch (error) {
       logger.error('GET /worker/invites failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /**
+   * Resolve a `dmRef` into a Discord DM link for the person that worker
+   * invited. Discord has no way to open a DM from a URL alone, so the real
+   * channel id is fetched server-side — which also means the invitee's Discord
+   * id never reaches the browser.
+   */
+  router.post('/invites/dm', workerAuthMiddleware, dmLimiter, async (req: WorkerAuthRequest, res: Response): Promise<void> => {
+    try {
+      const ref = String((req.body || {}).ref ?? '');
+      if (!ref || ref.length > 64) {
+        res.status(400).json({ success: false, message: 'That person is not available.' });
+        return;
+      }
+      const inviteeId = await resolveInviteeDmRef(req.worker!.sub, ref);
+      if (!inviteeId) {
+        res.status(404).json({ success: false, message: 'That person is not in your invites.' });
+        return;
+      }
+      if (!env.DISCORD_TOKEN) {
+        res.status(503).json({ success: false, message: 'Direct messages are unavailable right now.' });
+        return;
+      }
+      // Discord creates the DM channel if it does not exist yet, and returns the
+      // same id on every later call, so the link works even for a first DM.
+      const res2 = await fetch('https://discord.com/api/v10/users/@me/channels', {
+        method: 'POST',
+        headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient_id: inviteeId }),
+      });
+      if (!res2.ok) {
+        logger.warn('POST /worker/invites/dm Discord refused', { status: res2.status });
+        res.status(502).json({ success: false, message: 'Could not open a DM with that person.' });
+        return;
+      }
+      const channel = (await res2.json()) as { id?: string };
+      if (!channel?.id) {
+        res.status(502).json({ success: false, message: 'Could not open a DM with that person.' });
+        return;
+      }
+      res.json({ success: true, data: { dmUrl: `https://discord.com/channels/@me/${channel.id}` } });
+    } catch (error) {
+      logger.error('POST /worker/invites/dm failed', { error });
       res.status(500).json({ success: false, message: 'Internal server error.' });
     }
   });

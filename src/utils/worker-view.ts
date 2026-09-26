@@ -869,6 +869,8 @@ export interface WorkerInviteInput {
   threshold: number;
   /** Money already disbursed for this person. */
   paid: number;
+  /** Opaque DM handle (HMAC of the invitee id) — empty when unavailable. */
+  dmRef: string;
 }
 
 export interface WorkerInvitesTotals {
@@ -897,6 +899,8 @@ export interface WorkerInviteeDto {
   threshold: number;
   qualified: boolean;
   earned: number;
+  /** Opaque handle used to ask the server for a DM link. Never an id. */
+  dmRef: string;
 }
 
 export interface WorkerInvitesDto {
@@ -940,6 +944,7 @@ export function buildInvitesSummary(input: {
         threshold,
         qualified: tasks >= threshold,
         earned: roundMoney(i.paid),
+        dmRef: i.dmRef ?? '',
       };
     })
     .sort((a, b) => b.tasks - a.tasks || b.earned - a.earned || a.name.localeCompare(b.name));
