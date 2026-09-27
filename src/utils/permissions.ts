@@ -33,13 +33,33 @@ export function isMemberAdmin(member: GuildMember): boolean {
   return isAdmin(member.id);
 }
 
-export function getAllAdminIds(): string[] {
-  return [...getAdminIds(), ...getManagerIds(), ...getModeratorIds()];
+/**
+ * Memoized because it is called per channel member on the blast and worker-
+ * detection hot paths: each call used to split/trim/filter three env strings
+ * and allocate three arrays. `env` is validated once at boot and is immutable
+ * afterwards, so the result cannot go stale in production (tests that change
+ * the env do so before a `jest.resetModules()` + fresh import).
+ *
+ * Frozen and shared: treat the result as read-only. Every caller only
+ * iterates, `.includes()`, `.map()`s or wraps it in a Set.
+ */
+let allAdminIdsCache: readonly string[] | null = null;
+
+export function getAllAdminIds(): readonly string[] {
+  if (allAdminIdsCache === null) {
+    allAdminIdsCache = Object.freeze([...getAdminIds(), ...getManagerIds(), ...getModeratorIds()]);
+  }
+  return allAdminIdsCache;
 }
 
+let adminOrManagerIdsCache: readonly string[] | null = null;
+
 /** Admins + managers (no moderators) — recipients and approvers of blast DMs. */
-export function getAdminOrManagerIds(): string[] {
-  return [...getAdminIds(), ...getManagerIds()];
+export function getAdminOrManagerIds(): readonly string[] {
+  if (adminOrManagerIdsCache === null) {
+    adminOrManagerIdsCache = Object.freeze([...getAdminIds(), ...getManagerIds()]);
+  }
+  return adminOrManagerIdsCache;
 }
 
 export function getPermissionDeniedMessage(): string {

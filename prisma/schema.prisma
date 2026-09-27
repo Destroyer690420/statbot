@@ -488,6 +488,9 @@ model AutomationClaim {
 
   @@index([status, expiresAt])
   @@index([externalTaskId])
+  // listCycleClaims(cycleId) runs on every blast reply and on the claim poll's
+  // subreddit lookup; without this it is a sequential scan of the whole table.
+  @@index([cycleId])
 }
 
 model CompanionStatus {

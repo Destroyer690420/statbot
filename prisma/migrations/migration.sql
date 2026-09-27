@@ -700,3 +700,11 @@ CREATE TABLE IF NOT EXISTS "WorkerPortalAccess" (
 CREATE INDEX IF NOT EXISTS "PayoutItem_workerId_idx" ON "PayoutItem"("workerId");
 CREATE INDEX IF NOT EXISTS "AutomationBurst_cycleId_idx" ON "AutomationBurst"("cycleId");
 CREATE INDEX IF NOT EXISTS "Task_source_status_channelId_idx" ON "Task"("source", "status", "channelId");
+-- ============================================================
+-- Migration: Performance indexes (batch A part 2)
+-- ============================================================
+-- listCycleClaims(cycleId) runs on every blast reply (handleBurstReply) and
+-- on the claim poll's expected-subreddit lookup. AutomationClaim had no index
+-- on cycleId, so both were sequential scans of the whole table.
+-- Schema-only, no data statements, safe to re-run.
+CREATE INDEX IF NOT EXISTS "AutomationClaim_cycleId_idx" ON "AutomationClaim"("cycleId");

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.10
+// @version      1.4.11
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,14 @@
 // ==/UserScript==
 
 /**
+   * v1.4.11 - Claim pickup latency only (accept logic untouched): a finished
+   * claim now returns straight to the poll instead of idling 2-3.5s first, and
+   * the live-work poll cadence drops from 2-3.5s to 0.6-0.8s. Winner pickup
+   * goes from up to ~3.5s to under ~0.8s. claimTick now returns whether it
+   * processed a claim; every other exit path is unchanged. Safe to poll faster
+   * because the companion endpoints are exempt from the server rate limiter.
+   * Otherwise identical to v1.4.10 below.
+   *
    * v1.4.10 - Manual-scan watchdog cover: the on-demand branch now holds
    * the monitor guard (busy flag + watchdog timestamp) exactly like the
    * automatic path, so a stalled manual tick trips the same 90s recovery
@@ -191,7 +199,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.10';
+  const VERSION = '1.4.11';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -212,12 +220,19 @@
   // - FAST_ACCEPT_TIMEOUT_MS/TRIES: fail fast on stale Server Action ids.
   // - CARD_SCAN_BUDGET_MS: total budget for the card-by-card drawer search.
   // - CLAIM_API_TIMEOUT_MS: API timeout for claim poll/verdict/assign calls.
-  const BURST_OPEN_CLAIM_MS = 2000;
+  const BURST_OPEN_CLAIM_MS = 600;
   const BOOT_SETTLE_MS = 5000;
   const FAST_ACCEPT_TIMEOUT_MS = 3000;
   const FAST_ACCEPT_TRIES = 2;
   const CARD_SCAN_BUDGET_MS = 5000;
   const CLAIM_API_TIMEOUT_MS = 10000;
+  // Phase-2 claim pickup: a finished claim hands control straight back to the
+  // poll, and the live-work cadence drops from 2-3.5s to 0.6-0.8s so a winner
+  // is waiting under a second instead of up to 3.5s. Both are free: the
+  // companion endpoints are exempt from the server rate limiter, and each poll
+  // is a handful of indexed point reads.
+  const CLAIM_CONTINUE_MS = 150;
+  const CLAIM_FAST_JITTER_MS = 200;
   // Hard timeout racing the burst report POST: the transport timeout alone
   // proved untrustworthy (a hung POST wedged the loop with zero trace, no
   // log, no retry, no DM). Slightly above the transport timeout so normal
@@ -672,6 +687,15 @@
 
   function withBurstJitter(ms) {
     return ms + Math.floor(Math.random() * BURST_MONITOR_JITTER_MS);
+  }
+
+  /**
+   * Jitter for the live-work claim cadence. Separate from withBurstJitter
+   * because the monitor's 1.5s spread is sized for a 2.5s base and would
+   * swamp a 0.6s one.
+   */
+  function withClaimJitter(ms) {
+    return ms + Math.floor(Math.random() * CLAIM_FAST_JITTER_MS);
   }
 
   /**
@@ -1233,8 +1257,16 @@
     } catch (e) { return false; }
   }
 
+  /**
+   * One claim poll + accept cycle.
+   *
+   * Returns true when a claim was received and processed (its verdict has
+   * already been POSTed by the time this returns), so the loop knows the next
+   * claim, if any, already exists server-side and there is no reason to idle
+   * before asking again. Every other exit returns false.
+   */
   async function claimTick() {
-    if (claimBusy || !watcherEnabled() || isRateLimited()) return;
+    if (claimBusy || !watcherEnabled() || isRateLimited()) return false;
     // Watchdog: recover a wedged monitor tick so one stalled page load can
     // never freeze scanning again (claim loop ticks prove timers are alive).
     if (monitorBusy && Date.now() - lastMonitorDoneAt > 90000) {
@@ -1245,9 +1277,10 @@
     const settings = getSettings();
     if (!settings.apiKey) {
       setStatus(false, 'no API key - click the watcher gear (bottom-right)');
-      return;
+      return false;
     }
     claimBusy = true;
+    let didWork = false;
     try {
       const res = await request(settings, 'GET', '/claims/pending', null,
         'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION) + '&tabId=' + encodeURIComponent(getTabId()) +
@@ -1272,7 +1305,7 @@
       const claim = dd.claim;
       if (!claim) {
         sessSet(CLAIM_PENDING_FLAG, '');
-        return;
+        return false;
       }
       // Phase-1: mark work pending so a navigation reboot skips the settle
       // pause and polls immediately. Cleared on the next empty poll.
@@ -1282,7 +1315,9 @@
       // sent except inside the timings object below. No behavior change.
       claim._pollReceivedAt = Date.now();
       claim._timings = { pollReceivedAt: claim._pollReceivedAt, drawerOpenedMs: null, acceptedMs: null, pushedMs: null };
+      didWork = true;
       await processClaim(settings, claim);
+      return true;
     } catch (e) {
       if (isRateLimitError(e)) {
         noteRateLimit();
@@ -1291,6 +1326,7 @@
         setStatus(false, e && e.message ? String(e.message).slice(0, 80) : 'poll failed');
       }
       console.log('[Auto Watcher] claim poll failed:', e && e.message);
+      return false;
     } finally {
       claimBusy = false;
     }
@@ -1873,12 +1909,23 @@
     // flag survives a return-to-/tasks navigation in the same tab).
     if (!sessGet(CLAIM_PENDING_FLAG)) await sleep(BOOT_SETTLE_MS);
     for (;;) {
+      let didWork = false;
       try {
-        await claimTick();
+        didWork = await claimTick();
       } catch (e) { /* never break the loop */ }
-      // Phase-1: 2-3.5s while a burst is open on the server (or the local
-      // window is live); the routine 30-40s cadence otherwise.
-      await sleep(shouldFastPoll() ? withBurstJitter(BURST_OPEN_CLAIM_MS) : withJitter(CLAIM_MS));
+      if (didWork) {
+        // A claim was just accepted and its verdict already delivered. The
+        // next claim, if one exists, is on the server right now, so go
+        // straight back to the poll instead of sleeping first. Previously this
+        // cost a 2-3.5s idle wait between every single task.
+        await sleep(CLAIM_CONTINUE_MS);
+        continue;
+      }
+      // Phase-2: 0.6-0.8s while a burst is open on the server (or the local
+      // window is live); the routine 30-40s cadence otherwise. The live
+      // cadence used to be 2-3.5s, which meant a winner could sit idle for
+      // that long after replying before its task was even handed over.
+      await sleep(shouldFastPoll() ? withClaimJitter(BURST_OPEN_CLAIM_MS) : withJitter(CLAIM_MS));
     }
   }
 

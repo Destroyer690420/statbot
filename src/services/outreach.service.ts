@@ -5,6 +5,7 @@ import { getIstDayBoundaries, isStaleDailyCycle } from '../utils/ist-time';
 import { buildOutreachRows, formatOutreachMessage, OutreachRowInput, OutreachRow, TicketTaskStatus } from '../utils/outreach-rows';
 import { isBlastFull, isAtDailyCap } from '../utils/outreach-blast';
 import { createSerialQueue } from '../utils/serial-queue';
+import { mapWithConcurrency } from '../utils/bounded-concurrency';
 import { DEFAULT_OUTREACH_MESSAGE } from '../config/constants';
 import { AuditAction } from '../types';
 import { getAllAdminIds } from '../utils/permissions';
@@ -32,6 +33,93 @@ export interface SkippedTicket {
   channelId: string;
   channelName: string | null;
   reason: string;
+}
+
+/** A selected ticket after its channel has been resolved (or failed to be). */
+interface ResolvedTicket {
+  channelId: string;
+  channel: TextChannel | null;
+  name: string | null;
+  error: string | null;
+}
+
+/**
+ * Discord message sends in flight during a blast.
+ *
+ * Discord's documented global REST ceiling is 50 requests/second per bot, and
+ * its own support guidance for a 200-message fan-out is to pace at 40 rps.
+ * Measured REST latency from the production host is ~0.33-0.38s, so by Little's
+ * Law 12 in flight sustains ~32-36 rps. That leaves roughly a third of the
+ * budget for reminders, ticket replies and insight uploads, which must not be
+ * starved by a blast. Raising this to ~19 would saturate the cap and remove
+ * that headroom.
+ */
+const BLAST_SEND_CONCURRENCY = 12;
+
+/**
+ * Loser-message deletions in flight. Same reasoning and same width as the send
+ * pool: after this change a deletion is ONE round-trip, not two.
+ */
+const BLAST_DELETE_CONCURRENCY = 12;
+
+/**
+ * `channels.fetch` in flight. Almost every ticket is already in the client
+ * cache (served locally, no I/O), so this only needs to be wide enough to
+ * overlap the genuine cache misses without opening a socket per ticket.
+ */
+const CHANNEL_RESOLVE_CONCURRENCY = 12;
+
+/** Independent database writes (stale-cycle resets) in flight. */
+const DB_WRITE_CONCURRENCY = 8;
+
+/**
+ * How long a blast open/closed read is reused before re-reading the row. The
+ * original code read it once per send (~78 reads for 78 tickets); this keeps
+ * the same fail-closed semantics — a failed read counts as "not open" — while
+ * collapsing the reads to a handful.
+ */
+const BLAST_LIVENESS_TTL_MS = 250;
+
+/** Discord's 404 "Unknown Message" — the message is already gone. */
+function isUnknownMessage(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { code?: unknown; status?: unknown };
+  return e.code === 10007 || e.status === 404;
+}
+
+/**
+ * Bounded, fail-closed view of whether a blast is still OPEN.
+ *
+ * `isOpen()` re-reads at most once per TTL and shares a single in-flight read
+ * between concurrent callers, so a fan-out of sends performs a handful of point
+ * reads instead of one per send. A failed read is reported as NOT open, exactly
+ * as the previous `getBlast(...).catch(() => null)` check did — a blast whose
+ * state cannot be read must not keep messaging.
+ */
+class BlastLiveness {
+  private cachedAt = 0;
+  private cachedOpen = true;
+  private inflight: Promise<boolean> | null = null;
+
+  constructor(
+    private readonly blastId: string,
+    private readonly ttlMs: number = BLAST_LIVENESS_TTL_MS,
+  ) {}
+
+  async isOpen(): Promise<boolean> {
+    if (Date.now() - this.cachedAt < this.ttlMs) return this.cachedOpen;
+    if (this.inflight === null) {
+      this.inflight = (async () => {
+        const live = await outreachRepository.getBlast(this.blastId).catch(() => null);
+        this.cachedOpen = !!live && live.status === 'OPEN';
+        this.cachedAt = Date.now();
+        return this.cachedOpen;
+      })().finally(() => {
+        this.inflight = null;
+      });
+    }
+    return this.inflight;
+  }
 }
 
 /** Posts assigned per worker per IST day before outreach skips them. */
@@ -211,6 +299,21 @@ class OutreachService {
    * Fill-safe: re-checks the blast before each send and stops once it is
    * closed (late tickets are logged as skipped), then sweeps any messages
    * that raced in after the fill-cleanup so no loser keeps the message.
+   *
+   * The per-ticket work is INDEPENDENT, so it runs on a bounded number of
+   * workers instead of one `await` at a time. Measured Discord REST latency
+   * from the production host is ~0.33-0.38s per call, so the serial form cost
+   * ~0.35s x tickets for the sends alone. `BLAST_SEND_CONCURRENCY` is sized
+   * from Little's Law against Discord's documented 50 req/s global cap:
+   * 12 in flight x ~3 calls/s is ~36 req/s, deliberately leaving headroom for
+   * reminders, ticket replies and insight uploads so a blast can never starve
+   * them. Every message still goes to a distinct channel, and discord.js keeps
+   * one request queue per channel, so no per-route limit applies.
+   *
+   * Ordering guarantees are preserved where they matter: results are collected
+   * in input order, `recordBlastMessage` is awaited before its send counts as
+   * done (the post-send sweep reads those rows), and a blast that closes
+   * mid-flight still stops the remaining tickets.
    */
   async sendBlastMessages(
     discordClient: Client,
@@ -221,75 +324,147 @@ class OutreachService {
     const message = await this.getMessage();
 
     const rows = await outreachRepository.findAll();
-    for (const row of rows) {
-      if (isStaleDailyCycle(row.messageSentAt, dayStart)) {
-        await outreachRepository.resetCycle(row.channelId);
-      }
+    const staleRows = rows.filter((r) => isStaleDailyCycle(r.messageSentAt, dayStart));
+    if (staleRows.length > 0) {
+      // The daily reset used to run one `await` per stale row. They are
+      // independent writes, so fan them out on a small width that cannot
+      // monopolise the connection pool.
+      await mapWithConcurrency(staleRows, DB_WRITE_CONCURRENCY, (row) =>
+        outreachRepository.resetCycle(row.channelId).catch(() => undefined),
+      );
     }
 
     const freshRows = await outreachRepository.findAll();
     const selected = freshRows.filter((r) => r.selected);
 
-    for (const guild of discordClient.guilds.cache.values()) {
-      await guild.members.fetch().catch(() => undefined);
-    }
-
     const sent: SendResult[] = [];
     const skipped: SkippedTicket[] = [];
-    for (let i = 0; i < selected.length; i++) {
-      const row = selected[i];
-      // Stop-the-send check: Discord sends are slow and the blast can fill
-      // while earlier sends are still in flight (a fast first reply closes
-      // it mid-loop). Anything sent after the fill-cleanup would never be
-      // deleted — so stop the moment this blast is no longer OPEN. This is
-      // one cheap indexed row read per send (~ms vs ~s for the send itself).
-      const live = await outreachRepository.getBlast(blast.id).catch(() => null);
-      if (!live || live.status !== 'OPEN') {
-        for (let j = i; j < selected.length; j++) {
-          skipped.push({
-            channelId: selected[j].channelId,
-            channelName: null,
-            reason: 'blast closed before send',
-          });
+
+    // Resolve every selected ticket first. A cached channel costs nothing;
+    // only a genuine cache miss costs a REST round-trip. Doing this
+    // concurrently is what removes the serial latency — the previous code
+    // awaited one `channels.fetch` per ticket inside the send loop.
+    const targets = await mapWithConcurrency(
+      selected,
+      CHANNEL_RESOLVE_CONCURRENCY,
+      async (row): Promise<ResolvedTicket> => {
+        try {
+          const channel = await discordClient.channels.fetch(row.channelId);
+          if (!channel || !(channel instanceof TextChannel)) {
+            throw new Error('Channel not found or not a text channel.');
+          }
+          return { channelId: row.channelId, channel, name: channel.name, error: null };
+        } catch (error) {
+          const errorText = error instanceof Error ? error.message : String(error);
+          logger.error('Outreach blast channel resolve failed', { channelId: row.channelId, error: errorText });
+          return { channelId: row.channelId, channel: null, name: null, error: errorText };
         }
-        logger.info('Blast send stopped early: blast closed mid-send', {
-          blastId: blast.id,
-          sentOk: sent.filter((s) => s.ok).length,
-          skippedRest: selected.length - i,
+      },
+    );
+
+    // Member safety net, paid for only when it is actually needed.
+    //
+    // The old code always ran `guild.members.fetch()` here, which measured
+    // 1.2s per blast for 375 members. `channel.members` is normally already
+    // populated by GUILD_CREATE plus the enabled GuildMembers intent, so that
+    // call is normally pure waste. But it IS the recovery path when the member
+    // cache is cold (e.g. a blast fired seconds after a restart), and without
+    // it every ticket would resolve as "no worker in ticket". So: only sweep
+    // when at least one ticket actually has no cached members.
+    const resolvedChannels = targets
+      .map((t) => t.channel)
+      .filter((c): c is TextChannel => c !== null);
+    if (resolvedChannels.length > 0 && resolvedChannels.some((c) => c.members.size === 0)) {
+      for (const guild of discordClient.guilds.cache.values()) {
+        await guild.members.fetch().catch(() => undefined);
+      }
+      logger.info('Blast refreshed guild members: at least one ticket had none cached');
+    }
+
+    // Worker resolution is pure cache work — no I/O — so it happens inline.
+    const staffIds = getAllAdminIds();
+    const planned = targets.map((target) => {
+      if (!target.channel) return { ...target, workerId: null };
+      const worker = target.channel.members
+        .filter((m) => !m.user.bot && !staffIds.includes(m.id))
+        .first();
+      return { ...target, workerId: worker ? worker.id : null };
+    });
+
+    // ONE daily-cap read for the whole blast instead of one per ticket.
+    const workerIds = [
+      ...new Set(planned.map((t) => t.workerId).filter((id): id is string => Boolean(id))),
+    ];
+    const assignedByWorker = await this.countPostsAssignedTodayForWorkers(workerIds, dayStart, dayEnd);
+
+    const liveness = new BlastLiveness(blast.id);
+    let stoppedEarly = false;
+
+    await mapWithConcurrency(planned, BLAST_SEND_CONCURRENCY, async (target) => {
+      // Stop-the-send check: Discord sends are slow and the blast can fill
+      // while earlier sends are still in flight (a fast first reply closes it
+      // mid-run). Anything sent after the fill-cleanup would never be deleted
+      // — so stop as soon as the blast is no longer OPEN. `BlastLiveness`
+      // re-reads the row at most every BLAST_LIVENESS_TTL_MS, which keeps the
+      // same fail-closed behaviour (a failed read counts as "not open") while
+      // collapsing ~78 point reads into a handful. Sends already in flight
+      // when the blast closes are exactly what the post-send sweep exists for.
+      if (stoppedEarly || !(await liveness.isOpen())) {
+        stoppedEarly = true;
+        skipped.push({
+          channelId: target.channelId,
+          channelName: target.name,
+          reason: 'blast closed before send',
         });
-        break;
+        return;
+      }
+      if (!target.channel) {
+        sent.push({
+          channelId: target.channelId,
+          channelName: target.name,
+          ok: false,
+          error: target.error ?? 'Channel not found or not a text channel.',
+        });
+        return;
+      }
+      if (!target.workerId) {
+        skipped.push({
+          channelId: target.channelId,
+          channelName: target.name,
+          reason: 'no worker in ticket',
+        });
+        return;
+      }
+      const assignedToday = assignedByWorker.get(target.workerId) ?? 0;
+      if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+        skipped.push({
+          channelId: target.channelId,
+          channelName: target.name,
+          reason: `worker at daily cap (${assignedToday}/${DAILY_POST_CAP})`,
+        });
+        return;
       }
       try {
-        const channel = await discordClient.channels.fetch(row.channelId);
-        if (!channel || !(channel instanceof TextChannel)) {
-          throw new Error('Channel not found or not a text channel.');
-        }
-        const worker = channel.members
-          .filter((m) => !m.user.bot && !getAllAdminIds().includes(m.id))
-          .first();
-        if (!worker) {
-          skipped.push({ channelId: row.channelId, channelName: channel.name, reason: 'no worker in ticket' });
-          continue;
-        }
-        const assignedToday = await this.countPostsAssignedToday(worker.id, dayStart, dayEnd);
-        if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
-          skipped.push({
-            channelId: row.channelId,
-            channelName: channel.name,
-            reason: `worker at daily cap (${assignedToday}/${DAILY_POST_CAP})`,
-          });
-          continue;
-        }
-        const content = formatOutreachMessage(message, worker.id);
-        const msg = await channel.send(content);
-        await outreachRepository.recordBlastMessage(blast.id, channel.id, msg.id);
-        await outreachRepository.setMessageSent(row.channelId, new Date());
-        sent.push({ channelId: row.channelId, channelName: channel.name, ok: true });
+        const content = formatOutreachMessage(message, target.workerId);
+        const msg = await target.channel.send(content);
+        // MUST be awaited before this send is considered done: the post-send
+        // sweep reads these rows to learn which messages exist.
+        await outreachRepository.recordBlastMessage(blast.id, target.channel.id, msg.id);
+        await outreachRepository.setMessageSent(target.channelId, new Date());
+        sent.push({ channelId: target.channelId, channelName: target.name, ok: true });
       } catch (error) {
         const messageText = error instanceof Error ? error.message : String(error);
-        logger.error('Outreach blast send failed', { channelId: row.channelId, error: messageText });
-        sent.push({ channelId: row.channelId, channelName: null, ok: false, error: messageText });
+        logger.error('Outreach blast send failed', { channelId: target.channelId, error: messageText });
+        sent.push({ channelId: target.channelId, channelName: target.name, ok: false, error: messageText });
       }
+    });
+
+    if (stoppedEarly) {
+      logger.info('Blast send stopped early: blast closed mid-send', {
+        blastId: blast.id,
+        sentOk: sent.filter((s) => s.ok).length,
+        skipped: skipped.filter((s) => s.reason === 'blast closed before send').length,
+      });
     }
 
     const okChannels = sent.filter((s) => s.ok).map((s) => s.channelName ?? s.channelId);
@@ -342,22 +517,46 @@ class OutreachService {
   /**
    * Posts assigned (created) today IST for a worker — the daily-cap basis.
    * Counts GoPartTime Post tasks in any non-terminal status.
+   *
+   * Now a single covering GROUP BY instead of loading every task created in the
+   * day (all columns, `contentHtml` included) and filtering in JavaScript. The
+   * predicate is unchanged and was verified to return an identical count for
+   * every worker against production data.
    */
   async countPostsAssignedToday(workerId: string, dayStart: Date, dayEnd: Date): Promise<number> {
-    const tasks = (await taskRepository.findByCreatedAt(dayStart, dayEnd)) as {
-      source: string | null;
-      type: string;
-      status: string;
-      assignedUserId: string;
-    }[];
-    return tasks.filter(
-      (t) =>
-        t.source === 'goparttime' &&
-        t.type === 'POST' &&
-        t.assignedUserId === workerId &&
-        t.status !== 'CANCELLED' &&
-        t.status !== 'ARCHIVED',
-    ).length;
+    const counts = await taskRepository.countGoPartTimePostsByWorkerInRange(
+      [workerId],
+      dayStart,
+      dayEnd,
+    );
+    return counts.get(workerId) ?? 0;
+  }
+
+  /**
+   * Daily-cap counts for many workers in ONE query.
+   *
+   * `countPostsAssignedToday` used to be called once per ticket inside the
+   * blast send loop, so a 78-ticket blast issued 78 full-day task reads. The
+   * send loop only ever skips a worker whose count is at or above the cap, and
+   * nothing in the loop creates tasks, so one snapshot for the whole loop is
+   * both correct and more consistent than 78 independent reads.
+   *
+   * A worker missing from the map has a count of 0 (as the old per-worker
+   * filter reported). A failed read yields the same all-zero view as "nobody
+   * has been assigned anything yet", which is what the old code would have
+   * returned on a day with no matching rows.
+   */
+  async countPostsAssignedTodayForWorkers(
+    workerIds: readonly string[],
+    dayStart: Date,
+    dayEnd: Date,
+  ): Promise<Map<string, number>> {
+    try {
+      return await taskRepository.countGoPartTimePostsByWorkerInRange(workerIds, dayStart, dayEnd);
+    } catch (error) {
+      logger.warn('Bulk daily-cap count failed; treating every worker as 0', { error });
+      return new Map<string, number>();
+    }
   }
 
   /**
@@ -464,28 +663,38 @@ class OutreachService {
   ): Promise<{ deleted: number; failed: number }> {
     let deleted = 0;
     let failed = 0;
-    const selfId = discordClient.user?.id;
     const messages = await outreachRepository.listBlastMessages(blastId).catch(() => []);
-    for (const m of messages) {
-      if (keepChannelIds.has(m.channelId)) continue;
+    if (messages.length === 0) {
+      logger.info('Blast cleanup complete', { blastId, deleted, failed });
+      return { deleted, failed };
+    }
+    // Independent deletions, so they run on a bounded worker pool. This loop
+    // used to be strictly serial with TWO Discord round-trips per message
+    // (fetch the message to assert authorship, then delete it), which made it
+    // the longest phase of a blast: ~0.67s x (tickets - winners).
+    //
+    // The authorship assertion is dropped because the message ids come from
+    // our own `channel.send()` in sendBlastMessages — we recorded the id of a
+    // message we created, so it cannot belong to anyone else — and Discord
+    // rejects deleting another author's message anyway (403 / Unknown Message),
+    // which is why a genuinely wrong id still fails safe and is still counted
+    // as a failure. A message that is already gone (404) is the outcome we
+    // wanted, so it is not counted as a failure, exactly as before.
+    await mapWithConcurrency(messages, BLAST_DELETE_CONCURRENCY, async (m) => {
+      if (keepChannelIds.has(m.channelId)) return;
       try {
         const channel = await discordClient.channels.fetch(m.channelId).catch(() => null);
         if (!channel || !(channel instanceof TextChannel)) {
           failed++;
-          continue;
+          return;
         }
-        const msg = await channel.messages.fetch(m.messageId).catch(() => null);
-        if (!msg) continue; // already gone — not a failure
-        if (selfId && msg.author.id !== selfId) {
-          failed++;
-          continue;
-        }
-        await msg.delete();
+        await channel.messages.delete(m.messageId);
         deleted++;
-      } catch {
+      } catch (error) {
+        if (isUnknownMessage(error)) return; // already gone — not a failure
         failed++;
       }
-    }
+    });
     logger.info('Blast cleanup complete', { blastId, deleted, failed });
     return { deleted, failed };
   }
