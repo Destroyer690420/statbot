@@ -362,34 +362,45 @@ class OutreachService {
       },
     );
 
-    // Member safety net, paid for only when it is actually needed.
+    // Worker resolution is pure cache work — no I/O — so it runs inline.
+    const staffIds = getAllAdminIds();
+    const resolveWorkers = (list: typeof targets) =>
+      list.map((target) => {
+        if (!target.channel) return { ...target, workerId: null };
+        const worker = target.channel.members
+          .filter((m) => !m.user.bot && !staffIds.includes(m.id))
+          .first();
+        return { ...target, workerId: worker ? worker.id : null };
+      });
+    let planned = resolveWorkers(targets);
+
+    // Member safety net.
     //
-    // The old code always ran `guild.members.fetch()` here, which measured
-    // 1.2s per blast for 375 members. `channel.members` is normally already
-    // populated by GUILD_CREATE plus the enabled GuildMembers intent, so that
-    // call is normally pure waste. But it IS the recovery path when the member
-    // cache is cold (e.g. a blast fired seconds after a restart), and without
-    // it every ticket would resolve as "no worker in ticket". So: only sweep
-    // when at least one ticket actually has no cached members.
-    const resolvedChannels = targets
-      .map((t) => t.channel)
-      .filter((c): c is TextChannel => c !== null);
-    if (resolvedChannels.length > 0 && resolvedChannels.some((c) => c.members.size === 0)) {
+    // This used to run `guild.members.fetch()` unconditionally, on every blast
+    // (measured 1.2s for 375 members). It was then made conditional on "some
+    // ticket has an EMPTY member cache" — which BROKE EVERY BLAST. A cold
+    // cache is not necessarily empty: after a restart the gateway's member
+    // chunks may have delivered the bot and a few admins, so `members.size` is
+    // greater than zero while no ticket has a usable worker. The 13:10 IST blast
+    // on that build resolved 0 workers and messaged 0 tickets; the 11:12 blast
+    // on the previous build messaged 34.
+    //
+    // The condition is therefore the one that actually matters: if ANY resolved
+    // ticket has no usable worker, do the single guild fetch and re-resolve.
+    // That is at most one 1.2s call, it only runs when the cache is genuinely
+    // unusable, and it cannot skip the recovery path.
+    const needsMemberRefresh = planned.some((t) => t.channel !== null && !t.workerId);
+    if (needsMemberRefresh) {
       for (const guild of discordClient.guilds.cache.values()) {
         await guild.members.fetch().catch(() => undefined);
       }
-      logger.info('Blast refreshed guild members: at least one ticket had none cached');
+      planned = resolveWorkers(targets);
+      const stillMissing = planned.filter((t) => t.channel !== null && !t.workerId).length;
+      logger.info('Blast refreshed guild members', {
+        ticketsWithoutWorkerAfterRefresh: stillMissing,
+        resolvedTickets: planned.filter((t) => t.channel !== null).length,
+      });
     }
-
-    // Worker resolution is pure cache work — no I/O — so it happens inline.
-    const staffIds = getAllAdminIds();
-    const planned = targets.map((target) => {
-      if (!target.channel) return { ...target, workerId: null };
-      const worker = target.channel.members
-        .filter((m) => !m.user.bot && !staffIds.includes(m.id))
-        .first();
-      return { ...target, workerId: worker ? worker.id : null };
-    });
 
     // ONE daily-cap read for the whole blast instead of one per ticket.
     const workerIds = [
@@ -469,6 +480,27 @@ class OutreachService {
 
     const okChannels = sent.filter((s) => s.ok).map((s) => s.channelName ?? s.channelId);
     const failedChannels = sent.filter((s) => !s.ok).map((s) => s.channelName ?? s.channelId);
+
+    // Per-reason skip breakdown. The audit string below has to collapse three
+    // very different reasons into one sentence (Discord's message limit), which
+    // made a total-send-failure hard to diagnose: the 13:10 IST blast skipped 57
+    // tickets and the only way to learn that 56 of them were "no worker in
+    // ticket" was to reason about daily-cap counts by hand. Log it explicitly.
+    const skippedByReason: Record<string, number> = {};
+    for (const s of skipped) {
+      const key = s.reason.startsWith('worker at daily cap') ? 'worker at daily cap' : s.reason;
+      skippedByReason[key] = (skippedByReason[key] ?? 0) + 1;
+    }
+    logger.info('Blast send summary', {
+      blastId: blast.id,
+      slots: blast.slotsTotal,
+      selected: selected.length,
+      channelsResolved: targets.filter((t) => t.channel !== null).length,
+      sentOk: okChannels.length,
+      sendFailed: failedChannels.length,
+      skippedByReason,
+    });
+
     await auditLogService.log(
       AuditAction.OUTREACH_MESSAGE_SENT,
       null,

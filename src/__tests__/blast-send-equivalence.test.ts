@@ -647,4 +647,61 @@ describe('member cache safety net', () => {
     // This is the 1.2s-per-blast call we stopped paying for.
     expect(membersFetch).not.toHaveBeenCalled();
   });
+
+  /**
+   * REGRESSION. The safety net was once conditional on `members.size === 0`,
+   * which is the wrong condition: a cold cache can be NON-EMPTY and still
+   * useless (the gateway's member chunks may have delivered the bot and a few
+   * admins, so the collection is non-empty while no ticket has a worker). That
+   * build messaged 0 of 78 tickets. The trigger must be "a resolved ticket has
+   * no usable worker", not "a cache is empty".
+   */
+  it('REGRESSION: refreshes when the cache is non-empty but has only bots/admins', async () => {
+    (outreachRepository.findAll as jest.Mock).mockResolvedValue([outreachRow('c1')]);
+    const botOnly = makeChannel({
+      id: 'c1',
+      name: 't1',
+      // size > 0, so the old `members.size === 0` check would NOT fire...
+      members: [{ id: 'botuser', user: { bot: true } }],
+    });
+    const membersFetch = jest.fn().mockResolvedValue(undefined);
+    const client = makeClient(new Map([['c1', botOnly]]));
+    (client.guilds.cache as any).values = () => [{ members: { fetch: membersFetch } }][Symbol.iterator]();
+
+    // ...and the fetch repopulates the cache with the real worker.
+    membersFetch.mockImplementation(async () => {
+      botOnly.members.set('w1', { id: 'w1', user: { bot: false } } as any);
+    });
+
+    const { sent } = await service.sendBlastMessages(client, BLAST, 'manager');
+
+    // The fetch ran, and the ticket was messaged instead of silently skipped.
+    expect(membersFetch).toHaveBeenCalled();
+    expect(sent.filter((s) => s.ok)).toHaveLength(1);
+  });
+
+  it('REGRESSION: a blast with a cold cache still messages every reachable ticket', async () => {
+    // The exact 13:10 IST failure shape: many tickets, cache cold, old build
+    // sent nothing. This asserts messages DO go out.
+    const rows = Array.from({ length: 6 }, (_, i) => outreachRow(`c${i}`));
+    (outreachRepository.findAll as jest.Mock).mockResolvedValue(rows);
+    const channels = new Map<string, TextChannel>(
+      rows.map((r) => [
+        r.channelId,
+        // Every channel holds ONLY the bot: size > 0, no usable worker.
+        makeChannel({ id: r.channelId, name: r.channelId, members: [{ id: `bot-${r.channelId}`, user: { bot: true } }] }),
+      ]),
+    );
+    const membersFetch = jest.fn().mockImplementation(async () => {
+      for (const [id, ch] of channels) ch.members.set(`w-${id}`, { id: `w-${id}`, user: { bot: false } } as any);
+    });
+    const client = makeClient(channels);
+    (client.guilds.cache as any).values = () => [{ members: { fetch: membersFetch } }][Symbol.iterator]();
+
+    const { sent, skipped } = await service.sendBlastMessages(client, BLAST, 'manager');
+
+    expect(membersFetch).toHaveBeenCalled();
+    expect(sent.filter((s) => s.ok)).toHaveLength(6);
+    expect(skipped).toEqual([]);
+  });
 });
