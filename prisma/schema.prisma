@@ -365,6 +365,8 @@ model TicketOnboarding {
   channelId     String    @id
   welcomeSentAt DateTime?
   guideSentAt   DateTime?
+  /// Set by the one-off Reddit profile sweep; the exactly-once guard.
+  redditProfileRequestedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }

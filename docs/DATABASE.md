@@ -21,7 +21,7 @@
 - **Applied manually** (psql/SQL client). **NOT** via `prisma migrate deploy` or `migrate dev` — the Dockerfile only runs `prisma generate` + `npm run build`; no pipeline applies DDL.
 - Style rules: appended sections use `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` / `ALTER TYPE ... ADD VALUE IF NOT EXISTS` so the file can be re-run safely.
 - **Future sessions**: edit BOTH `schema.prisma` AND append an idempotent block to `migration.sql`, matching column-by-column.
-- Historical evolution (from git): initial 272-line file (2026-07-26, `1f01cc2`) → CommissionBatch week-columns append (`072aca9`) → GoPartTime columns + Accepted Tasks append (`445e7cf`, 2026-08-03) → two-level-referral append (`9348d2d`) then removed (`ac441e2`, 2026-08-09 — current file has no trace of it) → **outreach tables append (`TicketOutreach`, `OutreachSettings` + `OUTREACH_MESSAGE_SENT` enum value, 2026-08-18)** → **invite approval-queue append (`InviteDetection` table + indexes + `INVITE_DETECTED`/`INVITE_APPROVED`/`INVITE_REJECTED` enum values, 2026-09-03, deployed `e60ed28` via excerpt script)** → automation/blast/format-check/session-vault appends → **Worker Portal access table append (`WorkerPortalAccess`, 2026-09-25, deployed `675c618`)**.
+- Historical evolution (from git): initial 272-line file (2026-07-26, `1f01cc2`) → CommissionBatch week-columns append (`072aca9`) → GoPartTime columns + Accepted Tasks append (`445e7cf`, 2026-08-03) → two-level-referral append (`9348d2d`) then removed (`ac441e2`, 2026-08-09 — current file has no trace of it) → **outreach tables append (`TicketOutreach`, `OutreachSettings` + `OUTREACH_MESSAGE_SENT` enum value, 2026-08-18)** → **invite approval-queue append (`InviteDetection` table + indexes + `INVITE_DETECTED`/`INVITE_APPROVED`/`INVITE_REJECTED` enum values, 2026-09-03, deployed `e60ed28` via excerpt script)** → automation/blast/format-check/session-vault appends → **Worker Portal access table append (`WorkerPortalAccess`, 2026-09-25, deployed `675c618`)** → **`TicketOnboarding.redditProfileRequestedAt` column append (one-off Reddit profile sweep, 2026-09-27)**.
 - Data import history: Firestore → PostgreSQL via one-time scripts (see §10).
 
 ---
@@ -186,6 +186,14 @@ erDiagram
         boolean selected "persists across days"
         timestamp messageSentAt "nullable; last daily send"
         timestamp availableAt "nullable; first worker reply of cycle"
+        timestamp updatedAt
+    }
+    TicketOnboarding {
+        string channelId PK
+        timestamp welcomeSentAt "nullable; set on channelCreate welcome"
+        timestamp guideSentAt "nullable; set on opener's first message"
+        timestamp redditProfileRequestedAt "nullable; one-off profile sweep, exactly-once"
+        timestamp createdAt
         timestamp updatedAt
     }
     WorkerPortalAccess {

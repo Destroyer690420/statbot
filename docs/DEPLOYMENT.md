@@ -90,6 +90,32 @@ docker compose up -d --build
 - Commands: `npm run deploy-commands`.
 - Dashboard: `cd dashboard && npm install && npm run dev` (port 5173, proxy → `https://161.118.164.85`).
 
+### One-off operator scripts (run from the host repo, not from a container)
+
+Some maintenance jobs are Discord broadcasts or one-time data fixes, so they are versioned scripts under `scripts/` and run once by hand with `npx tsx` (the repo has `tsx` as a dev dependency; the running `app` container does not need them). They log in with the same bot token, so **run them when no blast is in flight**.
+
+| Script | What it does | Flags |
+|---|---|---|
+| `scripts/ask-reddit-profile-links.ts` | One-off ask, once per existing ticket, for the worker's Reddit profile link (tags the ticket's worker). Exactly-once via `TicketOnboarding.redditProfileRequestedAt`. | `--dry-run`, `--force`, `--all-text-channels`, `--only <ids\|names>`, `--concurrency <n>` |
+| `scripts/backfill-invite-detections.ts` | Stages historical `InviteDetection` rows. | `--since YYYY-MM-DD`, `--dry-run` |
+| `scripts/approve-pending-detections.ts` | Approves staged detections into `Referral` rows. | `--dry-run` |
+| `scripts/restore-accepted.ts` | Recovery tool for the 2026-08-12 migration incident. | — |
+
+Sequence for `ask-reddit-profile-links.ts` (the column must exist first, or the script exits before sending anything):
+
+```
+# 1. apply the additive migration (schema-only, idempotent)
+psql "$(sed -n 's/^DATABASE_URL=//p' .env | tr -d '"' | sed 's/host.docker.internal/localhost/')" -f prisma/migrations/migration.sql
+
+# 2. see exactly who would be asked, send nothing
+npx tsx scripts/ask-reddit-profile-links.ts --dry-run
+
+# 3. send for real (re-runnable: already-asked tickets are skipped)
+npx tsx scripts/ask-reddit-profile-links.ts
+```
+
+Notes: the sweep logs in with `Guilds` + `GuildMembers` only, resolves each ticket's worker as the single non-bot/non-staff member, skips anything ambiguous, and stamps the ticket only after Discord accepts the message (so a partial run is resumed, never repeated, by re-running). One audit row (`OUTREACH_MESSAGE_SENT`, `userId = 'reddit-profile-request'`) records the broadcast.
+
 ## 6. PM2 Alternative (non-Docker)
 
 `ecosystem.config.js`: app `reddit-task-manager`, `dist/index.js`, 1 instance, `autorestart`, `max_memory_restart 500M`, `NODE_ENV: production`, logs `logs/pm2-error.log` / `logs/pm2-out.log`. Start: `pm2 start ecosystem.config.js`.

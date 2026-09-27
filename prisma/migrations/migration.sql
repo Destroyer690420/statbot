@@ -708,3 +708,14 @@ CREATE INDEX IF NOT EXISTS "Task_source_status_channelId_idx" ON "Task"("source"
 -- on cycleId, so both were sequential scans of the whole table.
 -- Schema-only, no data statements, safe to re-run.
 CREATE INDEX IF NOT EXISTS "AutomationClaim_cycleId_idx" ON "AutomationClaim"("cycleId");
+
+-- ============================================================
+-- Migration: One-time Reddit profile request per ticket
+-- ============================================================
+-- Set when scripts/ask-reddit-profile-links.ts asks a ticket's worker for the
+-- Reddit profile link they will post from. This is the exactly-once guard: the
+-- sweep is a one-off broadcast over every EXISTING ticket, so a re-run after a
+-- partial failure (or an accidental second run) must never re-ask a worker who
+-- already got the message. No live bot hook writes this column.
+-- Schema-only, no data statements, safe to re-run.
+ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "redditProfileRequestedAt" TIMESTAMP(3);

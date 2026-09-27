@@ -79,6 +79,18 @@ export const DEFAULT_OUTREACH_MESSAGE =
 /** Welcome message sent automatically when a ticket channel is created (tag placeholder {user} is replaced) */
 export const TICKET_WELCOME_MESSAGE = 'Hey, {user} Can you please share your reddit profile link?';
 
+/**
+ * One-time per-ticket ask for the Reddit profile a worker will post from.
+ * {user} is replaced with the ticket worker's mention.
+ *
+ * Unlike TICKET_WELCOME_MESSAGE this is NOT sent on channelCreate: it is a
+ * deliberate sweep over the tickets that already exist, run once by
+ * `scripts/ask-reddit-profile-links.ts` (delivered tickets are recorded in
+ * `TicketOnboarding.redditProfileRequestedAt`, so a re-run cannot re-ask).
+ */
+export const TICKET_REDDIT_PROFILE_REQUEST_MESSAGE =
+  'Hey {user}, please share the reddit profile link you will be posting from. if you are posting or wanna start posting, sharing your reddit profile link is mandatory.';
+
 /** Onboarding guide sent once per new ticket when the opener sends their first message */
 export const TICKET_GUIDE_MESSAGE =
   'To understand everything i would advise you to read <#1520466000477163550>, <#1520481331773968384>, <#1520620297399828571>. it will barely take 10 mins to read it all but you will understand everything after reading these. and once you are done you can ask me your doubts and after that we can get started, so lemme know once you are done reading we will start after that. ok?';

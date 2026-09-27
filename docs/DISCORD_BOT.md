@@ -68,6 +68,17 @@ Ticket auto-welcome — fires on every `TextChannel` creation. After 2.5 s delay
 
 If a valid opener is found and not an admin/manager, the bot sends `TICKET_WELCOME_MESSAGE` (`src/config/constants.ts` — `Hey, {user} Can you please share your reddit profile link?` with `{user}` → `<@opener>`) via `channel.send`. Requires **View Audit Log** (for audit path; falls back gracefully) and **Send Messages** in the ticket channel.
 
+### One-off Reddit profile sweep — `scripts/ask-reddit-profile-links.ts` (NOT a live hook)
+
+The welcome above only fires when a ticket is **created**, so tickets that already existed were never asked for the profile they post from in the manager's wording. A one-off script therefore broadcasts, to every existing ticket exactly once:
+
+`TICKET_REDDIT_PROFILE_REQUEST_MESSAGE` — `Hey {user}, please share the reddit profile link you will be posting from. if you are posting or wanna start posting, sharing your reddit profile link is mandatory.` with `{user}` → `<@worker>`.
+
+- **No bot event is involved.** There is no `channelCreate`/`messageCreate` path for this message, so a ticket created after the sweep keeps only the existing welcome + guide behaviour.
+- Candidate rule is the same one used everywhere else for "who is this ticket's worker": exactly one non-bot, non-staff `channel.members` entry. `0` or `>1` candidates are **skipped with a reason** rather than tagged (an ambiguous ticket must never ping the wrong person). Only `ticket-*` channels are considered unless `--all-text-channels` is passed.
+- Exactly-once is enforced in Postgres, not in memory: each successful send stamps `TicketOnboarding.redditProfileRequestedAt` and every run starts by reading the stamped channels, so a re-run after a partial failure resumes instead of re-asking. `--force` bypasses the guard.
+- Decision logic is pure and unit-tested in `src/utils/reddit-profile-request.ts` (`buildProfileRequestPlan`, `formatProfileRequestMessage`, `summarizeProfileRequest`, `countSkippedByReason`); the script is only login + send + stamp. Defaults to `--concurrency 8` — under the live blast width of 12, because this script shares the app's bot token and therefore its 50 req/s budget.
+
 ## 6. Message Events (`src/bot/events/messageCreate.ts`)
 
 Bot messages and DMs ignored. `outreachService.onWorkerMessage` runs first on every message, then the ticket guide, then two handlers in order (first that handles a message returns):
