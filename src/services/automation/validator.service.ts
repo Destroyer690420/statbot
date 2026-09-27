@@ -42,3 +42,38 @@ export async function validateDetectedTask(
 
   return { eligible: true, reason: 'ELIGIBLE' };
 }
+
+/**
+ * Same rules as `validateDetectedTask(..., { skipDuplicate: true })`, but pure
+ * and synchronous: the caller supplies the already-fetched blocked set, so a
+ * whole drop costs ONE indexed read instead of one point lookup per task.
+ *
+ * This exists because the burst report cap used to be 20 tasks; with it lifted
+ * to 200, a per-task blocked lookup would mean 200 serial round-trips on the
+ * blast's critical path. `blockedSubs` must contain the same normalized values
+ * that `automationRepository.isBlocked` would have matched (it stores
+ * normalized subreddits), so `Set.has` is exactly the old `findUnique`.
+ *
+ * The check ORDER is identical to the skipDuplicate path: post-only, then
+ * subreddit readable, then blocked. `automation-burst-digest.test.ts` asserts
+ * this function and the async one agree across a matrix of inputs, so the two
+ * cannot drift.
+ */
+export function evaluateForBurst(
+  task: DetectedGoPartTimeTask,
+  blockedSubs: ReadonlySet<string>,
+): ValidationResult {
+  if (task.type !== 'post') {
+    return { eligible: false, reason: 'SKIPPED_COMMENT', detail: `Task ${task.subTaskId} type=${task.type}` };
+  }
+
+  const normalized = normalizeSubreddit(task.subreddit);
+  if (!normalized) {
+    return { eligible: false, reason: 'NO_SUBREDDIT', detail: `Task ${task.subTaskId} subreddit unreadable — skipped for safety` };
+  }
+  if (blockedSubs.has(normalized)) {
+    return { eligible: false, reason: 'BLOCKED', detail: `r/${normalized} is blocked` };
+  }
+
+  return { eligible: true, reason: 'ELIGIBLE' };
+}

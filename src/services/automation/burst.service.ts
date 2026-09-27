@@ -5,7 +5,7 @@ import { AuditAction, DetectedGoPartTimeTask } from '../../types';
 import { AUTOMATION } from '../../config/constants';
 import { getIstDayBoundaries, getIstHourStart } from '../../utils/ist-time';
 import { logger } from '../../utils/logger';
-import { validateDetectedTask } from './validator.service';
+import { evaluateForBurst } from './validator.service';
 import { diffNewTasks, isBurstActive, isMergeAllowed, parsePooledTasks, pickNextTask, serializePooledTasks } from './eligibility';
 import { outreachService, DAILY_POST_CAP } from '../outreach.service';
 
@@ -75,17 +75,34 @@ interface ValidationOutcome {
   commentsSkipped: number;
 }
 
-/** Validates inputs, logging every decision to the given cycle. */
+/**
+ * Validates inputs, logging every decision to the given cycle.
+ *
+ * The blocked-subreddit check is resolved ONCE for the whole batch (the list
+ * is ~100 rows, one indexed read) instead of a point lookup per task. The
+ * comparison is unchanged — `validateDetectedTask` was already comparing the
+ * NORMALIZED subreddit against an exact stored value, which is exactly
+ * `Set.has` over the same rows. A failed read is NOT swallowed: it propagates
+ * and fails the round, matching the previous per-task behaviour.
+ */
 async function validateInputs(inputs: BurstTaskInput[], cycleId: string): Promise<ValidationOutcome> {
   const eligible: DetectedGoPartTimeTask[] = [];
   let blocked = 0;
   let duplicates = 0;
   let commentsSkipped = 0;
+
+  // An empty report (the "nothing listed" tail sweep) validates nothing, so it
+  // must not pay for the blocked-list read either.
+  const blockedSubs =
+    inputs.length === 0
+      ? new Set<string>()
+      : new Set((await automationRepository.listBlocked()).map((row) => row.subreddit));
+
   for (const t of inputs) {
     const detected = toDetected(t);
     // Listed + available means takeable: an accepted task vanishes from the
     // listing, so history never disqualifies a listed task here.
-    const v = await validateDetectedTask(detected, { skipDuplicate: true });
+    const v = evaluateForBurst(detected, blockedSubs);
     await automationRepository.logTask({
       cycleId,
       externalTaskId: detected.subTaskId,

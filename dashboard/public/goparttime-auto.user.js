@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.4.11
+// @version      1.5.0
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,43 @@
 // ==/UserScript==
 
 /**
+   * v1.5.0 - Never-miss the report, and stop waiting a fixed 20s for it.
+   *
+   * CORRECTNESS (the reason for the major bump - this changes WHAT gets sent):
+   *  - The 20-task cap is GONE, on both the client and the server. A drop with
+   *    more than 20 posts used to have the overflow silently discarded: those
+   *    tasks never reached a cycle, so they could never enter a blast pool, be
+   *    claimed, or be assigned. Reports now carry the whole set, chunked at 200
+   *    (= the server limit); chunks 2..n fold into the same hour pool.
+   *  - Settle detection replaces the fixed 20s countdown. The old constant
+   *    waited 20s because the drop was assumed to land within :10 +/-20s; it is
+   *    a known instant. We now report once the observed set has been quiet for
+   *    1.5s (8s hard cap, so churn cannot stall it).
+   *  - Because settling early could otherwise LOSE a late arrival (the exact
+   *    thing the 20s wait protected), a confirmed report no longer ends the
+   *    hour: the watcher keeps watching and re-reports when genuinely new task
+   *    ids appear. The server merges those into the same pool without
+   *    re-messaging anyone.
+   *  - The parser no longer truncates a task block at 12000 chars. A captured
+   *    live page contains a 77,771-char block (6.5x that), and a truncated
+   *    window can drop subreddit_name, making a task permanently ineligible.
+   *  - A scan that CANNOT be read is no longer reported as "nothing listed".
+   *    Markers present but nothing available is a real empty drop; a large
+   *    document with zero sub_task markers is a fault, and it now says so on
+   *    the status pill, in the console, and as a server-side WARN.
+   *  - Minutes 10-11 (the drop itself) poll ~40% tighter, because the gap
+   *    between polls is the only thing that can lose a task outright.
+   *
+   * SPEED:
+   *  - No more downloading the ~380 KB listing twice: after the hourly reload
+   *    the first scan reuses the document already loaded (verified to contain
+   *    the payload; falls back to the fetch if hydration stripped it).
+   *  - An unchanged document is parsed once, not re-regexed every tick.
+   *
+   * Unchanged: claim/accept logic, the drawer flow, fast-accept, blast rules,
+   * the hourly :10 refresh, the tail-sweep empty report, and the 30s routine
+   * claim cadence.
+   *
    * v1.4.11 - Claim pickup latency only (accept logic untouched): a finished
    * claim now returns straight to the poll instead of idling 2-3.5s first, and
    * the live-work poll cadence drops from 2-3.5s to 0.6-0.8s. Winner pickup
@@ -199,7 +236,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.11';
+  const VERSION = '1.5.0';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -210,6 +247,15 @@
   // Burst window (drop minutes): tight loops while tasks rain, idle otherwise.
   const BURST_MONITOR_MS = 2500;
   const BURST_MONITOR_JITTER_MS = 1500;
+  // Minutes 10-11 bracket the known drop instant (:10:05), so this is the
+  // window where a task that appears and is taken within seconds could be
+  // missed outright. Polling here is ~40% tighter than the rest of the window.
+  // The blind gap between polls is the only thing that can lose a task
+  // completely, so this is where tightening actually buys correctness.
+  const DROP_MONITOR_MS = 1500;
+  const DROP_MONITOR_JITTER_MS = 500;
+  // After a page load, prefer the document we already have over re-fetching it.
+  const FIRST_TICK_DOM_WINDOW_MS = 20000;
   const BURST_CLAIM_MS = 5000;
   const BUNDLE_TTL_MS = 15 * 60 * 1000;
   const RATE_LIMIT_PAUSE_MS = 60 * 1000;
@@ -238,27 +284,53 @@
   // log, no retry, no DM). Slightly above the transport timeout so normal
   // slow responses still resolve first.
   const POST_TIMEOUT_MS = 35000;
-  // Once-per-hour reporting: the first scan with eligible posts starts a
-  // fixed countdown; when it lapses the CURRENT set is reported once.
-  // No signature comparison (churn-proof - a live drop never sits still).
-  // Retries re-send until the server confirms the blast.
+  // Once-per-hour reporting with SETTLE DETECTION (replaces a fixed 20s wait).
+  // The old constant waited 20s because the drop was assumed to arrive anywhere
+  // within :10 +/-20s. The drop is a known instant, so instead of guessing a
+  // duration we watch the listing: once the observed set has been unchanged
+  // for BURST_SETTLE_MS the drop has landed and we report. A quick drop reports
+  // in ~1.5s instead of 20s; a slow one waits exactly as long as it needs.
+  //   - BURST_SETTLE_MAX_MS is the churn-proof hard cap: a listing that keeps
+  //     changing still reports once this elapses after the first sighting.
+  //   - Reported-but-grown: after a report is confirmed we KEEP watching, and a
+  //     later tick carrying genuinely new task ids reports again. The server
+  //     folds that into the same hour's pool (diffNewTasks / appendBurstTasks /
+  //     bumpBlastSlots) without re-messaging anyone, so reporting early cannot
+  //     lose a late arrival - the exact failure the 20s wait guarded against.
+  const BURST_SETTLE_MS = 1500;
+  const BURST_SETTLE_MAX_MS = 8000;
+  // Matches the server-side max on POST /automation/burst (200). A larger drop
+  // arrives as further reports, which the hour-burst merge path folds into the
+  // same pool, so any realistic drop is a single request.
+  const BURST_CHUNK_SIZE = 200;
   let reportedHour = '';
   let burstConfirmed = false;
   let lastBurstPostAt = 0;
   // Flap-proofing: best non-empty eligible set seen this hour. Empty ticks
-  // (throttled fetch, streaming gap) count on this instead of restarting
-  // the countdown. Reset on hour rollover with the rest of the state.
+  // (throttled fetch, streaming gap) count on this instead of restarting the
+  // settle clock. Reset on hour rollover with the rest of the state.
   let latchedEligible = null;
-  // v1.4.5: scanned posts latch (any status - eligible, blocked,
-  // unreadable). The countdown starts on ANY listed post so banned-only
-  // drops still report (server tags them); empty drops are covered by the
-  // tail sweep below. Comments never count.
+  // v1.4.5: scanned posts latch (any status - eligible, blocked, unreadable).
+  // The settle clock starts on ANY listed post so banned-only drops still report
+  // (the server tags them); empty drops are covered by the tail sweep below.
+  // Comments never count.
   let latchedPosts = null;
+  // When the latched set last CHANGED. Settle detection measures quiet time
+  // from here. lastChangeAt is always >= firstSeenAt, so requiring quiet time
+  // also implies a minimum wait since the first sighting.
+  let lastChangeAt = 0;
+  // Id-list signature of the last observed post set. Compared each tick to
+  // decide whether anything actually changed; an identical tick must not
+  // restart the settle clock (a throttled fetch or streaming gap looks
+  // identical to a settled drop, and the old code got this wrong twice).
+  let lastSetSignature = '';
+  // Every sub_task id already reported this hour. Presence here is what makes a
+  // follow-up report unnecessary; absence is what triggers one.
+  let reportedIds = {};
   // Hour key of the last tail-sweep empty report (never the confirmed hour:
   // a real drop later in the window must still report normally).
   let emptyReportedHour = '';
   const BURST_RETRY_MS = 30000;
-  const BURST_REPORT_DELAY_MS = 20000;
   let firstSeenAt = 0;
 
   function burstHourKey(now) {
@@ -754,7 +826,12 @@
         title: t.title || null,
       });
     }
-    return out.slice(0, 20);
+    // No cap. This used to `slice(0, 20)`, which silently discarded the
+    // overflow of any drop with more than 20 eligible posts: those tasks never
+    // reached a cycle, so they could never enter a blast pool, be claimed, or be
+    // assigned. The transport now chunks at BURST_CHUNK_SIZE (== the server's
+    // 200 limit) and every server-side consumer is already bounded.
+    return out;
   }
 
   /**
@@ -875,20 +952,80 @@
       const grab = Number(hit.m[5]);
       if (status !== 0 || grab !== 0) continue; // only unclaimed, available tasks
       const idx = hit.index;
-      let nextStart = idx + 12000;
+      // The next task's own marker is the correct boundary, and there is
+      // deliberately NO character cap. The previous `Math.min(next, idx + 12000)`
+      // silently truncated real blocks: a captured live /tasks page contains a
+      // 77,771-character block, 6.5x that ceiling. A truncated window can drop
+      // `subreddit_name`, which makes a task permanently ineligible.
+      let nextStart = html.length;
       for (const s of starts) {
         if (s > idx) {
           nextStart = s;
           break;
         }
       }
-      const after = html.slice(idx, Math.min(nextStart, idx + 12000));
+      const after = html.slice(idx, nextStart);
       const before = html.slice(Math.max(0, idx - 4000), idx);
       const subreddit = extractSubWindow(after) || extractSubWindow(before);
       const title = extractTitleWindow(after) || extractTitleWindow(before);
       out.push({ subTaskId: Number(subId), type, subreddit, title });
     }
     return out;
+  }
+
+  /**
+   * How many `sub_task` block markers the document contains, regardless of
+   * whether they parse into AVAILABLE tasks.
+   *
+   * This is the signal that separates "the drop is empty / everything is taken"
+   * from "this document is not the listing we know how to read". Without it a
+   * parser regression, a site redesign, or a stripped payload is indistinguishable
+   * from "GoPartTime published nothing" — and the watcher would report
+   * "nothing listed" and quietly stop claiming.
+   */
+  function countSubTaskMarkers(html) {
+    if (!html) return 0;
+    const re = /\\{1,2}"sub_task\\{1,2}":\{/g;
+    let n = 0;
+    while (re.exec(html) !== null) n += 1;
+    return n;
+  }
+
+  /**
+   * Classifies a scan outcome so a parse failure can never masquerade as an
+   * empty drop.
+   *
+   *  - 'unreachable': no HTML at all (both the fetch and the DOM failed).
+   *  - 'unparseable': a substantial document with ZERO sub_task markers. Either
+   *    the payload shape changed or the fetch returned something else entirely.
+   *    Reported loudly, never as "nothing listed".
+   *  - 'ok': markers present. `tasks.length` may legitimately be 0 because every
+   *    listed task is already taken — that is a real, reportable empty drop.
+   */
+  function classifyScan(html, tasks) {
+    if (!html) return 'unreachable';
+    if (html.length > 2000 && countSubTaskMarkers(html) === 0) return 'unparseable';
+    return 'ok';
+  }
+
+  /**
+   * Parses a document, reusing the previous result when the bytes are identical.
+   *
+   * The monitor re-reads the same listing every few seconds; re-running a global
+   * regex over ~380 KB each time is pure waste when nothing changed. Equality on
+   * the exact string means an identical document cannot produce a different
+   * result, so the memo is behaviour-preserving by construction.
+   */
+  let lastParsedHtml = null;
+  let lastParsedTasks = null;
+  function parseTasksCached(html) {
+    if (html && lastParsedHtml !== null && html === lastParsedHtml) {
+      return lastParsedTasks || [];
+    }
+    const parsed = parseAvailableTasks(html || '');
+    lastParsedHtml = html;
+    lastParsedTasks = parsed;
+    return parsed;
   }
 
   // --- Monitor loop: report sightings --
@@ -933,8 +1070,10 @@
         }
         return true;
       });
-      // Newest-first, capped - same set shape as the automatic report.
-      const ordered = eligible.concat(rest).slice(0, 20).reverse();
+      // Newest-first, uncapped - same set shape as the automatic report, and
+      // the same reason the cap was removed: a capped on-demand report silently
+      // hid every task past the cut from the manager's digest.
+      const ordered = eligible.concat(rest).slice().reverse();
       console.log('[Auto Watcher] manual scan posting ' + ordered.length + ' task(s) (' + source + ') for ' + reqId + '...');
       notePostAttempt();
       let res = null;
@@ -1004,9 +1143,28 @@
       // routine order. Sightings are NOT posted during the burst: the
       // settled /burst report replaces them (posting both would
       // double-process via the sighting queue).
+      // Reuse the document we already have, once per page load.
+      //
+      // The hourly refresh does location.reload(), which has just downloaded
+      // the whole ~380 KB listing -- and the very next tick used to download it
+      // AGAIN through the no-store fetch, purely to scan it. On the first tick
+      // after a page load the live DOM *is* that freshly downloaded document,
+      // so prefer it. It is verified to actually contain the task payload; if
+      // hydration already stripped it we fall through to the fetch exactly as
+      // before. This can only save a download, never change what is scanned.
+      const freshDocument = Date.now() - bootAtMs < FIRST_TICK_DOM_WINDOW_MS;
       let html = null;
       let source = 'fetch';
-      if (burst) {
+      if (freshDocument) {
+        const dom = domHtml();
+        if (dom && countSubTaskMarkers(dom) > 0) {
+          html = dom;
+          source = 'dom';
+        }
+      }
+      if (!html) {
+        // Fresh SSR HTML always embeds the flight scripts; the live DOM may
+        // have them stripped after hydration, so fetch first, DOM as fallback.
         html = await fetchPageHtml();
         if (html) {
           source = 'fetch';
@@ -1014,31 +1172,34 @@
           html = domHtml();
           source = 'dom';
         }
-      } else {
-        // Fresh SSR HTML always embeds the flight scripts; the live DOM may
-        // have them stripped after hydration, so fetch first, DOM as fallback.
-        html = await fetchPageHtml();
-        if (!html) {
-          html = domHtml();
-          source = 'dom';
-        }
       }
-      const tasks = parseAvailableTasks(html || '');
-      try { noteScan(window.location.pathname, tasks.length, -1); } catch (e) { /* ignore */ }
+      const tasks = parseTasksCached(html || '');
+      // A parse failure must never look like an empty drop. "Nothing listed"
+      // is a real, reportable state; "I could not read the page" is a fault,
+      // and conflating the two is how a watcher silently stops claiming.
+      const scanClass = classifyScan(html, tasks);
+      if (scanClass !== 'ok') {
+        try { noteScan(window.location.pathname, -1, -1); } catch (e) { /* ignore */ }
+        noteUnreadableScan();
+        setStatus(false, 'SCAN FAILED (' + scanClass + ') - not reporting, retrying');
+        console.log('[Auto Watcher] scan unreadable (' + scanClass + ') htmlLen=' +
+          (html ? html.length : 0) + ' debug=' + JSON.stringify(pageDebug(html || '')) +
+          ' - refusing to report an empty drop');
+        return;
+      }
+      try { unreadableScans = 0; noteScan(window.location.pathname, tasks.length, -1); } catch (e) { /* ignore */ }
       if (burst) {
         const hourKey = burstHourKey();
         if (reportedHour !== hourKey) {
-          // New hour: reset the once-per-hour report state.
+          // New hour: reset the per-hour report state.
           reportedHour = '';
           burstConfirmed = false;
           firstSeenAt = 0;
+          lastChangeAt = 0;
           latchedEligible = null;
           latchedPosts = null;
           emptyReportedHour = '';
-        }
-        if (reportedHour === hourKey && burstConfirmed) {
-          setStatus(true, 'BURST reported this hour');
-          return;
+          reportedIds = {};
         }
         const bundle = await getBundle(settings);
         const eligible = filterEligible(tasks, bundle);
@@ -1056,12 +1217,21 @@
           postSeen[key] = true;
           posts.push({ subTaskId: Number(t.subTaskId), type: t.type, subreddit: t.subreddit || null, title: t.title || null });
         }
+        // Set-change detection drives the settle clock. A tick whose id list is
+        // identical to the last one is "no new information" and must NOT push
+        // the report out; a tick that adds or drops an id restarts the quiet
+        // period. Cheap: one join over the (small) post list.
+        const signature = posts.map((t) => t.subTaskId).join(',');
+        if (signature !== lastSetSignature) {
+          lastSetSignature = signature;
+          lastChangeAt = nowMs;
+        }
         if (posts.length > 0) {
           latchedPosts = posts;
           if (!firstSeenAt) firstSeenAt = nowMs;
         }
         if (eligible.length > 0) {
-          // Fresh set wins; the countdown start stays latched.
+          // Fresh set wins; the settle clock start stays latched.
           latchedEligible = eligible;
           if (!firstSeenAt) firstSeenAt = nowMs;
         }
@@ -1098,8 +1268,14 @@
           }
           return;
         }
-        // Report set: eligible first (newest-first at send), then the rest
-        // of the latched posts for visibility (server labels them); cap 20.
+        // Report set: eligible first (newest-first at send), then the rest of
+        // the latched posts for visibility (server labels them).
+        // NO CAP. The old `.slice(0, 20)` silently discarded the overflow of any
+        // drop with more than 20 posts: those tasks never reached a cycle, so
+        // they could never enter a blast pool, be claimed, or be assigned. The
+        // server's own limit is now 200, the digest already truncates its text
+        // and caps its block buttons, and the release path has no cap, so a
+        // larger set is safe to send whole.
         const latchedRest = (latchedPosts || []).filter((t) => {
           for (const e of (eligible.length > 0 ? eligible : (latchedEligible || []))) {
             if (Number(e.subTaskId) === Number(t.subTaskId)) return false;
@@ -1107,26 +1283,39 @@
           return true;
         });
         const reportSet = (eligible.length > 0 ? eligible : (latchedEligible || []).slice())
-          .concat(latchedRest)
-          .slice(0, 20);
-        // Adaptive countdown: short delay early in the window (drops land
-        // at xx:10 +-20s, so 20s covers the full drop), fast near the
-        // tail so delayed reports still land inside it.
-        // Fixed countdowns only - churn can never stall this.
-        const delayMs = new Date().getMinutes() >= 15 ? 10000 : BURST_REPORT_DELAY_MS;
-        const waitMs = delayMs - (nowMs - firstSeenAt);
-        if (waitMs > 0) {
-          // Count first, blast after: the single report carries the full
-          // number - never partial, never repeated.
-          setStatus(true, 'BURST ' + reportSet.length + ' found, sending in ' + Math.ceil(waitMs / 1000) + 's...');
+          .concat(latchedRest);
+        // Anything genuinely new since the last confirmed report? This is what
+        // replaces "report once per hour": once a report lands we keep
+        // watching, and a late arrival triggers a follow-up that the server
+        // merges into the same pool without messaging anyone again. Without
+        // this, settling early (1.5s) would trade the 20s wait's protection
+        // against late drops for a new way to lose them.
+        let hasUnreported = false;
+        for (const t of reportSet) {
+          if (!reportedIds[t.subTaskId]) { hasUnreported = true; break; }
+        }
+        if (burstConfirmed && reportedHour === hourKey && !hasUnreported) {
+          setStatus(true, 'BURST reported this hour (' + reportSet.length + ' seen)');
+          return;
+        }
+        // Settle detection: report once the observed set has been quiet for
+        // BURST_SETTLE_MS, or unconditionally once BURST_SETTLE_MAX_MS has
+        // passed since the first sighting (so a listing that keeps changing
+        // still reports). lastChangeAt is only advanced when the id list
+        // actually changed, so an empty/throttled tick can never postpone it.
+        const quietMs = nowMs - (lastChangeAt || nowMs);
+        const sinceFirstMs = nowMs - firstSeenAt;
+        const settled = quietMs >= BURST_SETTLE_MS || sinceFirstMs >= BURST_SETTLE_MAX_MS;
+        if (!burstConfirmed && !settled) {
+          setStatus(true, 'BURST ' + reportSet.length + ' found, settling ' +
+            Math.ceil(Math.min(BURST_SETTLE_MS - quietMs, BURST_SETTLE_MAX_MS - sinceFirstMs) / 1000) + 's...');
           return;
         }
         if (nowMs - lastBurstPostAt < BURST_RETRY_MS) {
-          setStatus(true, 'BURST send failed, retrying...');
+          setStatus(true, 'BURST send pending, retrying...');
           return;
         }
-        // Report once (newest-first). Retries re-send until the server
-        // confirms; the server dedupes by hour (no re-message ever).
+        // Report (newest-first). Retries re-send until the server confirms.
         lastBurstPostAt = nowMs;
         // Newest-first: page bottom carries the newest drop, so the first
         // replier wins the newest eligible post.
@@ -1136,16 +1325,29 @@
         // a silent wedge, and record the outcome for poll telemetry.
         console.log('[Auto Watcher] burst report posting ' + ordered.length + ' task(s)...');
         notePostAttempt();
+        // Chunked so an oversized drop cannot exceed the server's 200-task
+        // limit. Chunks 2..n are folded into the same hour pool by the server's
+        // merge path, so this is a transport detail, not extra blasts.
         let res = null;
         try {
-          res = await Promise.race([
-            request(settings, 'POST', '/burst', {
-              companionId: getCompanionId(),
-              version: VERSION,
-              tasks: ordered,
-            }),
-            sleep(POST_TIMEOUT_MS).then(() => { throw new Error('burst report timed out'); }),
-          ]);
+          const chunks = [];
+          for (let i = 0; i < ordered.length; i += BURST_CHUNK_SIZE) {
+            chunks.push(ordered.slice(i, i + BURST_CHUNK_SIZE));
+          }
+          if (chunks.length === 0) chunks.push([]);
+          let last = null;
+          for (let i = 0; i < chunks.length; i++) {
+            last = await Promise.race([
+              request(settings, 'POST', '/burst', {
+                companionId: getCompanionId(),
+                version: VERSION,
+                tasks: chunks[i],
+              }),
+              sleep(POST_TIMEOUT_MS).then(() => { throw new Error('burst report timed out'); }),
+            ]);
+            if (!last || !last.success) break;
+          }
+          res = last;
           notePostResult(true);
         } catch (e) {
           notePostResult(false);
@@ -1157,6 +1359,7 @@
         if (res && res.success) {
           reportedHour = hourKey;
           burstConfirmed = true;
+          for (const t of reportSet) reportedIds[t.subTaskId] = 1;
         }
         const confirmed = dd.eligible ? dd.eligible.length : reportSet.length;
         const blast = dd.blast
@@ -1229,6 +1432,18 @@
     } catch (e) { /* ignore */ }
   }
 
+  // Consecutive scans that could not be read at all. Reported on the claim poll
+  // so an unreadable page is visible in the server log as a FAULT rather than
+  // looking like an hour that published nothing.
+  let unreadableScans = 0;
+
+  function noteUnreadableScan() {
+    try {
+      unreadableScans += 1;
+      lastScan = { page: String(window.location.pathname || '').slice(0, 64) + '!unreadable', scanned: -1, eligible: -1 };
+    } catch (e) { /* ignore */ }
+  }
+
   // Burst-report outcome telemetry: the POST step used to fail three ways
   // (rejected = visible; hung forever = invisible wedge; never attempted =
   // invisible). Attempt + hard timeout + result are all recorded so the
@@ -1255,6 +1470,28 @@
     try {
       return isBurstWindow() || lastBurstOpen || !!pendingManualScan;
     } catch (e) { return false; }
+  }
+
+  /**
+   * Monitor cadence for the current moment.
+   *
+   * Minutes 10-11 are tightened because that is where the drop lands: a task
+   * listed and taken between two polls is gone for good, so the gap between
+   * polls is the only thing that can lose one outright. Minutes 12-16 keep the
+   * existing burst cadence (they only catch late leaks), and outside the window
+   * nothing changes.
+   */
+  function monitorDelayMs() {
+    try {
+      if (!isBurstWindow()) return withJitter(MONITOR_MS);
+      const minute = new Date().getMinutes();
+      if (minute >= 10 && minute <= 11) {
+        return DROP_MONITOR_MS + Math.floor(Math.random() * DROP_MONITOR_JITTER_MS);
+      }
+      return withBurstJitter(BURST_MONITOR_MS);
+    } catch (e) {
+      return withJitter(MONITOR_MS);
+    }
   }
 
   /**
@@ -1285,7 +1522,7 @@
       const res = await request(settings, 'GET', '/claims/pending', null,
         'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION) + '&tabId=' + encodeURIComponent(getTabId()) +
         '&page=' + encodeURIComponent(lastScan.page) + '&scan=' + lastScan.scanned + '&elig=' + lastScan.eligible +
-        '&post=' + lastPost.at + '&postOk=' + lastPost.ok,
+        '&post=' + lastPost.at + '&postOk=' + lastPost.ok + '&unreadable=' + unreadableScans,
         CLAIM_API_TIMEOUT_MS);
       setStatus(true, 'poll ok');
       const dd = (res && res.data) || {};
@@ -1900,7 +2137,7 @@
       try {
         await monitorTick();
       } catch (e) { /* never break the loop */ }
-      await sleep(isBurstWindow() ? withBurstJitter(BURST_MONITOR_MS) : withJitter(MONITOR_MS));
+      await sleep(monitorDelayMs());
     }
   }
 

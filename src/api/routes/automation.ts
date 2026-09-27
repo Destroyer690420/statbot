@@ -27,6 +27,7 @@ import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 import { buildClaimTimingsLog, claimTimingsSchema, ClaimTimings } from '../../utils/claim-timings';
 import { shouldLogVersionChange } from '../../utils/companion-version';
+import { burstSchema, sightingTaskSchema } from './automation.schemas';
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
@@ -63,12 +64,7 @@ const testAcceptSchema = z.object({
   accept: z.boolean().optional().default(false),
 });
 
-const sightingTaskSchema = z.object({
-  subTaskId: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).transform(String),
-  type: z.enum(['post', 'comment']),
-  subreddit: z.string().max(64).optional().nullable(),
-  title: z.string().max(300).optional().nullable(),
-});
+
 
 const sightingsSchema = z.object({
   companionId: z.string().max(64).optional().nullable(),
@@ -107,25 +103,6 @@ const rehearseSchema = z.object({
   title: z.string().max(300).optional().nullable(),
   /** Explicit live-fire confirmation — a created claim REALLY accepts on GoPartTime. */
   live: z.boolean().optional().default(false),
-});
-
-const burstTaskSchema = z.object({
-  subTaskId: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).transform(String),
-  type: z.enum(['post', 'comment']),
-  subreddit: z.string().max(64).optional().nullable(),
-  title: z.string().max(300).optional().nullable(),
-});
-
-const burstSchema = z.object({
-  companionId: z.string().max(64).optional().nullable(),
-  version: z.string().max(16).optional().nullable(),
-  tasks: z.array(burstTaskSchema).max(20),
-  /** Manual Blast Now: explicit human intent — bypasses the window gate only. */
-  force: z.boolean().optional().default(false),
-  /** On-demand `/scan` report: the request id from the poll's `scanNow`.
-   *  The first report carrying an id consumes it and gets a per-request
-   *  digest DM; later same-id reports merge as normal duplicates. */
-  scanRequestId: z.string().max(64).optional().nullable(),
 });
 
 /** Phase-0 instrumentation: one log line per claim verdict with queue wait
@@ -917,6 +894,12 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       const teleElig = typeof req.query.elig === 'string' ? Number(req.query.elig) : NaN;
       const telePost = typeof req.query.post === 'string' ? Number(req.query.post) : NaN;
       const telePostOk = typeof req.query.postOk === 'string' ? Number(req.query.postOk) : NaN;
+      // Consecutive scans the watcher could not read at all. Distinct from
+      // `scanned: 0` (an hour that genuinely published nothing): a non-zero
+      // value means the page shape changed, the payload was stripped, or the
+      // transport failed, and the watcher is deliberately NOT reporting an
+      // empty drop in that case.
+      const teleUnreadable = typeof req.query.unreadable === 'string' ? Number(req.query.unreadable) : NaN;
       let telePostAt: string | null = null;
       if (Number.isFinite(telePost) && telePost > 0 && telePost < 4102444800000) {
         try {
@@ -933,6 +916,15 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           eligible: Number.isFinite(teleElig) ? teleElig : null,
           postAt: telePostAt,
           postOk: Number.isFinite(telePostOk) ? telePostOk : null,
+        });
+      }
+      // Loud, not debug: an unreadable page is a fault that silently stops
+      // scanning, and it is the single most important thing to see in a log.
+      if (Number.isFinite(teleUnreadable) && teleUnreadable > 0) {
+        logger.warn('Companion cannot read the /tasks page - NOT reporting an empty drop', {
+          tabId,
+          consecutiveUnreadableScans: teleUnreadable,
+          page: telePage,
         });
       }
       // Phase-1 speed: tell the tab whether work is live so it can poll fast

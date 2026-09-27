@@ -45,11 +45,18 @@ export function parseTasksHtml(html: string): DetectedGoPartTimeTask[] {
   for (let i = 0; i < hits.length; i++) {
     const { m: hm, index } = hits[i];
     const [, subId, type, statusStr, taskId, grabStr, karmaStr, earnStr] = hm;
-    const nextStart = starts.find((s) => s > index) ?? index + 12000;
+    // The next task's own marker is the correct boundary: everything a task
+    // carries lives inside its own `detail` object, which ends where the next
+    // `sub_task` block begins. There is deliberately NO character cap here.
+    // The previous `Math.min(next, index + 12000)` silently truncated real
+    // blocks — a captured /tasks page contains a 77,771-character block, 6.5x
+    // that ceiling — and a truncated window can drop `subreddit_name`, which
+    // makes a task permanently ineligible (NO_SUBREDDIT).
+    const nextStart = starts.find((s) => s > index) ?? html.length;
     // Parent fields live inside the same `detail` object, which OPENS with
-    // the sub_task block — look forward first (bounded by the next task),
-    // then a short way back as fallback.
-    const after = html.slice(index, Math.min(nextStart, index + 12000));
+    // the sub_task block — look forward first, then a short way back as
+    // fallback for a marker that matched a nested reference.
+    const after = html.slice(index, nextStart);
     const before = html.slice(Math.max(0, index - 4000), index);
     const subreddit = extractSubreddit(after) ?? extractSubreddit(before);
     const title = extractTitle(after) ?? extractTitle(before);
