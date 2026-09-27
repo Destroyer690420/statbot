@@ -45,6 +45,15 @@ import { logger } from '../src/utils/logger';
  *   npx tsx scripts/ask-reddit-profile-links.ts --only ticket-0053,ticket-0154
  *   npx tsx scripts/ask-reddit-profile-links.ts --all-text-channels --force
  *
+ * Run it from the HOST repo, where `DATABASE_URL` points at
+ * `host.docker.internal` — a name that only resolves inside the compose
+ * network. A host-side process therefore needs it rewritten, or the preflight
+ * below exits with "Can't reach database server at host.docker.internal"
+ * (which is a safe failure: nothing is sent):
+ *
+ *   DBURL="$(sed -n 's/^DATABASE_URL=//p' .env | tr -d '"' | sed 's/host.docker.internal/localhost/')"
+ *   DATABASE_URL="$DBURL" npx tsx scripts/ask-reddit-profile-links.ts
+ *
  * Flags:
  *   --dry-run               Report the plan, send nothing, write nothing.
  *   --force                 Re-ask tickets that were already asked.

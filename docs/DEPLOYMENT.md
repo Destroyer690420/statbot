@@ -107,14 +107,20 @@ Sequence for `ask-reddit-profile-links.ts` (the column must exist first, or the 
 # 1. apply the additive migration (schema-only, idempotent)
 psql "$(sed -n 's/^DATABASE_URL=//p' .env | tr -d '"' | sed 's/host.docker.internal/localhost/')" -f prisma/migrations/migration.sql
 
-# 2. see exactly who would be asked, send nothing
-npx tsx scripts/ask-reddit-profile-links.ts --dry-run
+# 2. the host-side Prisma client must know the new column (the app image is unaffected)
+npx prisma generate
 
-# 3. send for real (re-runnable: already-asked tickets are skipped)
-npx tsx scripts/ask-reddit-profile-links.ts
+# 3. see exactly who would be asked, send nothing
+DBURL="$(sed -n 's/^DATABASE_URL=//p' .env | tr -d '"' | sed 's/host.docker.internal/localhost/')"
+DATABASE_URL="$DBURL" npx tsx scripts/ask-reddit-profile-links.ts --dry-run
+
+# 4. send for real (re-runnable: already-asked tickets are skipped)
+DATABASE_URL="$DBURL" npx tsx scripts/ask-reddit-profile-links.ts
 ```
 
-Notes: the sweep logs in with `Guilds` + `GuildMembers` only, resolves each ticket's worker as the single non-bot/non-staff member, skips anything ambiguous, and stamps the ticket only after Discord accepts the message (so a partial run is resumed, never repeated, by re-running). One audit row (`OUTREACH_MESSAGE_SENT`, `userId = 'reddit-profile-request'`) records the broadcast.
+⚠️ **`DATABASE_URL` rewrite is required** (verified live 2026-09-27): the host `.env` points at `host.docker.internal`, which only resolves inside the compose network, so a host-side `tsx` process fails the script's preflight with `Can't reach database server at host.docker.internal`. That failure is safe (nothing is sent) but confusing — use the `DBURL` form above. No Docker rebuild is needed: nothing in the running app reads this column or message.
+
+Notes: the sweep logs in with `Guilds` + `GuildMembers` only, resolves each ticket's worker as the single non-bot/non-staff member, skips anything ambiguous, and stamps the ticket only after Discord accepts the message (so a partial run is resumed, never repeated, by re-running). One audit row (`OUTREACH_MESSAGE_SENT`, `userId = 'reddit-profile-request'`) records the broadcast. Do not run it while a blast is open (`:10`–`:16` IST) — check `SELECT count(*) FROM "OutreachBlast" WHERE status = 'OPEN'`.
 
 ## 6. PM2 Alternative (non-Docker)
 
