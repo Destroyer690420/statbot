@@ -88,6 +88,8 @@ reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
 
 **Scope guards** (unchanged from the welcome/guide handlers): the message must come from the ticket's own worker — the single `!bot && !isAdminOrManager` `channel.members` viewer — otherwise the message falls through untouched. Staff messages, public/general channels and multi-person channels are skipped.
 
+**The two rejection messages are deliberately different remedies.** LOW_KARMA tells the worker to raise the karma of the account they already have and that they can start hiring from it — it must never suggest creating a new account, because that is the BANNED remedy and it reads to an under-karma worker as if their working account were broken. BANNED is the only case that tells someone to make a new account.
+
 **Karma rule**: `link_karma + comment_karma >= REDDIT_PROFILE_MIN_KARMA` (50). Award karma is excluded deliberately — it is not what subreddit AutoModerator karma filters count, so including it would let an account pass a gate its posts would still fail. Applied in exactly one place, `evaluateKarma`.
 
 **What counts as a profile link** (`extractProfileUsername`, pure + unit-tested): a Reddit profile URL on any host, with or without a scheme, `/user/` or `/u/`, with query/fragment/trailing punctuation — or a bare `u/name`. A **post permalink, a subreddit URL, plain chat, and a bare word are all rejected** so they trigger a re-ask. A message naming **two different** profiles is treated as ambiguous and re-asked rather than guessed at, because checking the wrong account hands a real verdict to the wrong person.

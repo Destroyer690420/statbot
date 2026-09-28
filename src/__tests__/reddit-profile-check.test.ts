@@ -147,6 +147,18 @@ describe('messages', () => {
     expect(msg).toContain(`<#${REDDIT_PROFILE_INFO_CHANNEL_ID}>`);
   });
 
+  it('does not tell an under-karma worker to create a new account', () => {
+    // Regression guard: the message used to suggest a new account, which is
+    // the banned-account remedy. A worker whose account works fine but has
+    // 1 karma was being told to abandon it.
+    const msg = formatLowKarmaMessage(1).toLowerCase();
+    expect(msg).not.toContain('new account');
+    expect(msg).not.toContain('create a new');
+    expect(msg).toContain('increase the karma of your account');
+    // ...and they can start from the same account.
+    expect(msg).toContain('then you can start hiring');
+  });
+
   it('tells a banned worker to make a new account and links the info channel', () => {
     const msg = formatBannedDmMessage();
     expect(msg.toLowerCase()).toContain('banned');

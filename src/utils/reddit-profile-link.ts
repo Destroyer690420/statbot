@@ -162,11 +162,18 @@ export function formatVerifiedMessage(karma: number): string {
   return `✅ your reddit account has been verified (${karma} karma). you are all set — please read the channels below to get started.`;
 }
 
-/** Sent in-ticket when the account is live but under the karma threshold. */
+/**
+ * Sent in-ticket when the account is live but under the karma threshold.
+ *
+ * Deliberately does NOT suggest creating a new account. The worker already
+ * has a working one; telling a banned-account message's remedy at someone who
+ * is merely under the karma bar read as if their account were unusable, and
+ * pushed them to abandon a profile that just needs some karma.
+ */
 export function formatLowKarmaMessage(karma: number, minKarma = REDDIT_PROFILE_MIN_KARMA): string {
   return (
     `your reddit account has only ${karma} karma but you need at least ${minKarma} to start. ` +
-    `please increase the karma of your account, or create a new account and build karma, then you can start hiring for us — ` +
+    `please increase the karma of your account, then you can start hiring for us — ` +
     `you will get ₹100 per successful hire. please read ${infoChannelMention()} for more info.`
   );
 }
