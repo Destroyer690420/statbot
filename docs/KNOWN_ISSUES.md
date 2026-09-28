@@ -102,12 +102,16 @@
 |---|---|---|
 | 23 | `.env.example` stale (FIREBASE_*, no `DATABASE_URL`) | repo root |
 | 24 | Legacy Firestore artifacts: `firebase.json`, `firestore.indexes.json`, stale comment in `src/index.ts:156`, `formatFirestoreDate` in `dashboard/src/pages/Payout.tsx` | repo root, src, dashboard |
-| 25 | Dead code: `check-reddit.ts` (`isPostDeleted`), `DELETED_DETECTION_THRESHOLD_MS`, `generateCommissionBatchId`, `insightStorageService.deleteTaskDir`, `reviewedAt`/`reviewedBy`/`markReviewed` (unused), `referralRepository.findById` (unused?) | `src/utils`, `src/services`, `src/database` |
+| 25 | Dead code: `check-reddit.ts` (`isPostDeleted`), `DELETED_DETECTION_THRESHOLD_MS`, `generateCommissionBatchId`, `insightStorageService.deleteTaskDir`, `reviewedAt`/`reviewedBy`/`markReviewed` (unused), `referralRepository.findById` (unused?), `onboardingRepository.hasGuideBeenSent` (unused) | `src/utils`, `src/services`, `src/database` |
 | 26 | Duplicate userscript copies (`scripts/` + `dashboard/public/`) must stay in sync | — |
 | 27 | In-memory filtering/sorting in `findCompleted`, `findCompletedOrArchived`, `search` (redditUrl substring), `findByDeliveryMessageId` JSONB scan | `task.repository.ts` |
 | 28 | Dashboard unused API fns (`getUpcomingReminders`, `getHealth`, `getExportCsvUrl`, `createReferral`); inert `w-4.5`/`animate-in` classes | `dashboard/src/api/client.ts`, pages |
 | 29 | Inconsistent admin checks (Discord-ID `isAdmin` vs username `requireDashboardAdmin`) | routes |
 | 30 | JWT carries no roles | `auth.ts` middleware |
+| 31 | **Reddit profile check depends on the `RedditSession` vault.** With no cookie stored (or an expired one) every new ticket reports `UNVERIFIABLE` and DMs the approver. Reddit blocks anonymous `.json` access from datacenter IPs (verified 2026-09-28: 403 "You've been blocked by network security"), so there is no anonymous fallback. | `reddit-profile-check.service.ts`, dashboard Settings |
+| 32 | **Shadowbanned Reddit accounts are not detected** by the profile check. Reddit exposes suspensions through the API but a shadowban is invisible to every authenticated view; a logged-out 404 is indistinguishable from a typo'd username, so it is reported as `not_found`, never as banned. Catching it would need a Playwright logged-out tab (ruled out as too fragile). | `reddit-profile-check.service.ts` |
+| 33 | Profile-check ban/low-karma verdicts are **unverified against live Reddit responses** — implemented defensively against several response shapes and unit-tested with fixtures, but no authenticated call has been made (the vault lives on the remote host). | `reddit-profile-check.service.ts` |
+| 34 | **Two long suites flake under full-suite parallel load** — both pass in isolation and the suite as a whole passes on re-run. `image-processor` (~116–148 s, long known) and `worker-isolation` (spins a real Express server; failed 1 of 4 full runs on 2026-09-28, once alongside a "worker process failed to exit gracefully" warning). **Not caused by the profile-check work:** the new suites were run together with `--detectOpenHandles` and leak nothing. Worth `--runInBand` or a per-suite timeout if it becomes a nuisance. | `src/__tests__` |
 
 ## Unknown / Unverified (do not assume)
 

@@ -367,6 +367,18 @@ model TicketOnboarding {
   guideSentAt   DateTime?
   /// Set by the one-off Reddit profile sweep; the exactly-once guard.
   redditProfileRequestedAt DateTime?
+  /// Reddit profile check: PENDING | PASSED | BANNED | LOW_KARMA | UNVERIFIABLE.
+  /// NULL means NOT enrolled, which is how every ticket that predates this
+  /// feature is kept out of the flow instead of being asked all over again.
+  profileCheckStatus String?
+  /// The username the worker was last checked under (lowercased).
+  profileUsername    String?
+  profileLinkKarma    Int?
+  profileCommentKarma Int?
+  profileCheckedAt    DateTime?
+  /// How many times the bot has re-asked for the link. Bounded so small talk
+  /// cannot turn into an endless nudge loop; re-sending a link is never capped.
+  profileReaskCount Int     @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }

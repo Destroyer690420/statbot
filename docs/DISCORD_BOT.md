@@ -68,13 +68,57 @@ Ticket auto-welcome — fires on every `TextChannel` creation. After 2.5 s delay
 
 If a valid opener is found and not an admin/manager, the bot sends `TICKET_WELCOME_MESSAGE` (`src/config/constants.ts` — `Hey, {user} Can you please share your reddit profile link?` with `{user}` → `<@opener>`) via `channel.send`. Requires **View Audit Log** (for audit path; falls back gracefully) and **Send Messages** in the ticket channel.
 
-### One-off Reddit profile sweep — `scripts/ask-reddit-profile-links.ts` (NOT a live hook)
+### 5.1 Reddit profile check (new tickets)
 
-The welcome above only fires when a ticket is **created**, so tickets that already existed were never asked for the profile they post from in the manager's wording. A one-off script therefore broadcasts, to every existing ticket exactly once:
+On ticket creation the bot asks for the worker's Reddit profile and **enrolls the ticket** (`onboardingRepository.enrollProfileCheck` writes `welcomeSentAt` + `profileCheckStatus = 'PENDING'` in one upsert). The worker's first reply is then **interpreted** instead of blindly triggering the onboarding guide — that was the old behaviour and the reason a worker who typed "hi" got the guide and was never actually asked.
+
+```
+ticket created  -> welcome ("share your reddit profile link") + enroll PENDING
+reply, no link  -> re-ask (capped at REDDIT_PROFILE_MAX_REASKS = 3)
+reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
+                     suspended        -> DM the worker "make a new account", BANNED
+                     karma >= 50      -> verified line + guide, DM the approver, PASSED
+                     karma <  50      -> "raise your karma" line, LOW_KARMA
+                     could not check  -> retryable nudge, UNVERIFIABLE
+```
+
+**Verdicts** live in `TicketOnboarding.profileCheckStatus` (plain TEXT, no DB enum — same convention as `Task.formatCheckStatus`). `PASSED` and `BANNED` are **terminal**; `PENDING`, `LOW_KARMA` and `UNVERIFIABLE` stay actionable so a worker who fixes their karma and re-sends the link is re-checked instead of being stuck.
+
+**NULL means "not enrolled" and the flow does not touch the ticket.** This is the safety mechanism for the ~250 tickets that predate the feature: they have no `profileCheckStatus`, so they are never re-asked. An unrecognised status string is also treated as not enrolled (fails safe). A ticket whose welcome never landed never enrolls, so it is not silently asked for a link later.
+
+**Scope guards** (unchanged from the welcome/guide handlers): the message must come from the ticket's own worker — the single `!bot && !isAdminOrManager` `channel.members` viewer — otherwise the message falls through untouched. Staff messages, public/general channels and multi-person channels are skipped.
+
+**Karma rule**: `link_karma + comment_karma >= REDDIT_PROFILE_MIN_KARMA` (50). Award karma is excluded deliberately — it is not what subreddit AutoModerator karma filters count, so including it would let an account pass a gate its posts would still fail. Applied in exactly one place, `evaluateKarma`.
+
+**What counts as a profile link** (`extractProfileUsername`, pure + unit-tested): a Reddit profile URL on any host, with or without a scheme, `/user/` or `/u/`, with query/fragment/trailing punctuation — or a bare `u/name`. A **post permalink, a subreddit URL, plain chat, and a bare word are all rejected** so they trigger a re-ask. A message naming **two different** profiles is treated as ambiguous and re-asked rather than guessed at, because checking the wrong account hands a real verdict to the wrong person.
+
+**Approver**: `REDDIT_PROFILE_APPROVAL_ADMIN_ID` — a single admin, DM'd only on a pass (or on `no_session`/`session_expired`, which are our problem rather than the worker's). A single id rather than the whole staff list, because this is a personal approval request. The DM carries the ticket name, worker mention, `u/name` and karma, and asks for the ticket to be added to the daily outreach.
+
+**Fallbacks**: the guide is sent *before* `markGuideSent` so a failed send is retried on the next message rather than lost; a worker with DMs closed gets the banned/low-karma text repeated in the ticket; a failed approver DM never rolls back a persisted verdict.
+
+**Message consumption is deliberately asymmetric.** A **profile link is consumed** (the flow returns `true` and the handlers below are skipped) — otherwise `handleInstructionReply` would accept the profile URL as the worker's submitted post. A **re-ask is not consumed** (returns `false`): a message with no profile link may still be a 20h insight screenshot or a task submission, and a ticket can hold a live task before the worker ever shares a profile, so claiming that message would silently drop an insight upload. The re-ask is a side effect, not a claim on the message.
+
+**Reddit access is authenticated and reused, not new.** See §5.2.
+
+### 5.2 Why the lookup needs the vaulted session
+
+Anonymous Reddit access does not work. Verified 2026-09-28: an unauthenticated `https://www.reddit.com/user/<name>/about.json` returns **403 with "You've been blocked by network security."**, and `old.reddit.com` is a login gate — datacenter IPs are hard-blocked. This is the same wall documented at `reddit-check.service.ts:104-110`, and it is why the dead `src/utils/check-reddit.ts` cannot work.
+
+So the check reuses the **existing** encrypted spare-account session (`RedditSession` → `redditSessionService.loadCookie()`) rather than adding a credential. **Consequence: if the vault is unset or the session expires, the check cannot run** and every new ticket reports `UNVERIFIABLE` with a retryable nudge (plus an approver alert for `no_session`/`session_expired`).
+
+**Only suspensions are detectable.** Reddit exposes a suspended flag through the API; a **shadowban is invisible to every authenticated view** and can only be seen in a real logged-out browser, where it is indistinguishable from a typo'd username. Detecting shadowbans would need a Playwright tab and was explicitly ruled out as too fragile. A logged-out 404 is therefore reported as `not_found`, never as `banned` — a false "your account is banned" would send a healthy worker off to make a new account.
+
+**Verdict safety** (`hasBanMarker`, the highest-risk logic in the feature): a suspended account, a dead session cookie and Reddit's network-security block can **all** return 403. A `BANNED` verdict is therefore only ever returned when Reddit's own response says so — its `USER_BANNED` reason token, an explicit `is_suspended: true`, or the "this account has been suspended" sentence. Anything else on a non-2xx is `session_expired` / `not_found` / `rate_limited` / `error`. This is pinned by tests that feed the block page, a 403 ban, a 404 ban, a 200-with-flag, and unrelated prose mentioning bans.
+
+**Pacing**: lookups run through a serial queue with a `REDDIT_PROFILE_MIN_INTERVAL_MS` (1.5 s) gap, because several tickets opening at once would otherwise hit the same spare account simultaneously and earn a 429. `www` then `old` host fallback, as in the format check. The username is `encodeURIComponent`-escaped. The cookie is only ever sent as a header, never in a URL, and is never logged.
+
+### 5.3 One-off Reddit profile sweep — `scripts/ask-reddit-profile-links.ts` (NOT a live hook)
+
+The welcome only fires when a ticket is **created**, so tickets that already existed were never asked for the profile they post from in the manager's wording. A one-off script therefore broadcasts, to every existing ticket exactly once:
 
 `TICKET_REDDIT_PROFILE_REQUEST_MESSAGE` — `Hey {user}, please share the reddit profile link you will be posting from. if you are posting or wanna start posting, sharing your reddit profile link is mandatory.` with `{user}` → `<@worker>`.
 
-- **No bot event is involved.** There is no `channelCreate`/`messageCreate` path for this message, so a ticket created after the sweep keeps only the existing welcome + guide behaviour.
+- **No bot event is involved, and the sweep is unaffected by §5.1.** It writes only `redditProfileRequestedAt` and never `profileCheckStatus`, so swept tickets stay unenrolled and the §5.1 flow ignores them — the two features cannot collide. A **new** ticket now gets the §5.1 flow (welcome → check → verdict), not this message.
 - Candidate rule is the same one used everywhere else for "who is this ticket's worker": exactly one non-bot, non-staff `channel.members` entry. `0` or `>1` candidates are **skipped with a reason** rather than tagged (an ambiguous ticket must never ping the wrong person). Only `ticket-*` channels are considered unless `--all-text-channels` is passed.
 - Exactly-once is enforced in Postgres, not in memory: each successful send stamps `TicketOnboarding.redditProfileRequestedAt` and every run starts by reading the stamped channels, so a re-run after a partial failure resumes instead of re-asking. `--force` bypasses the guard.
 - Decision logic is pure and unit-tested in `src/utils/reddit-profile-request.ts` (`buildProfileRequestPlan`, `formatProfileRequestMessage`, `summarizeProfileRequest`, `countSkippedByReason`); the script is only login + send + stamp. Defaults to `--concurrency 8` — under the live blast width of 12, because this script shares the app's bot token and therefore its 50 req/s budget.
@@ -83,9 +127,7 @@ The welcome above only fires when a ticket is **created**, so tickets that alrea
 
 Bot messages and DMs ignored. `outreachService.onWorkerMessage` runs first on every message, then the ticket guide, then two handlers in order (first that handles a message returns):
 
-0. **`handleTicketGuide`** — onboarding guide (best-effort, never blocks other handlers):
-    - Trigger: **any** message from the ticket opener (the single `!bot && !isAdminOrManager` `channel.members` viewer) in a **new ticket** where `TicketOnboarding.welcomeSentAt` exists and `guideSentAt` is null. Old tickets (no row) never get the guide; public/general channels (`0` or `>1` candidates) are skipped; admin/manager messages ignored.
-    - Action: `channel.send(TICKET_GUIDE_MESSAGE)` (`src/config/constants.ts` — `To understand everything i would advise you to read <#1520466000477163550>, <#1520481331773968384>, <#1520620297399828571>. ... ok?` with 3 clickable mentions, no user tag) → `onboardingRepository.markGuideSent`. Exactly-once per `channelId` (persisted), survives restarts.
+0. **`handleTicketProfileCheck`** — Reddit profile check + onboarding guide (best-effort, never blocks other handlers). Replaced the old `handleTicketGuide`; see §5.1 for the full flow. Returns `true` only when it consumed a **profile link** (so `handleInstructionReply` cannot record a profile URL as a submission); a re-ask returns `false` so a screenshot or submission in the same message still reaches the handlers below.
 
 1. **`handleInstructionReply`** — GoPartTime URL submission:
    - Trigger: reply to a message whose ID is in a task's `deliveryMessages` (`taskRepository.findByDeliveryMessageId`).

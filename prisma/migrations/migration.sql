@@ -719,3 +719,24 @@ CREATE INDEX IF NOT EXISTS "AutomationClaim_cycleId_idx" ON "AutomationClaim"("c
 -- already got the message. No live bot hook writes this column.
 -- Schema-only, no data statements, safe to re-run.
 ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "redditProfileRequestedAt" TIMESTAMP(3);
+-- ============================================================
+-- Migration: Reddit profile check per ticket
+-- ============================================================
+-- Enrollment + verdict for the profile check that runs when a worker shares
+-- their Reddit profile in a new ticket. channelCreate enrolls the ticket as
+-- PENDING; the first reply is then interpreted as a profile link instead of
+-- blindly triggering the onboarding guide.
+--
+-- profileCheckStatus is NULL for every ticket that existed before this
+-- feature, and the message handler treats NULL as "not enrolled" — that is
+-- deliberate, so the ~250 existing tickets are never re-asked.
+--
+-- Status is a plain nullable string (same convention as Task.formatCheckStatus)
+-- so this migration needs no CREATE TYPE and stays re-runnable.
+-- All columns are nullable or defaulted, so there are no data statements.
+ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileCheckStatus" TEXT;
+ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileUsername" TEXT;
+ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileLinkKarma" INTEGER;
+ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileCommentKarma" INTEGER;
+ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileCheckedAt" TIMESTAMP(3);
+ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileReaskCount" INTEGER NOT NULL DEFAULT 0;

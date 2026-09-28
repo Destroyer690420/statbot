@@ -6,13 +6,13 @@ import { insightStorageService } from '../../services/insight-storage.service';
 import { outreachService } from '../../services/outreach.service';
 import { handleAutomationReply } from '../../services/automation/worker-manager.service';
 import { isSupportedImage, isValidRedditUrl } from '../../utils/validators';
-import { taskRepository, onboardingRepository } from '../../database/repositories';
+import { taskRepository } from '../../database/repositories';
 import { TaskStatus, AuditAction } from '../../types';
 import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
 import { auditLogService } from '../../services/audit.service';
 import { logger } from '../../utils/logger';
 import { getAllAdminIds, isAdminOrManager } from '../../utils/permissions';
-import { TICKET_GUIDE_MESSAGE } from '../../config/constants';
+import { handleTicketProfileFlow } from '../../services/ticket-profile-check.service';
 import { isScanRetry, requestScanCommand } from '../../services/automation/scan-request.service';
 
 export async function handleMessageCreate(message: Message): Promise<void> {
@@ -36,13 +36,20 @@ export async function handleMessageCreate(message: Message): Promise<void> {
     // Automation Stage-2: worker reply within the 5-min confirmation window.
     await handleAutomationReply(message.channel.id, message.author.id).catch(() => undefined);
 
-    // Ticket onboarding guide: once per new ticket, on the opener's first message after welcome
-    await handleTicketGuide(message).catch((err) =>
-      logger.warn('Ticket guide handler failed', {
+    // Ticket Reddit profile check: the worker's first reply is interpreted
+    // rather than blindly triggering the onboarding guide. Only tickets
+    // enrolled by channelCreate are considered, so pre-existing tickets are
+    // untouched. Consumes ONLY a profile link it checked - a re-ask returns
+    // false so a screenshot or submission in the same message still reaches
+    // the handlers below.
+    const onboardingHandled = await handleTicketProfileCheck(message).catch((err) => {
+      logger.warn('Ticket profile check handler failed', {
         channelId: message.channel.id,
         error: err instanceof Error ? err.message : String(err),
-      }),
-    );
+      });
+      return false;
+    });
+    if (onboardingHandled) return;
 
     const handled = await handleInstructionReply(message);
     if (handled) return;
@@ -286,51 +293,30 @@ async function handleInsightUpload(message: Message): Promise<void> {
 }
 
 /**
- * Ticket onboarding guide: sent once per new ticket channel.
- * Trigger: the first message from the ticket opener (single non-bot
- * non-admin member) after the welcome was sent. Only for new tickets
- * where welcomeSentAt exists and guide has not yet been sent.
- * Scope matches welcome: exactly one non-bot non-admin viewer = ticket,
- * so public/general channels (0 or >1 candidates) are ignored.
+ * Ticket Reddit profile check (formerly the unconditional onboarding guide).
+ *
+ * The guide used to fire on the opener's first message no matter what it
+ * contained, which is exactly the gap this replaces: a worker who said "hi"
+ * got the guide and the ask was never answered. Now the message is inspected
+ * first, and the guide is the reward for passing the check rather than the
+ * response to typing anything at all.
+ *
+ * All of the decisions live in `ticket-profile-check.service.ts`; this is the
+ * Discord-shaped adapter that filters out everything that is not a plain
+ * worker message in a ticket.
  */
-async function handleTicketGuide(message: Message): Promise<void> {
-  if (!message.guild) return;
-  if (message.author.bot) return;
-  if (getAllAdminIds().includes(message.author.id)) return;
+async function handleTicketProfileCheck(message: Message): Promise<boolean> {
+  if (!message.guild) return false;
+  if (message.author.bot) return false;
+  if (getAllAdminIds().includes(message.author.id)) return false;
 
   const channel = message.channel;
-  if (!(channel instanceof TextChannel)) return;
+  if (!(channel instanceof TextChannel)) return false;
 
-  // Only for new tickets where welcome was delivered and guide not yet sent
-  let onboarding;
-  try {
-    onboarding = await onboardingRepository.findByChannelId(channel.id);
-  } catch {
-    return;
-  }
-  if (!onboarding?.welcomeSentAt) return;
-  if (onboarding.guideSentAt) return;
-
-  // Verify ticket-like: exactly one non-bot non-admin viewer and author is that viewer
-  try {
-    await channel.guild.members.fetch().catch(() => undefined);
-    const candidates = channel.members.filter((m) => !m.user.bot && !getAllAdminIds().includes(m.id));
-    if (candidates.size !== 1) return;
-    const soleId = candidates.first()!.id;
-    if (soleId !== message.author.id) return;
-  } catch {
-    return;
-  }
-
-  try {
-    await channel.send(TICKET_GUIDE_MESSAGE);
-    await onboardingRepository.markGuideSent(channel.id);
-    logger.info('Ticket guide sent', { channelId: channel.id, channelName: channel.name, userId: message.author.id });
-  } catch (error) {
-    logger.error('Ticket guide: failed to send', {
-      channelId: channel.id,
-      channelName: channel.name,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  return handleTicketProfileFlow({
+    client: message.client,
+    channel,
+    authorId: message.author.id,
+    content: message.content || '',
+  });
 }

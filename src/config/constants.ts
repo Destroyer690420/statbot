@@ -91,7 +91,60 @@ export const TICKET_WELCOME_MESSAGE = 'Hey, {user} Can you please share your red
 export const TICKET_REDDIT_PROFILE_REQUEST_MESSAGE =
   'Hey {user}, please share the reddit profile link you will be posting from. if you are posting or wanna start posting, sharing your reddit profile link is mandatory.';
 
-/** Onboarding guide sent once per new ticket when the opener sends their first message */
+/**
+ * Sent when the worker replies with anything that is not a Reddit profile
+ * link. Separate from TICKET_WELCOME_MESSAGE (the ask on ticket creation) so
+ * the nudge can be worded differently without changing what 250+ existing
+ * tickets were already sent.
+ */
+export const TICKET_REDDIT_PROFILE_REASK_MESSAGE =
+  'Hey {user} i still need your reddit profile link to move forward. please share it like this: https://www.reddit.com/user/yourusername';
+
+/**
+ * Minimum total karma (link + comment) a worker needs to pass the profile
+ * check. Link + comment is what subreddit AutoModerator karma filters
+ * actually count, so it predicts whether their posts will survive.
+ */
+export const REDDIT_PROFILE_MIN_KARMA = 50;
+
+/**
+ * The one admin asked to add passing tickets to the daily outreach. A single
+ * id rather than the whole staff list: this is a personal approval request,
+ * and pinging every admin/manager would notify people who cannot action it.
+ */
+export const REDDIT_PROFILE_APPROVAL_ADMIN_ID = '1299323714101317715';
+
+/** "read this for more info" channel linked in the rejected-worker messages. */
+export const REDDIT_PROFILE_INFO_CHANNEL_ID = '1545416325776678952';
+
+/**
+ * Automatic re-asks per ticket, on top of the ask on ticket creation. Bounded
+ * because an unbounded re-ask turns every bit of small talk ("hi", "ok", a
+ * sticker) into a bot message; a worker who is actually interested just
+ * re-sends the link, which is never re-ask-capped.
+ */
+export const REDDIT_PROFILE_MAX_REASKS = 3;
+
+/**
+ * Minimum gap between two Reddit profile lookups. Reddit throttles
+ * authenticated traffic aggressively, and several tickets opening at once
+ * would otherwise fire simultaneous lookups at the same spare account.
+ */
+export const REDDIT_PROFILE_MIN_INTERVAL_MS = 1500;
+
+/**
+ * The five states a ticket's Reddit profile check can be in, persisted in
+ * `TicketOnboarding.profileCheckStatus`. Kept as plain strings (like
+ * `Task.formatCheckStatus`) so the migration needs no CREATE TYPE; the
+ * TypeScript union lives in `src/utils/reddit-profile-link.ts`.
+ */
+export const PROFILE_CHECK_PENDING = 'PENDING';
+export const PROFILE_CHECK_PASSED = 'PASSED';
+export const PROFILE_CHECK_BANNED = 'BANNED';
+export const PROFILE_CHECK_LOW_KARMA = 'LOW_KARMA';
+export const PROFILE_CHECK_UNVERIFIABLE = 'UNVERIFIABLE';
+
+/** Onboarding guide sent once per new ticket, only after the worker passes the profile check */
 export const TICKET_GUIDE_MESSAGE =
   'To understand everything i would advise you to read <#1520466000477163550>, <#1520481331773968384>, <#1520620297399828571>. it will barely take 10 mins to read it all but you will understand everything after reading these. and once you are done you can ask me your doubts and after that we can get started, so lemme know once you are done reading we will start after that. ok?';
 

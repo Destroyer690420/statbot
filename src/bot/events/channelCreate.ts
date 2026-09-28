@@ -88,7 +88,11 @@ export async function handleChannelCreate(channel: Channel): Promise<void> {
     const content = TICKET_WELCOME_MESSAGE.replace('{user}', `<@${creatorId}>`);
     await channel.send(content);
     try {
-      await onboardingRepository.markWelcomeSent(channel.id);
+      // Enrolls in the Reddit profile check at the same time as the welcome.
+      // A ticket that never reaches this line never enrolls, and the message
+      // handler treats "not enrolled" as "do not touch" — so a ticket whose
+      // welcome failed is not silently asked for a profile link later.
+      await onboardingRepository.enrollProfileCheck(channel.id);
     } catch (dbErr) {
       logger.warn('Ticket welcome: sent but failed to mark onboarding', {
         channelId: channel.id,
