@@ -13,3 +13,10 @@ logs/
 
 # GoPartTime automation vault (raw session cookies, captures, browser profile - never commit)
 .goparttime/
+
+# Deploy transport (docs/DEPLOYMENT.md 5): `git bundle create statbot-main.bundle ...`
+# ships code to the host, which has no GitHub credentials. It is a build
+# artifact of the deploy, regenerated per run and deleted afterwards - never a
+# repo file, and a binary blob that would bloat history if `git add -A` swept
+# it in.
+*.bundle
