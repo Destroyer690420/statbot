@@ -5,6 +5,7 @@
 // This closes the "ban/low-karma verdicts unverified against live Reddit"
 // caveat in docs/KNOWN_ISSUES.md before the feature is switched on.
 import 'dotenv/config';
+import { initializeDatabase } from '../src/database/db';
 import { lookupRedditProfile } from '../src/services/reddit-profile-check.service';
 
 const CASES: Array<{ label: string; username: string; expect: string }> = [
@@ -16,6 +17,11 @@ const CASES: Array<{ label: string; username: string; expect: string }> = [
 // Wrapped rather than top-level await: the host repo builds to CJS, where
 // top-level await is a transform error.
 async function main(): Promise<void> {
+  // Required: loadCookie() reads RedditSession through Prisma, and it
+  // swallows any DB error into `null`, which would masquerade as "no vault
+  // configured" and make every case below report no_session.
+  await initializeDatabase();
+
   for (const c of CASES) {
     const started = Date.now();
     const r = await lookupRedditProfile(c.username);
