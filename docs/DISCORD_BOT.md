@@ -88,7 +88,10 @@ reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
 
 **Scope guards** (unchanged from the welcome/guide handlers): the message must come from the ticket's own worker — the single `!bot && !isAdminOrManager` `channel.members` viewer — otherwise the message falls through untouched. Staff messages, public/general channels and multi-person channels are skipped.
 
-**The two rejection messages are deliberately different remedies.** LOW_KARMA tells the worker to raise the karma of the account they already have and that they can start hiring from it — it must never suggest creating a new account, because that is the BANNED remedy and it reads to an under-karma worker as if their working account were broken. BANNED is the only case that tells someone to make a new account.
+**The two rejection messages are deliberately different remedies, and neither is a dead end.**
+
+- **LOW_KARMA** is **not a rejection** — hiring below the bar is allowed. The message must therefore never imply the worker is blocked: it states their karma, frames 50 as a *recommendation*, and spells out the alternative that they can start hiring right now with the karma they have. It must also never say "you need at least N to start" (false — they can hire below it) or "then you can start hiring" (framing karma as a prerequisite), and must never suggest creating a new account.
+- **BANNED** is the only case that tells someone to make a new account, because there the account genuinely is unusable.
 
 **Karma rule**: `link_karma + comment_karma >= REDDIT_PROFILE_MIN_KARMA` (50). Award karma is excluded deliberately — it is not what subreddit AutoModerator karma filters count, so including it would let an account pass a gate its posts would still fail. Applied in exactly one place, `evaluateKarma`.
 

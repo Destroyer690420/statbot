@@ -140,23 +140,31 @@ describe('messages', () => {
     expect(formatVerifiedMessage(120)).toContain('120');
   });
 
-  it('tells a low-karma worker both the number and the bar, and links the info channel', () => {
+  it('tells a low-karma worker their karma, the recommendation, and that hiring is still open', () => {
     const msg = formatLowKarmaMessage(12);
     expect(msg).toContain('12');
     expect(msg).toContain(String(REDDIT_PROFILE_MIN_KARMA));
     expect(msg).toContain(`<#${REDDIT_PROFILE_INFO_CHANNEL_ID}>`);
   });
 
+  it('offers the under-karma worker a real choice, not a prerequisite', () => {
+    // Regression: the message said "you need at least 50 to start" and
+    // "then you can start hiring", which reads as increasing karma being
+    // required first. Hiring below the bar is allowed, so the bar must be
+    // framed as a recommendation with the alternative spelled out.
+    const msg = formatLowKarmaMessage(1).toLowerCase();
+    expect(msg).toContain('recommend at least 50');
+    expect(msg).toContain('start hiring with the karma your account has right now');
+    expect(msg).not.toContain('you need at least');
+    expect(msg).not.toMatch(/then you can start hiring/);
+  });
+
   it('does not tell an under-karma worker to create a new account', () => {
-    // Regression guard: the message used to suggest a new account, which is
-    // the banned-account remedy. A worker whose account works fine but has
-    // 1 karma was being told to abandon it.
+    // Regression guard: "new account" is the BANNED remedy. A worker whose
+    // account works fine but has 1 karma was being told to abandon it.
     const msg = formatLowKarmaMessage(1).toLowerCase();
     expect(msg).not.toContain('new account');
     expect(msg).not.toContain('create a new');
-    expect(msg).toContain('increase the karma of your account');
-    // ...and they can start from the same account.
-    expect(msg).toContain('then you can start hiring');
   });
 
   it('tells a banned worker to make a new account and links the info channel', () => {

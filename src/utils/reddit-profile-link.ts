@@ -165,15 +165,22 @@ export function formatVerifiedMessage(karma: number): string {
 /**
  * Sent in-ticket when the account is live but under the karma threshold.
  *
- * Deliberately does NOT suggest creating a new account. The worker already
- * has a working one; telling a banned-account message's remedy at someone who
- * is merely under the karma bar read as if their account were unusable, and
- * pushed them to abandon a profile that just needs some karma.
+ * Two things this must not do:
+ *
+ * 1. Suggest creating a new account. That is the BANNED remedy; applied to a
+ *    worker whose account works fine, it reads as if their account were
+ *    unusable and pushes them to abandon a usable profile.
+ * 2. State that the threshold is required. Hiring is allowed below it, so
+ *    "you need at least N to start" is false and would gate a worker who is
+ *    free to take tasks right now.
+ *
+ * The bar is framed as a recommendation with the alternative spelled out:
+ * raise the karma, or just start hiring with what they have.
  */
 export function formatLowKarmaMessage(karma: number, minKarma = REDDIT_PROFILE_MIN_KARMA): string {
   return (
-    `your reddit account has only ${karma} karma but you need at least ${minKarma} to start. ` +
-    `please increase the karma of your account, then you can start hiring for us — ` +
+    `your reddit account has only ${karma} karma. we recommend at least ${minKarma} before you start, ` +
+    `but you can also start hiring with the karma your account has right now. ` +
     `you will get ₹100 per successful hire. please read ${infoChannelMention()} for more info.`
   );
 }
