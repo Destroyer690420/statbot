@@ -14,6 +14,11 @@ logs/
 # GoPartTime automation vault (raw session cookies, captures, browser profile - never commit)
 .goparttime/
 
+# Isolated feature workspaces (`git worktree add .worktrees/<branch>`) - each
+# one is a full checkout of the tree, so leaving it untracked risks a
+# `git add -A` sweeping thousands of duplicate source files into the repo.
+.worktrees/
+
 # Deploy transport (docs/DEPLOYMENT.md 5): `git bundle create statbot-main.bundle ...`
 # ships code to the host, which has no GitHub credentials. It is a build
 # artifact of the deploy, regenerated per run and deleted afterwards - never a
