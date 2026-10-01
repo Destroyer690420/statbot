@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-01
+### Deployed
+- **Fresh-scan batch restart live** (`161.118.164.85`) at commit `c925eed` + docs `add940f` (app-only rebuild; backup `rtm-backup-20261001-restart.tar.gz`; no DB migration; no userscript change; pushed to GitHub; host + local bundles cleaned). Verified live: health healthy (DB+Redis), boot "All systems online!" + bot login, `freshCycleOnly` in live `dist/services/automation/burst.service.js`, `restartBlast` in live `dist/services/outreach.service.js`. Locally: typecheck + build clean, 670/670 jest (47 suites). Other working-tree changes (dashboard payout pages, docs/FRONTEND.md) belong to a parallel session and were NOT included.
 ### Implemented (NOT deployed)
 - **Fresh-scan batch restart**: a `scan` during a live batch now keeps its OWN cycle (`freshCycleOnly`), so the digest shows the current listing instead of the previous batch's list (whose claimed posts were still listed) — that stale list was the merge path logging the new scan into the open hour blast's cycle. The Blast button becomes **Restart batch** when a batch is live (`blast:go:<cycleId>:restart`): release closes the open blast, deletes its messages from every non-winner ticket, drops tasks it already handed out, re-validates availability, then opens a fresh batch to the re-checked contact set. Automatic hourly rounds keep merge behavior. Verified: typecheck + build clean, 670/670 jest (47 suites).
 
