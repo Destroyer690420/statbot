@@ -2,8 +2,8 @@ import {
   asProfileCheckStatus,
   evaluateKarma,
   extractProfileUsername,
-  formatApprovalDm,
   formatBannedDmMessage,
+  formatTicketApprovalNotice,
   formatLowKarmaMessage,
   formatReaskMessage,
   formatUnverifiableMessage,
@@ -182,13 +182,25 @@ describe('messages', () => {
     expect(formatLowKarmaMessage(3)).not.toMatch(/<@\d+>/);
   });
 
-  it('gives the approver the ticket name and a usable mention', () => {
-    const dm = formatApprovalDm({ channelName: 'ticket-0424', workerId: '555', username: 'some_worker', karma: 300 });
-    expect(dm).toContain('ticket-0424');
-    expect(dm).toContain('<@555>');
-    expect(dm).toContain('u/some_worker');
-    expect(dm).toContain('300');
-    expect(dm.toLowerCase()).toContain('daily outreach');
+  it('asks the approver in-ticket with a usable worker mention and the profile', () => {
+    const notice = formatTicketApprovalNotice({ workerId: '555', username: 'some_worker', karma: 300 });
+    expect(notice).toContain('<@555>');
+    expect(notice).toContain('u/some_worker');
+    expect(notice).toContain('300');
+    expect(notice.toLowerCase()).toContain('daily outreach');
+  });
+
+  it('tags the approver itself, since this is posted in the ticket they must act in', () => {
+    // The whole point of the change: the approver used to be DMed. Now the
+    // notice lands in the ticket, so the mention has to move with it.
+    expect(formatTicketApprovalNotice({ workerId: '555', username: 'w', karma: 300 })).toContain(
+      `<@${REDDIT_PROFILE_APPROVAL_ADMIN_ID}>`,
+    );
+  });
+
+  it('does not repeat the ticket name, which the reader is already looking at', () => {
+    const notice = formatTicketApprovalNotice({ workerId: '555', username: 'w', karma: 300 });
+    expect(notice).not.toContain('ticket:');
   });
 
   it('surfaces the reason in the retryable in-ticket nudge', () => {

@@ -1,4 +1,5 @@
 import {
+  REDDIT_PROFILE_APPROVAL_ADMIN_ID,
   REDDIT_PROFILE_INFO_CHANNEL_ID,
   REDDIT_PROFILE_MIN_KARMA,
   TICKET_REDDIT_PROFILE_REASK_MESSAGE,
@@ -194,19 +195,23 @@ export function formatBannedDmMessage(): string {
 }
 
 /**
- * DM'd to the approver when a worker passes. Carries the ticket name (not the
- * channel id) so it can be found in the dashboard's Daily Outreach list
- * without a lookup.
+ * Posted IN the ticket when a worker passes, tagging the approver.
+ *
+ * This replaced a DM to the approver. The ticket is where the approver already
+ * has to act — adding the ticket to the Daily Outreach list is a decision about
+ * that ticket — so the notice belongs beside the verdict rather than in a
+ * private inbox that has to be mentally matched back to a channel.
+ *
+ * Deliberately omits the ticket name: the reader is looking at the ticket, so
+ * naming it back to them is noise.
  */
-export function formatApprovalDm(args: {
-  channelName: string;
+export function formatTicketApprovalNotice(args: {
   workerId: string;
   username: string;
   karma: number;
 }): string {
   return (
-    `new reddit profile passed ✅\n` +
-    `ticket: ${args.channelName}\n` +
+    `<@${REDDIT_PROFILE_APPROVAL_ADMIN_ID}> new reddit profile passed ✅\n` +
     `worker: <@${args.workerId}>\n` +
     `profile: u/${args.username}\n` +
     `karma: ${args.karma} (>= ${REDDIT_PROFILE_MIN_KARMA})\n\n` +

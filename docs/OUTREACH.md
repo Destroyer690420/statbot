@@ -30,7 +30,7 @@ Daily cycle = IST day. At **00:00 IST** the Available/Post/Comment state lazily 
 |---|---|
 | `id` | PK |
 | `channelId` | Discord channel ID, **unique** |
-| `selected` | Checked in the Select Tickets modal; **never auto-reset** |
+| `selected` | Checked in the Select Tickets modal — **or via the `add to daily outreach` button** on a passed profile check (see below); **never auto-reset** |
 | `messageSentAt` | Last successful daily send (cycle-scoped) |
 | `availableAt` | First worker message of the cycle (cycle-scoped) |
 | `updatedAt` | — |
@@ -79,6 +79,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE
 - **Routes** `src/api/routes/outreach.ts` (factory `createOutreachRoutes(discordClient)`; all `requireDashboardAdmin` — middleware extracted to `src/api/middleware/auth.ts`, shared with discord routes):
   - `GET /api/v1/outreach` → `{ istDate, message, tickets[], blast }`
   - `PUT /api/v1/outreach/selection` `{ selections: [{channelId, selected}] }` (max 500)
+  - **Not an API route:** the same `selected` write is also reachable from Discord via the `add to daily outreach` button on a passed profile check. It calls `outreachRepository.upsertSelection` directly (`src/services/outreach-selection.service.ts`), not this endpoint — see `docs/DISCORD_BOT.md` §5.1. Approver/admin only, idempotent.
   - `POST /api/v1/outreach/send` `{ slots: 1..500 }` → `{ blast, sent[], skipped[] }`
   - `GET/PUT /api/v1/outreach/settings` `{ message }`
 - **Bot hook** `src/bot/events/messageCreate.ts`: `outreachService.onWorkerMessage` runs first (now with `message.client` for deletions); managers/bots excluded via `getAllAdminIds()`; failures swallowed (logging only).
@@ -110,7 +111,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE
 - Availability = **any** worker message after the send (not strictly a reply to the broadcast).
 - Blast shortfall stays open: if fewer than `slotsTotal` reply, late replies still count until the next Send (which supersedes) or day end.
 - A worker hitting the 2-post cap after replying stops consuming slots; capped repliers never count.
-- `selected` is remembered forever unless changed; the manager must actively uncheck.
+- `selected` is remembered forever unless changed; the manager must actively uncheck. The Discord button only ever sets it to `true` — removing a ticket is still a dashboard action.
 - Portal access is per ticket, updates only on successful ticket-OTP login, and has no historical backfill; the tick means "has logged in from this ticket", never "currently online".
 
 ## 9. Blast campaigns (2026-09-09)

@@ -77,7 +77,8 @@ ticket created  -> welcome ("share your reddit profile link") + enroll PENDING
 reply, no link  -> re-ask (capped at REDDIT_PROFILE_MAX_REASKS = 3)
 reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
                      suspended        -> DM the worker "make a new account", BANNED
-                     karma >= 50      -> verified line + guide, DM the approver, PASSED
+                     karma >= 50      -> verified line + guide, in-ticket approver
+                                         notice + add-to-outreach button, PASSED
                      karma <  50      -> "raise your karma" line, LOW_KARMA
                      could not check  -> retryable nudge, UNVERIFIABLE
 ```
@@ -97,9 +98,20 @@ reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
 
 **What counts as a profile link** (`extractProfileUsername`, pure + unit-tested): a Reddit profile URL on any host, with or without a scheme, `/user/` or `/u/`, with query/fragment/trailing punctuation — or a bare `u/name`. A **post permalink, a subreddit URL, plain chat, and a bare word are all rejected** so they trigger a re-ask. A message naming **two different** profiles is treated as ambiguous and re-asked rather than guessed at, because checking the wrong account hands a real verdict to the wrong person.
 
-**Approver**: `REDDIT_PROFILE_APPROVAL_ADMIN_ID` — a single admin, DM'd only on a pass (or on `no_session`/`session_expired`, which are our problem rather than the worker's). A single id rather than the whole staff list, because this is a personal approval request. The DM carries the ticket name, worker mention, `u/name` and karma, and asks for the ticket to be added to the daily outreach.
+**Approver**: `REDDIT_PROFILE_APPROVAL_ADMIN_ID` — a single admin. On a pass they are **notified in the ticket**, not DM'd (see below). On `no_session`/`session_expired` — which are our problem rather than the worker's — they are still DM'd, since that failure has no in-ticket equivalent.
 
-**Fallbacks**: the guide is sent *before* `markGuideSent` so a failed send is retried on the next message rather than lost; a worker with DMs closed gets the banned/low-karma text repeated in the ticket; a failed approver DM never rolls back a persisted verdict.
+**The approver notice is in-ticket, and carries the button** (`src/utils/outreach-add-button.ts`, `src/services/outreach-selection.service.ts`). A pass posts a **second, separate message** in the ticket: an approver mention, the worker, `u/name`, the karma, and one **`add to daily outreach`** button (`outreach_add:<channelId>`, routed in `interactionCreate` alongside the `blast:` buttons).
+
+Why in-ticket rather than a DM: the approver's action is about *this* ticket, so the request belongs where the decision is made. The old DM forced a manual match of a channel name back to a channel, and the actual selection still had to happen in the dashboard.
+
+- **Two messages, deliberately.** The button sits on the approver notice, never on the worker-facing verified line + guide, which is addressed to the worker.
+- **The write is `TicketOutreach.selected = true`** — byte-for-byte the same upsert the dashboard's checkbox issues (`outreachRepository.upsertSelection`). It survives the IST day rollover and is what `POST /outreach/send` broadcasts to, so this path cannot drift from the dashboard's view.
+- **Permission is narrow**: `REDDIT_PROFILE_APPROVAL_ADMIN_ID` or `ADMIN_USER_IDS`. The worker whose profile passed is looking straight at the button, so any other click is refused **ephemerally** and writes nothing. Managers/moderators are excluded on purpose.
+- **Idempotent**: re-clicking a selected ticket says "already on the daily outreach list" and writes nothing. On success the button is **rebuilt disabled** and relabelled, so a live button never implies "not yet done".
+- Audited as `AuditAction.OUTREACH_TICKET_ADDED`.
+- The custom id is the **source of truth for which ticket is selected**, not the channel the click happened in, and `parseOutreachAddId` only accepts a digits-only snowflake — a lossy parse would otherwise select the wrong real ticket into the daily blast.
+
+**Fallbacks**: the guide is sent *before* `markGuideSent` so a failed send is retried on the next message rather than lost; a worker with DMs closed gets the banned/low-karma text repeated in the ticket; a failed approver notice **or button** never rolls back a persisted `PASSED` verdict (both are best-effort after the stamp). A failed button write replies "could not add this ticket" with the button re-enabled, so the click can be retried.
 
 **Message consumption is deliberately asymmetric.** A **profile link is consumed** (the flow returns `true` and the handlers below are skipped) — otherwise `handleInstructionReply` would accept the profile URL as the worker's submitted post. A **re-ask is not consumed** (returns `false`): a message with no profile link may still be a 20h insight screenshot or a task submission, and a ticket can hold a live task before the worker ever shares a profile, so claiming that message would silently drop an insight upload. The re-ask is a side effect, not a claim on the message.
 

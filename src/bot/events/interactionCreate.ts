@@ -20,6 +20,7 @@ import * as mystatsCmd from '../commands/mystats';
 import * as myinvitesCmd from '../commands/myinvites';
 import * as logincodeCmd from '../commands/logincode';
 import { handleBlastButton } from '../../services/automation/blast-approval.service';
+import { handleOutreachAddButton } from '../../services/outreach-selection.service';
 
 const commands = new Map<string, { execute: (interaction: ChatInputCommandInteraction) => Promise<void> }>();
 commands.set('task', taskCmd);
@@ -42,9 +43,18 @@ commands.set('mystats', mystatsCmd);
  * Handle interactionCreate event — route slash commands and DM buttons.
  */
 export async function handleInteractionCreate(interaction: Interaction): Promise<void> {
-  // Pre-blast DM buttons (manager phone approvals) — guild-agnostic.
+  // Pre-blast DM buttons (manager phone approvals) and the in-ticket
+  // "add to daily outreach" button — both guild-agnostic.
   // Other buttons (e.g. /delete confirmations via collectors) pass through.
   if (interaction.isButton()) {
+    if (interaction.customId.startsWith('outreach_add:')) {
+      try {
+        await handleOutreachAddButton(interaction);
+      } catch (error) {
+        logger.error('Button handling failed', { error });
+      }
+      return;
+    }
     if (!interaction.customId.startsWith('blast:')) return;
     try {
       await handleBlastButton(interaction);

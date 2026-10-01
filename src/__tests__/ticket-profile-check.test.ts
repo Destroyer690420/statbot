@@ -42,6 +42,8 @@ import { REDDIT_PROFILE_APPROVAL_ADMIN_ID, REDDIT_PROFILE_MAX_REASKS } from '../
 const WORKER = '111';
 
 const sent: string[] = [];
+/** Every `channel.send` payload, so a message WITH buttons is inspectable. */
+const payloads: SendPayload[] = [];
 const dmSent: { id: string; content: string }[] = [];
 
 /**
@@ -61,11 +63,15 @@ function makeCollection(items: Array<{ id: string; user: { bot: boolean } }>) {
   };
 }
 
+/** A `channel.send` payload: plain text, or text plus components. */
+type SendPayload = string | { content: string; components?: unknown };
+
 function makeChannel(overrides: Record<string, unknown> = {}) {
   return {
     id: 'chan-1',
     name: 'ticket-0001',
-    send: jest.fn(async (payload: unknown) => {
+    send: jest.fn(async (payload: SendPayload) => {
+      payloads.push(payload);
       sent.push(typeof payload === 'string' ? payload : JSON.stringify(payload));
     }),
     guild: { members: { fetch: jest.fn(async () => undefined) } },
@@ -88,6 +94,7 @@ const client = { users: { fetch: fetchUser } } as never;
 beforeEach(() => {
   jest.clearAllMocks();
   sent.length = 0;
+  payloads.length = 0;
   dmSent.length = 0;
   mockFindByChannelId.mockResolvedValue({ profileCheckStatus: 'PENDING', profileReaskCount: 0, guideSentAt: null });
   mockLookup.mockResolvedValue({ kind: 'ok', profile: { username: 'some_worker', linkKarma: 30, commentKarma: 40 } });
@@ -276,7 +283,7 @@ describe('replies that are not a profile link', () => {
 });
 
 describe('passing the check', () => {
-  it('sends the guide, stamps it, and DMs the approver', async () => {
+  it('sends the guide, stamps it, and notifies the approver in the ticket', async () => {
     await handleTicketProfileFlow({
       client,
       channel: makeChannel(),
@@ -295,10 +302,81 @@ describe('passing the check', () => {
       { status: 'PASSED', username: 'some_worker', linkKarma: 30, commentKarma: 40 },
     );
 
-    const dm = dmSent.find((d) => d.id === REDDIT_PROFILE_APPROVAL_ADMIN_ID);
-    expect(dm).toBeDefined();
-    expect(dm!.content).toContain('ticket-0001');
-    expect(dm!.content).toContain('u/some_worker');
+    // The approver is pinged where the action happens, and the ticket is named
+    // by the channel itself rather than repeated as text.
+    expect(ticketText).toContain(`<@${REDDIT_PROFILE_APPROVAL_ADMIN_ID}>`);
+    expect(ticketText).toContain('u/some_worker');
+  });
+
+  it('no longer DMs the approver on a pass', async () => {
+    // The DM required mentally matching a channel id back to a ticket. The
+    // notice now lands in the ticket itself.
+    await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: 'https://www.reddit.com/user/some_worker',
+    });
+
+    expect(dmSent.some((d) => d.id === REDDIT_PROFILE_APPROVAL_ADMIN_ID)).toBe(false);
+  });
+
+  it('puts the add-to-outreach button on the approver notice', async () => {
+    await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: 'https://www.reddit.com/user/some_worker',
+    });
+
+    // The button is the point of the change: the approver can select the ticket
+    // without leaving Discord or opening the dashboard.
+    const notice = payloads.find((p) => typeof p !== 'string' && p.content.includes('passed'));
+    expect(notice).toBeDefined();
+    const json = JSON.stringify((notice as { components?: unknown }).components);
+    expect(json).toContain(`outreach_add:${'chan-1'}`);
+  });
+
+  it('sends the guide and the approver notice as two separate messages', async () => {
+    // Combined into one message the button would sit inside the worker-facing
+    // guide, which is addressed to the worker, not to the approver.
+    await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: 'https://www.reddit.com/user/some_worker',
+    });
+
+    const guide = payloads.find((p) => typeof p === 'string' && p.includes('<#1520466000477163550>'));
+    const notice = payloads.find((p) => typeof p !== 'string' && p.content.includes('passed'));
+    expect(guide).toBeDefined();
+    expect(notice).toBeDefined();
+    expect(guide).not.toBe(notice);
+  });
+
+  it('still stamps PASSED when the approver notice fails to send', async () => {
+    // The verdict is the durable fact. A notice that could not be delivered
+    // must not roll the ticket back out of PASSED.
+    const channel = makeChannel({
+      send: jest.fn(async (payload: string | { content: string; components?: unknown }) => {
+        if (typeof payload !== 'string' && payload.content.includes('passed')) {
+          throw new Error('discord down');
+        }
+        return undefined;
+      }),
+    });
+
+    await handleTicketProfileFlow({
+      client,
+      channel,
+      authorId: WORKER,
+      content: 'https://www.reddit.com/user/some_worker',
+    });
+
+    expect(mockMarkProfileChecked).toHaveBeenCalledWith(
+      'chan-1',
+      { status: 'PASSED', username: 'some_worker', linkKarma: 30, commentKarma: 40 },
+    );
   });
 
   it('does not DMs the worker on a pass, so nothing in the ticket looks like a test', async () => {

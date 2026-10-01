@@ -740,3 +740,15 @@ ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileLinkKarma" INTEG
 ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileCommentKarma" INTEGER;
 ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileCheckedAt" TIMESTAMP(3);
 ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileReaskCount" INTEGER NOT NULL DEFAULT 0;
+
+-- ============================================================
+-- Migration: in-ticket "add to daily outreach" button
+-- ============================================================
+-- The profile-passed notice is now posted in the ticket with a button that
+-- selects it for the daily outreach, instead of DMing the approver. The click
+-- writes TicketOutreach.selected (the same field the dashboard writes), so no
+-- table changes here.
+--
+-- This is only a new audit action for that click. Schema-only and idempotent,
+-- like every other AuditAction addition in this file.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_TICKET_ADDED';
