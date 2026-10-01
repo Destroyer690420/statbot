@@ -17,6 +17,7 @@ import {
   buildDigestButtons,
   buildReleaseInputs,
   formatDigestMessage,
+  isEligibleLogStatus,
   parseBlastButtonId,
   ButtonSpec,
 } from './blast-digest';
@@ -143,12 +144,19 @@ export async function buildDigestForCycle(cycleId: string): Promise<BuiltDigest 
   const logs = await automationRepository.listCycleLogs(cycleId).catch(() => []);
   const blockedRows = await automationRepository.listBlocked().catch(() => []);
   const seen = await automationRepository.listSeenSubreddits().catch(() => []);
+  // A live batch changes what Blast means: the button becomes "Restart
+  // batch" (fresh availability check + stale-message cleanup) instead of
+  // releasing into the frozen hour pool. Only an actually-eligible digest
+  // offers it — with nothing to release, restart is meaningless.
+  const openBursts = await automationRepository.listOpenBursts().catch(() => []);
+  const eligibleCount = logs.filter((l) => l && isEligibleLogStatus(l.status)).length;
   const digest = buildBlastDigest(
     cycleId,
     logs,
     blockedRows.map((b) => b.subreddit),
     seen,
     { scanned: cycle.tasksDetected, eligible: cycle.eligiblePosts, blocked: cycle.blocked },
+    { restartAvailable: openBursts.length > 0 && eligibleCount > 0 },
   );
   return {
     message: formatDigestMessage(digest),
@@ -359,8 +367,15 @@ export async function handleBlastButton(interaction: ButtonInteraction): Promise
         await editReplySafe(interaction, 'Nothing eligible left in that round (all blocked or taken).', true);
         return true;
       }
+      // A live batch is still open -> release as a RESTART: the previous
+      // batch's unclaimed messages are removed and a fresh batch opens from
+      // this (freshly scanned) round. Availability is re-validated by
+      // createBurstFlow exactly like any other release.
+      const openBursts = await automationRepository.listOpenBursts().catch(() => []);
+      const restart = parsed.restart === true && openBursts.length > 0;
       const result = await createBurstFlow(interaction.client as Client, inputs, interaction.user.id, {
         forceWindow: true,
+        restart,
       });
       await auditLogService
         .log(
@@ -373,7 +388,9 @@ export async function handleBlastButton(interaction: ButtonInteraction): Promise
       if (result.blast) {
         await editReplySafe(
           interaction,
-          `Blast opened: ${result.sent}/${result.blast.slotsTotal} workers messaged. Winners claim by replying — same as always.`,
+          restart
+            ? `New batch started: ${result.sent}/${result.blast.slotsTotal} workers messaged from the fresh scan. Previous unclaimed messages removed; workers already on a task were skipped.`
+            : `Blast opened: ${result.sent}/${result.blast.slotsTotal} workers messaged. Winners claim by replying — same as always.`,
           true,
         );
       } else {

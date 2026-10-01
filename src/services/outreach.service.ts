@@ -1,5 +1,5 @@
 import { Client, TextChannel } from 'discord.js';
-import { outreachRepository, taskRepository, workerPortalAccessRepository } from '../database/repositories';
+import { automationRepository, outreachRepository, taskRepository, workerPortalAccessRepository } from '../database/repositories';
 import { auditLogService } from './audit.service';
 import { getIstDayBoundaries, isStaleDailyCycle } from '../utils/ist-time';
 import { buildOutreachRows, formatOutreachMessage, OutreachRowInput, OutreachRow, TicketTaskStatus } from '../utils/outreach-rows';
@@ -291,6 +291,60 @@ class OutreachService {
 
     const blast = await outreachRepository.createBlast(slotsTotal, senderId);
     return { id: blast.id, slotsTotal };
+  }
+
+  /**
+   * Blast restart: the manager starts a NEW batch from a fresh scan while
+   * an older one is still open. Best-effort and never throws — a failed
+   * cleanup must not stop the new batch from opening.
+   *
+   * Order matters: close the blast first (so replies stop converting into
+   * claims), then remove its messages from every non-winner ticket. Winners
+   * keep theirs — their task is running and that message is their record.
+   * Returns the contacted task ids so the caller can exclude them.
+   */
+  async restartBlast(
+    discordClient: Client,
+  ): Promise<{ closedBlastId: string | null; winners: number; deleted: number; failed: number; handledTaskIds: string[] }> {
+    const previous = await outreachRepository.getOpenBlast().catch(() => null);
+    if (!previous) return { closedBlastId: null, winners: 0, deleted: 0, failed: 0, handledTaskIds: [] };
+    const filled = await outreachRepository.countReplies(previous.id).catch(() => 0);
+    await outreachRepository.closeBlast(previous.id, filled).catch(() => undefined);
+    try {
+      await this.blastHooks.onClosed?.(previous.id);
+    } catch (error) {
+      logger.warn('Blast restart close hook failed', { blastId: previous.id, error });
+    }
+    const winners = new Set(await outreachRepository.listReplyChannelIds(previous.id).catch(() => []));
+    const cleaned = await this.deleteBlastMessages(discordClient, previous.id, winners);
+    // Tasks from the previous pool: every id a winner could have claimed
+    // (the blast is closed now, so nothing further converts) plus the ones
+    // still handed out. Excluding them keeps a restart from re-offering a
+    // task a worker already took — their ticket is mid-task anyway.
+    const previousBurst = await automationRepository.getBurstByBlast(previous.id).catch(() => null);
+    const handled = new Set<string>(previousBurst?.taskIds ?? []);
+    // Claims the previous batch handed out (PENDING or CLAIMED): their
+    // workers already own those tasks, so a restart must not re-offer them.
+    for (const claim of await automationRepository
+      .listCycleClaims(previousBurst?.cycleId ?? '')
+      .catch(() => [])) {
+      if (claim.status === 'PENDING' || claim.status === 'CLAIMED') handled.add(claim.externalTaskId);
+    }
+    logger.info('Blast restart cleanup complete', {
+      previousBlastId: previous.id,
+      filled,
+      winners: winners.size,
+      deleted: cleaned.deleted,
+      failed: cleaned.failed,
+      excludedTasks: handled.size,
+    });
+    return {
+      closedBlastId: previous.id,
+      winners: winners.size,
+      deleted: cleaned.deleted,
+      failed: cleaned.failed,
+      handledTaskIds: [...handled],
+    };
   }
 
   /**

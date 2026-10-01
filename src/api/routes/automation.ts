@@ -796,20 +796,21 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           title: t.title || null,
         }),
       );
+      // On-demand scan reports (DM `scan` / scheduled hourly) are identified
+      // BEFORE the flow runs: they always get their OWN cycle. Merging into a
+      // live hour blast's cycle would make the digest rebuild the previous
+      // batch's list (claimed posts included) instead of this fresh scan.
+      // Forged or ancient ids are NOT manual: they keep the normal auto path.
+      const rawScanRequestId = typeof req.body.scanRequestId === 'string' ? req.body.scanRequestId : null;
+      const isManualReport = rawScanRequestId !== null && scanRequestService.wasRequested(rawScanRequestId);
       const result = await createBurstFlow(discordClient, tasks, 'burst', {
         forceWindow: req.body.force === true,
+        freshCycleOnly: isManualReport,
       });
-      // On-demand `/scan` report: the first report carrying the request id
-      // consumes it and ALWAYS answers with its own digest DM (per-request
-      // idempotency, never the hour gate). Same-id duplicates stay silent
-      // (see isManualReport below); validation + cycle flow is identical.
-      const rawScanRequestId = typeof req.body.scanRequestId === 'string' ? req.body.scanRequestId : null;
+      // The first report carrying the request id consumes it and ALWAYS
+      // answers with its own digest DM (per-request idempotency, never the
+      // hour gate). Same-id duplicates stay silent.
       const manualRequest = rawScanRequestId ? scanRequestService.takeRequest(rawScanRequestId) : null;
-      // A report tagged with a real scan request id is fully answered by
-      // the manual DM (first tab) or silence (second tab's duplicate) — it
-      // must never ALSO trigger the hour-gated automatic digest. Forged or
-      // ancient ids are NOT manual: they keep the normal auto path.
-      const isManualReport = rawScanRequestId !== null && scanRequestService.wasRequested(rawScanRequestId);
       if (manualRequest) {
         void blastApprovalService
           .sendManualDigest(discordClient, result.cycleId, manualRequest.requestId, manualRequest.requestedBy)

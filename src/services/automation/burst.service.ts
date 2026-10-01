@@ -149,7 +149,7 @@ export async function createBurstFlow(
   discordClient: Client,
   tasks: BurstTaskInput[],
   senderId: string | null,
-  opts: { forceWindow?: boolean } = {},
+  opts: { forceWindow?: boolean; restart?: boolean; freshCycleOnly?: boolean } = {},
 ): Promise<BurstResult> {
   const settings = await automationRepository.getSettings();
   const dryRun = settings ? settings.dryRun : true;
@@ -164,20 +164,60 @@ export async function createBurstFlow(
 
   // One-blast-per-hour guard (live mode only): the settled report already
   // opened the blast — join it only inside the merge grace, never re-message.
+  // `freshCycleOnly` is the on-demand-scan path: a `scan` must be answered by
+  // its OWN freshly scanned cycle, never by a live hour blast's cycle. Merging
+  // would log this scan into the OLD cycle, so the digest the manager reads
+  // would be the previous batch's list (claimed posts included) with the new
+  // scan appended — exactly the stale-list symptom. Skipping the merge keeps
+  // validation identical and only decides which cycle owns the report.
+  // `restart` is the manager explicitly replacing a stalled batch: it skips
+  // the merge (the old pool is about to be closed anyway) and falls through
+  // to the normal open path after the restart cleanup below.
+  let restartCleanup: { deleted: number; failed: number; excluded: Set<string> } | null = null;
   if (live) {
-    const hourBursts = await automationRepository.listBurstsSince(getIstHourStart()).catch(() => []);
-    const hourOpen = [...hourBursts].reverse().find((b) => b.status === 'OPEN');
-    if (hourOpen) {
-      return mergeIntoHourBurst(hourOpen.id, inputs, senderId);
+    if (opts.freshCycleOnly === true) {
+      logger.info('Burst report kept in its own cycle (on-demand scan)', { senderId });
+    } else if (opts.restart === true) {
+      const cleanup = await outreachService
+        .restartBlast(discordClient)
+        .catch((error) => {
+          logger.warn('Blast restart cleanup failed (continuing with fresh batch)', { error });
+          return null;
+        });
+      // Tasks the previous batch handed out (or still held) must never be
+      // re-offered: their workers are mid-task.
+      restartCleanup = {
+        deleted: cleanup?.deleted ?? 0,
+        failed: cleanup?.failed ?? 0,
+        excluded: new Set(cleanup?.handledTaskIds ?? []),
+      };
+      logger.info('Burst restart requested', {
+        closedBlastId: cleanup?.closedBlastId ?? null,
+        winners: cleanup?.winners ?? 0,
+        messagesDeleted: restartCleanup.deleted,
+        messagesFailed: restartCleanup.failed,
+        excludedTasks: restartCleanup.excluded.size,
+      });
+    } else {
+      const hourBursts = await automationRepository.listBurstsSince(getIstHourStart()).catch(() => []);
+      const hourOpen = [...hourBursts].reverse().find((b) => b.status === 'OPEN');
+      if (hourOpen) {
+        return mergeIntoHourBurst(hourOpen.id, inputs, senderId);
+      }
     }
   }
+  const usableInputs = restartCleanup
+    ? inputs.filter((t) => !restartCleanup!.excluded.has(t.subTaskId))
+    : inputs;
 
   const cycleId = `burst-${new Date().toISOString().slice(0, 16).replace('T', '-')}-${Date.now().toString(36)}`;
   await automationRepository.createCycle({ id: cycleId, dryRun: !live });
 
   // Close previous-hour strays WITHOUT unioning (pools freeze; late sets
   // wait for next hour). Live mode only — a frozen system touches nothing.
-  if (live) {
+  // `freshCycleOnly` (an on-demand scan) must NOT close a live batch: the
+  // scan only reports; the still-running batch keeps serving its winners.
+  if (live && opts.freshCycleOnly !== true) {
     try {
       const openBursts = await automationRepository.listOpenBursts();
       for (const b of openBursts) {
@@ -188,7 +228,7 @@ export async function createBurstFlow(
       logger.warn('Burst stray close failed (continuing with fresh scan)', { error });
     }
   }
-  const candidates: BurstTaskInput[] = [...inputs];
+  const candidates: BurstTaskInput[] = [...usableInputs];
 
   const { eligible, blocked, duplicates, commentsSkipped } = await validateInputs(candidates, cycleId);
 

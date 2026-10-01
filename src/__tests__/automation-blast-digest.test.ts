@@ -239,18 +239,76 @@ describe('blockableSubs', () => {
   });
 });
 
+describe('restart batch (fresh scan while a batch is live)', () => {
+  const CYCLE = 'burst-2026-10-01-12:35-mupioeqv';
+
+  it('marks the digest restartable and carries the intent in the button id', () => {
+    const logs = [log('1', 'cats'), log('2', 'dogs')];
+    const base = { scanned: 2, eligible: 2, blocked: 0 };
+    const plain = buildBlastDigest(CYCLE, logs, [], [], base);
+    expect(plain.restartAvailable).toBe(false);
+    expect(buildDigestButtons(plain)[0][0]).toMatchObject({ action: 'go', label: 'Blast now' });
+
+    const restartable = buildBlastDigest(CYCLE, logs, [], [], base, { restartAvailable: true });
+    expect(restartable.restartAvailable).toBe(true);
+    const rows = buildDigestButtons(restartable);
+    expect(rows[0][0]).toMatchObject({ action: 'go', label: 'Restart batch' });
+    expect(rows[0][0].customId).toBe(`blast:go:${CYCLE}:restart`);
+    // The colon-bearing cycle id must still round-trip through the parser.
+    expect(parseBlastButtonId(rows[0][0].customId)).toEqual({
+      action: 'go',
+      cycleId: CYCLE,
+      sub: null,
+      restart: true,
+    });
+  });
+
+  it('parses restart on plain go/hold/block ids as false', () => {
+    expect(parseBlastButtonId(`blast:go:${CYCLE}`)?.restart).toBe(false);
+    expect(parseBlastButtonId(`blast:hold:${CYCLE}`)?.restart).toBe(false);
+    expect(parseBlastButtonId(`blast:block:${CYCLE}:cats`)).toEqual({
+      action: 'block',
+      cycleId: CYCLE,
+      sub: 'cats',
+      restart: false,
+    });
+  });
+
+  it('rejects malformed restart ids', () => {
+    for (const bad of ['blast:go:', 'blast:go::restart', 'blast:hold:c1:restart:restart']) {
+      expect(parseBlastButtonId(bad)).toBeNull();
+    }
+  });
+
+  it('excludes already-handled tasks from a restart release', () => {
+    const inputs = buildReleaseInputs(
+      [log('1', 'cats'), log('2', 'dogs'), log('3', 'birds')],
+      new Set(['2']),
+    );
+    // Newest-first, minus the task a previous winner already holds.
+    expect(inputs.map((i) => i.subTaskId)).toEqual(['3', '1']);
+  });
+});
+
 describe('parseBlastButtonId', () => {
   it('parses go/hold/block ids', () => {
     expect(parseBlastButtonId('blast:go:burst-2026-09-17-02-49-ab12cd')).toEqual({
       action: 'go',
       cycleId: 'burst-2026-09-17-02-49-ab12cd',
       sub: null,
+      restart: false,
     });
-    expect(parseBlastButtonId('blast:hold:c1')).toEqual({ action: 'hold', cycleId: 'c1', sub: null });
+    expect(parseBlastButtonId('blast:hold:c1')).toEqual({
+      action: 'hold',
+      cycleId: 'c1',
+      sub: null,
+      restart: false,
+    });
     expect(parseBlastButtonId('blast:block:c1:weirdsub')).toEqual({
       action: 'block',
       cycleId: 'c1',
       sub: 'weirdsub',
+      restart: false,
     });
   });
 
@@ -259,16 +317,19 @@ describe('parseBlastButtonId', () => {
       action: 'go',
       cycleId: 'burst-2026-09-20-09:17-mu9lra8m',
       sub: null,
+      restart: false,
     });
     expect(parseBlastButtonId('blast:hold:burst-2026-09-20-09:17-mu9lra8m')).toEqual({
       action: 'hold',
       cycleId: 'burst-2026-09-20-09:17-mu9lra8m',
       sub: null,
+      restart: false,
     });
     expect(parseBlastButtonId('blast:block:burst-2026-09-20-09:17-mu9lra8m:aidiscussion')).toEqual({
       action: 'block',
       cycleId: 'burst-2026-09-20-09:17-mu9lra8m',
       sub: 'aidiscussion',
+      restart: false,
     });
     // Round-trip: every id buildDigestButtons emits must parse back.
     const d = {

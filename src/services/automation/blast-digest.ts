@@ -51,6 +51,10 @@ export interface BlastDigest {
    * (not UNKNOWN_SUB) and not already blocked, eligible first then
    * tagged, first-seen order within each group, capped for buttons. */
   blockableSubs: string[];
+  /** True when an earlier batch is still open — the Blast button then
+   *  releases as a RESTART (fresh availability check + stale-message
+   *  cleanup) instead of merging into the frozen hour pool. */
+  restartAvailable?: boolean;
 }
 
 export type BlastButtonAction = 'go' | 'hold' | 'block';
@@ -93,6 +97,7 @@ export function buildBlastDigest(
   blockedSubs: readonly (string | null | undefined)[],
   seenSubs: readonly (string | null | undefined)[],
   counts: { scanned: number; eligible: number; blocked: number },
+  opts: { restartAvailable?: boolean } = {},
 ): BlastDigest {
   const blocked = normalizeSet(blockedSubs);
   const seen = normalizeSet(seenSubs);
@@ -139,7 +144,16 @@ export function buildBlastDigest(
     })
     .map((s) => s.sub)
     .slice(0, MAX_BLOCK_BUTTONS);
-  return { cycleId, scanned: counts.scanned, eligible: counts.eligible, blocked: counts.blocked, subs, newSubs, blockableSubs };
+  return {
+    cycleId,
+    scanned: counts.scanned,
+    eligible: counts.eligible,
+    blocked: counts.blocked,
+    subs,
+    newSubs,
+    blockableSubs,
+    restartAvailable: opts.restartAvailable === true,
+  };
 }
 
 /** One-line-per-sub breakdown, capped to fit a 2000-char DM. */
@@ -170,9 +184,16 @@ export function formatDigestMessage(digest: BlastDigest): string {
 
 /** Row 0: Blast + Hold. Following rows: Block buttons (capped). */
 export function buildDigestButtons(digest: BlastDigest): ButtonSpec[][] {
+  // A live batch changes what Blast means: with one still open, releasing
+  // starts a NEW batch (re-check availability, drop the stale messages)
+  // rather than merging into the frozen hour pool. The button id carries
+  // that intent so the release path never has to guess.
+  const restart = digest.restartAvailable === true;
+  const goLabel = restart ? 'Restart batch' : 'Blast now';
+  const goId = restart ? `blast:go:${digest.cycleId}:restart` : `blast:go:${digest.cycleId}`;
   const rows: ButtonSpec[][] = [
     [
-      { action: 'go', label: 'Blast now', style: 'primary', customId: `blast:go:${digest.cycleId}` },
+      { action: 'go', label: goLabel, style: 'primary', customId: goId },
       { action: 'hold', label: 'Hold', style: 'secondary', customId: `blast:hold:${digest.cycleId}` },
     ],
   ];
@@ -200,6 +221,8 @@ export interface ParsedBlastButton {
   cycleId: string;
   /** Normalized subreddit for block buttons. */
   sub: string | null;
+  /** True for `blast:go:<cycleId>:restart` — release as a new batch. */
+  restart: boolean;
 }
 
 const CYCLE_ID_RE = /^[A-Za-z0-9_:-]{1,64}$/;
@@ -239,25 +262,32 @@ export function parseBlastButtonId(customId: string): ParsedBlastButton | null {
     if (!SUB_RE.test(sub)) return null;
     const cycleId = parts.slice(2, -1).join(':');
     if (!isValidCycleId(cycleId)) return null;
-    return { action, cycleId, sub };
+    return { action, cycleId, sub, restart: false };
   }
-  // blast:<go|hold>:<cycleId> — a real id splits into 4.
-  if (parts.length !== 3 && parts.length !== 4) return null;
-  const cycleId = parts.slice(2).join(':');
+  // blast:go:<cycleId>[:restart] — the restart flag is a plain literal, so
+  // it is stripped before the cycle id is re-joined (cycle ids may hold one
+  // colon of their own).
+  const tail = parts.slice(2);
+  const restart = tail.length > 0 && tail[tail.length - 1] === 'restart';
+  if (restart) tail.pop();
+  // A second trailing "restart" is malformed, never a cycle id.
+  if (tail.length > 0 && tail[tail.length - 1] === 'restart') return null;
+  if (tail.length < 1) return null;
+  const cycleId = tail.join(':');
   if (!isValidCycleId(cycleId)) return null;
-  return { action, cycleId, sub: null };
+  return { action, cycleId, sub: null, restart };
 }
 
 /**
  * Release inputs for an approved round: validated-eligible logs,
  * newest-first (matches the watcher report order, so winner 1 gets the
- * newest post). Titles are unavailable in task logs — null, same as a
- * fresh scan before extraction.
+ * newest post). `excludeIds` drops tasks already handled in an earlier
+ * batch — a restart never re-sends what a previous winner took.
  */
-export function buildReleaseInputs(logs: DigestTaskLog[]): BurstTaskInput[] {
+export function buildReleaseInputs(logs: DigestTaskLog[], excludeIds: ReadonlySet<string> = new Set()): BurstTaskInput[] {
   return [...logs]
     .reverse()
-    .filter((l) => l && isEligibleLogStatus(l.status))
+    .filter((l) => l && isEligibleLogStatus(l.status) && !excludeIds.has(l.externalTaskId))
     .map((l) => ({
       subTaskId: l.externalTaskId,
       type: (l.taskType === 'comment' ? 'comment' : 'post') as 'post' | 'comment',
