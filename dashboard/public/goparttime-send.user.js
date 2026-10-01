@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.4.4
+// @version      1.5.0
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,7 +18,13 @@
 // ==/UserScript==
 
 /**
- * v1.4.4 — Auto Submit View: clicking the site's own "Submit View" button
+ * v1.5.0 — Submit Link autofill: clicking a card's "Submit Task" button now
+ * fills the dialog's post/comment URL with the link the worker already sent
+ * in their Discord ticket (read back from Statbot), instead of the manager
+ * copy-pasting it out of the dashboard's Accepted section. Auto-runs on the
+ * click, works on desktop and mobile, and still never clicks the dialog's own
+ * Submit button. v1.4.4 — Auto Submit View: clicking the site's own "Submit
+ * View" button
  * now runs the whole flow immediately (fetch + attach + preview) — the
  * floating "📊 Submit View" tap is no longer needed (it stays as a manual
  * fallback). View-count entry, Submit click, and success verification stay
@@ -172,6 +178,31 @@
   button.addEventListener('click', openModal);
   document.body.appendChild(button);
 
+  // ─── Generic helpers (used by both Submit View and Submit Link) ──
+
+  // These live outside the submitViewEnabled() guard below: the link autofill
+  // is a tiny GET plus a text-field fill, so unlike the screenshot preview it
+  // is perfectly usable on a phone and must not inherit the desktop-only gate.
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // Reads the "Task ID" field off a task card. The card renders the label and
+  // its value as sibling elements, so the value is the label's next sibling.
+  function detectCardTaskId(card) {
+    const nodes = card.querySelectorAll('div, span');
+    for (const el of nodes) {
+      if (el.children.length === 0 && (el.textContent || '').trim() === 'Task ID') {
+        const sibling = el.nextElementSibling;
+        if (sibling) {
+          const value = (sibling.textContent || '').trim();
+          if (/^\d+$/.test(value)) return value;
+        }
+      }
+    }
+    return null;
+  }
+
   if (submitViewEnabled()) {
   // ─── Submit View automation ────────────────────────────────
 
@@ -246,20 +277,6 @@
     } catch (err) { /* flow alerts internally; never break the page */ }
   }, true);
 
-  function detectCardTaskId(card) {
-    const nodes = card.querySelectorAll('div, span');
-    for (const el of nodes) {
-      if (el.children.length === 0 && (el.textContent || '').trim() === 'Task ID') {
-        const sibling = el.nextElementSibling;
-        if (sibling) {
-          const value = (sibling.textContent || '').trim();
-          if (/^\d+$/.test(value)) return value;
-        }
-      }
-    }
-    return null;
-  }
-
   function detectCardViewStep(card) {
     const trigger = card.querySelector('div[data-slot="popover-trigger"]');
     const text = (trigger && trigger.textContent || '').trim();
@@ -277,10 +294,6 @@
       /^(Submit View|Available to submit view)/.test((b.textContent || '').trim()),
     );
     return btn || null;
-  }
-
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // Opens the view-data dialog by clicking the card's "Submit View" button if
@@ -503,6 +516,122 @@
   }
 
   } // end submitViewEnabled() guard
+
+  // ─── Submit Link autofill ──────────────────────────────────
+  //
+  // Clicking "Submit Task" on a /my-tasks card opens a dialog asking for the
+  // post/comment URL. That URL is already on Statbot: the worker replied with
+  // it in their Discord ticket, recordSubmission stored it, and the dashboard's
+  // Accepted section renders it. Without this the manager has to alt-tab to
+  // the dashboard, find the task, copy the link, and paste it by hand.
+  //
+  // This reads it back via GET /goparttime/submission/:taskId and prefills the
+  // field. Like the rest of this script it is strictly assistive: it NEVER
+  // clicks the dialog's own Submit button and never reports success to
+  // GoPartTime. The manager still reviews the link and submits.
+  //
+  // Runs on mobile too (unlike Submit View) — it is one small GET and a
+  // text-field fill, with no upload and no preview.
+
+  let trackedSubmitCard = null;
+  let submitLinkBusy = false;
+
+  // Capture-phase so the card is read before React re-renders the list.
+  document.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('button[data-slot="button"]') : null;
+    if (!btn) return;
+    // Only the card's own action button — never the dialog's inner Submit.
+    if ((btn.textContent || '').trim() !== 'Submit Task') return;
+    const card = btn.closest('div[data-slot="card"]');
+    if (!card) return;
+    const taskId = detectCardTaskId(card);
+    if (!taskId) return;
+    trackedSubmitCard = { card, taskId };
+    // The native click is already opening the dialog, so run immediately; the
+    // flow waits for the dialog itself and is busy-guarded against double taps.
+    try {
+      submitLinkFlow();
+    } catch (err) { /* flow reports internally; never break the page */ }
+  }, true);
+
+  function findSubmitLinkDialog() {
+    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"][data-slot="dialog-content"]'));
+    return dialogs.find((d) => d.querySelector('input[name="redditUrl"]')) || null;
+  }
+
+  // The dialog is opened by the click we are reacting to, so it may not be in
+  // the DOM yet. Poll briefly rather than assuming.
+  async function waitForSubmitLinkDialog() {
+    for (let i = 0; i < 25; i++) {
+      const dialog = findSubmitLinkDialog();
+      if (dialog) return dialog;
+      await sleep(80);
+    }
+    return null;
+  }
+
+  /**
+   * Writes a value into a React-controlled input so React actually registers
+   * it. Assigning `input.value` directly updates the DOM but not React's
+   * internal state tracker, so the next render reverts the field to empty.
+   * Going through the native prototype setter and dispatching a bubbling
+   * `input` event is what makes the change stick.
+   */
+  function setReactInputValue(input, value) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  async function submitLinkFlow() {
+    if (submitLinkBusy) return;
+    const settings = getSettings();
+    if (!settings.apiKey) {
+      alert('Submit Link is not configured. Use the Tampermonkey menu → "⚙️ Configure Sender..." first.');
+      return;
+    }
+    if (!trackedSubmitCard) {
+      alert('Click the "Submit Task" button on a task card first.');
+      return;
+    }
+
+    const { card, taskId } = trackedSubmitCard;
+    submitLinkBusy = true;
+    try {
+      const dialog = findSubmitLinkDialog() || (await waitForSubmitLinkDialog());
+      if (!dialog) {
+        alert('Could not find the submit-link dialog. Open it manually, then run Submit Link again.');
+        return;
+      }
+      const input = dialog.querySelector('input[name="redditUrl"]');
+      if (!input) {
+        alert('Could not find the post/comment URL field in the dialog.');
+        return;
+      }
+
+      // Never clobber a link the manager typed or corrected by hand.
+      if ((input.value || '').trim()) {
+        alert('The URL field is already filled — left it untouched.');
+        return;
+      }
+
+      const data = await request(settings, 'GET', '/submission/' + taskId).then((res) => res.data);
+      if (!data || !data.redditUrl) {
+        alert(
+          (data && data.message ? data.message : 'No submitted URL for this task yet.') +
+          '\n\nAsk the worker to reply to the assignment message in their Discord ticket with their post/comment link — that reply is what stores it here.',
+        );
+        return;
+      }
+
+      setReactInputValue(input, data.redditUrl);
+      alert('✅ Link filled for task ' + taskId + '. Check it, then click Submit.');
+    } catch (err) {
+      alert('⚠️ ' + (err && err.message ? err.message : 'Submit Link failed.'));
+    } finally {
+      submitLinkBusy = false;
+    }
+  }
 
   let modal = null;
   let pendingTask = null;

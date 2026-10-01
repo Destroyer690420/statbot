@@ -1,24 +1,13 @@
 import { Reminder, TaskType } from '../types';
 
+// The manual-id candidate builder now lives with the rest of the shared
+// external-task lookup, but it stays re-exported here because it is part of
+// this module's established public API (imported by routes and tests).
+export { buildManualTaskIdCandidates } from './goparttime-task-lookup.service';
+
 export interface InsightResolution {
   reminder: Reminder | null;
   step: number;
-}
-
-/**
- * Candidate task IDs for manually-created tasks whose id embeds the
- * GoPartTime number ("POST #688318", "Comment #688318", ...). Both case
- * conventions are covered: uppercase (manual "/task" convention) first,
- * then the lowercase GoPartTime format. Uppercase-first keeps the lookup
- * deterministic when both variants somehow exist.
- */
-export function buildManualTaskIdCandidates(externalTaskId: string): string[] {
-  return [
-    `POST #${externalTaskId}`,
-    `Comment #${externalTaskId}`,
-    `Post #${externalTaskId}`,
-    `COMMENT #${externalTaskId}`,
-  ];
 }
 
 /**
