@@ -3,6 +3,9 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-02
+### Deployed (2026-10-02 at `a2ed9d2` — dashboard-only rebuild, no migration)
+- **Dashboard header/avatar cleanup live** (`161.118.164.85`; app/redis untouched; backup `rtm-backup-20261002-cleanup.tar.gz`). Removed the redundant in-page Dashboard context header and the decorative navbar "A" avatar. Verified: 3 services Up, health healthy (DB+Redis), root + all three userscripts 200, new `Dashboard-Du3QFIQ1.js` chunk 200 and confirmed served without the removed text.
+
 ### Deployed (2026-10-02 at `bafeede` — dashboard-only rebuild, no migration)
 - **Admin dashboard premium redesign live** (`161.118.164.85`, git HEAD `bafeede`; dashboard-only rebuild — app/redis untouched (app still Up, no restart); backup `rtm-backup-20261002-redesign.tar.gz`; **no DB migration**, no env change, no slash-command redeploy; pushed to GitHub `bd40924..bafeede`; host bundle removed). Verified: 3 services Up, health healthy (DB+Redis), root + all three userscripts 200, served userscript still `@version 1.6.0`, `scripts/` ↔ `dashboard/public/` copies byte-identical (`cmp`), served CSS `index-G8nBg3_x.css` contains the new tokens (`#0B0D0F`, `#6C8CFF`) with old colors (`#6366f1`, `#020617`) absent, new `Dashboard-CTDbGtyb.js` chunk 200. **No Tampermonkey update needed** — `dashboard/public/` userscripts are byte-unchanged by this deploy.
 
