@@ -112,4 +112,48 @@ describe('goPartTimePayloadSchema', () => {
     const result = goPartTimePayloadSchema.safeParse(payload);
     expect(result.success).toBe(false);
   });
+
+  test('media without a kind defaults to image (older userscripts)', () => {
+    const payload = {
+      ...baseComment,
+      images: [{ order: 1, url: 'https://static.goparttime.net/a.jpg' }],
+    };
+    const parsed = goPartTimePayloadSchema.parse(payload);
+    expect(parsed.images[0].kind).toBe('image');
+  });
+
+  test('a video-only task parses and keeps its kind', () => {
+    const payload = {
+      ...baseComment,
+      contentHtml: '',
+      images: [
+        {
+          order: 1,
+          url: 'https://video.twimg.com/amplify_video/1/vid/avc1/1280x720/a.mp4?tag=29',
+          kind: 'video',
+        },
+      ],
+    };
+    const parsed = goPartTimePayloadSchema.parse(payload);
+    expect(parsed.images[0].kind).toBe('video');
+  });
+
+  test('images and a video share one sequential order', () => {
+    const payload = {
+      ...baseComment,
+      images: [
+        { order: 1, url: 'https://static.goparttime.net/a.jpg', kind: 'image' },
+        { order: 2, url: 'https://video.twimg.com/a.mp4', kind: 'video' },
+      ],
+    };
+    expect(goPartTimePayloadSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test('an unknown media kind is rejected', () => {
+    const payload = {
+      ...baseComment,
+      images: [{ order: 1, url: 'https://static.goparttime.net/a.gif', kind: 'gif' }],
+    };
+    expect(goPartTimePayloadSchema.safeParse(payload).success).toBe(false);
+  });
 });

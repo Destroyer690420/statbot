@@ -1,12 +1,14 @@
 # BROWSER_EXTENSION.md — GoPartTime Userscript
 
-> Verified against `scripts/goparttime-send.user.js` (identical to `dashboard/public/goparttime-send.user.js`, SHA-256 `581F116A…` byte-for-byte) on 2026-10-01 (v1.5.0). Served publicly at `https://statbot.duckdns.org/goparttime-send.user.js`.
+> Verified against `scripts/goparttime-send.user.js` (identical to `dashboard/public/goparttime-send.user.js`, SHA-256 `B4052F66…` byte-for-byte) on 2026-10-02 (v1.6.0). Served publicly at `https://statbot.duckdns.org/goparttime-send.user.js`.
+>
+> `scripts/goparttime-auto.user.js` (the auto-accept watcher, SHA-256 `0B2715A8…`) carries the **same** media extractor at v1.6.0 — parity is asserted by `src/__tests__/userscript-media.test.ts`.
 
 ---
 
 ## 1. Identity
 
-Tampermonkey userscript **"Discord Task Sender"** (v1.5.0, author "Manager"), designed for desktop and mobile (Kiwi Browser / Edge Canary noted in the header and `ANDROID_SETUP.md`). Works as a plain bookmarklet/non-GM fallback too (localStorage + fetch). **v1.5.0 added Submit Link autofill** (see §5d) — clicking a card's "Submit Task" button prefills the dialog with the link the worker already sent in Discord. v1.4.3 **surfaces Zod validation details** (`Validation failed: field: message` + `errors` array shown in Tampermonkey) and keeps v1.4.2 image-only fix (empty `div.prose` allowed when `images>0` e.g. #880072 `r/Nocfree`); v1.4.0 disabled Submit View on narrow (mobile) viewports — insights are only submitted from the PC; everything else (Send Task, settings, desktop preview) is unchanged. v1.3.0 added the **insight screenshot preview** to the v1.2.0 **Submit View** automation (which itself sits on top of v1.1.0's send flow).
+Tampermonkey userscript **"Discord Task Sender"** (v1.6.0, author "Manager"), designed for desktop and mobile (Kiwi Browser / Edge Canary noted in the header and `ANDROID_SETUP.md`). Works as a plain bookmarklet/non-GM fallback too (localStorage + fetch). **v1.6.0 extracts `<video>` media** (see §5f) — a task whose media is a video previously sent nothing at all, because its markup contains no `<img>`. **v1.5.0 added Submit Link autofill** (see §5d) — clicking a card's "Submit Task" button prefills the dialog with the link the worker already sent in Discord. v1.4.3 **surfaces Zod validation details** (`Validation failed: field: message` + `errors` array shown in Tampermonkey) and keeps v1.4.2 image-only fix (empty `div.prose` allowed when `images>0` e.g. #880072 `r/Nocfree`); v1.4.0 disabled Submit View on narrow (mobile) viewports — insights are only submitted from the PC; everything else (Send Task, settings, desktop preview) is unchanged. v1.3.0 added the **insight screenshot preview** to the v1.2.0 **Submit View** automation (which itself sits on top of v1.1.0's send flow).
 
 ## 2. Metadata & Permissions
 
@@ -105,6 +107,37 @@ Read-only, extension-key authenticated, no status filter (the link is written wh
 | `submittedAt` / `formatCheckStatus` | submission timestamp / format-check verdict |
 
 URL resolution is `submittedRedditUrl ?? redditUrl` (mirroring `worker-view.ts`): the former is what `recordSubmission` writes from the Discord reply, the latter only carries manually-created slash-command/dashboard tasks, which validate and store `redditUrl` at creation while leaving `submittedRedditUrl` null. Unknown task → 404; non-numeric id → 400; same manual-id fallback as `/insight/` and `/expected/`.
+
+## 5f. Media extraction — images **and** video (v1.6.0)
+
+`extractImages(root)` walks `querySelectorAll('img, video')` in **document order** and returns `[{order, url, kind}]`, capped at 20 items. The `order` numbering is shared across both kinds, which is what keeps a mixed image+video task in the order GoPartTime displayed it.
+
+**Why the `kind` field exists.** A GoPartTime video task renders as
+
+```html
+<div class="flex gap-2 overflow-x-auto">
+  <video class="h-12 w-24 …" poster="https://pbs.twimg.com/amplify_video_thumb/…/img/….jpg" width="96">
+    <source src="https://video.twimg.com/amplify_video/…/vid/avc1/1280x720/….mp4?tag=29">
+  </video>
+</div>
+```
+
+There is **no `<img>`** — the thumbnail is a `poster` attribute, not an element. The original img-only extractor therefore produced an empty media list for a video task, and the video never reached the backend at all. Nothing about size was ever involved in that failure: it was dropped in the browser, before any limit applied. The extractor now reads `<video>` and tags each item so the backend picks the right toolchain (`prepareImage`/sharp vs `prepareVideo`/ffmpeg).
+
+| Case | Result |
+|---|---|
+| `<img>` with an http(s) `alt` | `kind: 'image'`, `url` = `alt` (the original, not the Next.js-optimized `src`) |
+| `<img>` inside a button | skipped |
+| `<img>` with `naturalWidth < 60` | skipped (UI icons) |
+| `<video>` with a `<source>`/attr URL ending `.mp4/.m4v/.mov/.webm/.mkv` (query string allowed) | `kind: 'video'` |
+| `<video>` with only an HLS `.m3u8` or no extension | falls back to `poster` as `kind: 'image'` — Discord cannot play a playlist, and the poster frame beats no media at all |
+| `<video>` with neither | dropped (not faked) |
+
+`kind` is optional in the backend schema and **defaults to `image`**, so an older installed script keeps working unchanged. Server side it is `TaskImage.kind` in the existing `taskImages` JSONB column — **no migration** (see `docs/GOPARTTIME.md` §5).
+
+Both scripts (`goparttime-send.user.js` and the auto-accept `goparttime-auto.user.js`) carry an identical copy of this extractor, bracketed by `// ─── media-extraction:start/end ───` sentinels. `src/__tests__/userscript-media.test.ts` lifts that block out of both shipped files and runs it against a DOM stub, so the extractor cannot silently regress, and it also asserts the `scripts/` and `dashboard/public/` copies stay byte-identical (the sync rule `docs/KNOWN_ISSUES.md` #11 records as manual).
+
+Compression of an oversized video is **server-side only** — the browser never touches the bytes. See `docs/GOPARTTIME.md` §5 for the ladder.
 
 ## 6. User-Facing Error Mapping (`parseStatus`)
 

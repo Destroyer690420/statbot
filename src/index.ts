@@ -154,6 +154,20 @@ async function main(): Promise<void> {
       logger.error('Burst hooks failed to register', { error });
     }
 
+    // 9. Media toolchain probe. Not fatal: nothing needs ffmpeg until a task
+    // carries a video over Discord's upload limit. But that failure mode is a
+    // confusing 413 at delivery time, so say it out loud at boot instead.
+    try {
+      const { isFfmpegAvailable, MAX_VIDEO_BYTES } = await import('./utils/video-processor');
+      if (await isFfmpegAvailable()) {
+        logger.info(`ffmpeg available — task videos up to ${MAX_VIDEO_BYTES} bytes are sent as-is, larger ones are compressed`);
+      } else {
+        logger.warn('ffmpeg NOT found — task videos over Discord\'s upload limit cannot be compressed and will fail to deliver');
+      }
+    } catch (error) {
+      logger.error('Media toolchain probe failed', { error });
+    }
+
     logger.info('═══════════════════════════════════════════');
     logger.info('  ✅ All systems online!');
     logger.info('═══════════════════════════════════════════');

@@ -9,6 +9,7 @@ import { getDb } from '../database/db';
 import { isValidRedditUrl } from '../utils/validators';
 import { htmlToDiscord } from '../utils/html-to-discord';
 import { prepareImage } from '../utils/image-processor';
+import { prepareVideo, formatBytes } from '../utils/video-processor';
 import { goPartTimePayloadSchema, GoPartTimePayload } from '../utils/goparttime-payload';
 import { buildTaskMessagePlan, InstructionMessage, TaskMessageFields } from '../utils/plain-task-message';
 import { submissionInstructionEmbed } from '../bot/embeds';
@@ -91,7 +92,7 @@ class GoPartTimeService {
       formattedContent: formattedContent || null,
       payment: parsed.payment || null,
       deadline: parsed.deadline || null,
-      taskImages: parsed.images.length > 0 ? parsed.images.map((i) => ({ order: i.order, url: i.url })) : null,
+      taskImages: parsed.images.length > 0 ? parsed.images.map((i) => ({ order: i.order, url: i.url, kind: i.kind })) : null,
       deliveryMessages: null,
       assignmentStatus: 'PENDING',
       assignmentError: null,
@@ -445,7 +446,7 @@ deliveryMessages: null as any,
         delivery.push({ kind: 'content', order: nextOrder++, messageId: message.id, createdAt });
       }
       for (let i = imagesSent; i < images.length; i++) {
-        const message = await this.sendImage(channel, images[i]);
+        const message = await this.sendMedia(channel, images[i]);
         delivery.push({ kind: 'images', order: nextOrder++, messageId: message.id, createdAt });
       }
       const instructionSent = existing.filter((m) => m.kind === 'instruction').length;
@@ -537,7 +538,7 @@ deliveryMessages: null as any,
     }
 
     for (const image of payload.images) {
-      const message = await this.sendImage(channel, image);
+      const message = await this.sendMedia(channel, image);
       delivery.push({ kind: 'images', order: order++, messageId: message.id, createdAt });
     }
 
@@ -572,7 +573,7 @@ deliveryMessages: null as any,
 
     const images = (task.taskImages || []).slice().sort((a, b) => a.order - b.order);
     for (const image of images) {
-      const message = await this.sendImage(channel, image);
+      const message = await this.sendMedia(channel, image);
       delivery.push({ kind: 'images', order: order++, messageId: message.id, createdAt });
     }
 
@@ -597,12 +598,35 @@ deliveryMessages: null as any,
   }
 
   /**
-   * Downloads an image and sends it as a Discord attachment.
+   * Downloads a task image or video and sends it as a Discord attachment.
+   *
+   * Images go through sharp (images > 10 MB become WebP). Videos go through
+   * ffmpeg when they exceed Discord's 25 MB upload limit — and when that
+   * happens the worker is told the quality was reduced, because "the video
+   * looks worse than the original" is otherwise unexplainable to them.
    */
-  private async sendImage(channel: TextChannel, image: { order: number; url: string }): Promise<{ id: string }> {
-    const prepared = await prepareImage(image.url);
+  private async sendMedia(channel: TextChannel, media: { order: number; url: string; kind?: string }): Promise<{ id: string }> {
+    if (media.kind === 'video') {
+      const prepared = await prepareVideo(media.url);
+      if (prepared.compressed) {
+        logger.info('Compressed an oversized task video for Discord', {
+          order: media.order,
+          originalBytes: prepared.originalBytes,
+          compressedBytes: prepared.buffer.length,
+        });
+      }
+      const attachment = new AttachmentBuilder(prepared.buffer, {
+        name: `task-video-${media.order}.${prepared.extension}`,
+      });
+      const content = prepared.compressed
+        ? `Video compressed from ${formatBytes(prepared.originalBytes)} to ${formatBytes(prepared.buffer.length)} to fit Discord's upload limit, so it looks lower quality than the original.`
+        : undefined;
+      return channel.send({ files: [attachment], content });
+    }
+
+    const prepared = await prepareImage(media.url);
     const attachment = new AttachmentBuilder(prepared.buffer, {
-      name: `task-image-${image.order}.${prepared.extension}`,
+      name: `task-image-${media.order}.${prepared.extension}`,
     });
     return channel.send({ files: [attachment] });
   }

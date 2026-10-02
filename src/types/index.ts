@@ -81,9 +81,17 @@ export interface Task {
 
 export type AssignmentStatus = 'PENDING' | 'SENT' | 'FAILED';
 
+export type TaskMediaKind = 'image' | 'video';
+
+/**
+ * One media item of a task, in the order GoPartTime showed it. A task carries
+ * images, a video, or both; `kind` is optional because rows written before
+ * video support have no such field and are images.
+ */
 export interface TaskImage {
   order: number;
   url: string;
+  kind?: TaskMediaKind;
 }
 
 export type DeliveryMessageKind = 'metadata' | 'content' | 'images' | 'instruction';

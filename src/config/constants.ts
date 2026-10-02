@@ -29,6 +29,19 @@ export const MAX_NOTES_LENGTH = 500;
 /** Supported image extensions for insight uploads */
 export const SUPPORTED_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as const;
 
+/**
+ * Task media delivery knobs.
+ *
+ * `FFMPEG_PATH` is read straight from `process.env` (falling back to PATH)
+ * rather than through `config/env.ts` on purpose: `env.ts` calls
+ * `process.exit(1)` when the environment is incomplete, and
+ * `utils/video-processor.ts` is unit-tested in isolation without one. The
+ * Docker image installs ffmpeg via apk, so the default resolves there.
+ */
+export const MEDIA = {
+  FFMPEG_PATH: process.env.FFMPEG_PATH || 'ffmpeg',
+} as const;
+
 /** BullMQ queue name */
 export const QUEUE_NAME = 'reminder-queue';
 

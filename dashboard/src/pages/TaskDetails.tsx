@@ -399,20 +399,38 @@ export function TaskDetails() {
 
               {task.taskImages && task.taskImages.length > 0 && (
                 <div>
-                  <p className="text-dark-400 text-xs font-medium mb-2">Images ({task.taskImages.length})</p>
+                  <p className="text-dark-400 text-xs font-medium mb-2">
+                    Media ({task.taskImages.length})
+                  </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {task.taskImages
                       .slice()
                       .sort((a: any, b: any) => a.order - b.order)
-                      .map((img: any) => (
-                        <a key={img.order} href={img.url} target="_blank" rel="noreferrer" className="block">
-                          <img
-                            src={img.url}
-                            alt={`Task image ${img.order}`}
-                            className="w-full h-28 object-cover rounded-lg border border-dark-700/50 cursor-pointer hover:opacity-90 transition-opacity"
+                      .map((media: any) =>
+                        media.kind === 'video' ? (
+                          <video
+                            key={media.order}
+                            src={media.url}
+                            controls
+                            preload="metadata"
+                            className="w-full h-28 object-cover rounded-lg border border-dark-700/50 bg-black cursor-pointer"
                           />
-                        </a>
-                      ))}
+                        ) : (
+                          <a
+                            key={media.order}
+                            href={media.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block"
+                          >
+                            <img
+                              src={media.url}
+                              alt={`Task image ${media.order}`}
+                              className="w-full h-28 object-cover rounded-lg border border-dark-700/50 cursor-pointer hover:opacity-90 transition-opacity"
+                            />
+                          </a>
+                        ),
+                      )}
                   </div>
                 </div>
               )}

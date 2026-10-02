@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.5.0
+// @version      1.6.0
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,7 +18,15 @@
 // ==/UserScript==
 
 /**
-   * v1.5.0 - Never-miss the report, and stop waiting a fixed 20s for it.
+   * v1.6.0 - Video tasks are no longer dropped by the auto-accept drawer path.
+ * A video task renders as <video poster="...jpg"><source src="...mp4"></video>
+ * with no <img> in it, so the img-only extractor sent zero media and the
+ * accepted task reached the worker with no video at all. Extraction now walks
+ * <img> and <video> in document order and tags each item with
+ * `kind: 'image' | 'video'`, so the backend compresses an oversized video for
+ * Discord's 25 MB upload limit. Image handling and the 20-item cap unchanged.
+ *
+ * v1.5.0 - Never-miss the report, and stop waiting a fixed 20s for it.
    *
    * CORRECTNESS (the reason for the major bump - this changes WHAT gets sent):
    *  - The 20-task cap is GONE, on both the client and the server. A drop with
@@ -1712,20 +1720,53 @@
     return null;
   }
 
+  // ─── media-extraction:start ─── (extracted verbatim by
+  // src/__tests__/userscript-media.test.ts — keep the sentinels)
   function extractImages(root) {
-    const imgs = Array.from((root || document).querySelectorAll('img')).filter((img) => {
-      if (img.closest('button')) return false;
-      const alt = (img.alt || '').trim();
-      const src = (img.src || '').trim();
-      if (!/^https?:\/\//.test(alt) && !/^https?:\/\//.test(src)) return false;
-      if (img.naturalWidth && img.naturalWidth < 60) return false;
-      return true;
-    });
-    return imgs.slice(0, 20).map((img, index) => ({
-      order: index + 1,
-      url: (img.alt || '').trim() || img.src,
-    }));
+    // Walks <img> AND <video> in document order: a video task renders as
+    // <video poster="…jpg"><source src="…mp4"></video>, which an img-only
+    // query misses entirely. `kind` tells the backend to compress for Discord
+    // instead of running it through sharp.
+    const nodes = Array.from((root || document).querySelectorAll('img, video'));
+
+    const media = [];
+    for (const node of nodes) {
+      if (media.length >= 20) break;
+      if (node.closest('button')) continue;
+
+      if (node.tagName === 'IMG') {
+        const alt = (node.alt || '').trim();
+        const src = (node.src || '').trim();
+        if (!/^https?:\/\//.test(alt) && !/^https?:\/\//.test(src)) continue;
+        if (node.naturalWidth && node.naturalWidth < 60) continue;
+        media.push({ order: media.length + 1, url: alt || src, kind: 'image' });
+        continue;
+      }
+
+      const video = extractVideo(node);
+      if (video) media.push({ order: media.length + 1, url: video.url, kind: video.kind });
+    }
+
+    return media;
   }
+
+  const VIDEO_URL_RE = /\.(mp4|m4v|mov|webm|mkv)(?:$|[?#])/i;
+
+  function extractVideo(node) {
+    const candidates = Array.from(node.querySelectorAll('source'))
+      .map((s) => (s.getAttribute('src') || '').trim());
+    if (node.currentSrc) candidates.push(String(node.currentSrc).trim());
+    if (node.getAttribute('src')) candidates.push(String(node.getAttribute('src')).trim());
+
+    for (const url of candidates) {
+      if (/^https?:\/\//.test(url) && VIDEO_URL_RE.test(url)) return { url: url, kind: 'video' };
+    }
+
+    const poster = (node.getAttribute('poster') || '').trim();
+    if (/^https?:\/\//.test(poster)) return { url: poster, kind: 'image' };
+    return null;
+  }
+  // ─── media-extraction:end ───
 
   function extractTaskDetail(root) {
     const targetRoot = root || findTaskRoot();

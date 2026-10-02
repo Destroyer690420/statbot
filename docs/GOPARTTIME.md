@@ -82,8 +82,21 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
 - Returns `{task, created: false}` on dedupe (route → 409).
 - `resolveChannel`: channel ID (cache → fetch) or channel name searched in first guild's cache; must be `TextChannel` ("Ticket channel not found…").
 - `detectWorker`: non-bot, non-admin/manager members; 0 → error; >1 → error listing names (channel must contain exactly one worker).
-- Task row: `createdById: 'goparttime-api'`, `formattedContent = htmlToDiscord(contentHtml)`, `taskImages` mapped `[{order,url}]`, everything else copied; status `ACCEPTED`, assignment `PENDING`.
-- Delivery (`deliverToChannel`/`deliverTaskToChannel`): sends each metadata label/value pair as **its own message** (copy-friendly: label, blank line, value), content chunks via `buildTaskMessagePlan` (paragraph-aware `chunkText`, ≤2000 chars, sensitive formatting preserved), images individually after `prepareImage` (≤10MB unchanged; >10MB compressed to ~9MB WebP, quality ladder; never silently dropped — failure marks assignment FAILED), then the instruction embed reply-with-link prompt.
+- Task row: `createdById: 'goparttime-api'`, `formattedContent = htmlToDiscord(contentHtml)`, `taskImages` mapped `[{order,url,kind}]`, everything else copied; status `ACCEPTED`, assignment `PENDING`.
+- Delivery (`deliverToChannel`/`deliverTaskToChannel`): sends each metadata label/value pair as **its own message** (copy-friendly: label, blank line, value), content chunks via `buildTaskMessagePlan` (paragraph-aware `chunkText`, ≤2000 chars, sensitive formatting preserved), then each media item individually via `sendMedia` (see below), then the instruction embed reply-with-link prompt.
+
+#### Media delivery — `sendMedia(channel, {order, url, kind})`
+`kind` comes from the payload (`'image'` default) and picks the toolchain. Delivery records keep the `images` kind for both, since that is one delivery step.
+
+- **Images** → `prepareImage`: ≤10 MB unchanged (byte-identical), >10 MB compressed to ~9 MB WebP (quality ladder, alpha preserved).
+- **Videos** → `prepareVideo`: ≤24 MB unchanged (byte-identical), >24 MB compressed with **ffmpeg** (`src/utils/video-processor.ts`). Discord rejects anything over its 25 MB per-file limit with a 413, and most task clips are far above it, so this is the difference between a delivered video and a failed assignment.
+  - Ladder, cheapest quality loss first, first result under the limit wins: `-c copy` remux (free when only the container is wasteful) → CRF `30/33/36/39` at `veryfast`, same resolution → CRF + `scale=-2:720/480/360/270`. Output is always H.264 `yuv420p` + AAC in a `+faststart` MP4.
+  - Download is capped (300 MB) and read incrementally, so a pathological URL cannot OOM the box. Timeout 120 s.
+  - When compression happens the message carries `Video compressed from X to Y to fit Discord's upload limit, so it looks lower quality than the original.` — otherwise a worker who notices the drop in quality has no way to know why. The service logs the before/after sizes.
+  - A video that cannot be brought under the limit **throws**, exactly like an image: the assignment goes `FAILED` with the reason and is retryable. Nothing is silently dropped.
+- Neither path is a silent drop: any failure fails the assignment (see below).
+
+> **ffmpeg is a hard runtime dependency for oversized videos.** It is installed in the Docker image (`apk add ffmpeg`) and probed at boot (`isFfmpegAvailable()`), which logs a warning if it is missing. Override the binary with `FFMPEG_PATH` (read in `src/config/constants.ts` as `MEDIA.FFMPEG_PATH`, not through `config/env.ts`, so the module stays unit-testable without a full environment).
 - Success → `updateAssignment('SENT')` + `updateDeliveryMessages` (JSONB records of kind `metadata|content|images|instruction` + messageIds + order) + audit `TASK_ASSIGNED` "Assigned from external source (task X) to <@worker>".
 - Failure → `updateAssignment('FAILED', message)` + audit "Assignment failed (external task X): msg" → route returns 200 with `failed:true` (task stays ACCEPTED/FAILED, retryable).
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.5.0
+// @version      1.6.0
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,7 +18,16 @@
 // ==/UserScript==
 
 /**
- * v1.5.0 — Submit Link autofill: clicking a card's "Submit Task" button now
+ * v1.6.0 — Video tasks are no longer dropped. A task whose media is a video
+ * renders as <video poster="…jpg"><source src="…mp4"></video> with no <img>
+ * anywhere, so the old img-only extractor sent zero media and the bot never
+ * posted the video. Extraction now walks <img> and <video> together in
+ * document order and tags each item with `kind: 'image' | 'video'`, so the
+ * backend can compress an oversized video for Discord's 25 MB upload limit
+ * instead of running it through sharp. A video with no directly playable
+ * source (HLS playlist) falls back to its poster frame. Image handling and
+ * the 20-item cap are unchanged. v1.5.0 — Submit Link autofill: clicking a
+ * card's "Submit Task" button now
  * fills the dialog's post/comment URL with the link the worker already sent
  * in their Discord ticket (read back from Statbot), instead of the manager
  * copy-pasting it out of the dashboard's Accepted section. Auto-runs on the
@@ -1031,23 +1040,55 @@
     };
   }
 
+  // ─── media-extraction:start ─── (extracted verbatim by
+  // src/__tests__/userscript-media.test.ts — keep the sentinels)
   function extractImages(root) {
-    const imgs = Array.from((root || document).querySelectorAll('img')).filter((img) => {
-      if (img.closest('button')) return false;
-      const alt = (img.alt || '').trim();
-      const src = (img.src || '').trim();
-      if (!/^https?:\/\//.test(alt) && !/^https?:\/\//.test(src)) return false;
-      // Skip small UI icons; task images are sized thumbnails or larger.
-      if (img.naturalWidth && img.naturalWidth < 60) return false;
-      return true;
-    });
+    // Walks <img> AND <video> in document order. A task whose media is a video
+    // renders as <video poster="…jpg"><source src="…mp4"></video> — no <img>
+    // anywhere — so an img-only query dropped the video entirely and the
+    // backend never got a chance to send (or compress) it.
+    const nodes = Array.from((root || document).querySelectorAll('img, video'));
 
-    return imgs
-      .slice(0, 20)
-      .map((img, index) => ({
-        order: index + 1,
+    const media = [];
+    for (const node of nodes) {
+      if (media.length >= 20) break;
+      if (node.closest('button')) continue;
+
+      if (node.tagName === 'IMG') {
+        const alt = (node.alt || '').trim();
+        const src = (node.src || '').trim();
+        if (!/^https?:\/\//.test(alt) && !/^https?:\/\//.test(src)) continue;
+        // Skip small UI icons; task images are sized thumbnails or larger.
+        if (node.naturalWidth && node.naturalWidth < 60) continue;
         // Prefer the original URL in the alt attribute (not Next.js-optimized).
-        url: (img.alt || '').trim() || img.src,
-      }));
+        media.push({ order: media.length + 1, url: alt || src, kind: 'image' });
+        continue;
+      }
+
+      const video = extractVideo(node);
+      if (video) media.push({ order: media.length + 1, url: video.url, kind: video.kind });
+    }
+
+    return media;
   }
+
+  const VIDEO_URL_RE = /\.(mp4|m4v|mov|webm|mkv)(?:$|[?#])/i;
+
+  function extractVideo(node) {
+    const candidates = Array.from(node.querySelectorAll('source'))
+      .map((s) => (s.getAttribute('src') || '').trim());
+    if (node.currentSrc) candidates.push(String(node.currentSrc).trim());
+    if (node.getAttribute('src')) candidates.push(String(node.getAttribute('src')).trim());
+
+    for (const url of candidates) {
+      if (/^https?:\/\//.test(url) && VIDEO_URL_RE.test(url)) return { url: url, kind: 'video' };
+    }
+
+    // HLS playlist or an extensionless source: Discord cannot play those, so
+    // fall back to the poster frame. Still far better than no media at all.
+    const poster = (node.getAttribute('poster') || '').trim();
+    if (/^https?:\/\//.test(poster)) return { url: poster, kind: 'image' };
+    return null;
+  }
+  // ─── media-extraction:end ───
 })();

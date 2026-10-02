@@ -16,7 +16,9 @@ WORKDIR /app
 # System Chromium for the GoPartTime automation poller (playwright-core drives
 # it via executablePath; ~170MB, keeps polling inside the free-tier box).
 # Xvfb lets the poller run headFUL (real-desktop signals for bot management).
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont xvfb unzip
+# ffmpeg re-encodes task videos that are over Discord's 25 MB upload limit;
+# without it an oversized video fails the whole assignment with a 413.
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont xvfb unzip ffmpeg
 ENV PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium-browser
 ENV DISPLAY=:99
 ENV POLLER_HEADFUL=1

@@ -69,7 +69,7 @@ flowchart TB
 | Services | `src/services/*.ts` (12) | business logic (task, reminder, payout, commission, goparttime, analytics, audit, settings, owner-earnings, insight-storage, state-machine, outreach) | repositories | DB writes, audits, jobs | repositories, utils |
 | Repositories | `src/database/repositories/*.ts` (8) | data access (Prisma queries) | services | Prisma results | Prisma client |
 | DB bootstrap | `src/database/db.ts` | PrismaClient + PrismaPg adapter | `DATABASE_URL` | client singleton | generated client |
-| Utils | `src/utils/*.ts` | validation, formatting, image processing, chunking, logging, permissions | — | — | — |
+| Utils | `src/utils/*.ts` | validation, formatting, image + video processing, chunking, logging, permissions | — | — | — |
 
 ### 2.2 Dashboard (`dashboard/`)
 
@@ -139,6 +139,10 @@ flowchart TB
 | `insight-storage.service` | Download+saves screenshots, 60h cleanup | — |
 
 Cross-cutting helpers: `src/utils/permissions.ts` (admin/manager IDs), `src/utils/logger.ts` (winston; file transports only in non-production), `src/utils/id-generator.ts`.
+
+Task-media helpers (both mirror the same "download → enforce a size policy → never silently drop" shape, and both are dependency-light on purpose so they stay unit-testable without a full environment):
+- `src/utils/image-processor.ts` — sharp. ≤10 MB byte-identical, >10 MB WebP quality ladder to ~9 MB.
+- `src/utils/video-processor.ts` — ffmpeg. ≤24 MB byte-identical, >24 MB an argv ladder (remux → CRF → CRF+downscale), H.264/`+faststart` MP4. `FFMPEG_PATH` comes from `MEDIA` in `config/constants.ts`, **not** `config/env.ts`, because `env.ts` exits the process on an incomplete environment.
 
 ---
 

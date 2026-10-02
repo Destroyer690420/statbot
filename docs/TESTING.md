@@ -19,15 +19,22 @@
 
 Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<rootDir>/src`.
 
+**No jsdom in this project**, so anything touching the DOM is tested by lifting the block out of the shipped `.user.js` and running it against a hand-rolled stub (see `userscript-media.test.ts`).
+
+**Modules under test must not import `src/config/env.ts`.** `env.ts` calls `process.exit(1)` when the environment is incomplete, so importing it turns any missing var into a dead test run. That is why `utils/video-processor.ts` reads `FFMPEG_PATH` from `MEDIA` in `src/config/constants.ts` (a plain `process.env` read) instead.
+
 ## 2. Existing Tests (8 files)
 
 | File | Covers |
 |---|---|
 | `state-machine.test.ts` | legal/illegal transitions; `getStatusAfterReminderSent`, `getStatusAfterInsightReceived`, `shouldComplete` (Comment @ 20h, Post @ 70h), terminal/cancellable |
 | `validators.test.ts` | Reddit URL pattern, notes length, image extensions, `sanitize`, snowflake |
-| `goparttime-payload.test.ts` | zod schema: post/comment payloads, coercion, rejections (missing title/postLink, non-sequential image orders, >20 images, whitespace content, missing ticket, non-digit taskId) |
+| `goparttime-payload.test.ts` | zod schema: post/comment payloads, coercion, rejections (missing title/postLink, non-sequential image orders, >20 images, whitespace content, missing ticket, non-digit taskId, unknown media `kind`), media `kind` defaulting to `image` for older scripts |
 | `goparttime-insight.test.ts` | `resolveInsightReminder`: step 1 → 20h reminder, step 2 → 70h (post), step-2-on-comment throws, invalid step throws, no-reminder → null, no-step fallbacks (pending → has-image → earliest), empty list |
 | `image-processor.test.ts` | `prepareImage`: ≤10MB passthrough, >10MB WebP compression ≤~9.5MB, 404 throw, alpha preserved |
+| `video-processor.test.ts` | `prepareVideo` (injected transcoder): ceiling sits under Discord's limit, ≤limit passthrough byte-identical, >limit compressed + flagged, no ffmpeg call on the small path, remux tried first, fall-through to CRF, a failing rung skipped not fatal, full ladder shape (9 rungs: remux + 4 CRF + 4 downscale) and exact `scale=-2:` sequence, nothing-under-limit throws, missing ffmpeg surfaces, HTTP 404 + empty body, real HTTP download byte-identical, `sniffVideoFormat` (ftyp/EBML/fallback), `isVideoUrl`, `formatBytes` |
+| `video-processor.integration.test.ts` | **Real ffmpeg** (self-skips when absent): boot probe, real HTTP download passthrough, oversized clip really re-encoded into a valid smaller MP4 (verified by decoding it back with ffmpeg, `Video: h264`), the downscale rungs produce a playable file, non-video input fails loudly, default ceiling is the Discord-derived 24 MB |
+| `userscript-media.test.ts` | Lifts the shipped `media-extraction` block out of both userscripts and runs it against a DOM stub: `<video>` with no `<img>` is extracted (the regression), images unchanged + alt preference, shared document-order numbering, UI icons and button-wrapped media skipped, HLS→poster fallback, unplayable+poster-less video dropped, other containers accepted, 20-item cap across both kinds; plus both `scripts/` copies being byte-identical to their `dashboard/public/` mirrors, declaring a version, and extracting video identically |
 | `discord-chunker.test.ts` | `chunkText`: paragraph→sentence→word→char splitting, formatting preservation, code fences, custom limits |
 | `plain-task-message.test.ts` | `buildTaskMessagePlan` metadata/content chunking; `buildInstructionMessage` post/comment variants |
 | `html-to-discord.test.ts` | HTML→markdown mapping (bold, links, lists, blockquotes, code, headings, img ignored) |

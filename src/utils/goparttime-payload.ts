@@ -11,6 +11,13 @@ import { z } from 'zod';
 export const goPartTimeImageSchema = z.object({
   order: z.number().int().positive(),
   url: z.string().url(),
+  /**
+   * 'image' | 'video'. A GoPartTime task can carry a `<video>` instead of (or
+   * alongside) images — the userscript marks it so the backend compresses it
+   * for Discord's upload limit instead of running it through sharp. Defaults
+   * to 'image' so payloads from older userscript versions keep working.
+   */
+  kind: z.enum(['image', 'video']).optional().default('image'),
 });
 
 export const goPartTimePayloadSchema = z
