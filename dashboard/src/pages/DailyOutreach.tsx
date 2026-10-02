@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getOutreach, saveOutreachSelection, sendOutreachMessage } from '../api/client';
-import { Loader2, RefreshCw, Check, X, Users, Send, Save } from 'lucide-react';
+import { Loader2, RefreshCw, Check, X, Users, Send, Save, Search } from 'lucide-react';
 
 interface OutreachTicket {
   channelId: string;
@@ -54,6 +54,7 @@ export function DailyOutreach() {
   const queryClient = useQueryClient();
   const [selectOpen, setSelectOpen] = useState(false);
   const [draft, setDraft] = useState<Map<string, boolean>>(new Map());
+  const [ticketSearch, setTicketSearch] = useState('');
   const [sendNote, setSendNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [slotsOpen, setSlotsOpen] = useState(false);
   const [slotsInput, setSlotsInput] = useState('5');
@@ -83,9 +84,20 @@ export function DailyOutreach() {
         .sort((a, b) => Number(replied.has(b.channelId)) - Number(replied.has(a.channelId))),
     [tickets, replied],
   );
+  // Modal search across channel name + worker name (case-insensitive).
+  const filteredModalTickets = useMemo(() => {
+    const q = ticketSearch.trim().toLowerCase();
+    if (!q) return tickets;
+    return tickets.filter(
+      (t) =>
+        (t.channelName || '').toLowerCase().includes(q) ||
+        (t.workerName || '').toLowerCase().includes(q),
+    );
+  }, [tickets, ticketSearch]);
 
   const openSelect = () => {
     setDraft(new Map(tickets.map((t) => [t.channelId, t.selected])));
+    setTicketSearch('');
     setSelectOpen(true);
   };
 
@@ -386,9 +398,19 @@ export function DailyOutreach() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-dark-400 text-sm mb-4">
+            <p className="text-dark-400 text-sm mb-3">
               Only checked tickets appear on the page and receive the daily message. Selection is remembered.
             </p>
+            <div className="relative mb-3">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-dark-500 pointer-events-none" />
+              <input
+                type="text"
+                value={ticketSearch}
+                onChange={(e) => setTicketSearch(e.target.value)}
+                placeholder="Search channel or worker…"
+                className="input-field w-full text-sm pl-9"
+              />
+            </div>
             <div className="overflow-y-auto -mx-2 px-2 space-y-2 flex-1">
               {statusQuery.isLoading ? (
                 <div className="flex justify-center py-10">
@@ -396,8 +418,12 @@ export function DailyOutreach() {
                 </div>
               ) : tickets.length === 0 ? (
                 <p className="text-center text-dark-400 text-sm py-10">No tickets available.</p>
+              ) : filteredModalTickets.length === 0 ? (
+                <p className="text-center text-dark-400 text-sm py-10">
+                  No tickets match “{ticketSearch.trim()}”.
+                </p>
               ) : (
-                tickets.map((t) => (
+                filteredModalTickets.map((t) => (
                   <label
                     key={t.channelId}
                     className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60 hover:border-primary-500/30 transition-colors cursor-pointer"
