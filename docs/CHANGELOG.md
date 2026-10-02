@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-02
+### Added (deployed 2026-10-02 at `aaa72b7` — dashboard-only rebuild)
+- **Select Tickets search.** The Daily Outreach modal gains a search box filtering by channel or worker name (case-insensitive, resets on open; checkbox drafts survive filtering). Verified live: served `DailyOutreach` chunk contains the new placeholder, `search-*` icon chunk 200.
 ### Fixed (deployed 2026-10-02 at `100503c` — app-only rebuild, no migration)
 - **Rate-limiter exemption actually exempts.** The `skip` in `src/api/server.ts` compared `req.path` against `/api/v1/...`, but Express strips the `/api` mount prefix from `req.path` inside `app.use('/api/', ...)` (proven with a live express probe), so the companion poll endpoints were never exempt: on 2026-10-02 the 2s fast-poll burned the shared IP budget and the dashboard's own `GET /tasks`, `/stats`, `/automation/*` fetches 429'd mid-blast (~109 × 429, zero non-429 errors). New pure `isRateLimitExempt()` in `src/utils/rate-limit-exempt.ts`, matched on `req.originalUrl`, + `rate-limit-exempt.test.ts` (4 tests incl. an express-mount regression pin). Typecheck clean, 55 suites / 762 tests. Docs updated (`API.md`, `TROUBLESHOOTING.md`, `PROJECT_CONTEXT.md`).
 ### Deployed
