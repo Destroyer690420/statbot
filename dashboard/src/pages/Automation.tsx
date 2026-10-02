@@ -144,7 +144,7 @@ export function Automation() {
   const live = !!status?.enabled && !status?.dryRun;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       {/* Status */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2.5">
@@ -152,9 +152,9 @@ export function Automation() {
           <span
             className={`status-badge border ${
               live
-                ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                ? 'bg-success-muted text-success border-success/30'
                 : status?.enabled
-                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                  ? 'bg-warning-muted text-warning border-warning/30'
                   : 'bg-dark-700/40 text-dark-300 border-dark-600/40'
             }`}
           >
@@ -188,7 +188,7 @@ export function Automation() {
           <button
             onClick={() => { statusQuery.refetch(); cyclesQuery.refetch(); }}
             disabled={statusQuery.isFetching}
-            className="p-2 md:p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50 shrink-0"
+            className="p-2 md:p-2.5 text-dark-400 hover:text-text-primary hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50 shrink-0"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
@@ -206,7 +206,7 @@ export function Automation() {
         ].map(([label, value]) => (
           <div key={label} className="stat-card">
             <p className="text-sm text-dark-400">{label}</p>
-            <p className="text-2xl font-bold text-white mt-1">{String(value)}</p>
+            <p className="text-2xl font-bold text-text-primary mt-1">{String(value)}</p>
           </div>
         ))}
       </div>
@@ -214,8 +214,8 @@ export function Automation() {
       {/* Companion watcher */}
       <div className="glass-card p-4 sm:p-6 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-white">Browser Watcher</h2>
-          <span className={`status-badge border ${companion?.online ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-dark-700/40 text-dark-300 border-dark-600/40'}`}>
+          <h2 className="text-base font-semibold text-text-primary">Browser Watcher</h2>
+          <span className={`status-badge border ${companion?.online ? 'bg-success-muted text-success border-success/30' : 'bg-dark-700/40 text-dark-300 border-dark-600/40'}`}>
             {companion?.online ? 'Online' : 'Offline'}
           </span>
         </div>
@@ -229,7 +229,7 @@ export function Automation() {
             {claims.map((cl) => (
               <div key={String(cl.id)} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60">
                 <span className="font-mono text-sm text-dark-100">#{String(cl.externalTaskId)} → {String(cl.channelId).slice(-4)}</span>
-                <span className="text-xs text-amber-400">awaiting companion accept</span>
+                <span className="text-xs text-warning">awaiting companion accept</span>
               </div>
             ))}
           </div>
@@ -238,7 +238,7 @@ export function Automation() {
 
       {/* Switches */}
       <div className="glass-card p-4 sm:p-6 space-y-3">
-        <h2 className="text-base font-semibold text-white">Switches</h2>
+        <h2 className="text-base font-semibold text-text-primary">Switches</h2>
         {status ? (
           <div className="flex flex-col gap-3 text-sm">
             {([
@@ -274,7 +274,7 @@ export function Automation() {
       <div className="glass-card p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-2">
           <FlaskConical className="w-4 h-4 text-primary-400" />
-          <h2 className="text-base font-semibold text-white">Manual Single-Task Test</h2>
+          <h2 className="text-base font-semibold text-text-primary">Manual Single-Task Test</h2>
         </div>
         <div className="grid md:grid-cols-2 gap-2">
           <input
@@ -318,8 +318,8 @@ export function Automation() {
           </button>
         </div>
         {testResult && (
-          <p className={`text-sm ${testResult.ok ? 'text-green-400' : 'text-red-400'}`}>
-            {testResult.ok ? '✅ ' : '❌ '}{testResult.text}
+          <p className={`text-sm ${testResult.ok ? 'text-success' : 'text-danger'}`}>
+            {testResult.ok ? '' : ''}{testResult.text}
           </p>
         )}
         <p className="text-xs text-dark-500">
@@ -331,7 +331,7 @@ export function Automation() {
       <div className="glass-card p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-2">
           <FlaskConical className="w-4 h-4 text-primary-400" />
-          <h2 className="text-base font-semibold text-white">Rehearse One Task</h2>
+          <h2 className="text-base font-semibold text-text-primary">Rehearse One Task</h2>
         </div>
         <p className="text-sm text-dark-400 -mt-2">
           Queues a real companion claim (drawer accept + ticket push). Without Live it only runs the pre-flight checks.
@@ -379,8 +379,8 @@ export function Automation() {
           </button>
         </div>
         {rehearseResult && (
-          <p className={`text-sm ${rehearseResult.ok ? 'text-green-400' : 'text-red-400'}`}>
-            {rehearseResult.ok ? '✅ ' : '❌ '}{rehearseResult.text}
+          <p className={`text-sm ${rehearseResult.ok ? 'text-success' : 'text-danger'}`}>
+            {rehearseResult.ok ? '' : ''}{rehearseResult.text}
           </p>
         )}
         <p className="text-xs text-dark-500">
@@ -392,7 +392,7 @@ export function Automation() {
       <div className="glass-card p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Ban className="w-4 h-4 text-primary-400" />
-          <h2 className="text-base font-semibold text-white">Blocked Subreddits</h2>
+          <h2 className="text-base font-semibold text-text-primary">Blocked Subreddits</h2>
         </div>
         <p className="text-sm text-dark-400 -mt-2">Exact match only — blocking aiagents never blocks aiagents2.</p>
         <div className="flex gap-2">
@@ -422,7 +422,7 @@ export function Automation() {
               <div key={b.subreddit} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60">
                 <span className="font-mono text-sm text-dark-100">r/{b.subreddit}</span>
                 <button
-                  className="text-red-400 text-sm hover:underline shrink-0 ml-3"
+                  className="text-danger text-sm hover:underline shrink-0 ml-3"
                   onClick={() => removeBlockedMutation.mutate(b.subreddit)}
                 >
                   Remove
@@ -437,7 +437,7 @@ export function Automation() {
       <div className="glass-card p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-2">
           <KeyRound className="w-4 h-4 text-primary-400" />
-          <h2 className="text-base font-semibold text-white">GoPartTime Session</h2>
+          <h2 className="text-base font-semibold text-text-primary">GoPartTime Session</h2>
         </div>
         <p className="text-sm text-dark-400 -mt-2">Cookies are encrypted on the server and never shown back. Pasting new values replaces the old ones.</p>
         <textarea
@@ -479,7 +479,7 @@ export function Automation() {
       {/* Recent cycles — desktop table */}
       <div className="glass-card overflow-hidden hidden md:block">
         <div className="px-6 pt-5 pb-3">
-          <h2 className="text-base font-semibold text-white">Recent Cycles</h2>
+          <h2 className="text-base font-semibold text-text-primary">Recent Cycles</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -565,7 +565,7 @@ export function Automation() {
                           {taskIds.length > 0 ? ` · #${taskIds.join(' #')}` : ''}
                         </p>
                         {replies.map((r, i) => (
-                          <p key={String(r.channelId)} className="font-mono text-xs text-green-400 py-0.5 pl-4">
+                          <p key={String(r.channelId)} className="font-mono text-xs text-success py-0.5 pl-4">
                             #{i + 1} winner: {String(r.channelId).slice(-4)} · {r.repliedAt ? new Date(String(r.repliedAt)).toLocaleTimeString() : ''}
                           </p>
                         ))}
@@ -582,7 +582,7 @@ export function Automation() {
       {/* Recent cycles — mobile cards */}
       <div className="md:hidden space-y-4">
         <div className="glass-card border border-dark-700/50 px-4 pt-4 pb-2">
-          <h2 className="text-base font-semibold text-white pb-2">Recent Cycles</h2>
+          <h2 className="text-base font-semibold text-text-primary pb-2">Recent Cycles</h2>
         </div>
         {cyclesQuery.isLoading ? (
           <div className="flex justify-center py-10">

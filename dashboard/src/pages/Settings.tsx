@@ -166,11 +166,11 @@ export function Settings() {
       setDeadScan(dead);
       setDeadScanNote(
         dead.length === 0
-          ? { ok: true, text: '✅ No dead tickets — every saved row still resolves.' }
+          ? { ok: true, text: 'No dead tickets — every saved row still resolves.' }
           : null,
       );
     } catch (e) {
-      setDeadScanNote({ ok: false, text: `❌ Scan failed: ${(e as Error).message}` });
+      setDeadScanNote({ ok: false, text: `Scan failed: ${(e as Error).message}` });
     } finally {
       setDeadScanning(false);
     }
@@ -182,11 +182,11 @@ export function Settings() {
       const deleted = res?.data?.deleted ?? 0;
       const ids = new Set(deadDeleteMutation.variables || []);
       setDeadScan((prev) => (prev ? prev.filter((d) => !ids.has(d.channelId)) : prev));
-      setDeadScanNote({ ok: true, text: `✅ Deleted ${deleted} dead ticket(s) from the outreach list.` });
+      setDeadScanNote({ ok: true, text: `Deleted ${deleted} dead ticket(s) from the outreach list.` });
       queryClient.invalidateQueries({ queryKey: ['outreach'] });
     },
     onError: (error: Error) => {
-      setDeadScanNote({ ok: false, text: `❌ Delete failed: ${error.message}` });
+      setDeadScanNote({ ok: false, text: `Delete failed: ${error.message}` });
     },
   });
 
@@ -212,51 +212,51 @@ export function Settings() {
   const redditUpdatedBy = redditSessionQuery.data?.data?.updatedBy as string | undefined;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8">
       <div className="max-w-2xl space-y-6">
         {/* Theme Selection */}
         <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Dashboard Theme</h3>
+          <h3 className="text-lg font-semibold text-text-primary mb-4">Dashboard Theme</h3>
           <div className="grid grid-cols-3 gap-4">
             <button
               onClick={() => setTheme('dark')}
               className={`p-4 rounded-xl border-2 transition-all ${
                 theme === 'dark'
-                  ? 'border-primary-500 bg-primary-900/20'
-                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
+                  ? 'border-primary-500 bg-info-muted'
+                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-600'
               }`}
             >
               <Moon className="w-6 h-6 text-primary-400 mx-auto mb-2" />
-              <p className="text-sm text-white font-medium">Dark</p>
+              <p className="text-sm text-text-primary font-medium">Dark</p>
             </button>
             <button
               onClick={() => setTheme('light')}
               className={`p-4 rounded-xl border-2 transition-all ${
                 theme === 'light'
-                  ? 'border-primary-500 bg-primary-900/20'
-                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
+                  ? 'border-primary-500 bg-info-muted'
+                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-600'
               }`}
             >
-              <Sun className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-              <p className="text-sm text-white font-medium">Light</p>
+              <Sun className="w-6 h-6 text-warning mx-auto mb-2" />
+              <p className="text-sm text-text-primary font-medium">Light</p>
             </button>
             <button
               onClick={() => setTheme('system')}
               className={`p-4 rounded-xl border-2 transition-all ${
                 theme === 'system'
-                  ? 'border-primary-500 bg-primary-900/20'
-                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-500'
+                  ? 'border-primary-500 bg-info-muted'
+                  : 'border-dark-700 bg-dark-800/50 hover:border-dark-600'
               }`}
             >
               <Monitor className="w-6 h-6 text-dark-300 mx-auto mb-2" />
-              <p className="text-sm text-white font-medium">System</p>
+              <p className="text-sm text-text-primary font-medium">System</p>
             </button>
           </div>
         </div>
 
         {/* Payout Rates */}
         <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Payout Rates</h3>
+          <h3 className="text-lg font-semibold text-text-primary mb-4">Payout Rates</h3>
           <p className="text-dark-400 text-sm mb-4">
             Set the payment amount per task type. Changes apply to future payouts immediately.
           </p>
@@ -316,46 +316,46 @@ export function Settings() {
           </button>
 
           {ratesMutation.isSuccess && (
-            <p className="mt-2 text-green-400 text-sm">✅ Payout rates updated successfully.</p>
+            <p className="mt-2 text-success text-sm">Payout rates updated successfully.</p>
           )}
           {ratesMutation.isError && (
-            <p className="mt-2 text-red-400 text-sm">❌ Failed to update rates: {(ratesMutation.error as Error).message}</p>
+            <p className="mt-2 text-danger text-sm">Failed to update rates: {(ratesMutation.error as Error).message}</p>
           )}
         </div>
 
         {/* Reminder Delays */}
         <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Reminder Delays</h3>
+          <h3 className="text-lg font-semibold text-text-primary mb-4">Reminder Delays</h3>
           <p className="text-dark-400 text-sm mb-4">
             Configured in environment variables. Restart required for changes.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
               <p className="text-dark-400 text-xs font-medium mb-1">Post 20H</p>
-              <p className="text-white font-mono text-lg">20 hours</p>
+              <p className="text-text-primary font-mono text-lg">20 hours</p>
             </div>
             <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
               <p className="text-dark-400 text-xs font-medium mb-1">Post 70H</p>
-              <p className="text-white font-mono text-lg">70 hours</p>
+              <p className="text-text-primary font-mono text-lg">70 hours</p>
             </div>
             <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
               <p className="text-dark-400 text-xs font-medium mb-1">Comment 20H</p>
-              <p className="text-white font-mono text-lg">20 hours</p>
+              <p className="text-text-primary font-mono text-lg">20 hours</p>
             </div>
           </div>
         </div>
 
         {/* Retry Configuration */}
         <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Retry Configuration</h3>
+          <h3 className="text-lg font-semibold text-text-primary mb-4">Retry Configuration</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
               <p className="text-dark-400 text-xs font-medium mb-1">First Retry</p>
-              <p className="text-white font-mono text-lg">+2 hours</p>
+              <p className="text-text-primary font-mono text-lg">+2 hours</p>
             </div>
             <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
               <p className="text-dark-400 text-xs font-medium mb-1">Second Retry</p>
-              <p className="text-white font-mono text-lg">+6 hours</p>
+              <p className="text-text-primary font-mono text-lg">+6 hours</p>
             </div>
           </div>
         </div>
@@ -364,7 +364,7 @@ export function Settings() {
         <div className="glass-card p-6">
           <div className="flex items-center gap-2 mb-4">
             <UserPlus className="w-5 h-5 text-primary-400" />
-            <h3 className="text-lg font-semibold text-white">Commission Rates</h3>
+            <h3 className="text-lg font-semibold text-text-primary">Commission Rates</h3>
           </div>
           <p className="text-dark-400 text-sm mb-4">
             Set commission rates for the invitation program. Normal inviters earn a one-time bonus per successful invite. Special inviters earn a bonus plus per-task commission.
@@ -492,10 +492,10 @@ export function Settings() {
           </button>
 
           {commRatesMutation.isSuccess && (
-            <p className="mt-2 text-green-400 text-sm">✅ Commission rates updated successfully.</p>
+            <p className="mt-2 text-success text-sm">Commission rates updated successfully.</p>
           )}
           {commRatesMutation.isError && (
-            <p className="mt-2 text-red-400 text-sm">❌ Failed to update commission rates: {(commRatesMutation.error as Error).message}</p>
+            <p className="mt-2 text-danger text-sm">Failed to update commission rates: {(commRatesMutation.error as Error).message}</p>
           )}
         </div>
 
@@ -503,7 +503,7 @@ export function Settings() {
         <div className="glass-card p-6">
           <div className="flex items-center gap-2 mb-4">
             <MessageSquare className="w-5 h-5 text-primary-400" />
-            <h3 className="text-lg font-semibold text-white">Daily Outreach Message</h3>
+            <h3 className="text-lg font-semibold text-text-primary">Daily Outreach Message</h3>
           </div>
           <p className="text-dark-400 text-sm mb-4">
             Sent to the selected tickets when you press "Send Message" on the Daily Outreach page.
@@ -539,10 +539,10 @@ export function Settings() {
           </button>
 
           {outreachMutation.isSuccess && (
-            <p className="mt-2 text-green-400 text-sm">✅ Daily outreach message updated successfully.</p>
+            <p className="mt-2 text-success text-sm">Daily outreach message updated successfully.</p>
           )}
           {outreachMutation.isError && (
-            <p className="mt-2 text-red-400 text-sm">❌ Failed to update message: {(outreachMutation.error as Error).message}</p>
+            <p className="mt-2 text-danger text-sm">Failed to update message: {(outreachMutation.error as Error).message}</p>
           )}
         </div>
 
@@ -550,7 +550,7 @@ export function Settings() {
         <div className="glass-card p-6">
           <div className="flex items-center gap-2 mb-4">
             <ScanSearch className="w-5 h-5 text-primary-400" />
-            <h3 className="text-lg font-semibold text-white">Dead Tickets</h3>
+            <h3 className="text-lg font-semibold text-text-primary">Dead Tickets</h3>
           </div>
           <p className="text-dark-400 text-sm mb-4">
             Tickets whose Discord channel was deleted but are still saved in the outreach list —
@@ -591,7 +591,7 @@ export function Settings() {
                     <button
                       onClick={() => deadDeleteMutation.mutate([d.channelId])}
                       disabled={deadDeleteMutation.isPending}
-                      className="shrink-0 p-2 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                      className="shrink-0 p-2 text-dark-500 hover:text-danger hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
                       title="Delete this dead ticket"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -602,7 +602,7 @@ export function Settings() {
               <button
                 onClick={() => deadDeleteMutation.mutate(deadScan.map((d) => d.channelId))}
                 disabled={deadDeleteMutation.isPending}
-                className="btn bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-700/50 rounded-xl px-5 py-2.5 flex items-center gap-2 transition-all mt-4 text-sm"
+                className="btn bg-danger-muted hover:bg-red-900/50 text-danger border border-danger/30 rounded-xl px-5 py-2.5 flex items-center gap-2 transition-all mt-4 text-sm"
               >
                 {deadDeleteMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -615,7 +615,7 @@ export function Settings() {
           )}
 
           {deadScanNote && (
-            <p className={`mt-3 text-sm ${deadScanNote.ok ? 'text-green-400' : 'text-red-400'}`}>
+            <p className={`mt-3 text-sm ${deadScanNote.ok ? 'text-success' : 'text-danger'}`}>
               {deadScanNote.text}
             </p>
           )}
@@ -623,7 +623,7 @@ export function Settings() {
 
         {/* Reddit Session (format-check login) */}
         <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Reddit Session</h3>
+          <h3 className="text-lg font-semibold text-text-primary mb-4">Reddit Session</h3>
           <p className="text-dark-400 text-sm mb-4">
             Reddit blocks anonymous checks, so the bot verifies formatting with a spare account's login cookie
             (stored encrypted, never shown). Paste the full <code className="text-primary-300">Cookie</code> header value
@@ -638,11 +638,11 @@ export function Settings() {
           ) : (
             <p className="text-sm mb-4">
               {redditConfigured ? (
-                <span className="text-green-400">
-                  ✅ Configured{redditUpdatedAt ? ` (updated ${new Date(redditUpdatedAt).toLocaleString()}${redditUpdatedBy ? ` by ${redditUpdatedBy}` : ''})` : ''}.
+                <span className="text-success">
+                  Configured{redditUpdatedAt ? ` (updated ${new Date(redditUpdatedAt).toLocaleString()}${redditUpdatedBy ? ` by ${redditUpdatedBy}` : ''})` : ''}.
                 </span>
               ) : (
-                <span className="text-yellow-400">⚠️ Not configured — format checks cannot run until you paste a cookie.</span>
+                <span className="text-warning">Not configured — format checks cannot run until you paste a cookie.</span>
               )}
             </p>
           )}
@@ -670,22 +670,22 @@ export function Settings() {
           </button>
 
           {redditSessionMutation.isSuccess && (
-            <p className="mt-2 text-green-400 text-sm">✅ Reddit session updated successfully.</p>
+            <p className="mt-2 text-success text-sm">Reddit session updated successfully.</p>
           )}
           {redditSessionMutation.isError && (
-            <p className="mt-2 text-red-400 text-sm">❌ Failed to update session: {(redditSessionMutation.error as Error).message}</p>
+            <p className="mt-2 text-danger text-sm">Failed to update session: {(redditSessionMutation.error as Error).message}</p>
           )}
         </div>
 
         {/* Danger Zone */}
-        <div className="glass-card p-6 border-red-800/30">
-          <h3 className="text-lg font-semibold text-red-400 mb-4">Danger Zone</h3>
+        <div className="glass-card p-6 border-danger/30">
+          <h3 className="text-lg font-semibold text-danger mb-4">Danger Zone</h3>
           <p className="text-dark-400 text-sm mb-4">
             Owner-only panel. Requires a 4-digit PIN to access.
           </p>
           <button
             onClick={() => setShowPinModal(true)}
-            className="btn bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-700/50 rounded-xl px-5 py-2.5 flex items-center gap-2 transition-all"
+            className="btn bg-danger-muted hover:bg-red-900/50 text-danger border border-danger/30 rounded-xl px-5 py-2.5 flex items-center gap-2 transition-all"
           >
             <Trash2 className="w-4 h-4" />
             Delete All Data
@@ -697,13 +697,13 @@ export function Settings() {
 
       {/* PIN Modal */}
       {showPinModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-dark-800 rounded-2xl p-8 w-full max-w-sm mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm duration-200">
+          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-sm mx-4 border border-dark-700 shadow-pop modal-panel">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">Enter PIN</h3>
+              <h3 className="text-xl font-semibold text-text-primary">Enter PIN</h3>
               <button
                 onClick={() => { setShowPinModal(false); setPinError(''); setPinInput(''); }}
-                className="text-dark-500 hover:text-white transition-colors"
+                className="text-dark-500 hover:text-text-primary transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -720,7 +720,7 @@ export function Settings() {
               autoFocus
             />
             {pinError && (
-              <p className="text-red-400 text-sm text-center mb-4">{pinError}</p>
+              <p className="text-danger text-sm text-center mb-4">{pinError}</p>
             )}
             <button
               onClick={handlePinSubmit}

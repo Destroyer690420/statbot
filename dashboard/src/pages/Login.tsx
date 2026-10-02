@@ -8,7 +8,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,36 +31,35 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary-600/20 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary-900/40 blur-[120px] pointer-events-none" />
-
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+    <div className="min-h-screen bg-dark-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-dark-900/80 border border-primary-500/30 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/20 transform rotate-3 overflow-hidden p-2">
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain transform -rotate-3" />
+          <div className="w-12 h-12 bg-surface border border-appborder rounded-lg flex items-center justify-center overflow-hidden p-1.5">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-white tracking-tight">
-          Reddit Task Manager
+        <h2 className="mt-5 text-center text-2xl font-semibold text-text-primary tracking-tight">
+          Task Manager
         </h2>
-        <p className="mt-2 text-center text-sm text-dark-400">
-          Admin Dashboard Login
+        <p className="mt-1.5 text-center text-[13px] text-text-secondary">
+          Sign in to the admin dashboard
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="glass-card py-8 px-4 shadow-2xl sm:rounded-2xl sm:px-10 border border-dark-700/50">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="glass-card py-8 px-4 sm:px-10">
+          <form className="space-y-5" onSubmit={handleSubmit}>
             {error && (
-              <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-4">
-                <p className="text-sm text-red-400 text-center font-medium">{error}</p>
+              <div
+                className="rounded-md px-4 py-3"
+                style={{ background: 'rgba(214, 107, 114, 0.12)', border: '1px solid rgba(214, 107, 114, 0.30)' }}
+              >
+                <p className="text-[13px] text-center font-medium" style={{ color: '#D66B72' }}>{error}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-dark-200 mb-2">
+              <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
                 Username
               </label>
               <input
@@ -74,7 +73,7 @@ export function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-200 mb-2">
+              <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
                 Password
               </label>
               <input
@@ -90,12 +89,12 @@ export function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="btn-primary w-full flex justify-center py-3 mt-4 text-base"
+              className="btn-primary w-full py-2.5"
             >
               {isLoading ? (
-                <span className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                'Sign In'
+                'Sign in'
               )}
             </button>
           </form>

@@ -1,6 +1,6 @@
 # FRONTEND.md — Admin Dashboard
 
-> Verified against `dashboard/src/**`, `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/nginx.conf` on 2026-09-25 (worker visual redesign section re-verified after deployment).
+> Verified against `dashboard/src/**`, `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/nginx.conf` on 2026-09-25 (worker visual redesign section re-verified after deployment). Admin premium redesign (§11) verified against `dashboard/src/**` on 2026-10-02 (build clean, NOT deployed).
 
 ---
 
@@ -50,7 +50,7 @@ Unused API functions: `getUpcomingReminders`, `getExportCsvUrl`, `getHealth`, `c
 ## 5. Pages
 
 ### Dashboard
-Server stat cards (Total/Pending/Completed/Overdue) + AreaChart (7-day activity) + client-side today stats from full task list (Today's Posts/Comments/Deleted, Total Deleted; `cancelledReason` `deleted|deleted_later` = deleted).
+Context header + 4 subtle metric cards (Total/Pending/Completed/Overdue, white numbers + muted labels + thin accent bars) + 7-day AreaChart (`#6C8CFF` on `#20252C` grid) + secondary activity cards; skeleton loaders while loading (no spinner).
 
 ### Tasks
 Search (id, url, channel), 15/page client-side pagination, status filter; desktop table / mobile cards. Actions: cancelledReason dropdown (OK/Deleted/Deleted Later → PATCH), Download latest insight image, Copy submitted link, View, Delete (confirm). CSV export.
@@ -59,16 +59,16 @@ Search (id, url, channel), 15/page client-side pagination, status filter; deskto
 Task info + GoPartTime external block (assignmentStatus badge, Retry Delivery on FAILED, error text, externalTaskId/subreddit/flair/payment/deadline/sourceUrl/postLink/formattedContent/taskImages grid) + Submission section (record/replace URL, Mark as Done when ACCEPTED, format-check badge + checked-at + diff modal) + Reminder Timeline (built from `RETRY_DELAYS` 2h/6h assumptions) + Submitted Screenshots (each reminder's `insightImageUrl`, click-to-open, download).
 
 ### AcceptedTasks
-Queue of ACCEPTED tasks; Reassign (ticket select with `(busy)` marker for `awaiting-submission` channels), Done (activation), copy link, delete; 15/page. **Format column** (`FormatBadge` from the stored `formatCheckStatus/Detail` — 🟢 Match, 🔴 para mismatch, 🟡 title/text mismatch, ⚠️ verify-failed, — for comments, No URL/Unchecked otherwise; mismatch badges open `FormatDiffModal`: browser-direct live Reddit fetch vs delivered content, per-paragraph highlighting, title row, server-side Recheck button → `POST /tasks/:id/recheck-format`). No in-page heading (top bar shows "Accepted Tasks"; "N queued" badge top-right).
+Queue of ACCEPTED tasks; Reassign (ticket select with `busy` badge for `awaiting-submission` channels), Done (activation), copy link, delete; 15/page with chevron pagination. **Format column** (`FormatBadge` from the stored `formatCheckStatus/Detail` — text-only Match / para-mismatch / title-text-mismatch / verify-failed badges in muted semantic colors, — for comments, No URL/Unchecked otherwise; mismatch badges open `FormatDiffModal`: browser-direct live Reddit fetch vs delivered content, per-paragraph highlighting, title row, server-side Recheck button → `POST /tasks/:id/recheck-format`). No in-page heading (top bar shows "Accepted Tasks"; "N queued" badge top-right).
 
 ### Archives
-Read-only ARCHIVED list + search + CSV; table-only (scrolls horizontally).
+Read-only ARCHIVED list + search + CSV; spec table header (12px muted on `#111418`), neutral Archived badges, desktop table + mobile cards + empty states; chevron pagination.
 
 ### Payments (`dashboard/src/pages/payout/`)
 Modular redesign split across 17 clean components:
 - `PayoutLayout.tsx`: Header, sub-navigation tabs (`/payout/tasks` & `/payout/commissions`), segmented-control DateFilter (Previous/Current/All/Custom), shared week query & Outlet context.
-- `TaskPayments.tsx`: Color-accented summary cards, Pay All banner, worker breakdown table (desktop) / cards (mobile) with inline accordion worker details, collapsible Payout History.
-- `Commissions.tsx`: Color-accented summary cards, Pay All Commissions banner, inviter breakdown table/cards with inline inviter details, collapsible Commission History.
+- `TaskPayments.tsx`: muted summary cards (thin accent bars, no left-border rainbows), Pay All banner, worker breakdown table (desktop) / cards (mobile) with inline accordion worker details, collapsible Payout History.
+- `Commissions.tsx`: muted summary cards, Pay All Commissions banner, inviter breakdown table/cards with inline inviter details, collapsible Commission History.
 - Restore Unpaid Archived button & CSV exports per tab.
 - Date formatters in `payout/utils.ts`.
 
@@ -92,7 +92,7 @@ Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payou
 
 ## 6. Components
 
-- `Layout.tsx`: sidebar (10 nav items, no admin gating), mobile off-canvas drawer + hamburger, auto-hiding header on scroll, PWA install button (`beforeinstallprompt`), logout.
+- `Layout.tsx`: sidebar (10 nav items, no admin gating; flat `#111418` bg, muted 13px items, blue-muted active pill + indicator bar), mobile off-canvas drawer + hamburger, auto-hiding header on scroll, PWA install button (`beforeinstallprompt`), logout. Content constrained to `max-w-[1200px]`.
 - `CopyButton.tsx`: clipboard with execCommand fallback, "Copied!" 1.5s.
 - `ProtectedRoute.tsx`: auth gate.
 
@@ -108,11 +108,18 @@ Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payou
 
 ## 9. Known UI Quirks
 
-- `w-4.5 h-4.5` classes have no Tailwind definition (icons render default size).
-- `animate-in fade-in`/`zoom-in-95` classes inert (tailwindcss-animate not installed).
 - Theme picker non-functional; OwnerEarnings route JWT-only; `getUpcomingReminders`/`getHealth`/`getExportCsvUrl`/`createReferral` client fns unused.
+- Green row wash means `deleted_later` in Tasks but "replied" in Daily Outreach (pre-existing semantic collision, kept).
 
-## 10. Worker Portal (`/worker/*` — visual redesign deployed 2026-09-25)
+## 10. Admin Design System (premium redesign, implemented 2026-10-02, NOT deployed)
+
+Worker portal (`worker/*`, `--wp-*` tokens, Sora display face, `wallet-gradient`) is explicitly out of scope and untouched.
+
+- **Tokens** (`tailwind.config.js`): remapped `dark` scale to the app hierarchy (`950 #0B0D0F` → `900 #111418` → `800 #171B20`, borders `700 #272D35`, text `500 #66707C` / `400/300 #98A1AD` / `50 #F2F4F7`); `primary` centered on `#6C8CFF` (hover `#829EFF`); explicit `background`/`surface`/`appborder`/`text-*` colors plus `success #4CAF82` / `warning #D6A85A` / `danger #D66B72` / `info #6C8CFF` with `*-muted` fills; radius 6–12px; `pop`/`subtle` shadows only.
+- **Components** (`index.css`): `glass-card`/`stat-card`/`summary-card` (surface + border, no blur/glow), `btn-primary`/`btn-secondary`/`btn-danger` (+ legacy bare `.btn` → secondary), `input-field` (blue focus ring), `status-badge` + `badge-{success,warning,danger,info,neutral}`, `app-table` (muted 12px header on `#111418`), `segmented-control`, `skeleton`, `empty-state`, `modal-panel` (150ms fade+scale, replacing the inert `animate-in` classes), backdrop `bg-black/65`.
+- **Conventions**: no gradients/glows in admin chrome, no emoji in badges/notes, compact icon buttons, chevron pagination everywhere, Inter only.
+
+## 11. Worker Portal (`/worker/*` — visual redesign deployed 2026-09-25)
 
 Read-only self-service portal, visually redesigned on 2026-09-25 without changing its API, routes, data contracts, permissions, or business rules. Lazy-loaded pages remain outside the admin `ProtectedRoute`; the dedicated `workerApi` axios instance and `rtm_worker_token` behavior are unchanged. The admin token still cannot open worker pages.
 

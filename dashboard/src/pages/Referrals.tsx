@@ -157,13 +157,13 @@ export function Referrals() {
   }, [ticketsQuery.data, formTicket]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       <div className="relative flex-1">
-        <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-dark-400 pointer-events-none" />
+        <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted pointer-events-none" />
         <input
           type="text"
           placeholder="Search inviter, invitee, or ticket..."
-          className="w-full h-10 pl-10 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-xl text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
+          className="input-field w-full h-10 pl-9"
           value={searchTerm}
           onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
         />
@@ -199,14 +199,14 @@ export function Referrals() {
                   <tr key={r.id} className="hover:bg-dark-800/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-primary-700 to-primary-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-surface-active border border-appborder flex items-center justify-center text-text-secondary text-xs font-semibold shrink-0">
                           {(r.inviterName || r.inviterId || '?').charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <p className="text-sm font-medium text-white truncate">{r.inviterName}</p>
+                            <p className="text-sm font-medium text-text-primary truncate">{r.inviterName}</p>
                             {r.indirectSpecialInviterId && (
-                              <span className="px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-md shrink-0" title={`Indirect special inviter: ${r.indirectSpecialInviterId}`}>
+                              <span className="px-1.5 py-0.5 text-[10px] font-semibold text-warning bg-warning-muted border border-warning/30 rounded-md shrink-0" title={`Indirect special inviter: ${r.indirectSpecialInviterId}`}>
                                 Indirect
                               </span>
                             )}
@@ -217,11 +217,11 @@ export function Referrals() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-700 to-purple-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-surface-active border border-appborder flex items-center justify-center text-text-secondary text-xs font-semibold shrink-0">
                           {(r.inviteeName || r.inviteeId || '').charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{r.inviteeName}</p>
+                          <p className="text-sm font-medium text-text-primary truncate">{r.inviteeName}</p>
                           <p className="text-[11px] text-dark-500 font-mono truncate">{r.inviteeId}</p>
                         </div>
                       </div>
@@ -246,7 +246,7 @@ export function Referrals() {
                         <button
                           onClick={() => handleDelete(r)}
                           disabled={deleteMutation.isPending && deleteMutation.variables === r.id}
-                          className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-40"
+                          className="p-2 text-dark-400 hover:text-danger hover:bg-danger-muted rounded-lg transition-colors disabled:opacity-40"
                           title="Delete referral"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -275,14 +275,14 @@ export function Referrals() {
             <div key={r.id} className="glass-card border border-dark-700/50 overflow-hidden">
               <div className="flex items-center justify-between px-4 pt-4 pb-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary-700 to-primary-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-surface-active border border-appborder flex items-center justify-center text-text-secondary text-xs font-semibold shrink-0">
                     {(r.inviterName || r.inviterId || '').charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-white text-sm font-medium truncate">{r.inviterName}</p>
+                      <p className="text-text-primary text-sm font-medium truncate">{r.inviterName}</p>
                       {r.indirectSpecialInviterId && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-md shrink-0">
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold text-warning bg-warning-muted border border-warning/30 rounded-md shrink-0">
                           Indirect
                         </span>
                       )}
@@ -301,7 +301,7 @@ export function Referrals() {
                   <button
                     onClick={() => handleDelete(r)}
                     disabled={deleteMutation.isPending && deleteMutation.variables === r.id}
-                    className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-40"
+                    className="p-1.5 text-dark-400 hover:text-danger hover:bg-danger-muted rounded-lg transition-colors disabled:opacity-40"
                     title="Delete referral"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -341,7 +341,7 @@ export function Referrals() {
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2 text-dark-400 hover:text-text-primary hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -351,7 +351,7 @@ export function Referrals() {
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2 text-dark-400 hover:text-text-primary hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -360,13 +360,13 @@ export function Referrals() {
       )}
 
       {editingRef && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-dark-800 rounded-2xl p-8 w-full max-w-md mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm duration-200">
+          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-md mx-4 border border-dark-700 shadow-pop modal-panel">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">Edit Referral</h3>
+              <h3 className="text-xl font-semibold text-text-primary">Edit Referral</h3>
               <button
                 onClick={() => setEditingRef(null)}
-                className="text-dark-500 hover:text-white transition-colors"
+                className="text-dark-500 hover:text-text-primary transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -426,13 +426,13 @@ export function Referrals() {
                   className="input-field w-full bg-dark-900"
                 >
                   {!ticketOptions.hasCurrent && formTicket && (
-                    <option value={formTicket} className="bg-dark-900 text-white">
+                    <option value={formTicket} className="bg-dark-900 text-text-primary">
                       {formTicket.startsWith('#') ? formTicket : `#${formTicket}`} (current)
                     </option>
                   )}
-                  <option value="" className="bg-dark-900 text-white">No ticket</option>
+                  <option value="" className="bg-dark-900 text-text-primary">No ticket</option>
                   {ticketOptions.options.map((name) => (
-                    <option key={name} value={name} className="bg-dark-900 text-white">
+                    <option key={name} value={name} className="bg-dark-900 text-text-primary">
                       #{name}
                     </option>
                   ))}
@@ -440,7 +440,7 @@ export function Referrals() {
               </div>
 
               {formError && (
-                <p className="text-red-400 text-sm">{formError}</p>
+                <p className="text-danger text-sm">{formError}</p>
               )}
 
               <button

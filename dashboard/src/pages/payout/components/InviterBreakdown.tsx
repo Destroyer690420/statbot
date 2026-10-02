@@ -49,7 +49,7 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
     <div className="glass-card overflow-hidden">
       <div className="p-4 sm:p-5 border-b border-dark-700/30">
         <div className="flex items-center justify-between">
-          <h3 className="text-base sm:text-lg font-semibold text-white">Inviter Breakdown</h3>
+          <h3 className="text-base sm:text-lg font-semibold text-text-primary">Inviter Breakdown</h3>
           {inviters.length > 0 && (
             <span className="text-dark-400 text-xs bg-dark-800/60 px-2.5 py-1 rounded-full">
               {inviters.length} inviter{inviters.length !== 1 ? 's' : ''}
@@ -65,7 +65,7 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
           </div>
         ) : inviters.length === 0 ? (
           <div className="text-center py-10">
-            <UserPlus className="w-10 h-10 text-dark-600 mx-auto mb-2" />
+            <UserPlus className="w-10 h-10 text-text-muted mx-auto mb-2" />
             <p className="text-dark-400 text-sm">No referrals found. Use <code className="text-primary-400 text-xs">/referral add</code> to add referrals.</p>
           </div>
         ) : (
@@ -94,7 +94,7 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
                         onClick={() => setExpandedInviter(expandedInviter === inv.inviterId ? null : inv.inviterId)}
                       >
                         <td className="py-3 px-2">
-                          <div className="flex items-center gap-2 text-white">
+                          <div className="flex items-center gap-2 text-text-primary">
                             {expandedInviter === inv.inviterId ? (
                               <ChevronDown className="w-4 h-4 text-dark-400 shrink-0" />
                             ) : (
@@ -106,15 +106,15 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
                         <td className="py-3 px-2 text-center">
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             inv.inviterType === 'special'
-                              ? 'bg-yellow-500/10 text-yellow-400'
+                              ? 'bg-warning-muted text-warning'
                               : 'bg-dark-700/50 text-dark-300'
                           }`}>
                             {inv.inviterType === 'special' ? '⭐ Special' : 'Normal'}
                           </span>
                         </td>
-                        <td className="py-3 px-2 text-center text-white">{inv.totalReferrals}</td>
-                        <td className="py-3 px-2 text-center text-white">{inv.successfulReferrals}</td>
-                        <td className="py-3 px-2 text-right text-white font-semibold">{formatCurrency(inv.totalCommission)}</td>
+                        <td className="py-3 px-2 text-center text-text-primary">{inv.totalReferrals}</td>
+                        <td className="py-3 px-2 text-center text-text-primary">{inv.successfulReferrals}</td>
+                        <td className="py-3 px-2 text-right text-text-primary font-semibold">{formatCurrency(inv.totalCommission)}</td>
                         {isCurrentWeek && (
                           <td className="py-3 px-2 text-center" onClick={e => e.stopPropagation()}>
                             {inv.totalCommission === 0 ? (
@@ -171,16 +171,16 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
                         ) : (
                           <ChevronRight className="w-4 h-4 text-dark-400 shrink-0" />
                         )}
-                        <span className="text-white font-medium text-sm">{inv.inviterName}</span>
+                        <span className="text-text-primary font-medium text-sm">{inv.inviterName}</span>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                           inv.inviterType === 'special'
-                            ? 'bg-yellow-500/10 text-yellow-400'
+                            ? 'bg-warning-muted text-warning'
                             : 'bg-dark-700/50 text-dark-300'
                         }`}>
                           {inv.inviterType === 'special' ? '⭐' : 'Normal'}
                         </span>
                       </div>
-                      <span className="text-white font-semibold text-sm">{formatCurrency(inv.totalCommission)}</span>
+                      <span className="text-text-primary font-semibold text-sm">{formatCurrency(inv.totalCommission)}</span>
                     </div>
                     <div className="flex items-center gap-3 pl-6 text-xs text-dark-400">
                       <span>{inv.totalReferrals} referrals</span>
@@ -233,7 +233,7 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
         )}
 
         {payInviterMutation.isError && (
-          <p className="mt-3 text-red-400 text-sm">{(payInviterMutation.error as Error).message}</p>
+          <p className="mt-3 text-danger text-sm">{(payInviterMutation.error as Error).message}</p>
         )}
       </div>
     </div>

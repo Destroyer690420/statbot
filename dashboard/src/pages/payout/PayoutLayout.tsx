@@ -107,7 +107,7 @@ export function PayoutLayout() {
           className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 ${
             activeRoute === 'tasks'
               ? 'bg-primary-600/20 text-primary-400 shadow-sm'
-              : 'text-dark-400 hover:text-white hover:bg-dark-800/40'
+              : 'text-dark-400 hover:text-text-primary hover:bg-dark-800/40'
           }`}
         >
           <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -118,7 +118,7 @@ export function PayoutLayout() {
           className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 ${
             activeRoute === 'commissions'
               ? 'bg-primary-600/20 text-primary-400 shadow-sm'
-              : 'text-dark-400 hover:text-white hover:bg-dark-800/40'
+              : 'text-dark-400 hover:text-text-primary hover:bg-dark-800/40'
           }`}
         >
           <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

@@ -6,7 +6,7 @@ import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
 import { FormatBadge } from '../components/FormatBadge';
 import { FormatDiffModal } from '../components/FormatDiffModal';
-import { Loader2, CheckCircle2, Repeat, Trash2, Eye, ExternalLink, X } from 'lucide-react';
+import { Loader2, CheckCircle2, Repeat, Trash2, Eye, ExternalLink, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
@@ -56,9 +56,9 @@ export function AcceptedTasks() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       <div className="flex items-center justify-end">
-        <span className="status-badge border bg-violet-500/10 text-violet-400 border-violet-500/20 px-3 py-1">
+        <span className="status-badge border bg-info-muted text-info border-info/30 px-3 py-1">
           {tasks.length} queued
         </span>
       </div>
@@ -137,7 +137,7 @@ export function AcceptedTasks() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => setTicketFor(task.id)}
-                          className="p-2 text-dark-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
+                          className="p-2 text-dark-400 hover:text-warning hover:bg-warning-muted rounded-lg transition-colors"
                           title="Reassign"
                         >
                           <Repeat className="w-4 h-4" />
@@ -148,7 +148,7 @@ export function AcceptedTasks() {
                         <button
                           onClick={() => doneMutation.mutate(task.id)}
                           disabled={doneMutation.isPending}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors disabled:opacity-40 disabled:cursor-wait"
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-success-muted text-success border border-success/30 hover:bg-success-muted transition-colors disabled:opacity-40 disabled:cursor-wait"
                           title="Mark done and move to active queue"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
@@ -163,7 +163,7 @@ export function AcceptedTasks() {
                         </Link>
                         <button
                           onClick={() => handleDelete(task.id)}
-                          className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                          className="p-2 text-dark-400 hover:text-danger hover:bg-danger-muted rounded-lg transition-colors"
                           title="Delete Task"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -195,7 +195,7 @@ export function AcceptedTasks() {
                 <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="min-w-0">
                   <span className="text-primary-400 font-bold font-mono text-base truncate">{displayTaskId(task.id, task.type, task.externalTaskId)}</span>
                 </Link>
-                <span className="status-badge border bg-violet-500/10 text-violet-400 border-violet-500/20 text-[10px]">
+                <span className="status-badge border bg-info-muted text-info border-info/30 text-[10px]">
                   ACCEPTED
                 </span>
               </div>
@@ -239,7 +239,7 @@ export function AcceptedTasks() {
                 <button
                   onClick={() => doneMutation.mutate(task.id)}
                   disabled={doneMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors disabled:opacity-40"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-success-muted text-success border border-success/30 hover:bg-success-muted transition-colors disabled:opacity-40"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Done
@@ -247,7 +247,7 @@ export function AcceptedTasks() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setTicketFor(task.id)}
-                    className="p-1.5 text-dark-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
+                    className="p-1.5 text-dark-400 hover:text-warning hover:bg-warning-muted rounded-lg transition-colors"
                     title="Reassign"
                   >
                     <Repeat className="w-4 h-4" />
@@ -264,7 +264,7 @@ export function AcceptedTasks() {
                   </Link>
                   <button
                     onClick={() => handleDelete(task.id)}
-                    className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                    className="p-1.5 text-dark-400 hover:text-danger hover:bg-danger-muted rounded-lg transition-colors"
                     title="Delete Task"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -285,17 +285,19 @@ export function AcceptedTasks() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2 text-text-secondary hover:text-text-primary hover:bg-surface rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Previous page"
             >
-              Previous
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm text-dark-300 font-medium">Page {page} of {totalPages}</span>
+            <span className="text-[13px] text-text-secondary font-medium">Page {page} of {totalPages}</span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2 text-text-secondary hover:text-text-primary hover:bg-surface rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Next page"
             >
-              Next
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -307,13 +309,13 @@ export function AcceptedTasks() {
 
       {/* Reassign ticket picker (modal — works on mobile; native <select> + onBlur unmount broke on phones) */}
       {ticketFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-dark-800 rounded-2xl p-6 w-full max-w-sm mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm duration-200">
+          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-sm mx-4 border border-dark-700 shadow-pop modal-panel max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Reassign task</h3>
+              <h3 className="text-lg font-semibold text-text-primary">Reassign task</h3>
               <button
                 onClick={() => setTicketFor(null)}
-                className="text-dark-500 hover:text-white transition-colors"
+                className="text-dark-500 hover:text-text-primary transition-colors"
                 title="Close"
               >
                 <X className="w-5 h-5" />
@@ -332,11 +334,11 @@ export function AcceptedTasks() {
                     key={t.channelId}
                     onClick={() => reassignMutation.mutate({ id: ticketFor, ticket: t.channelId })}
                     disabled={reassignMutation.isPending}
-                    className="w-full text-left px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60 hover:border-amber-400/40 hover:bg-amber-400/5 text-dark-200 hover:text-white transition-colors disabled:opacity-50"
+                    className="w-full text-left px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60 hover:border-warning/30 hover:bg-warning-muted text-dark-200 hover:text-text-primary transition-colors disabled:opacity-50"
                   >
                     <span className="font-mono text-sm">#{t.channelName || t.channelId}</span>
                     {t.taskStatus === 'awaiting-submission' && (
-                      <span className="ml-2 text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider">busy</span>
+                      <span className="ml-2 status-badge border bg-warning-muted text-warning border-warning/30">busy</span>
                     )}
                   </button>
                 ))
@@ -346,7 +348,7 @@ export function AcceptedTasks() {
               <button
                 onClick={() => setTicketFor(null)}
                 disabled={reassignMutation.isPending}
-                className="px-4 py-2 text-sm text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm text-dark-400 hover:text-text-primary transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

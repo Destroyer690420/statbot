@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getStats, getDailyStats, getTasks } from '../api/client';
-import { CheckCircle2, Clock, AlertCircle, ListTodo, Loader2, FileText, MessageSquare, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, ListTodo, FileText, MessageSquare, Trash2, XCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 function isToday(dateStr: string): boolean {
@@ -16,6 +16,12 @@ function isDeleted(task: any): boolean {
     task.cancelledReason === 'deleted' ||
     task.cancelledReason === 'deleted_later';
 }
+
+const CHART_PRIMARY = '#6C8CFF';
+const CHART_GRID = '#20252C';
+const CHART_LABEL = '#66707C';
+const CHART_TOOLTIP_BG = '#111418';
+const CHART_TOOLTIP_BORDER = '#272D35';
 
 export function Dashboard() {
   const { data: statsData, isLoading: statsLoading } = useQuery({
@@ -35,8 +41,20 @@ export function Dashboard() {
 
   if (statsLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="skeleton h-[104px]" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 skeleton h-[380px]" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="skeleton h-[124px]" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -62,110 +80,98 @@ export function Dashboard() {
   }
 
   const statCards = [
-    { title: 'Total Tasks', value: stats.total || 0, icon: ListTodo, color: 'text-primary-400' },
-    { title: 'Pending', value: stats.pending || 0, icon: Clock, color: 'text-yellow-400' },
-    { title: 'Completed', value: stats.completed || 0, icon: CheckCircle2, color: 'text-green-400' },
-    { title: 'Overdue', value: stats.overdue || 0, icon: AlertCircle, color: 'text-red-400' },
+    { title: 'Total Tasks', value: stats.total || 0, icon: ListTodo, accent: '#6C8CFF' },
+    { title: 'Pending', value: stats.pending || 0, icon: Clock, accent: '#D6A85A' },
+    { title: 'Completed', value: stats.completed || 0, icon: CheckCircle2, accent: '#4CAF82' },
+    { title: 'Overdue', value: stats.overdue || 0, icon: AlertCircle, accent: '#D66B72' },
+  ];
+
+  const secondaryCards = [
+    { title: "Today's Posts", value: todayPosts, icon: FileText },
+    { title: "Today's Comments", value: todayComments, icon: MessageSquare },
+    { title: 'Total Deleted', value: totalDeleted, icon: XCircle },
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Primary Stats Grid */}
+    <div className="space-y-6">
+      {/* Context */}
+      <div>
+        <h1 className="text-2xl font-semibold text-text-primary tracking-tight">Dashboard</h1>
+        <p className="text-[13px] text-text-secondary mt-1">
+          Task throughput, completions, and deletions at a glance.
+        </p>
+      </div>
 
-      {/* Primary Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Key metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat, i) => (
-          <div key={i} className="stat-card relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
-              <stat.icon className={`w-16 h-16 ${stat.color}`} />
+          <div key={i} className="stat-card">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] text-text-secondary font-medium">{stat.title}</p>
+              <stat.icon className="w-4 h-4" style={{ color: stat.accent }} strokeWidth={2} />
             </div>
-            <div className="relative z-10">
-              <p className="text-dark-400 font-medium mb-1">{stat.title}</p>
-              <h2 className="text-4xl font-bold text-white">{stat.value}</h2>
+            <h2 className="text-[28px] leading-8 font-semibold text-text-primary mt-2 tabular-nums">{stat.value}</h2>
+            <div className="h-0.5 rounded-full mt-3" style={{ background: `${stat.accent}33` }}>
+              <div className="h-0.5 rounded-full w-2/5" style={{ background: stat.accent }} />
             </div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Chart */}
-        <div className="lg:col-span-2 glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-6">Task Activity (Last 7 Days)</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Activity chart */}
+        <div className="lg:col-span-2 glass-card p-5">
+          <div className="flex items-baseline justify-between mb-4">
+            <h3 className="text-[16px] font-semibold text-text-primary">Task activity</h3>
+            <span className="text-xs text-text-muted">Last 7 days</span>
+          </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorTasks" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    <stop offset="5%" stopColor={CHART_PRIMARY} stopOpacity={0.25} />
+                    <stop offset="95%" stopColor={CHART_PRIMARY} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis stroke="#64748b" tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                <XAxis dataKey="name" stroke={CHART_LABEL} tick={{ fill: CHART_LABEL, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis stroke={CHART_LABEL} tick={{ fill: CHART_LABEL, fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }}
-                  itemStyle={{ color: '#e0e7ff' }}
+                  contentStyle={{ backgroundColor: CHART_TOOLTIP_BG, borderColor: CHART_TOOLTIP_BORDER, borderRadius: '8px', fontSize: 13 }}
+                  itemStyle={{ color: '#F2F4F7' }}
+                  labelStyle={{ color: '#98A1AD' }}
                 />
-                <Area type="monotone" dataKey="tasks" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorTasks)" />
+                <Area type="monotone" dataKey="tasks" stroke={CHART_PRIMARY} strokeWidth={2} fillOpacity={1} fill="url(#colorTasks)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Secondary Activity & Deletion Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Today's Post */}
-          <div className="stat-card relative overflow-hidden group flex flex-col justify-between p-5">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <FileText className="w-12 h-12 text-purple-400" />
-            </div>
-            <div className="relative z-10">
-              <p className="text-dark-400 text-xs font-medium mb-1">Today's Post</p>
-              <h2 className="text-3xl font-bold text-white">{todayPosts}</h2>
-            </div>
-          </div>
-
-          {/* Today's Comment */}
-          <div className="stat-card relative overflow-hidden group flex flex-col justify-between p-5">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <MessageSquare className="w-12 h-12 text-indigo-400" />
-            </div>
-            <div className="relative z-10">
-              <p className="text-dark-400 text-xs font-medium mb-1">Today's Comment</p>
-              <h2 className="text-3xl font-bold text-white">{todayComments}</h2>
-            </div>
-          </div>
-
-          {/* Today's Deleted — split into Post / Comment */}
-          <div className="stat-card relative overflow-hidden group flex flex-col justify-between p-5">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Trash2 className="w-12 h-12 text-orange-400" />
-            </div>
-            <div className="relative z-10">
-              <p className="text-dark-400 text-xs font-medium mb-2">Today's Deleted</p>
-              <div className="flex items-center gap-4">
-                <div>
-                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Post</p>
-                  <h2 className="text-2xl font-bold text-white">{todayPostsDeleted}</h2>
-                </div>
-                <div className="w-px h-8 bg-dark-700/60" />
-                <div>
-                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Comment</p>
-                  <h2 className="text-2xl font-bold text-white">{todayCommentsDeleted}</h2>
-                </div>
+        {/* Secondary activity */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+          {secondaryCards.map((card, i) => (
+            <div key={i} className="stat-card flex items-center justify-between py-4">
+              <div>
+                <p className="text-[13px] text-text-secondary font-medium">{card.title}</p>
+                <h2 className="text-2xl font-semibold text-text-primary mt-1 tabular-nums">{card.value}</h2>
               </div>
+              <card.icon className="w-5 h-5 text-text-muted" strokeWidth={2} />
             </div>
-          </div>
-
-          {/* Total Deleted */}
-          <div className="stat-card relative overflow-hidden group flex flex-col justify-between p-5">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <XCircle className="w-12 h-12 text-red-400" />
-            </div>
-            <div className="relative z-10">
-              <p className="text-dark-400 text-xs font-medium mb-1">Total Deleted</p>
-              <h2 className="text-3xl font-bold text-white">{totalDeleted}</h2>
+          ))}
+          <div className="stat-card py-4">
+            <p className="text-[13px] text-text-secondary font-medium">Today's deleted</p>
+            <div className="flex items-center gap-4 mt-2">
+              <div>
+                <p className="text-text-muted text-[11px] font-medium uppercase tracking-wider">Posts</p>
+                <p className="text-xl font-semibold text-text-primary tabular-nums">{todayPostsDeleted}</p>
+              </div>
+              <div className="w-px h-8 bg-appborder-subtle" />
+              <div>
+                <p className="text-text-muted text-[11px] font-medium uppercase tracking-wider">Comments</p>
+                <p className="text-xl font-semibold text-text-primary tabular-nums">{todayCommentsDeleted}</p>
+              </div>
+              <Trash2 className="w-5 h-5 text-text-muted ml-auto" strokeWidth={2} />
             </div>
           </div>
         </div>
@@ -173,4 +179,3 @@ export function Dashboard() {
     </div>
   );
 }
-

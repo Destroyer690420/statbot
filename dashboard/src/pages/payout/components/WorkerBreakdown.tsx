@@ -51,7 +51,7 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
     <div className="glass-card overflow-hidden">
       <div className="p-4 sm:p-5 border-b border-dark-700/30">
         <div className="flex items-center justify-between">
-          <h3 className="text-base sm:text-lg font-semibold text-white">Worker Breakdown</h3>
+          <h3 className="text-base sm:text-lg font-semibold text-text-primary">Worker Breakdown</h3>
           {workers.length > 0 && (
             <span className="text-dark-400 text-xs bg-dark-800/60 px-2.5 py-1 rounded-full">
               {workers.length} worker{workers.length !== 1 ? 's' : ''}
@@ -67,7 +67,7 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
           </div>
         ) : workers.length === 0 ? (
           <div className="text-center py-10">
-            <Users className="w-10 h-10 text-dark-600 mx-auto mb-2" />
+            <Users className="w-10 h-10 text-text-muted mx-auto mb-2" />
             <p className="text-dark-400 text-sm">No workers found for this period.</p>
           </div>
         ) : (
@@ -96,7 +96,7 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
                         onClick={() => setExpandedWorker(expandedWorker === w.workerId ? null : w.workerId)}
                       >
                         <td className="py-3 px-2">
-                          <div className="flex items-center gap-2 text-white">
+                          <div className="flex items-center gap-2 text-text-primary">
                             {expandedWorker === w.workerId ? (
                               <ChevronDown className="w-4 h-4 text-dark-400 shrink-0" />
                             ) : (
@@ -105,11 +105,11 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
                             <span className="font-medium text-sm">{w.workerName}</span>
                           </div>
                         </td>
-                        <td className="py-3 px-2 text-center text-white">{w.posts}</td>
-                        <td className="py-3 px-2 text-center text-white">{w.comments}</td>
-                        <td className="py-3 px-2 text-right text-white font-semibold">{formatCurrency(w.totalAmount)}</td>
+                        <td className="py-3 px-2 text-center text-text-primary">{w.posts}</td>
+                        <td className="py-3 px-2 text-center text-text-primary">{w.comments}</td>
+                        <td className="py-3 px-2 text-right text-text-primary font-semibold">{formatCurrency(w.totalAmount)}</td>
                         <td className="py-3 px-2 text-center">
-                          <span className="status-badge bg-green-500/10 text-green-400">Ready</span>
+                          <span className="status-badge border bg-success-muted text-success border-success/30">Ready</span>
                         </td>
                         {isCurrentWeek && (
                           <td className="py-3 px-2 text-center" onClick={e => e.stopPropagation()}>
@@ -163,9 +163,9 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
                         ) : (
                           <ChevronRight className="w-4 h-4 text-dark-400 shrink-0" />
                         )}
-                        <span className="text-white font-medium text-sm">{w.workerName}</span>
+                        <span className="text-text-primary font-medium text-sm">{w.workerName}</span>
                       </div>
-                      <span className="status-badge bg-green-500/10 text-green-400 text-[10px]">Ready</span>
+                      <span className="status-badge border bg-success-muted text-success border-success/30 text-[10px]">Ready</span>
                     </div>
                     <div className="flex items-center justify-between pl-6">
                       <div className="flex items-center gap-3 text-xs text-dark-400">
@@ -176,7 +176,7 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
                           <MessageSquare className="w-3 h-3" /> {w.comments}
                         </span>
                       </div>
-                      <span className="text-white font-semibold text-sm">{formatCurrency(w.totalAmount)}</span>
+                      <span className="text-text-primary font-semibold text-sm">{formatCurrency(w.totalAmount)}</span>
                     </div>
                   </button>
 
@@ -226,7 +226,7 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
         )}
 
         {payWorkerMutation.isError && (
-          <p className="mt-3 text-red-400 text-sm">{(payWorkerMutation.error as Error).message}</p>
+          <p className="mt-3 text-danger text-sm">{(payWorkerMutation.error as Error).message}</p>
         )}
       </div>
     </div>

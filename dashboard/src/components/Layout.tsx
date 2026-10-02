@@ -89,7 +89,7 @@ export function Layout({ children }: { children: ReactNode }) {
     if (pathname.startsWith('/automation')) return 'Automation';
     if (pathname.startsWith('/analytics')) return 'Analytics';
     if (pathname.startsWith('/archives')) return 'Archives';
-    if (pathname.startsWith('/payout')) return 'Payments';
+    if (pathname.startsWith('/payout')) return 'Payout';
     if (pathname.startsWith('/referrals')) return 'Referrals';
     if (pathname.startsWith('/owner-earnings')) return 'Owner Earnings';
     if (pathname.startsWith('/settings')) return 'Settings';
@@ -103,84 +103,105 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-20 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-20 bg-black/65 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-64 glass-card border-l-0 border-y-0 rounded-none transform transition-transform duration-300 lg:translate-x-0 lg:static lg:inset-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-30 w-60 bg-background-secondary border-r border-appborder-subtle transform transition-transform duration-150 lg:translate-x-0 lg:static lg:inset-0 flex flex-col ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        <div className="flex items-center justify-center gap-3 h-20 border-b border-dark-700/50 px-4">
-          <img src="/logo.png" alt="Logo" className="w-9 h-9 object-contain rounded-xl shadow-md" />
-          <h1 className="text-xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+        <div className="flex items-center gap-2.5 h-16 border-b border-appborder-subtle px-5">
+          <img src="/logo.png" alt="Logo" className="w-7 h-7 object-contain rounded-md" />
+          <h1 className="text-[15px] font-semibold text-text-primary tracking-tight">
             Task Manager
           </h1>
         </div>
 
-        <div className="flex flex-col flex-1 overflow-y-auto">
-          <nav className="flex-1 px-4 py-6 space-y-2">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.name}
-                to={item.path}
-                className={({ isActive }) =>
-                  `flex items-center px-4 py-3 rounded-xl transition-all duration-200 ${isActive
-                    ? 'bg-primary-600/10 text-primary-400 border border-primary-500/20'
-                    : 'text-dark-400 hover:bg-dark-800 hover:text-dark-100'
-                  }`
-                }
-                onClick={() => setSidebarOpen(false)}
-              >
-                <item.icon className="w-5 h-5 mr-3" />
-                <span className="font-medium">{item.name}</span>
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="p-4 border-t border-dark-700/50">
-            <button
-              onClick={handleLogout}
-              className="flex items-center w-full px-4 py-3 text-red-400 rounded-xl hover:bg-red-500/10 hover:border-red-500/20 border border-transparent transition-all duration-200"
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.name}
+              to={item.path}
+              className={({ isActive }) =>
+                `relative flex items-center px-3 py-2 rounded-md text-[13px] transition-colors duration-150 ${isActive
+                  ? 'text-text-primary font-medium'
+                  : 'text-text-secondary hover:bg-surface hover:text-text-primary font-normal'
+                }`
+              }
+              style={({ isActive }) =>
+                isActive ? { background: 'rgba(108, 140, 255, 0.12)' } : undefined
+              }
+              onClick={() => setSidebarOpen(false)}
             >
-              <LogOut className="w-5 h-5 mr-3" />
-              <span className="font-medium">Logout</span>
-            </button>
-          </div>
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <span
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full"
+                      style={{ background: '#6C8CFF' }}
+                    />
+                  )}
+                  <item.icon className="w-4 h-4 mr-2.5 shrink-0" strokeWidth={2} />
+                  <span className="truncate">{item.name}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="p-3 border-t border-appborder-subtle">
+          <button
+            onClick={handleLogout}
+            className="flex items-center w-full px-3 py-2 text-[13px] rounded-md transition-colors duration-150 hover:bg-surface"
+            style={{ color: '#D66B72' }}
+          >
+            <LogOut className="w-4 h-4 mr-2.5" strokeWidth={2} />
+            <span className="font-medium">Logout</span>
+          </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <div className="flex flex-col flex-1 overflow-hidden w-full relative">
+      <div className="flex flex-col flex-1 overflow-hidden w-full min-w-0 relative">
         <header
-          className={`fixed top-0 left-0 right-0 h-14 px-4 bg-dark-900/90 backdrop-blur-md border-b border-dark-800/80 shadow-md shadow-black/30 z-10 flex items-center justify-between transition-transform duration-300 ${showHeader ? 'translate-y-0' : '-translate-y-full'
-            } lg:static lg:translate-y-0 lg:h-20 lg:px-6 lg:glass-card lg:border-r-0 lg:border-t-0 lg:rounded-none lg:shadow-none`}
+          className={`bg-background-secondary/95 backdrop-blur border-b border-appborder-subtle z-10 flex items-center justify-between transition-transform duration-150 fixed top-0 left-0 right-0 h-14 px-4 ${showHeader ? 'translate-y-0' : '-translate-y-full'
+            } lg:static lg:translate-y-0 lg:h-16 lg:px-8`}
         >
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 min-w-0">
             <button
-              className="lg:hidden text-dark-300 hover:text-white p-1 rounded-lg hover:bg-dark-800 transition-colors"
+              className="lg:hidden text-text-secondary hover:text-text-primary p-1.5 rounded-md hover:bg-surface transition-colors"
               onClick={() => setSidebarOpen(true)}
+              aria-label="Open navigation"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-base sm:text-lg font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+            <span className="text-base font-semibold text-text-primary tracking-tight truncate">
               {pageTitle}
             </span>
           </div>
 
-          <div className="flex items-center space-x-3 sm:space-x-4 ml-auto">
+          <div className="flex items-center space-x-3 ml-auto">
             {showInstallBtn && (
               <button
                 onClick={handleInstallClick}
-                className="flex items-center gap-1.5 bg-primary-600/20 hover:bg-primary-600/30 text-primary-400 border border-primary-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                style={{
+                  background: 'rgba(108, 140, 255, 0.12)',
+                  color: '#F2F4F7',
+                  border: '1px solid rgba(108, 140, 255, 0.30)',
+                }}
                 title="Install App"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Install App</span>
               </button>
             )}
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary-600 to-primary-400 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-primary-500/20">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-text-primary font-semibold text-[13px]"
+              style={{ background: '#222832', border: '1px solid #272D35' }}
+            >
               A
             </div>
           </div>
@@ -189,12 +210,13 @@ export function Layout({ children }: { children: ReactNode }) {
         <main
           ref={mainRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4 pt-20 sm:p-6 sm:pt-24 lg:p-8"
+          className="flex-1 overflow-y-auto p-4 pt-20 sm:p-6 sm:pt-24 lg:p-8 lg:pt-8"
         >
-          {children}
+          <div className="max-w-[1200px] mx-auto w-full">
+            {children}
+          </div>
         </main>
       </div>
     </div>
   );
 }
-

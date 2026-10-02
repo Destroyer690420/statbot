@@ -48,19 +48,19 @@ export function BatchDetail({ batchId }: { batchId: string }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-1">
           <div className="bg-dark-800/60 rounded-lg p-2.5 border border-dark-700/40">
             <p className="text-dark-400 text-xs">Workers</p>
-            <p className="text-white font-semibold text-sm">{batch?.totalWorkers ?? 0}</p>
+            <p className="text-text-primary font-semibold text-sm">{batch?.totalWorkers ?? 0}</p>
           </div>
           <div className="bg-dark-800/60 rounded-lg p-2.5 border border-dark-700/40">
             <p className="text-dark-400 text-xs">Tasks</p>
-            <p className="text-white font-semibold text-sm">{batch?.totalTasks ?? 0}</p>
+            <p className="text-text-primary font-semibold text-sm">{batch?.totalTasks ?? 0}</p>
           </div>
           <div className="bg-dark-800/60 rounded-lg p-2.5 border border-dark-700/40">
             <p className="text-dark-400 text-xs">Amount</p>
-            <p className="text-white font-semibold text-sm">{formatCurrency(batch?.totalAmount ?? 0)}</p>
+            <p className="text-text-primary font-semibold text-sm">{formatCurrency(batch?.totalAmount ?? 0)}</p>
           </div>
           <div className="bg-dark-800/60 rounded-lg p-2.5 border border-dark-700/40">
             <p className="text-dark-400 text-xs">Paid On</p>
-            <p className="text-white font-semibold text-xs">{formatDate(batch?.paidAt)}</p>
+            <p className="text-text-primary font-semibold text-xs">{formatDate(batch?.paidAt)}</p>
           </div>
         </div>
         <button
@@ -78,8 +78,8 @@ export function BatchDetail({ batchId }: { batchId: string }) {
         {Object.entries(workerGroups).map(([wId, group]) => (
           <div key={wId} className="bg-dark-800/30 rounded-lg p-2.5 border border-dark-700/30">
             <div className="flex items-center justify-between">
-              <span className="text-white text-sm font-medium">{(workerNames || {})[wId] || wId.slice(0, 8)}</span>
-              <span className="text-white font-semibold text-sm">{formatCurrency(group.amount)}</span>
+              <span className="text-text-primary text-sm font-medium">{(workerNames || {})[wId] || wId.slice(0, 8)}</span>
+              <span className="text-text-primary font-semibold text-sm">{formatCurrency(group.amount)}</span>
             </div>
             <div className="flex items-center gap-3 mt-1 text-dark-400 text-xs">
               <span>{group.posts} posts</span>
@@ -105,14 +105,14 @@ export function BatchDetail({ batchId }: { batchId: string }) {
           <tbody>
             {(items ?? []).map((item: any) => (
               <tr key={item.id} className="border-b border-dark-800/30">
-                <td className="py-1.5 px-2 text-white font-mono">{displayTaskId(item.taskId, item.taskType, item.externalTaskId)}</td>
+                <td className="py-1.5 px-2 text-text-primary font-mono">{displayTaskId(item.taskId, item.taskType, item.externalTaskId)}</td>
                 <td className="py-1.5 px-2 text-center text-dark-300">{(workerNames || {})[item.workerId] || item.workerId?.slice(0, 8)}</td>
                 <td className="py-1.5 px-2 text-center">
-                  <span className={`px-2 py-0.5 rounded-full ${item.taskType === 'POST' ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'}`}>
+                  <span className={`px-2 py-0.5 rounded-full ${item.taskType === 'POST' ? 'bg-info-muted text-info' : 'bg-success-muted text-success'}`}>
                     {item.taskType}
                   </span>
                 </td>
-                <td className="py-1.5 px-2 text-right text-white">{formatCurrency(item.amount)}</td>
+                <td className="py-1.5 px-2 text-right text-text-primary">{formatCurrency(item.amount)}</td>
               </tr>
             ))}
           </tbody>

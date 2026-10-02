@@ -105,7 +105,7 @@
 | 25 | Dead code: `check-reddit.ts` (`isPostDeleted`), `DELETED_DETECTION_THRESHOLD_MS`, `generateCommissionBatchId`, `insightStorageService.deleteTaskDir`, `reviewedAt`/`reviewedBy`/`markReviewed` (unused), `referralRepository.findById` (unused?), `onboardingRepository.hasGuideBeenSent` (unused) | `src/utils`, `src/services`, `src/database` |
 | 26 | Duplicate userscript copies (`scripts/` + `dashboard/public/`) must stay in sync | **Now automated for the two GoPartTime scripts** — `userscript-media.test.ts` asserts `scripts/` and `dashboard/public/` are byte-identical. `reddit-format-check.user.js` is still unchecked (its two copies are not covered by any test) |
 | 27 | In-memory filtering/sorting in `findCompleted`, `findCompletedOrArchived`, `search` (redditUrl substring), `findByDeliveryMessageId` JSONB scan | `task.repository.ts` |
-| 28 | Dashboard unused API fns (`getUpcomingReminders`, `getHealth`, `getExportCsvUrl`, `createReferral`); inert `w-4.5`/`animate-in` classes | `dashboard/src/api/client.ts`, pages |
+| 28 | Dashboard unused API fns (`getUpcomingReminders`, `getHealth`, `getExportCsvUrl`, `createReferral`) | `dashboard/src/api/client.ts` |
 | 29 | Inconsistent admin checks (Discord-ID `isAdmin` vs username `requireDashboardAdmin`) | routes |
 | 30 | JWT carries no roles | `auth.ts` middleware |
 | 31 | **Reddit profile check depends on the `RedditSession` vault.** With no cookie stored (or an expired one) every new ticket reports `UNVERIFIABLE` and DMs the approver. Reddit blocks anonymous `.json` access from datacenter IPs (verified 2026-09-28: 403 "You've been blocked by network security"), so there is no anonymous fallback. | `reddit-profile-check.service.ts`, dashboard Settings |

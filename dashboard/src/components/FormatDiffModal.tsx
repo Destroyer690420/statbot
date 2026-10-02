@@ -87,14 +87,14 @@ export function FormatDiffModal({ task, onClose, onRechecked }: Props) {
   const maxRows = Math.max(expectedParas.length, actualParas.length);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="bg-dark-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col border border-dark-700 shadow-2xl"
+        className="bg-dark-800 rounded-lg w-full max-w-4xl max-h-[85vh] flex flex-col border border-dark-700 shadow-pop"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/50">
           <div>
-            <h3 className="text-base font-semibold text-white">Format check — {task.externalTaskId ? `Post #${task.externalTaskId}` : task.id}</h3>
+            <h3 className="text-base font-semibold text-text-primary">Format check — {task.externalTaskId ? `Post #${task.externalTaskId}` : task.id}</h3>
             <a href={task.submittedRedditUrl} target="_blank" rel="noreferrer" className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1 mt-0.5">
               Open on Reddit <ExternalLink className="w-3 h-3" />
             </a>
@@ -108,7 +108,7 @@ export function FormatDiffModal({ task, onClose, onRechecked }: Props) {
               {rechecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               Recheck
             </button>
-            <button onClick={onClose} className="text-dark-500 hover:text-white transition-colors" title="Close">
+            <button onClick={onClose} className="text-dark-500 hover:text-text-primary transition-colors" title="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -120,13 +120,13 @@ export function FormatDiffModal({ task, onClose, onRechecked }: Props) {
               <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
             </div>
           ) : error ? (
-            <p className="text-sm text-orange-400 bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">{error}</p>
+            <p className="text-sm text-warning bg-warning-muted border border-warning/30 rounded-lg p-3">{error}</p>
           ) : (
             <>
               <div className="text-[11px] text-dark-500">
                 Live copy via {source === 'server' ? 'server session (spare Reddit account)' : 'your browser (fallback — may be rate-limited)'}.
               </div>
-              <div className={`rounded-lg border p-3 text-sm ${titleOk ? 'border-green-500/20 bg-green-500/5 text-green-300' : 'border-yellow-500/20 bg-yellow-500/5 text-yellow-300'}`}>
+              <div className={`rounded-lg border p-3 text-sm ${titleOk ? 'border-success/30 bg-success-muted text-success' : 'border-warning/30 bg-warning-muted text-warning'}`}>
                 <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70 mb-1">{titleOk ? '✓ Title matches' : '✗ Title differs'}</p>
                 <p><span className="opacity-60">Expected:</span> {expectedTitle || '(none)'}</p>
                 <p><span className="opacity-60">Reddit:</span> {live?.title || '(none)'}</p>
@@ -139,7 +139,7 @@ export function FormatDiffModal({ task, onClose, onRechecked }: Props) {
                     {expectedParas.map((p, i) => {
                       const match = live ? normalizeInline(p) === normalizeInline(actualParas[i] ?? '') : false;
                       return (
-                        <div key={i} className={`rounded-lg border p-2.5 text-xs whitespace-pre-wrap break-words ${match ? 'border-green-500/20 bg-green-500/5' : 'border-red-500/20 bg-red-500/5'}`}>
+                        <div key={i} className={`rounded-lg border p-2.5 text-xs whitespace-pre-wrap break-words ${match ? 'border-success/30 bg-success-muted' : 'border-danger/30 bg-danger-muted'}`}>
                           <span className="font-mono opacity-50">¶{i + 1} </span>{p}
                         </div>
                       );
@@ -153,11 +153,11 @@ export function FormatDiffModal({ task, onClose, onRechecked }: Props) {
                     {Array.from({ length: maxRows }).map((_, i) => {
                       const a = actualParas[i];
                       if (a === undefined) {
-                        return <div key={i} className="rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300">¶{i + 1} missing on Reddit</div>;
+                        return <div key={i} className="rounded-lg border border-danger/30 bg-danger-muted p-2.5 text-xs text-danger">¶{i + 1} missing on Reddit</div>;
                       }
                       const match = normalizeInline(expectedParas[i] ?? '') === normalizeInline(a);
                       return (
-                        <div key={i} className={`rounded-lg border p-2.5 text-xs whitespace-pre-wrap break-words ${match ? 'border-green-500/20 bg-green-500/5' : 'border-yellow-500/20 bg-yellow-500/5'}`}>
+                        <div key={i} className={`rounded-lg border p-2.5 text-xs whitespace-pre-wrap break-words ${match ? 'border-success/30 bg-success-muted' : 'border-warning/30 bg-warning-muted'}`}>
                           <span className="font-mono opacity-50">¶{i + 1} </span>{a}
                         </div>
                       );

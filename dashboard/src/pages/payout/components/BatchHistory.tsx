@@ -31,7 +31,7 @@ export function BatchHistory() {
       >
         <div className="flex items-center gap-2.5">
           <History className="w-4 h-4 text-dark-400" />
-          <h3 className="text-base sm:text-lg font-semibold text-white">Payout History</h3>
+          <h3 className="text-base sm:text-lg font-semibold text-text-primary">Payout History</h3>
           {batches.length > 0 && (
             <span className="text-dark-400 text-xs bg-dark-800/60 px-2 py-0.5 rounded-full">
               {batches.length}
@@ -53,7 +53,7 @@ export function BatchHistory() {
             </div>
           ) : batches.length === 0 ? (
             <div className="text-center py-8">
-              <ScrollText className="w-8 h-8 text-dark-600 mx-auto mb-2" />
+              <ScrollText className="w-8 h-8 text-text-muted mx-auto mb-2" />
               <p className="text-dark-400 text-sm">No payout batches yet.</p>
             </div>
           ) : (
@@ -70,7 +70,7 @@ export function BatchHistory() {
                       ) : (
                         <ChevronRight className="w-3.5 h-3.5 text-dark-400 shrink-0" />
                       )}
-                      <span className="text-white font-medium text-sm">Batch #{batch.batchNumber}</span>
+                      <span className="text-text-primary font-medium text-sm">Batch #{batch.batchNumber}</span>
                       <span className="text-dark-500 text-xs">
                         {formatDate(batch.weekStart)} — {formatDate(batch.weekEnd)}
                       </span>
@@ -78,7 +78,7 @@ export function BatchHistory() {
                     <div className="flex items-center gap-3 sm:gap-4 pl-6 sm:pl-0">
                       <span className="text-dark-400 text-xs">{batch.totalWorkers} workers</span>
                       <span className="text-dark-400 text-xs">{batch.totalTasks} tasks</span>
-                      <span className="text-white font-semibold text-sm">{formatCurrency(batch.totalAmount ?? 0)}</span>
+                      <span className="text-text-primary font-semibold text-sm">{formatCurrency(batch.totalAmount ?? 0)}</span>
                     </div>
                   </button>
 

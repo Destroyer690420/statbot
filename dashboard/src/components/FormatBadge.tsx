@@ -9,14 +9,14 @@ interface Props {
 }
 
 const STYLES: Record<string, string> = {
-  MATCH: 'bg-green-500/10 text-green-400 border-green-500/20',
-  PARA_MISMATCH: 'bg-red-500/10 text-red-400 border-red-500/20',
-  TITLE_MISMATCH: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  TEXT_MISMATCH: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  FETCH_ERROR: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  DELETED: 'bg-red-500/10 text-red-400 border-red-500/20',
+  MATCH: 'bg-success-muted text-success border-success/30',
+  PARA_MISMATCH: 'bg-danger-muted text-danger border-danger/30',
+  TITLE_MISMATCH: 'bg-warning-muted text-warning border-warning/30',
+  TEXT_MISMATCH: 'bg-warning-muted text-warning border-warning/30',
+  FETCH_ERROR: 'bg-warning-muted text-warning border-warning/30',
+  DELETED: 'bg-danger-muted text-danger border-danger/30',
   NO_SESSION: 'bg-dark-700/40 text-dark-300 border-dark-600/50',
-  SESSION_EXPIRED: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  SESSION_EXPIRED: 'bg-warning-muted text-warning border-warning/30',
   NONE: 'bg-dark-700/40 text-dark-400 border-dark-600/50',
 };
 
@@ -35,42 +35,42 @@ export function FormatBadge({ status, detail, taskType, hasUrl, onOpenDiff }: Pr
   const s = status as FormatCheckStatus;
 
   if (s === 'MATCH') {
-    return <span className={`status-badge border ${STYLES.MATCH} px-2 py-0.5 text-[11px]`}>🟢 {counts} Match</span>;
+    return <span className={`status-badge border ${STYLES.MATCH} px-2 py-0.5 text-[11px]`}>{counts} Match</span>;
   }
   if (s === 'PARA_MISMATCH') {
     return (
       <button onClick={onOpenDiff} title="Open side-by-side diff" className={`status-badge border ${STYLES.PARA_MISMATCH} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
-        🔴 {counts} Mismatch
+        {counts} Mismatch
       </button>
     );
   }
   if (s === 'TITLE_MISMATCH' || s === 'TEXT_MISMATCH') {
     return (
       <button onClick={onOpenDiff} title="Open side-by-side diff" className={`status-badge border ${STYLES.TITLE_MISMATCH} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
-        🟡 {s === 'TITLE_MISMATCH' ? 'Title' : 'Text'} Mismatch
+        {s === 'TITLE_MISMATCH' ? 'Title' : 'Text'} Mismatch
       </button>
     );
   }
   if (s === 'DELETED') {
-    return <span className={`status-badge border ${STYLES.DELETED} px-2 py-0.5 text-[11px]`}>🗑️ Deleted</span>;
+    return <span className={`status-badge border ${STYLES.DELETED} px-2 py-0.5 text-[11px]`}>Deleted</span>;
   }
   if (s === 'NO_SESSION') {
     return (
       <button onClick={onOpenDiff} title="Reddit session not configured — open for setup hint" className={`status-badge border ${STYLES.NO_SESSION} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
-        ⚙️ No session
+        No session
       </button>
     );
   }
   if (s === 'SESSION_EXPIRED') {
     return (
       <button onClick={onOpenDiff} title="Reddit session expired — re-paste the cookie in Settings, then Recheck" className={`status-badge border ${STYLES.SESSION_EXPIRED} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
-        🔑 Session expired
+        Session expired
       </button>
     );
   }
   return (
     <button onClick={onOpenDiff} title={d?.error || 'Check failed — click to retry via diff view'} className={`status-badge border ${STYLES.FETCH_ERROR} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
-      ⚠️ Verify failed
+      Verify failed
     </button>
   );
 }

@@ -6,10 +6,10 @@ export function InviterDetail({ data }: { data: any }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <h4 className="text-white font-semibold text-sm sm:text-base">{data.inviterName}</h4>
+          <h4 className="text-text-primary font-semibold text-sm sm:text-base">{data.inviterName}</h4>
           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
             data.inviterType === 'special'
-              ? 'bg-yellow-500/10 text-yellow-400'
+              ? 'bg-warning-muted text-warning'
               : 'bg-dark-700/50 text-dark-300'
           }`}>
             {data.inviterType === 'special' ? '⭐ Special' : 'Normal'}
@@ -17,9 +17,9 @@ export function InviterDetail({ data }: { data: any }) {
         </div>
         <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
           data.status === 'Paid'
-            ? 'bg-blue-500/10 text-blue-400'
+            ? 'bg-info-muted text-info'
             : data.status === 'Ready'
-            ? 'bg-green-500/10 text-green-400'
+            ? 'bg-success-muted text-success'
             : 'bg-dark-700/50 text-dark-400'
         }`}>
           {data.status}
@@ -30,15 +30,15 @@ export function InviterDetail({ data }: { data: any }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <div className="bg-dark-800/60 rounded-xl p-3 border border-dark-700/40">
           <p className="text-dark-400 text-xs font-medium mb-0.5">Referrals</p>
-          <p className="text-white font-bold text-base sm:text-lg">{data.referrals?.length ?? 0}</p>
+          <p className="text-text-primary font-bold text-base sm:text-lg">{data.referrals?.length ?? 0}</p>
         </div>
         <div className="bg-dark-800/60 rounded-xl p-3 border border-dark-700/40">
           <p className="text-dark-400 text-xs font-medium mb-0.5">Invite Bonus</p>
-          <p className="text-white font-bold text-base sm:text-lg">{formatCurrency(data.totalBonus ?? 0)}</p>
+          <p className="text-text-primary font-bold text-base sm:text-lg">{formatCurrency(data.totalBonus ?? 0)}</p>
         </div>
         <div className="bg-dark-800/60 rounded-xl p-3 border border-dark-700/40">
           <p className="text-dark-400 text-xs font-medium mb-0.5">Per-Task</p>
-          <p className="text-white font-bold text-base sm:text-lg">{formatCurrency(data.totalPerTask ?? 0)}</p>
+          <p className="text-text-primary font-bold text-base sm:text-lg">{formatCurrency(data.totalPerTask ?? 0)}</p>
         </div>
         <div className="bg-dark-800/60 rounded-xl p-3 border border-dark-700/40">
           <p className="text-dark-400 text-xs font-medium mb-0.5">Total</p>
@@ -66,17 +66,17 @@ export function InviterDetail({ data }: { data: any }) {
           <tbody>
             {(data.referrals ?? []).map((ref: any) => (
               <tr key={ref.referralId} className="border-b border-dark-800/50">
-                <td className="py-2 px-2 text-white text-sm font-medium">{ref.inviteeName}</td>
-                <td className="py-2 px-2 text-center text-white">{ref.inviteeTasks?.total ?? 0}</td>
+                <td className="py-2 px-2 text-text-primary text-sm font-medium">{ref.inviteeName}</td>
+                <td className="py-2 px-2 text-center text-text-primary">{ref.inviteeTasks?.total ?? 0}</td>
                 <td className="py-2 px-2 text-center text-dark-300">{ref.inviteeTasks?.posts ?? 0}</td>
                 <td className="py-2 px-2 text-center text-dark-300">{ref.inviteeTasks?.comments ?? 0}</td>
-                <td className="py-2 px-2 text-right text-white">{ref.bonusAmount > 0 ? formatCurrency(ref.bonusAmount) : '-'}</td>
-                <td className="py-2 px-2 text-right text-white">{ref.perTaskAmount > 0 ? formatCurrency(ref.perTaskAmount) : '-'}</td>
+                <td className="py-2 px-2 text-right text-text-primary">{ref.bonusAmount > 0 ? formatCurrency(ref.bonusAmount) : '-'}</td>
+                <td className="py-2 px-2 text-right text-text-primary">{ref.perTaskAmount > 0 ? formatCurrency(ref.perTaskAmount) : '-'}</td>
                 <td className="py-2 px-2 text-center">
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
                     ref.isSuccessful
-                      ? ref.bonusPaid ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'
-                      : 'bg-yellow-500/10 text-yellow-400'
+                      ? ref.bonusPaid ? 'bg-info-muted text-info' : 'bg-success-muted text-success'
+                      : 'bg-warning-muted text-warning'
                   }`}>
                     {ref.isSuccessful ? (ref.bonusPaid ? 'Paid' : 'Ready') : 'Pending'}
                   </span>
@@ -92,11 +92,11 @@ export function InviterDetail({ data }: { data: any }) {
         {(data.referrals ?? []).map((ref: any) => (
           <div key={ref.referralId} className="bg-dark-800/40 rounded-lg p-3 border border-dark-700/30">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-white text-sm font-medium">{ref.inviteeName}</span>
+              <span className="text-text-primary text-sm font-medium">{ref.inviteeName}</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                 ref.isSuccessful
-                  ? ref.bonusPaid ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'
-                  : 'bg-yellow-500/10 text-yellow-400'
+                  ? ref.bonusPaid ? 'bg-info-muted text-info' : 'bg-success-muted text-success'
+                  : 'bg-warning-muted text-warning'
               }`}>
                 {ref.isSuccessful ? (ref.bonusPaid ? 'Paid' : 'Ready') : 'Pending'}
               </span>

@@ -18,9 +18,9 @@ interface OutreachTicket {
 
 function StatusIcon({ ok }: { ok: boolean }) {
   return ok ? (
-    <Check className="w-5 h-5 text-green-400" />
+    <Check className="w-5 h-5 text-success" />
   ) : (
-    <X className="w-5 h-5 text-dark-600" />
+    <X className="w-5 h-5 text-text-muted" />
   );
 }
 
@@ -32,7 +32,7 @@ function PortalIcon({ accessed, lastSeenAt }: { accessed: boolean; lastSeenAt: s
     : 'No portal login recorded';
   return (
     <span
-      className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${accessed ? 'bg-green-500/10 text-green-400' : 'bg-dark-800 text-dark-600'}`}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${accessed ? 'bg-success-muted text-success' : 'bg-dark-800 text-text-muted'}`}
       title={label}
       role="img"
       aria-label={label}
@@ -44,9 +44,9 @@ function PortalIcon({ accessed, lastSeenAt }: { accessed: boolean; lastSeenAt: s
 
 function CountCell({ count }: { count: number }) {
   return count === 0 ? (
-    <X className="w-5 h-5 text-dark-600" />
+    <X className="w-5 h-5 text-text-muted" />
   ) : (
-    <span className="text-sm font-semibold text-green-400">{count}</span>
+    <span className="text-sm font-semibold text-success">{count}</span>
   );
 }
 
@@ -163,7 +163,7 @@ export function DailyOutreach() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2.5">
           {selectedCount > 0 ? (
@@ -204,7 +204,7 @@ export function DailyOutreach() {
           <button
             onClick={() => statusQuery.refetch()}
             disabled={statusQuery.isFetching}
-            className="p-2 md:p-2.5 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50 shrink-0"
+            className="p-2 md:p-2.5 text-dark-400 hover:text-text-primary hover:bg-dark-800 rounded-xl transition-colors disabled:opacity-50 shrink-0"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
@@ -217,13 +217,13 @@ export function DailyOutreach() {
       </p>
 
       {sendNote && (
-        <p className={`text-sm ${sendNote.ok ? 'text-green-400' : 'text-red-400'}`}>
-          {sendNote.ok ? '✅ ' : '❌ '}{sendNote.text}
+        <p className={`text-sm ${sendNote.ok ? 'text-success' : 'text-danger'}`}>
+          {sendNote.ok ? '' : ''}{sendNote.text}
         </p>
       )}
 
       {blast && blast.status === 'OPEN' && (
-        <div className="glass-card px-4 sm:px-6 py-4 flex items-center justify-between gap-3 border-primary-700/20 bg-gradient-to-r from-primary-950/40 to-dark-900/60">
+        <div className="glass-card px-4 sm:px-6 py-4 flex items-center justify-between gap-3 border-primary-700/20 to-dark-900/60">
           <p className="text-sm text-dark-100">
             Blast open: <span className="font-semibold text-primary-400">{blast.slotsFilled}/{blast.slotsTotal}</span> replied
           </p>
@@ -233,9 +233,9 @@ export function DailyOutreach() {
 
       {/* Slots prompt modal */}
       {slotsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-dark-800 rounded-2xl p-6 w-full max-w-sm mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-semibold text-white">How many posts available?</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm duration-200">
+          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-sm mx-4 border border-dark-700 shadow-pop modal-panel">
+            <h3 className="text-lg font-semibold text-text-primary">How many posts available?</h3>
             <p className="text-dark-400 text-sm mt-1 mb-4">
               The message goes to all {selectedCount} selected ticket(s). The first{' '}
               <span className="text-dark-100 font-semibold">{slotsInput || '?'}</span> workers to reply win;
@@ -254,7 +254,7 @@ export function DailyOutreach() {
               <button
                 onClick={() => setSlotsOpen(false)}
                 disabled={sendMutation.isPending}
-                className="px-4 py-2 text-sm text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm text-dark-400 hover:text-text-primary transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -308,7 +308,7 @@ export function DailyOutreach() {
                     key={t.channelId}
                     className={
                       replied.has(t.channelId)
-                        ? 'bg-green-900/10 hover:bg-green-900/20 transition-colors'
+                        ? 'bg-success-muted hover:bg-green-900/20 transition-colors'
                         : 'hover:bg-dark-800/30 transition-colors'
                     }
                   >
@@ -318,7 +318,7 @@ export function DailyOutreach() {
                           #{t.channelName || t.channelId}
                         </span>
                         {t.taskStatus === 'awaiting-submission' && (
-                          <span className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider">busy</span>
+                          <span className="status-badge border bg-warning-muted text-warning border-warning/30">busy</span>
                         )}
                       </div>
                     </td>
@@ -351,7 +351,7 @@ export function DailyOutreach() {
               key={t.channelId}
               className={
                 replied.has(t.channelId)
-                  ? 'glass-card border-green-500/30 bg-green-900/15 overflow-hidden'
+                  ? 'glass-card border-success/30 bg-green-900/15 overflow-hidden'
                   : 'glass-card border border-dark-700/50 overflow-hidden'
               }
             >
@@ -386,13 +386,13 @@ export function DailyOutreach() {
 
       {/* Select Tickets modal */}
       {selectOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-dark-800 rounded-2xl p-6 w-full max-w-md mx-4 border border-dark-700 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm duration-200">
+          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-md mx-4 border border-dark-700 shadow-pop modal-panel max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Select Tickets</h3>
+              <h3 className="text-lg font-semibold text-text-primary">Select Tickets</h3>
               <button
                 onClick={() => setSelectOpen(false)}
-                className="text-dark-500 hover:text-white transition-colors"
+                className="text-dark-500 hover:text-text-primary transition-colors"
                 title="Close"
               >
                 <X className="w-5 h-5" />
@@ -437,7 +437,7 @@ export function DailyOutreach() {
                       />
                       <span className="font-mono text-sm text-dark-100 truncate">#{t.channelName || t.channelId}</span>
                       {t.taskStatus === 'awaiting-submission' && (
-                        <span className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider">busy</span>
+                        <span className="status-badge border bg-warning-muted text-warning border-warning/30">busy</span>
                       )}
                     </span>
                     <span className="ml-3 flex shrink-0 items-center gap-2">
@@ -452,7 +452,7 @@ export function DailyOutreach() {
               <button
                 onClick={() => setSelectOpen(false)}
                 disabled={saveMutation.isPending}
-                className="px-4 py-2 text-sm text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm text-dark-400 hover:text-text-primary transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -470,7 +470,7 @@ export function DailyOutreach() {
               </button>
             </div>
             {saveMutation.isError && (
-              <p className="mt-3 text-red-400 text-sm">❌ Failed to save selection: {(saveMutation.error as Error).message}</p>
+              <p className="mt-3 text-danger text-sm">Failed to save selection: {(saveMutation.error as Error).message}</p>
             )}
           </div>
         </div>

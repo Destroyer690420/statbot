@@ -53,7 +53,7 @@ export function CopyButton({
       onClick={handleCopy}
       title={copied ? 'Copied!' : title}
       className={`${className} text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors ${
-        copied ? 'text-green-400 hover:text-green-400' : ''
+        copied ? 'text-success hover:text-success' : ''
       }`}
     >
       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}

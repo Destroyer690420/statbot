@@ -63,9 +63,9 @@ export function TaskDetails() {
   const task = taskData?.data;
   if (!task) {
     return (
-      <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
-        <AlertCircle className="w-16 h-16 text-dark-400" />
-        <h2 className="text-2xl font-bold text-white">Task Not Found</h2>
+      <div className="flex flex-col items-center justify-center h-[50vh] gap-3">
+        <AlertCircle className="w-8 h-8 text-text-muted" />
+        <h2 className="text-xl font-semibold text-text-primary">Task not found</h2>
         <Link to="/tasks" className="text-primary-400 hover:text-primary-300">
           ← Back to Tasks
         </Link>
@@ -75,14 +75,17 @@ export function TaskDetails() {
 
   const reminders = remindersData?.data || [];
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, cancelledReason?: string | null) => {
     switch (status) {
-      case 'COMPLETED': return 'bg-green-500/10 text-green-400 border-green-500/20';
-      case 'ARCHIVED': return 'bg-dark-500/10 text-dark-400 border-dark-500/20';
-      case 'CANCELLED': return 'bg-red-500/10 text-red-400 border-red-500/20';
-      case 'PENDING': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
-      case 'ACCEPTED': return 'bg-violet-500/10 text-violet-400 border-violet-500/20';
-      default: return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+      case 'COMPLETED': return 'bg-success-muted text-success border-success/30';
+      case 'ARCHIVED': return 'bg-surface-active text-text-secondary border-appborder';
+      case 'CANCELLED':
+        if (cancelledReason === 'deleted' || cancelledReason === 'deleted_later')
+          return 'bg-warning-muted text-warning border-warning/30';
+        return 'bg-danger-muted text-danger border-danger/30';
+      case 'PENDING': return 'bg-warning-muted text-warning border-warning/30';
+      case 'ACCEPTED': return 'bg-info-muted text-info border-info/30';
+      default: return 'bg-info-muted text-info border-info/30';
     }
   };
 
@@ -195,12 +198,12 @@ export function TaskDetails() {
 
   function dotColor(type: string): string {
     switch (type) {
-      case 'task-created': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'scheduled': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
-      case 'sent': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-      case 'retry': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-      case 'completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'task-completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'task-created': return 'bg-info-muted text-info border-info/30';
+      case 'scheduled': return 'bg-info-muted text-info border-info/30';
+      case 'sent': return 'bg-warning-muted text-warning border-warning/30';
+      case 'retry': return 'bg-warning-muted text-warning border-warning/30';
+      case 'completed': return 'bg-success-muted text-success border-success/30';
+      case 'task-completed': return 'bg-success-muted text-success border-success/30';
       default: return 'bg-dark-700/50 text-dark-400 border-dark-600';
     }
   }
@@ -208,13 +211,13 @@ export function TaskDetails() {
   const timeline = buildTimelineEvents(reminders, task);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link to="/tasks" className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors">
+        <Link to="/tasks" className="p-2 text-dark-400 hover:text-text-primary hover:bg-dark-800 rounded-lg transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">{displayTaskId(task.id, task.type, task.externalTaskId)}</h1>
+          <h1 className="text-3xl font-bold text-text-primary tracking-tight">{displayTaskId(task.id, task.type, task.externalTaskId)}</h1>
           <p className="text-dark-400 mt-1">Task details and activity</p>
         </div>
       </div>
@@ -223,8 +226,8 @@ export function TaskDetails() {
         {/* Task Info */}
         <div className="lg:col-span-2 glass-card p-6 space-y-6">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Task Information</h3>
-            <span className={`status-badge border ${getStatusColor(task.status)}`}>
+            <h3 className="text-lg font-semibold text-text-primary">Task Information</h3>
+            <span className={`status-badge border ${getStatusColor(task.status, task.cancelledReason)}`}>
               {task.status.replace(/_/g, ' ')}
             </span>
           </div>
@@ -238,19 +241,19 @@ export function TaskDetails() {
             </div>
             <div>
               <p className="text-dark-400 text-sm font-medium mb-1">Assigned User</p>
-              <p className="text-white font-mono text-sm">{task.assignedUserId}</p>
+              <p className="text-text-primary font-mono text-sm">{task.assignedUserId}</p>
             </div>
             <div>
               <p className="text-dark-400 text-sm font-medium mb-1">Ticket Channel</p>
-              <p className="text-white font-mono text-sm">{task.channelName ? `#${task.channelName}` : task.channelId}</p>
+              <p className="text-text-primary font-mono text-sm">{task.channelName ? `#${task.channelName}` : task.channelId}</p>
             </div>
             <div>
               <p className="text-dark-400 text-sm font-medium mb-1">Created</p>
-              <p className="text-white text-sm">{new Date(task.createdAt).toLocaleString()}</p>
+              <p className="text-text-primary text-sm">{new Date(task.createdAt).toLocaleString()}</p>
             </div>
             <div>
               <p className="text-dark-400 text-sm font-medium mb-1">Updated</p>
-              <p className="text-white text-sm">{new Date(task.updatedAt).toLocaleString()}</p>
+              <p className="text-text-primary text-sm">{new Date(task.updatedAt).toLocaleString()}</p>
             </div>
             {task.notes && (
               <div className="col-span-2">
@@ -261,8 +264,8 @@ export function TaskDetails() {
             {task.cancelledReason && (
               <div className="col-span-2">
                 <p className="text-dark-400 text-sm font-medium mb-1">Cancelled Reason</p>
-                <p className="text-white text-sm font-medium">
-                  {task.cancelledReason === 'deleted' ? '🗑️ Deleted (Early)' : '🗑️ Deleted Later'}
+                <p className="text-text-primary text-sm font-medium">
+                  {task.cancelledReason === 'deleted' ? 'Deleted (Early)' : 'Deleted Later'}
                 </p>
               </div>
             )}
@@ -291,7 +294,7 @@ export function TaskDetails() {
                 <p className="text-dark-400 text-sm font-medium">External Assignment</p>
                 {task.assignmentStatus === 'FAILED' ? (
                   <div className="flex items-center gap-2">
-                    <span className="status-badge border bg-red-500/10 text-red-400 border-red-500/20">FAILED</span>
+                    <span className="status-badge border bg-danger-muted text-danger border-danger/30">FAILED</span>
                     <button
                       onClick={() => retryMutation.mutate()}
                       disabled={retryMutation.isPending}
@@ -304,8 +307,8 @@ export function TaskDetails() {
                 ) : (
                   <span className={`status-badge border ${
                     task.assignmentStatus === 'SENT'
-                      ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                      : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                      ? 'bg-success-muted text-success border-success/30'
+                      : 'bg-warning-muted text-warning border-warning/30'
                   }`}>
                     {task.assignmentStatus || 'PENDING'}
                   </span>
@@ -313,12 +316,12 @@ export function TaskDetails() {
               </div>
 
               {task.assignmentError && (
-                <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 text-xs text-red-300 break-words">
+                <div className="bg-danger-muted border border-danger/30 rounded-lg p-3 text-xs text-danger break-words">
                   {task.assignmentError}
                 </div>
               )}
               {retryMutation.isError && (
-                <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 text-xs text-red-300 break-words">
+                <div className="bg-danger-muted border border-danger/30 rounded-lg p-3 text-xs text-danger break-words">
                   {(retryMutation.error as Error)?.message || 'Retry failed.'}
                 </div>
               )}
@@ -328,7 +331,7 @@ export function TaskDetails() {
                   {task.externalTaskId && (
                     <div>
                       <p className="text-dark-400 text-xs font-medium mb-0.5">External Task ID</p>
-                      <p className="text-white font-mono">{task.externalTaskId}</p>
+                      <p className="text-text-primary font-mono">{task.externalTaskId}</p>
                     </div>
                   )}
                   {task.subreddit && (
@@ -339,26 +342,26 @@ export function TaskDetails() {
                           {task.subreddit}
                         </a>
                       ) : (
-                        <p className="text-white">{task.subreddit}</p>
+                        <p className="text-text-primary">{task.subreddit}</p>
                       )}
                     </div>
                   )}
                   {task.flair && (
                     <div>
                       <p className="text-dark-400 text-xs font-medium mb-0.5">Flair</p>
-                      <p className="text-white">{task.flair}</p>
+                      <p className="text-text-primary">{task.flair}</p>
                     </div>
                   )}
                   {task.payment && (
                     <div>
                       <p className="text-dark-400 text-xs font-medium mb-0.5">Payment</p>
-                      <p className="text-white">{task.payment}</p>
+                      <p className="text-text-primary">{task.payment}</p>
                     </div>
                   )}
                   {task.deadline && (
                     <div>
                       <p className="text-dark-400 text-xs font-medium mb-0.5">Deadline</p>
-                      <p className="text-white">{task.deadline}</p>
+                      <p className="text-text-primary">{task.deadline}</p>
                     </div>
                   )}
                   {task.sourceUrl && (
@@ -484,11 +487,11 @@ export function TaskDetails() {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <div className="relative flex-1">
-                            <Link2 className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-dark-400" />
+                            <Link2 className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted" />
                             <input
                               type="text"
                               placeholder="https://www.reddit.com/..."
-                              className="w-full h-9 pl-9 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-lg text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
+                              className="input-field w-full h-9 pl-9"
                               value={submitUrl}
                               onChange={(e) => setSubmitUrl(e.target.value)}
                             />
@@ -513,7 +516,7 @@ export function TaskDetails() {
                           </button>
                         </div>
                         {submitMutation.isError && (
-                          <p className="text-xs text-red-400">
+                          <p className="text-xs text-danger">
                             {(submitMutation.error as Error)?.message || 'Could not replace the URL.'}
                           </p>
                         )}
@@ -540,11 +543,11 @@ export function TaskDetails() {
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
-                        <Link2 className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-dark-400" />
+                        <Link2 className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted" />
                         <input
                           type="text"
                           placeholder="https://www.reddit.com/..."
-                          className="w-full h-9 pl-9 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-lg text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
+                          className="input-field w-full h-9 pl-9"
                           value={submitUrl}
                           onChange={(e) => setSubmitUrl(e.target.value)}
                         />
@@ -559,7 +562,7 @@ export function TaskDetails() {
                       </button>
                     </div>
                     {submitMutation.isError && (
-                      <p className="text-xs text-red-400">
+                      <p className="text-xs text-danger">
                         {(submitMutation.error as Error)?.message || 'Could not record the URL.'}
                       </p>
                     )}
@@ -571,7 +574,7 @@ export function TaskDetails() {
                     <button
                       onClick={() => doneMutation.mutate()}
                       disabled={doneMutation.isPending}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-muted text-success border border-success/30 hover:bg-success-muted text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {doneMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                       Mark as Done
@@ -582,7 +585,7 @@ export function TaskDetails() {
                   </div>
                 )}
                 {doneMutation.isError && (
-                  <p className="text-xs text-red-400">
+                  <p className="text-xs text-danger">
                     {(doneMutation.error as Error)?.message || 'Could not accept the task.'}
                   </p>
                 )}
@@ -593,7 +596,7 @@ export function TaskDetails() {
 
         {/* Reminder Timeline */}
         <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
             <Clock className="w-5 h-5 text-primary-400" />
             Reminder Timeline
           </h3>
@@ -606,7 +609,7 @@ export function TaskDetails() {
             <p className="text-dark-400 text-sm">No reminders for this task.</p>
           ) : (
             <div className="relative">
-              <div className="absolute left-[19px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-dark-600 via-dark-700 to-dark-800" />
+              <div className="absolute left-[19px] top-2 bottom-2 w-[2px] bg-appborder-subtle" />
               <div className="space-y-0">
                 {timeline.map((event) => {
                   const isFuture = event.date && event.date.getTime() > Date.now();
@@ -630,7 +633,7 @@ export function TaskDetails() {
         {/* Submitted Screenshots */}
         {reminders.some((r: any) => r.insightImageUrl) && (
           <div className="glass-card p-6">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
               <Image className="w-5 h-5 text-primary-400" />
               Submitted Screenshots
             </h3>

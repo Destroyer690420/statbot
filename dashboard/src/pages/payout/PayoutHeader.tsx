@@ -32,7 +32,7 @@ export function PayoutHeader({ weekLabel, dateParams, activeRoute }: PayoutHeade
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
       <div>
-        <h2 className="text-xl sm:text-2xl font-bold text-white">Payments</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-text-primary">Payments</h2>
         {weekLabel && (
           <p className="text-dark-400 text-xs sm:text-sm mt-0.5 flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5" />
@@ -59,10 +59,10 @@ export function PayoutHeader({ weekLabel, dateParams, activeRoute }: PayoutHeade
           Export CSV
         </button>
         {restoreMutation.isSuccess && (
-          <span className="text-green-400 text-xs">Restored {restoreMutation.data?.data?.restored} tasks</span>
+          <span className="text-success text-xs">Restored {restoreMutation.data?.data?.restored} tasks</span>
         )}
         {restoreMutation.isError && (
-          <span className="text-red-400 text-xs">{(restoreMutation.error as Error).message}</span>
+          <span className="text-danger text-xs">{(restoreMutation.error as Error).message}</span>
         )}
       </div>
     </div>

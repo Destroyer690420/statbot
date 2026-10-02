@@ -6,7 +6,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, Legend,
 } from 'recharts';
 
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const COLORS = ['#6C8CFF', '#4CAF82', '#D6A85A', '#D66B72', '#829EFF', '#98A1AD'];
 
 export function Analytics() {
   const { data: statsData, isLoading: statsLoading } = useQuery({
@@ -53,23 +53,24 @@ export function Analytics() {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Stats Cards */}
-
+    <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         {statCards.map((card, i) => (
           <div key={i} className="stat-card">
-            <p className="text-dark-400 text-xs font-medium mb-1">{card.title}</p>
-            <h3 className="text-2xl font-bold text-white">{card.value}</h3>
+            <p className="text-text-secondary text-xs font-medium mb-1">{card.title}</p>
+            <h3 className="text-2xl font-semibold text-text-primary tabular-nums">{card.value}</h3>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Tasks Per Day */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-6">Tasks Per Day (Last 30 Days)</h3>
+        <div className="glass-card p-5">
+          <div className="flex items-baseline justify-between mb-4">
+            <h3 className="text-[16px] font-semibold text-text-primary">Tasks per day</h3>
+            <span className="text-xs text-text-muted">Last 30 days</span>
+          </div>
           {dailyLoading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
@@ -82,15 +83,15 @@ export function Analytics() {
                 <AreaChart data={daily}>
                   <defs>
                     <linearGradient id="colorDaily" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#6C8CFF" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#6C8CFF" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="date" stroke="#64748b" tick={{fill: '#64748b', fontSize: 12}} axisLine={false} tickLine={false} />
-                  <YAxis stroke="#64748b" tick={{fill: '#64748b'}} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
-                  <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorDaily)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#20252C" vertical={false} />
+                  <XAxis dataKey="date" stroke="#66707C" tick={{fill: '#66707C', fontSize: 12}} axisLine={false} tickLine={false} />
+                  <YAxis stroke="#66707C" tick={{fill: '#66707C'}} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: '#111418', borderColor: '#272D35', borderRadius: '12px' }} />
+                  <Area type="monotone" dataKey="count" stroke="#6C8CFF" strokeWidth={2} fillOpacity={1} fill="url(#colorDaily)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -98,8 +99,8 @@ export function Analytics() {
         </div>
 
         {/* Task Type Distribution */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-6">Task Type Distribution</h3>
+        <div className="glass-card p-5">
+          <h3 className="text-[16px] font-semibold text-text-primary mb-4">Task type distribution</h3>
           {typesLoading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
@@ -123,7 +124,7 @@ export function Analytics() {
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#111418', borderColor: '#272D35', borderRadius: '12px' }} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -132,8 +133,8 @@ export function Analytics() {
         </div>
 
         {/* Employee Performance */}
-        <div className="lg:col-span-2 glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-6">Employee Performance</h3>
+        <div className="lg:col-span-2 glass-card p-5">
+          <h3 className="text-[16px] font-semibold text-text-primary mb-4">Employee performance</h3>
           {empLoading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
@@ -144,14 +145,14 @@ export function Analytics() {
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={employees}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="userId" stroke="#64748b" tick={{fill: '#64748b', fontSize: 12}} axisLine={false} tickLine={false} />
-                  <YAxis stroke="#64748b" tick={{fill: '#64748b'}} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#20252C" vertical={false} />
+                  <XAxis dataKey="userId" stroke="#66707C" tick={{fill: '#66707C', fontSize: 12}} axisLine={false} tickLine={false} />
+                  <YAxis stroke="#66707C" tick={{fill: '#66707C'}} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: '#111418', borderColor: '#272D35', borderRadius: '12px' }} />
                   <Legend />
-                  <Bar dataKey="total" name="Total Tasks" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="completed" name="Completed" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="pending" name="Pending" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="total" name="Total Tasks" fill="#6C8CFF" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" name="Completed" fill="#4CAF82" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="pending" name="Pending" fill="#D6A85A" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

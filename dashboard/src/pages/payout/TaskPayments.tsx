@@ -75,7 +75,7 @@ export function TaskPayments() {
             {
               label: 'Completed Tasks',
               value: summary?.completedTasks ?? 0,
-              icon: <CheckCircle2 className="w-5 h-5 text-green-400" />,
+              icon: <CheckCircle2 className="w-5 h-5 text-success" />,
               accent: 'green',
               subtitle: (
                 <div className="flex items-center gap-3">
@@ -91,13 +91,13 @@ export function TaskPayments() {
             {
               label: 'Pending Amount',
               value: formatCurrency(summary?.pendingAmount ?? 0),
-              icon: <IndianRupee className="w-5 h-5 text-yellow-400" />,
+              icon: <IndianRupee className="w-5 h-5 text-warning" />,
               accent: 'amber',
             },
             {
               label: 'Already Paid',
               value: formatCurrency(summary?.alreadyPaid ?? 0),
-              icon: <Wallet className="w-5 h-5 text-blue-400" />,
+              icon: <Wallet className="w-5 h-5 text-info" />,
               accent: 'blue',
             },
           ]}
@@ -118,7 +118,7 @@ export function TaskPayments() {
           errorMessage={(payAllMutation.error as Error)?.message}
           successContent={
             <span>
-              ✅ Paid {payAllMutation.data?.data?.items?.length ?? 0} tasks — Batch #{payAllMutation.data?.data?.batch?.batchNumber}
+              Paid {payAllMutation.data?.data?.items?.length ?? 0} tasks — Batch #{payAllMutation.data?.data?.batch?.batchNumber}
             </span>
           }
           onConfirm={() => payAllMutation.mutate()}

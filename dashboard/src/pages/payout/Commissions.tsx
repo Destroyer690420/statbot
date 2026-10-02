@@ -74,13 +74,13 @@ export function Commissions() {
             {
               label: 'Successful Invites',
               value: summary?.totalSuccessfulInvites ?? 0,
-              icon: <UserPlus className="w-5 h-5 text-green-400" />,
+              icon: <UserPlus className="w-5 h-5 text-success" />,
               accent: 'green',
             },
             {
               label: 'Total Commission',
               value: formatCurrency(summary?.totalCommission ?? 0),
-              icon: <IndianRupee className="w-5 h-5 text-yellow-400" />,
+              icon: <IndianRupee className="w-5 h-5 text-warning" />,
               accent: 'amber',
               subtitle: (
                 <div className="flex items-center gap-3">
@@ -96,7 +96,7 @@ export function Commissions() {
             {
               label: 'Already Paid',
               value: formatCurrency(summary?.alreadyPaidCommission ?? 0),
-              icon: <Wallet className="w-5 h-5 text-blue-400" />,
+              icon: <Wallet className="w-5 h-5 text-info" />,
               accent: 'blue',
             },
           ]}
@@ -117,7 +117,7 @@ export function Commissions() {
           errorMessage={(payAllMutation.error as Error)?.message}
           successContent={
             <span>
-              ✅ Paid {payAllMutation.data?.data?.invitersPaid ?? 0} inviters — {formatCurrency(payAllMutation.data?.data?.totalAmount ?? 0)}
+              Paid {payAllMutation.data?.data?.invitersPaid ?? 0} inviters — {formatCurrency(payAllMutation.data?.data?.totalAmount ?? 0)}
             </span>
           }
           onConfirm={() => payAllMutation.mutate()}

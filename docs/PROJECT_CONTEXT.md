@@ -222,7 +222,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 5. **Stale root `dist/`** build (missing newer modules like `html-to-discord`), gitignored.
 6. **`.env.example` stale**: still lists removed `FIREBASE_*` vars, missing required `DATABASE_URL`.
 7. Payout week windows rely on **post-completion times derived from reminder `.completedAt`**, not stored completion times; edge cases exist (see docs/PAYOUT_SYSTEM.md).
-8. Dashboard: Theme picker stub; `w-4.5` invalid Tailwind class; `tailwindcss-animate` classes inert; OwnerEarnings route JWT-only (PIN not enforced server-side per request).
+8. Dashboard: Theme picker stub; OwnerEarnings route JWT-only (PIN not enforced server-side per request). (Fixed 2026-10-02, NOT deployed: invalid `w-4.5` classes and inert `tailwindcss-animate` classes removed; see FRONTEND.md §10.)
 9. Rate limit (300 req/15 min/IP) applies to the whole `/api/` prefix including health/login, EXCEPT the extension-key-gated companion poll endpoints (`/automation/claims/pending`, `/sightings`, `/burst`, `/eligibility-bundle`, `/goparttime/assign`) — matched on `req.originalUrl` via `src/utils/rate-limit-exempt.ts` (a `req.path` check never matches under `app.use('/api/')`; that exact bug 429'd the dashboard mid-blast 2026-10-02 — fixed and DEPLOYED 2026-10-02 at `100503c`).
 10. `insightStorageService.deleteTaskDir`, `check-reddit.ts` (`isPostDeleted`), `DELETED_DETECTION_THRESHOLD_MS`, `generateCommissionBatchId` — dead code.
 11. Duplicate userscript copies (`scripts/` and `dashboard/public/`) must stay in sync.
@@ -257,6 +257,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-10-02**: **Admin dashboard premium redesign (NOT deployed — working tree only).** Visual/UI-only pass over the whole admin SPA (worker portal, backend, API, DB untouched): centralized token system (`tailwind.config.js` + `index.css` — page `#0B0D0F` → secondary `#111418` → surface `#171B20`, `#6C8CFF` accent, muted semantics), rebuilt sidebar/Dashboard/Login/Archives, swept all other admin pages for bright colors, invalid classes (`w-4.5`, `placeholder-dark-400`), emoji badges, and modal/pagination inconsistencies. Verified: `tsc && vite build` clean (3×). Docs updated (`FRONTEND.md` §10–11, `CHANGELOG.md`, `KNOWN_ISSUES.md` #8/#28). Takes effect on the next dashboard rebuild + deploy.
 
 - **2026-10-02**: **Dead Tickets cleanup (DEPLOYED 2026-10-02 at `5c37da9`**: app + dashboard rebuild; no DB migration — new `TicketOutreach.deleteByChannelIds` + `Task.findLatestByChannelId` read existing tables). Settings gains a Dead Tickets card: Scan lists outreach rows whose Discord channel no longer resolves (deleted tickets) with last-known ticket/worker names from the newest Task, per-row delete + delete-all (`GET`/`DELETE /api/v1/outreach/dead-tickets`, admin JWT). The 12:12 blast's 24 "failed" were exactly this: stale selected rows for deleted channels (`Unknown Channel`). Verified: live `dist` gates, both endpoints 401-unauthenticated (route + auth wired), settings page 200, health healthy, boot "All systems online!".
 

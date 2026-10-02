@@ -5,31 +5,64 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
-          950: '#1e1b4b',
-        },
+        // ── Premium neutral scale (Linear/Vercel-like hierarchy) ──
+        // Page #0B0D0F → secondary #111418 → surface #171B20.
+        // Numeric increase = darker, preserving Tailwind ordering.
         dark: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
-          950: '#020617',
+          50: '#F2F4F7',
+          100: '#DCE1E7',
+          200: '#B9C1CB',
+          300: '#98A1AD',
+          400: '#98A1AD',
+          500: '#66707C',
+          600: '#3A424D',
+          700: '#272D35',
+          800: '#171B20',
+          900: '#111418',
+          950: '#0B0D0F',
+        },
+        // ── Primary accent: restrained soft blue ──
+        primary: {
+          50: '#EEF1FF',
+          100: '#DDE4FF',
+          200: '#C3CFFF',
+          300: '#A4B9FF',
+          400: '#829EFF',
+          500: '#6C8CFF',
+          600: '#6C8CFF',
+          700: '#5569C4',
+          800: '#3D4C8F',
+          900: '#2A3358',
+          950: '#181D33',
+        },
+        // ── Layered surfaces (explicit tokens, §29) ──
+        background: '#0B0D0F',
+        'background-secondary': '#111418',
+        surface: '#171B20',
+        'surface-hover': '#1D2229',
+        'surface-active': '#222832',
+        appborder: '#272D35',
+        'appborder-subtle': '#20252C',
+        // ── Text tokens ──
+        'text-primary': '#F2F4F7',
+        'text-secondary': '#98A1AD',
+        'text-muted': '#66707C',
+        // ── Muted semantic colors ──
+        success: {
+          DEFAULT: '#4CAF82',
+          muted: 'rgba(76, 175, 130, 0.12)',
+        },
+        warning: {
+          DEFAULT: '#D6A85A',
+          muted: 'rgba(214, 168, 90, 0.12)',
+        },
+        danger: {
+          DEFAULT: '#D66B72',
+          muted: 'rgba(214, 107, 114, 0.12)',
+        },
+        info: {
+          DEFAULT: '#6C8CFF',
+          muted: 'rgba(108, 140, 255, 0.12)',
         },
         worker: {
           bg: '#0B0E14',
@@ -48,8 +81,18 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
         display: ['Sora', 'Inter', 'system-ui', 'sans-serif'],
+      },
+      borderRadius: {
+        sm: '6px',
+        md: '8px',
+        lg: '10px',
+        xl: '12px',
+      },
+      boxShadow: {
+        pop: '0 12px 32px rgba(0, 0, 0, 0.25)',
+        subtle: '0 1px 2px rgba(0, 0, 0, 0.2)',
       },
       backgroundImage: {
         'wallet-gradient': 'linear-gradient(135deg, #5B63D8 0%, #7C86FF 55%, #9B7BFF 100%)',

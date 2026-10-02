@@ -12,15 +12,15 @@ export function WorkerDetail({ data }: { data: any }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <div className="bg-dark-800/60 rounded-xl p-3 border border-dark-700/40">
           <p className="text-dark-400 text-xs font-medium mb-0.5">Posts</p>
-          <p className="text-white font-bold text-base sm:text-lg">{data.posts}</p>
+          <p className="text-text-primary font-bold text-base sm:text-lg">{data.posts}</p>
         </div>
         <div className="bg-dark-800/60 rounded-xl p-3 border border-dark-700/40">
           <p className="text-dark-400 text-xs font-medium mb-0.5">Comments</p>
-          <p className="text-white font-bold text-base sm:text-lg">{data.comments}</p>
+          <p className="text-text-primary font-bold text-base sm:text-lg">{data.comments}</p>
         </div>
         <div className="bg-dark-800/60 rounded-xl p-3 border border-dark-700/40">
           <p className="text-dark-400 text-xs font-medium mb-0.5">Completed</p>
-          <p className="text-white font-bold text-base sm:text-lg">{data.tasks?.length ?? 0}</p>
+          <p className="text-text-primary font-bold text-base sm:text-lg">{data.tasks?.length ?? 0}</p>
         </div>
         <div className="bg-dark-800/60 rounded-xl p-3 border border-dark-700/40">
           <p className="text-dark-400 text-xs font-medium mb-0.5">Earnings</p>
@@ -32,12 +32,12 @@ export function WorkerDetail({ data }: { data: any }) {
       <div className="bg-dark-800/30 rounded-xl p-3 border border-dark-700/30 mb-3 text-sm">
         <div className="flex flex-wrap gap-x-6 gap-y-1">
           <p className="text-dark-300">
-            Posts: <span className="text-white font-medium">{data.posts} × ₹{data.postRate} = ₹{(data.postsEarnings ?? 0).toLocaleString('en-IN')}</span>
+            Posts: <span className="text-text-primary font-medium">{data.posts} × ₹{data.postRate} = ₹{(data.postsEarnings ?? 0).toLocaleString('en-IN')}</span>
           </p>
           <p className="text-dark-300">
-            Comments: <span className="text-white font-medium">{data.comments} × ₹{data.commentRate} = ₹{(data.commentsEarnings ?? 0).toLocaleString('en-IN')}</span>
+            Comments: <span className="text-text-primary font-medium">{data.comments} × ₹{data.commentRate} = ₹{(data.commentsEarnings ?? 0).toLocaleString('en-IN')}</span>
           </p>
-          <p className="text-white font-semibold ml-auto">
+          <p className="text-text-primary font-semibold ml-auto">
             Total: ₹{(data.totalAmount ?? 0).toLocaleString('en-IN')}
           </p>
         </div>
@@ -69,17 +69,17 @@ export function WorkerDetail({ data }: { data: any }) {
                 {data.tasks.map((task: any) => (
                   <tr key={task.id} className="border-b border-dark-800/50">
                     <td className="py-2 px-2">
-                      <span className="font-mono text-xs text-white">{displayTaskId(task.id, task.type, task.externalTaskId)}</span>
+                      <span className="font-mono text-xs text-text-primary">{displayTaskId(task.id, task.type, task.externalTaskId)}</span>
                     </td>
                     <td className="py-2 px-2 text-center">
-                      <span className={`status-badge ${task.type === 'POST' ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'}`}>
+                      <span className={`status-badge border ${task.type === 'POST' ? 'bg-info-muted text-info border-info/30' : 'badge-neutral'}`}>
                         {task.type}
                       </span>
                     </td>
                     <td className="py-2 px-2 text-center text-dark-300 text-xs">
                       {task.createdAt ? formatISODate(task.createdAt) : '-'}
                     </td>
-                    <td className="py-2 px-2 text-right text-white">₹{task.amount}</td>
+                    <td className="py-2 px-2 text-right text-text-primary">₹{task.amount}</td>
                   </tr>
                 ))}
               </tbody>
@@ -91,8 +91,8 @@ export function WorkerDetail({ data }: { data: any }) {
             {data.tasks.map((task: any) => (
               <div key={task.id} className="bg-dark-800/40 rounded-lg p-3 border border-dark-700/30">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-mono text-xs text-white">{displayTaskId(task.id, task.type, task.externalTaskId)}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${task.type === 'POST' ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'}`}>
+                  <span className="font-mono text-xs text-text-primary">{displayTaskId(task.id, task.type, task.externalTaskId)}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs border ${task.type === 'POST' ? 'bg-info-muted text-info border-info/30' : 'bg-surface-active text-text-secondary border-appborder'}`}>
                     {task.type}
                   </span>
                 </div>
@@ -101,7 +101,7 @@ export function WorkerDetail({ data }: { data: any }) {
                     {task.type === 'POST' ? <FileText className="w-3 h-3" /> : <MessageSquare className="w-3 h-3" />}
                     {task.createdAt ? formatISODate(task.createdAt) : '-'}
                   </span>
-                  <span className="text-white font-medium">₹{task.amount}</span>
+                  <span className="text-text-primary font-medium">₹{task.amount}</span>
                 </div>
               </div>
             ))}

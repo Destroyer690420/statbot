@@ -4,19 +4,49 @@
 
 @layer base {
   :root {
-    --wp-bg: #0B0E14;
-    --wp-surface: #12161F;
-    --wp-surface-2: #171C27;
-    --wp-border: #232A38;
-    --wp-text: #E7EAF2;
-    --wp-text-muted: #93A0B4;
-    --wp-text-faint: #5C6779;
-    --wp-accent: #7C86FF;
-    --wp-accent-hover: #8F98FF;
-    --wp-success: #34D399;
-    --wp-warning: #F5B454;
-    --wp-danger: #FB7185;
-    --wp-info: #7C86FF;
+    /* ── Global design tokens (§2–§8, §29) ── */
+    --background: #0b0d0f;
+    --background-secondary: #111418;
+    --surface: #171b20;
+    --surface-hover: #1d2229;
+    --surface-active: #222832;
+    --border: #272d35;
+    --border-subtle: #20252c;
+    --text-primary: #f2f4f7;
+    --text-secondary: #98a1ad;
+    --text-muted: #66707c;
+    --primary: #6c8cff;
+    --primary-hover: #829eff;
+    --primary-muted: rgba(108, 140, 255, 0.12);
+    --primary-border: rgba(108, 140, 255, 0.3);
+    --success: #4caf82;
+    --success-muted: rgba(76, 175, 130, 0.12);
+    --warning: #d6a85a;
+    --warning-muted: rgba(214, 168, 90, 0.12);
+    --danger: #d66b72;
+    --danger-muted: rgba(214, 107, 114, 0.12);
+    --info: #6c8cff;
+    --info-muted: rgba(108, 140, 255, 0.12);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+    --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.25);
+
+    /* Worker portal tokens (untouched scope) */
+    --wp-bg: #0b0e14;
+    --wp-surface: #12161f;
+    --wp-surface-2: #171c27;
+    --wp-border: #232a38;
+    --wp-text: #e7eaf2;
+    --wp-text-muted: #93a0b4;
+    --wp-text-faint: #5c6779;
+    --wp-accent: #7c86ff;
+    --wp-accent-hover: #8f98ff;
+    --wp-success: #34d399;
+    --wp-warning: #f5b454;
+    --wp-danger: #fb7185;
+    --wp-info: #7c86ff;
   }
 
   * {
@@ -25,79 +55,220 @@
     box-sizing: border-box;
   }
 
+  html {
+    background-color: var(--background);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(108, 140, 255, 0.25);
+  }
+
   ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
+    height: 8px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #0f172a;
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #334155;
-    border-radius: 3px;
+    background: #272d35;
+    border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #475569;
+    background: #3a424d;
+  }
+
+  :focus-visible {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.1);
   }
 }
 
 @layer components {
+  /* ── Surfaces ─────────────────────────────── */
   .glass-card {
-    @apply bg-dark-900/60 backdrop-blur-xl border border-dark-700/50 rounded-2xl;
+    @apply bg-surface border border-appborder rounded-lg;
   }
 
   .stat-card {
-    @apply glass-card p-6 transition-all duration-300 hover:border-primary-500/30 hover:shadow-lg hover:shadow-primary-500/5;
+    @apply bg-surface border border-appborder rounded-lg p-5 transition-colors duration-150 hover:bg-surface-hover;
   }
 
+  .summary-card {
+    @apply bg-surface border border-appborder rounded-lg p-4 sm:p-5 transition-colors duration-150 hover:bg-surface-hover;
+  }
+
+  /* ── Buttons (clear hierarchy, §14) ────────── */
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-500 text-white font-medium px-6 py-2.5 rounded-xl transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-400 text-white text-sm font-medium px-4 py-2 rounded-md transition-all duration-150 active:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply bg-dark-700 hover:bg-dark-600 text-dark-100 font-medium px-6 py-2.5 rounded-xl transition-all duration-200 border border-dark-600;
+    @apply inline-flex items-center justify-center gap-2 bg-surface border border-appborder text-text-primary text-sm font-medium px-4 py-2 rounded-md transition-colors duration-150 hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-danger {
-    @apply bg-red-600/20 hover:bg-red-600/30 text-red-400 font-medium px-6 py-2.5 rounded-xl transition-all duration-200 border border-red-500/30;
+    @apply inline-flex items-center justify-center gap-2 text-sm font-medium px-4 py-2 rounded-md border transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    background: var(--danger-muted);
+    border-color: rgba(214, 107, 114, 0.3);
+    color: var(--danger);
   }
 
+  .btn-danger:hover {
+    background: rgba(214, 107, 114, 0.2);
+  }
+
+  /* Legacy bare `.btn` (used in Settings/OwnerEarnings) maps to secondary */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 bg-surface border border-appborder text-text-primary text-sm font-medium px-4 py-2 rounded-md transition-colors duration-150 hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* ── Inputs (§15) ─────────────────────────── */
   .input-field {
-    @apply bg-dark-800 border border-dark-600 rounded-xl px-4 py-2.5 text-dark-100 placeholder:text-dark-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50 transition-all duration-200;
+    @apply bg-background-secondary border border-appborder rounded-md px-3 py-2 text-sm text-text-primary transition-colors duration-150;
   }
 
+  .input-field::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input-field:hover {
+    border-color: #3a424d;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.1);
+  }
+
+  /* ── Status badges (§13 — compact, muted) ──── */
   .status-badge {
-    @apply px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider;
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium tracking-wide whitespace-nowrap border border-transparent;
   }
 
-  /* ─── Payout redesign components ──────────────────────────── */
-
-  .summary-card {
-    @apply glass-card p-4 sm:p-5 transition-all duration-300 hover:shadow-lg hover:shadow-primary-500/5;
+  .badge-success {
+    background: var(--success-muted);
+    color: var(--success);
   }
 
+  .badge-warning {
+    background: var(--warning-muted);
+    color: var(--warning);
+  }
+
+  .badge-danger {
+    background: var(--danger-muted);
+    color: var(--danger);
+  }
+
+  .badge-info {
+    background: var(--info-muted);
+    color: var(--info);
+  }
+
+  .badge-neutral {
+    @apply bg-surface-active text-text-secondary border-appborder;
+  }
+
+  /* ── Tables (§12) ─────────────────────────── */
+  .app-table {
+    @apply w-full text-sm;
+  }
+
+  .app-table thead th {
+    @apply text-left text-xs font-medium uppercase tracking-wider px-4 py-3;
+    background: var(--background-secondary);
+    color: var(--text-muted);
+  }
+
+  .app-table tbody td {
+    @apply px-4 py-3;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+  }
+
+  .app-table tbody tr {
+    transition: background-color 120ms ease;
+  }
+
+  .app-table tbody tr:hover {
+    background: var(--surface);
+  }
+
+  .app-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* ── Segmented control / tabs ─────────────── */
   .segmented-control {
-    @apply flex bg-dark-800/60 rounded-xl p-1 border border-dark-700/40 w-full sm:w-auto overflow-x-auto;
+    @apply flex bg-background-secondary rounded-md p-1 border border-appborder-subtle w-full sm:w-auto overflow-x-auto;
   }
 
   .segmented-control-item {
-    @apply flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap text-center text-dark-400 hover:text-white;
+    @apply flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors duration-150 whitespace-nowrap text-center text-text-secondary hover:text-text-primary;
   }
 
   .segmented-control-item.active {
-    @apply bg-primary-600/20 text-primary-400 shadow-sm;
+    background: var(--primary-muted);
+    color: var(--text-primary);
   }
 
+  /* ── Panels / banners ─────────────────────── */
   .expand-panel {
     @apply p-3 sm:p-4;
   }
 
   .pay-all-banner {
-    @apply glass-card p-4 sm:p-5 bg-gradient-to-r from-primary-950/40 to-dark-900/60 border-primary-700/20;
+    @apply bg-surface border border-appborder rounded-lg p-4 sm:p-5;
   }
 
+  /* ── Modal entrance (§22 — subtle fade + scale) ── */
+  .modal-panel {
+    animation: modal-in 150ms ease-out both;
+  }
+
+  /* ── Skeletons (§24) ──────────────────────── */
+  .skeleton {
+    @apply rounded-md motion-safe:animate-pulse;
+    background: #1d2229;
+  }
+
+  .skeleton-block {
+    @apply rounded-md motion-safe:animate-pulse h-4 w-full;
+    background: #1d2229;
+  }
+
+  /* ── Empty states (§23) ───────────────────── */
+  .empty-state {
+    @apply flex flex-col items-center justify-center text-center py-12 px-6;
+  }
+
+  .empty-state-title {
+    @apply text-[15px] font-semibold text-text-primary mb-1;
+  }
+
+  .empty-state-desc {
+    @apply text-[13px] text-text-secondary max-w-sm;
+  }
+
+  /* ─── Payout redesign components ──────────── */
+
+  /* ── Worker portal components (out of scope, preserved) ── */
   .worker-card {
     @apply rounded-xl border border-worker-border bg-worker-surface transition-colors duration-150;
   }
@@ -143,6 +314,17 @@
   }
 }
 
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 @keyframes worker-route-fade {
   from {
     opacity: 0;
@@ -153,7 +335,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .worker-route-fade {
+  .worker-route-fade,
+  .modal-panel {
     animation: none;
   }
 

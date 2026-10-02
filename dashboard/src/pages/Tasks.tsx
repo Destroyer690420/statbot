@@ -86,34 +86,34 @@ export function Tasks() {
   );
 
   const getRowClass = (cancelledReason?: string | null) => {
-    if (cancelledReason === 'deleted') return 'bg-red-900/10 hover:bg-red-900/20 transition-colors';
-    if (cancelledReason === 'deleted_later') return 'bg-green-900/10 hover:bg-green-900/20 transition-colors';
-    return 'hover:bg-dark-800/30 transition-colors';
+    if (cancelledReason === 'deleted') return 'bg-danger-muted transition-colors';
+    if (cancelledReason === 'deleted_later') return 'bg-success-muted transition-colors';
+    return 'hover:bg-surface transition-colors';
   };
 
   const getStatusColor = (status: string, cancelledReason?: string) => {
     switch (status) {
-      case 'COMPLETED': return 'bg-green-500/10 text-green-400 border-green-500/20';
-      case 'ARCHIVED': return 'bg-dark-500/10 text-dark-400 border-dark-500/20';
+      case 'COMPLETED': return 'bg-success-muted text-success border-success/30';
+      case 'ARCHIVED': return 'bg-surface-active text-text-secondary border-appborder';
       case 'CANCELLED':
         if (cancelledReason === 'deleted' || cancelledReason === 'deleted_later')
-          return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
-        return 'bg-red-500/10 text-red-400 border-red-500/20';
-      case 'PENDING': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
-      default: return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+          return 'bg-warning-muted text-warning border-warning/30';
+        return 'bg-danger-muted text-danger border-danger/30';
+      case 'PENDING': return 'bg-warning-muted text-warning border-warning/30';
+      default: return 'bg-info-muted text-info border-info/30';
     }
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       <div className="flex items-center gap-2 w-full">
         {/* Search Input */}
         <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-dark-400 pointer-events-none" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted pointer-events-none" />
           <input
             type="text"
             placeholder="Search ID or URL..."
-            className="w-full h-10 pl-10 pr-3 bg-dark-800/80 border border-dark-700/80 rounded-xl text-sm text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-all"
+            className="input-field w-full h-10 pl-9"
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
           />
@@ -121,14 +121,14 @@ export function Tasks() {
 
         {/* Filter Icon Button */}
         <div 
-          className={`relative flex items-center justify-center w-10 h-10 rounded-xl border shrink-0 transition-all ${
+          className={`relative flex items-center justify-center w-10 h-10 rounded-md border shrink-0 transition-colors ${
             statusFilter 
               ? 'bg-primary-500/20 border-primary-500/40 text-primary-400' 
-              : 'bg-dark-800/80 border-dark-700/80 text-dark-300 hover:border-dark-600 hover:text-white'
+              : 'bg-dark-800/80 border-dark-700/80 text-dark-300 hover:border-dark-600 hover:text-text-primary'
           }`}
           title={statusFilter ? `Filter: ${statusFilter}` : "Filter by status"}
         >
-          <Filter className="w-4.5 h-4.5" />
+          <Filter className="w-4 h-4" />
           {statusFilter && (
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary-500 rounded-full ring-2 ring-dark-950" />
           )}
@@ -137,21 +137,21 @@ export function Tasks() {
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           >
-            <option value="" className="bg-dark-900 text-white">All Statuses</option>
-            <option value="PENDING" className="bg-dark-900 text-white">Pending</option>
-            <option value="REMINDER_20_SENT" className="bg-dark-900 text-white">20H Sent</option>
-            <option value="COMPLETED" className="bg-dark-900 text-white">Completed</option>
-            <option value="CANCELLED" className="bg-dark-900 text-white">Cancelled</option>
+            <option value="" className="bg-dark-900 text-text-primary">All Statuses</option>
+            <option value="PENDING" className="bg-dark-900 text-text-primary">Pending</option>
+            <option value="REMINDER_20_SENT" className="bg-dark-900 text-text-primary">20H Sent</option>
+            <option value="COMPLETED" className="bg-dark-900 text-text-primary">Completed</option>
+            <option value="CANCELLED" className="bg-dark-900 text-text-primary">Cancelled</option>
           </select>
         </div>
 
         {/* Download Button */}
         <button
           onClick={() => downloadCsv(statusFilter ? { status: statusFilter } : undefined)}
-          className="flex items-center justify-center w-10 h-10 rounded-xl bg-dark-800/80 border border-dark-700/80 hover:border-dark-600 text-dark-300 hover:text-white shrink-0 transition-all"
+          className="btn-secondary w-10 h-10 !px-0 shrink-0"
           title="Export CSV"
         >
-          <Download className="w-4.5 h-4.5" />
+          <Download className="w-4 h-4" />
         </button>
       </div>
 
@@ -160,14 +160,14 @@ export function Tasks() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-dark-700/50 bg-dark-800/50">
-                <th className="px-6 py-4 font-semibold text-dark-200">Task ID</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Type</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Status</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">URL</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Created</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Ticket</th>
-                <th className="px-6 py-4 font-semibold text-dark-200 text-right">Actions</th>
+              <tr className="border-b border-appborder-subtle bg-background-secondary">
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-muted">Task ID</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-muted">Type</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-muted">Status</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-muted">URL</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-muted">Created</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-muted">Ticket</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-muted text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dark-700/50">
@@ -186,12 +186,12 @@ export function Tasks() {
               ) : (
                 paginatedTasks.map((task: any) => (
                   <tr key={task.id} className={getRowClass(task.cancelledReason)}>
-                    <td className="px-6 py-4 font-mono text-sm font-medium text-dark-100">
+                    <td className="px-4 py-3 font-mono text-sm font-medium text-dark-100">
                       <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="hover:text-primary-400 transition-colors">
                         {displayTaskId(task.id, task.type, task.externalTaskId)}
                       </Link>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <select
                         className="input-field px-2 py-1 text-xs appearance-none bg-dark-800 border border-dark-600 rounded-md text-dark-200 cursor-pointer min-w-[100px]"
                         value={task.cancelledReason ?? ''}
@@ -207,12 +207,12 @@ export function Tasks() {
                         <option value="deleted_later">Deleted Later</option>
                       </select>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <span className={`status-badge border ${getStatusColor(task.status, task.cancelledReason)}`}>
                         {task.status.replace(/_/g, ' ')}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       {task.redditUrl ? (
                         <a 
                           href={task.redditUrl} 
@@ -227,19 +227,19 @@ export function Tasks() {
                         <span className="text-dark-500 text-sm italic">External</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-dark-300">
+                    <td className="px-4 py-3 text-sm text-dark-300">
                       {new Date(task.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <span className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50">
                         {task.channelName ? `#${task.channelName}` : task.channelId}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleDownloadImage(task.id)}
-                          className="p-2 text-dark-400 hover:text-cyan-400 hover:bg-cyan-400/10 rounded-lg transition-colors"
+                          className="p-2 text-dark-400 hover:text-info hover:bg-info-muted rounded-lg transition-colors"
                           title="Download Image"
                         >
                           <ImageDown className="w-4 h-4" />
@@ -256,7 +256,7 @@ export function Tasks() {
                         </Link>
                         <button
                           onClick={() => handleDelete(task.id)}
-                          className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                          className="p-2 text-dark-400 hover:text-danger hover:bg-danger-muted rounded-lg transition-colors"
                           title="Delete Task"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -284,9 +284,9 @@ export function Tasks() {
         ) : (
           paginatedTasks.map((task: any) => {
             const cardStyle = task.cancelledReason === 'deleted'
-              ? 'border-red-500/30 bg-red-900/15'
+              ? 'border-danger/30 bg-red-900/15'
               : task.cancelledReason === 'deleted_later'
-              ? 'border-green-500/30 bg-green-900/15'
+              ? 'border-success/30 bg-green-900/15'
               : 'border-dark-700/50';
 
             return (
@@ -364,7 +364,7 @@ export function Tasks() {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleDownloadImage(task.id)}
-                      className="p-1.5 text-dark-400 hover:text-cyan-400 hover:bg-cyan-400/10 rounded-lg transition-colors"
+                      className="p-1.5 text-dark-400 hover:text-info hover:bg-info-muted rounded-lg transition-colors"
                       title="Download Image"
                     >
                       <ImageDown className="w-4 h-4" />
@@ -381,7 +381,7 @@ export function Tasks() {
                     </Link>
                     <button
                       onClick={() => handleDelete(task.id)}
-                      className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                      className="p-1.5 text-dark-400 hover:text-danger hover:bg-danger-muted rounded-lg transition-colors"
                       title="Delete Task"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -404,7 +404,7 @@ export function Tasks() {
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2 text-dark-400 hover:text-text-primary hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -414,7 +414,7 @@ export function Tasks() {
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2 text-dark-400 hover:text-text-primary hover:bg-dark-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
