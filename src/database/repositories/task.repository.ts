@@ -59,6 +59,15 @@ export class TaskRepository {
     });
   }
 
+  /** Most recent task in a channel (any status) — last-known ticket/worker names. */
+  async findLatestByChannelId(channelId: string) {
+    return getDb().task.findFirst({
+      where: { channelId },
+      orderBy: { createdAt: 'desc' },
+      select: { channelName: true, assignedUserName: true },
+    });
+  }
+
   async findByDeliveryMessageId(channelId: string, messageId: string) {
     const tasks = await getDb().task.findMany({
       where: {

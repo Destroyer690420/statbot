@@ -1,8 +1,15 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X, MessageSquare } from 'lucide-react';
-import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin, getOutreachSettings, updateOutreachSettings, getRedditSessionStatus, saveRedditSession } from '../api/client';
+import { Save, Sun, Moon, Monitor, Loader2, IndianRupee, UserPlus, Trash2, X, MessageSquare, ScanSearch } from 'lucide-react';
+import { getPayoutRates, updatePayoutRates, getCommissionRates, updateCommissionRates, verifyOwnerPin, getOutreachSettings, updateOutreachSettings, getRedditSessionStatus, saveRedditSession, getDeadTickets, deleteDeadTickets } from '../api/client';
+
+interface DeadTicket {
+  channelId: string;
+  selected: boolean;
+  lastKnownChannelName: string | null;
+  lastKnownWorkerName: string | null;
+}
 
 export function Settings() {
   const navigate = useNavigate();
@@ -143,6 +150,45 @@ export function Settings() {
   const handleSaveOutreachMessage = () => {
     outreachMutation.mutate({ message: outreachMessage });
   };
+
+  // ─── Dead Tickets (deleted channels stuck in the outreach selection) ──
+
+  const [deadScan, setDeadScan] = useState<DeadTicket[] | null>(null);
+  const [deadScanNote, setDeadScanNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [deadScanning, setDeadScanning] = useState(false);
+
+  const handleScanDeadTickets = async () => {
+    setDeadScanning(true);
+    setDeadScanNote(null);
+    try {
+      const res = await getDeadTickets();
+      const dead: DeadTicket[] = res?.data?.dead || [];
+      setDeadScan(dead);
+      setDeadScanNote(
+        dead.length === 0
+          ? { ok: true, text: '✅ No dead tickets — every saved row still resolves.' }
+          : null,
+      );
+    } catch (e) {
+      setDeadScanNote({ ok: false, text: `❌ Scan failed: ${(e as Error).message}` });
+    } finally {
+      setDeadScanning(false);
+    }
+  };
+
+  const deadDeleteMutation = useMutation({
+    mutationFn: (channelIds: string[]) => deleteDeadTickets(channelIds),
+    onSuccess: (res) => {
+      const deleted = res?.data?.deleted ?? 0;
+      const ids = new Set(deadDeleteMutation.variables || []);
+      setDeadScan((prev) => (prev ? prev.filter((d) => !ids.has(d.channelId)) : prev));
+      setDeadScanNote({ ok: true, text: `✅ Deleted ${deleted} dead ticket(s) from the outreach list.` });
+      queryClient.invalidateQueries({ queryKey: ['outreach'] });
+    },
+    onError: (error: Error) => {
+      setDeadScanNote({ ok: false, text: `❌ Delete failed: ${error.message}` });
+    },
+  });
 
   // ─── Reddit Session (spare-account login cookie for format checks) ──
 
@@ -497,6 +543,81 @@ export function Settings() {
           )}
           {outreachMutation.isError && (
             <p className="mt-2 text-red-400 text-sm">❌ Failed to update message: {(outreachMutation.error as Error).message}</p>
+          )}
+        </div>
+
+        {/* Dead Tickets */}
+        <div className="glass-card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <ScanSearch className="w-5 h-5 text-primary-400" />
+            <h3 className="text-lg font-semibold text-white">Dead Tickets</h3>
+          </div>
+          <p className="text-dark-400 text-sm mb-4">
+            Tickets whose Discord channel was deleted but are still saved in the outreach list —
+            every one of them counts as a failure on the next blast. Scan, then delete them.
+          </p>
+
+          <button
+            onClick={handleScanDeadTickets}
+            disabled={deadScanning}
+            className="btn-secondary flex items-center gap-2 text-sm px-4 py-2"
+          >
+            {deadScanning ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ScanSearch className="w-4 h-4" />
+            )}
+            {deadScan === null ? 'Scan for dead tickets' : 'Rescan'}
+          </button>
+
+          {deadScan !== null && deadScan.length > 0 && (
+            <>
+              <div className="mt-4 space-y-2 max-h-64 overflow-y-auto">
+                {deadScan.map((d) => (
+                  <div
+                    key={d.channelId}
+                    className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-dark-900/60 border border-dark-700/60"
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-mono text-sm text-dark-100 truncate">
+                        #{d.lastKnownChannelName || d.channelId}
+                      </span>
+                      <span className="block text-xs text-dark-500 truncate">
+                        {d.lastKnownWorkerName || 'unknown worker'}
+                        {d.selected ? ' · selected' : ' · not selected'}
+                        {' · '}{d.channelId}
+                      </span>
+                    </span>
+                    <button
+                      onClick={() => deadDeleteMutation.mutate([d.channelId])}
+                      disabled={deadDeleteMutation.isPending}
+                      className="shrink-0 p-2 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                      title="Delete this dead ticket"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => deadDeleteMutation.mutate(deadScan.map((d) => d.channelId))}
+                disabled={deadDeleteMutation.isPending}
+                className="btn bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-700/50 rounded-xl px-5 py-2.5 flex items-center gap-2 transition-all mt-4 text-sm"
+              >
+                {deadDeleteMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Delete all {deadScan.length} dead ticket(s)
+              </button>
+            </>
+          )}
+
+          {deadScanNote && (
+            <p className={`mt-3 text-sm ${deadScanNote.ok ? 'text-green-400' : 'text-red-400'}`}>
+              {deadScanNote.text}
+            </p>
           )}
         </div>
 

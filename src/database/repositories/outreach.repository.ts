@@ -9,8 +9,7 @@ export class OutreachRepository {
     return getDb().ticketOutreach.findUnique({ where: { channelId } });
   }
 
-  async upsertSelection(selections: { channelId: string; selected: boolean }[]) {
-    if (selections.length === 0) return [];
+  async upsertSelection(selections: { channelId: string; selected: boolean }[]) {    if (selections.length === 0) return [];
     return getDb().$transaction(
       selections.map((s) =>
         getDb().ticketOutreach.upsert({
@@ -22,8 +21,7 @@ export class OutreachRepository {
     );
   }
 
-  async setMessageSent(channelId: string, at: Date) {
-    return getDb().ticketOutreach.update({
+  async setMessageSent(channelId: string, at: Date) {    return getDb().ticketOutreach.update({
       where: { channelId },
       data: { messageSentAt: at, updatedAt: new Date() },
     });
@@ -33,6 +31,14 @@ export class OutreachRepository {
     return getDb().ticketOutreach.update({
       where: { channelId },
       data: { availableAt: at, updatedAt: new Date() },
+    });
+  }
+
+  /** Removes dead-ticket rows (deleted Discord channels) by channel id. */
+  async deleteByChannelIds(channelIds: string[]) {
+    if (channelIds.length === 0) return { count: 0 };
+    return getDb().ticketOutreach.deleteMany({
+      where: { channelId: { in: channelIds } },
     });
   }
 

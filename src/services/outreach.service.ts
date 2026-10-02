@@ -43,6 +43,14 @@ interface ResolvedTicket {
   error: string | null;
 }
 
+/** An outreach row whose Discord channel no longer exists (deleted ticket). */
+export interface DeadTicket {
+  channelId: string;
+  selected: boolean;
+  lastKnownChannelName: string | null;
+  lastKnownWorkerName: string | null;
+}
+
 /**
  * Discord message sends in flight during a blast.
  *
@@ -264,6 +272,48 @@ class OutreachService {
     await outreachRepository.upsertSelection(selections);
     logger.info('Outreach selection saved', { count: selections.length });
     return selections.length;
+  }
+
+  /**
+   * Finds outreach rows whose Discord channel no longer resolves (deleted
+   * tickets). Last-known ticket/worker names come from the newest Task in
+   * the channel, since a deleted channel has no live name.
+   */
+  async findDeadTickets(discordClient: Client): Promise<DeadTicket[]> {
+    const rows = await outreachRepository.findAll();
+    const checked = await mapWithConcurrency(
+      rows,
+      CHANNEL_RESOLVE_CONCURRENCY,
+      async (row): Promise<DeadTicket | null> => {
+        try {
+          const channel = await discordClient.channels.fetch(row.channelId);
+          if (channel instanceof TextChannel) return null;
+          // Resolves but is not a messageable ticket channel — same as dead
+          // for blast purposes (the send would fail).
+        } catch {
+          // Unknown Channel (deleted) or otherwise unresolvable
+        }
+        const last = await taskRepository.findLatestByChannelId(row.channelId).catch(() => null);
+        return {
+          channelId: row.channelId,
+          selected: row.selected,
+          lastKnownChannelName: last?.channelName ?? null,
+          lastKnownWorkerName: last?.assignedUserName ?? null,
+        };
+      },
+    );
+    const dead = checked.filter((d): d is DeadTicket => d !== null);
+    logger.info('Dead outreach tickets scanned', { rows: rows.length, dead: dead.length });
+    return dead;
+  }
+
+  /** Deletes outreach rows for dead tickets. Returns the deleted count. */
+  async deleteDeadTickets(channelIds: string[]): Promise<number> {
+    const unique = [...new Set(channelIds.filter((id) => typeof id === 'string' && id.length > 0))];
+    if (unique.length === 0) return 0;
+    const result = await outreachRepository.deleteByChannelIds(unique);
+    logger.info('Dead outreach tickets deleted', { requested: unique.length, deleted: result.count });
+    return result.count;
   }
 
   /**

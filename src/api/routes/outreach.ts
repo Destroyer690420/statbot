@@ -109,5 +109,40 @@ export default function createOutreachRoutes(discordClient: Client): Router {
     }
   });
 
+  /**
+   * GET /api/v1/outreach/dead-tickets
+   * Lists outreach rows whose Discord channel no longer resolves (deleted
+   * tickets) with last-known names, so they can be pruned from the selection.
+   */
+  router.get('/dead-tickets', async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      const dead = await outreachService.findDeadTickets(discordClient);
+      res.json({ success: true, data: { dead } });
+    } catch (error) {
+      logger.error('GET /outreach/dead-tickets failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /**
+   * DELETE /api/v1/outreach/dead-tickets
+   * Deletes outreach rows for the given dead-ticket channel ids.
+   */
+  router.delete(
+    '/dead-tickets',
+    validateBody(z.object({ channelIds: z.array(z.string().min(1)).max(500) })),
+    async (req: Request, res: Response): Promise<void> => {
+      if (!requireDashboardAdmin(req, res)) return;
+      try {
+        const deleted = await outreachService.deleteDeadTickets(req.body.channelIds);
+        res.json({ success: true, data: { deleted } });
+      } catch (error) {
+        logger.error('DELETE /outreach/dead-tickets failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
+
   return router;
 }

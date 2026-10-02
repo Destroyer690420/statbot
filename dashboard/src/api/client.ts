@@ -185,6 +185,16 @@ export async function sendOutreachMessage(slots: number) {
   return data;
 }
 
+export async function getDeadTickets() {
+  const { data } = await api.get('/outreach/dead-tickets');
+  return data;
+}
+
+export async function deleteDeadTickets(channelIds: string[]) {
+  const { data } = await api.delete('/outreach/dead-tickets', { data: { channelIds } });
+  return data;
+}
+
 // ─── Payouts ─────────────────────────────────────────────────
 
 export async function getPayoutWeek() {
