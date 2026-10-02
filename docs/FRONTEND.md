@@ -1,6 +1,6 @@
 # FRONTEND.md — Admin Dashboard
 
-> Verified against `dashboard/src/**`, `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/nginx.conf` on 2026-09-25 (worker visual redesign section re-verified after deployment). Admin premium redesign (§11) verified against `dashboard/src/**` on 2026-10-02 (build clean, NOT deployed).
+> Verified against `dashboard/src/**`, `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/nginx.conf` on 2026-09-25 (worker visual redesign section re-verified after deployment). Admin premium redesign (§10) verified against `dashboard/src/**` on 2026-10-02 and DEPLOYED live at `bafeede` (dashboard-only rebuild).
 
 ---
 
@@ -111,7 +111,7 @@ Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payou
 - Theme picker non-functional; OwnerEarnings route JWT-only; `getUpcomingReminders`/`getHealth`/`getExportCsvUrl`/`createReferral` client fns unused.
 - Green row wash means `deleted_later` in Tasks but "replied" in Daily Outreach (pre-existing semantic collision, kept).
 
-## 10. Admin Design System (premium redesign, implemented 2026-10-02, NOT deployed)
+## 10. Admin Design System (premium redesign, DEPLOYED 2026-10-02 at `bafeede`, dashboard-only rebuild)
 
 Worker portal (`worker/*`, `--wp-*` tokens, Sora display face, `wallet-gradient`) is explicitly out of scope and untouched.
 
