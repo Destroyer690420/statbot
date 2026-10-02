@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { Client } from 'discord.js';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import { isRateLimitExempt } from '../utils/rate-limit-exempt';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 // Routes
@@ -63,12 +64,10 @@ export function createApiServer(discordClient: Client): express.Application {
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Too many requests. Please try again later.' },
-    skip: (req) =>
-      req.path === '/api/v1/automation/claims/pending' ||
-      req.path === '/api/v1/automation/sightings' ||
-      req.path === '/api/v1/automation/burst' ||
-      req.path === '/api/v1/automation/eligibility-bundle' ||
-      req.path === '/api/v1/goparttime/assign',
+    // Match on originalUrl: Express strips the '/api' mount prefix from
+    // req.path inside this middleware, so a req.path comparison against
+    // '/api/v1/...' never matches and the exemption silently does nothing.
+    skip: (req) => isRateLimitExempt(req.originalUrl),
   });
   app.use('/api/', limiter);
 

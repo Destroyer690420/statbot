@@ -117,7 +117,7 @@
 - **Solution**: log in again.
 
 ### 429 "Too many requests"
-- **Cause**: 100 req/15 min/IP on `/api/`.
+- **Cause**: 300 req/15 min/IP on `/api/` (companion poll endpoints `/automation/claims/pending`, `/sightings`, `/burst`, `/eligibility-bundle` + `/goparttime/assign` are exempt). Match is on `req.originalUrl` — a `req.path` check never matches under `app.use('/api/')` because Express strips the mount prefix (this exact bug 429'd the dashboard mid-blast on 2026-10-02).
 - **Solution**: wait; raise `max` in `server.ts` if needed.
 
 ### 503 on /goparttime/assign

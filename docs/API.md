@@ -12,7 +12,7 @@
 | `trust proxy` | `app.set('trust proxy', 1)` |
 | helmet | defaults |
 | CORS | `origin: [DASHBOARD_URL, 'https://goparttime.net', 'https://www.goparttime.net']`, `credentials: true` (extension uses `GM_xmlhttpRequest` which bypasses CORS; plain fetch from goparttime.net allowed) |
-| Rate limit | `express-rate-limit`: **100 requests / 15 min / IP** on `/api/`, `standardHeaders: true`, custom JSON 429 message |
+| Rate limit | `express-rate-limit`: **300 requests / 15 min / IP** on `/api/`, `standardHeaders: true`, custom JSON 429 message. Exempt (extension-key-gated, matched on `req.originalUrl` via `isRateLimitExempt` in `src/utils/rate-limit-exempt.ts`): `/automation/claims/pending`, `/automation/sightings`, `/automation/burst`, `/automation/eligibility-bundle`, `/goparttime/assign` |
 | Body | `express.json({ limit: '1mb' })` + urlencoded |
 | 404 | `{ success:false, message: 'Route <METHOD> <path> not found.' }` |
 | 500 | `{ success:false, message }` (`err.message` dev / `'Internal server error.'` prod) |
