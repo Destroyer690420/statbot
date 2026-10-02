@@ -94,14 +94,6 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Context */}
-      <div>
-        <h1 className="text-2xl font-semibold text-text-primary tracking-tight">Dashboard</h1>
-        <p className="text-[13px] text-text-secondary mt-1">
-          Task throughput, completions, and deletions at a glance.
-        </p>
-      </div>
-
       {/* Key metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat, i) => (

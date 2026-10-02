@@ -50,7 +50,7 @@ Unused API functions: `getUpcomingReminders`, `getExportCsvUrl`, `getHealth`, `c
 ## 5. Pages
 
 ### Dashboard
-Context header + 4 subtle metric cards (Total/Pending/Completed/Overdue, white numbers + muted labels + thin accent bars) + 7-day AreaChart (`#6C8CFF` on `#20252C` grid) + secondary activity cards; skeleton loaders while loading (no spinner).
+4 subtle metric cards (Total/Pending/Completed/Overdue, white numbers + muted labels + thin accent bars) + 7-day AreaChart (`#6C8CFF` on `#20252C` grid) + secondary activity cards; skeleton loaders while loading (no spinner). No in-page heading (top bar shows the title).
 
 ### Tasks
 Search (id, url, channel), 15/page client-side pagination, status filter; desktop table / mobile cards. Actions: cancelledReason dropdown (OK/Deleted/Deleted Later → PATCH), Download latest insight image, Copy submitted link, View, Delete (confirm). CSV export.

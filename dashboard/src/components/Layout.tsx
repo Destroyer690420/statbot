@@ -198,12 +198,6 @@ export function Layout({ children }: { children: ReactNode }) {
                 <span className="hidden sm:inline">Install App</span>
               </button>
             )}
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-text-primary font-semibold text-[13px]"
-              style={{ background: '#222832', border: '1px solid #272D35' }}
-            >
-              A
-            </div>
           </div>
         </header>
 
