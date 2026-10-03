@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-04
+### Deployed (2026-10-04 at `79c4fe1` — dashboard-only rebuild, no migration)
+- **Pay Worker QR full-size lightbox.** Workers upload full payment posters, not tight QR crops, so the code renders tiny inside the fixed 256px box. The popup QR is now clickable → a `z-60` lightbox showing the image at near-natural size (`max-h-[85vh]`, natural aspect, white mat) for reliable scanning; hint line added ("Click the code for a larger view"). Worker Wallet upload card gains a "crop to just the QR code" tip to fix the source over time. Verified: served `TaskPayments` chunk contains the lightbox + hint, health 200, app/redis untouched. Backup `rtm-backup-20261004-qrzoom.tar.gz`; host bundle + probe scripts removed.
 ### Deployed (2026-10-04 at `363fac0` — dashboard-only rebuild, no migration)
 - **Pay Worker QR enlarged to 256px** (was 176px, too small to scan reliably). `PayWorkerModal` image + skeleton + placeholder `h-44 w-44` → `h-64 w-64`; layout unchanged (fits `max-w-lg`, stacks on mobile). Verified: served `TaskPayments` chunk contains `h-64 w-64` with `h-44 w-44` gone, health 200, app/redis untouched. Backup `rtm-backup-20261004-qrsize.tar.gz`; host bundle + probe scripts removed.
 
