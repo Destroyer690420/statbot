@@ -60,6 +60,8 @@ ssh ubuntu@161.118.164.85 "cd /home/ubuntu/rtm && git fetch /home/ubuntu/statbot
 
 Then build/restart as below. **Always back up the working tree first** (`tar -czf /home/ubuntu/rtm-backup-$(date +%Y%m%d-%H%M%S).tar.gz --exclude=rtm/node_modules --exclude=rtm/dist --exclude=rtm/.git -C /home/ubuntu rtm`). Verify `HEAD` after the reset. `.env`, `node_modules/`, `dist/` and server scratch files are untouched by this flow. After a verified deploy, delete the bundle from the host.
 
+> ⚠️ **Lockfile discipline (learned 2026-10-04):** the builder runs `npm ci` with npm 10 (node:20-alpine). A local `npm install` with npm 11 silently pruned `@emnapi/*` entries from `package-lock.json` that npm 10 requires, breaking the app build with `EUSAGE Missing ... from lock file` (dashboard was unaffected — separate lock). After any local `npm install`, re-validate with `npx -p npm@10.8.2 npm ci --dry-run` (must exit 0 with no EUSAGE) before bundling. Prefer surgical lock edits over full regenerations.
+
 ### Backend image
 ```
 docker compose build app
