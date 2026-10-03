@@ -56,7 +56,8 @@ Managers (`MANAGER_USER_IDS`) are used **only** by the bot, never the API.
 ## 7. File Upload / Storage
 
 - Insight screenshots: downloaded from Discord CDN by the server (no client upload endpoint); written to `uploads/insights/<taskId>/`; served read-only with traversal checks; 60h TTL cleanup.
-- No arbitrary file upload endpoints exist.
+- Worker payment QR codes: the one client upload endpoint (`POST /api/v1/worker/wallet/qr-code`, worker JWT + 10/hour/worker, base64 data URL in JSON). Written to `uploads/payment-qr/<workerId>.<ext>` (one current file per worker, no TTL); served read-only via `GET /api/v1/uploads/payment-qr/:workerId/:filename` (unauthenticated like insight serving, traversal-guarded plus a strict `<workerId>.<ext>` name match). Validation is server-side via sharp-sniffed format (PNG/JPEG/WebP only — declared MIME never trusted), a 3 MB decoded cap, and a full-decode check before saving.
+- No other arbitrary file upload endpoints exist.
 
 ## 8. Database Security
 

@@ -112,6 +112,15 @@ export interface FixtureState {
   commissionItems: FixtureCommissionItem[];
   postRate: number;
   commentRate: number;
+  /** Worker-uploaded payment QR rows (optional so older fixtures still compile). */
+  paymentQr?: FixturePaymentQr[];
+}
+
+export interface FixturePaymentQr {
+  workerId: string;
+  filename: string;
+  mimeType: string;
+  updatedAt: Date;
 }
 
 export function fullTaskRow(t: FixtureTask): Record<string, unknown> {
@@ -280,6 +289,21 @@ export function createMockDb(state: FixtureState): Record<string, any> {
     },
     payoutSettings: {
       findUnique: async () => ({ commentRate: state.commentRate, postRate: state.postRate }),
+    },
+    workerPaymentInfo: {
+      findUnique: async (args: any) =>
+        (state.paymentQr ?? []).find((row) => row.workerId === args?.where?.workerId) ?? null,
+      upsert: async (args: any) => {
+        const rows = (state.paymentQr ??= []);
+        const existing = rows.find((row) => row.workerId === args.where.workerId);
+        if (existing) {
+          Object.assign(existing, args.update);
+          return existing;
+        }
+        const created = { workerId: args.where.workerId, ...args.create };
+        rows.push(created);
+        return created;
+      },
     },
     workerPortalAccess: {
       findMany: async (args: any = {}) =>

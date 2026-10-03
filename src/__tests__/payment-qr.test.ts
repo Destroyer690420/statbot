@@ -1,0 +1,114 @@
+import sharp from 'sharp';
+import {
+  PAYMENT_QR_MAX_BYTES,
+  QrValidationError,
+  buildQrCodeUrl,
+  decodeQrDataUrl,
+  processQrImage,
+} from '../utils/payment-qr';
+
+const TINY_GIF_B64 =
+  'R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+
+async function pngBuffer(width = 16, height = 16): Promise<Buffer> {
+  return sharp({
+    create: { width, height, channels: 3, background: { r: 10, g: 120, b: 200 } },
+  })
+    .png()
+    .toBuffer();
+}
+
+function dataUrl(mime: string, buf: Buffer): string {
+  return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+describe('payment-qr image handling', () => {
+  test('valid PNG is accepted byte-for-byte (not resized, not converted)', async () => {
+    const raw = await pngBuffer();
+    const decoded = decodeQrDataUrl(dataUrl('image/png', raw));
+    expect(decoded.equals(raw)).toBe(true);
+    const out = await processQrImage(decoded);
+    expect(out.buffer.equals(raw)).toBe(true);
+    expect(out.resized).toBe(false);
+    expect(out.mimeType).toBe('image/png');
+    expect(out.extension).toBe('png');
+  });
+
+  test('valid JPEG and WebP are accepted with their own format kept', async () => {
+    const raw = await pngBuffer();
+    const jpeg = await sharp(raw).jpeg().toBuffer();
+    const webp = await sharp(raw).webp().toBuffer();
+
+    const j = await processQrImage(decodeQrDataUrl(dataUrl('image/jpeg', jpeg)));
+    expect(j.mimeType).toBe('image/jpeg');
+    expect(j.extension).toBe('jpg');
+    expect(j.resized).toBe(false);
+
+    const w = await processQrImage(decodeQrDataUrl(dataUrl('image/webp', webp)));
+    expect(w.mimeType).toBe('image/webp');
+    expect(w.extension).toBe('webp');
+    expect(w.resized).toBe(false);
+  });
+
+  test('oversized input is rejected outright, never compressed down', () => {
+    const raw = Buffer.alloc(PAYMENT_QR_MAX_BYTES + 1024, 7);
+    expect(() => decodeQrDataUrl(dataUrl('image/png', raw))).toThrow(QrValidationError);
+    expect(() => decodeQrDataUrl(dataUrl('image/png', raw))).toThrow(/larger than 3 MB/);
+  });
+
+  test('non-image bytes with a spoofed image/png prefix are rejected', async () => {
+    const fake = Buffer.from('this is definitely not image data');
+    const decoded = decodeQrDataUrl(dataUrl('image/png', fake));
+    await expect(processQrImage(decoded)).rejects.toThrow(QrValidationError);
+  });
+
+  test('GIF is rejected by sniffed format even with an honest prefix', async () => {
+    const gif = Buffer.from(TINY_GIF_B64, 'base64');
+    const decoded = decodeQrDataUrl(dataUrl('image/gif', gif));
+    await expect(processQrImage(decoded)).rejects.toThrow(/Only PNG, JPEG and WebP/);
+  });
+
+  test('corrupt image data (truncated PNG) is rejected cleanly', async () => {
+    const raw = await pngBuffer();
+    const truncated = raw.slice(0, Math.floor(raw.length / 2));
+    const decoded = decodeQrDataUrl(dataUrl('image/png', truncated));
+    await expect(processQrImage(decoded)).rejects.toThrow(QrValidationError);
+  });
+
+  test('an image over 1200px is resized inside 1200px with format unchanged', async () => {
+    const big = await sharp({
+      create: { width: 1600, height: 900, channels: 3, background: { r: 200, g: 30, b: 30 } },
+    })
+      .png()
+      .toBuffer();
+    // Sanity: the fixture itself must fit the upload cap.
+    expect(big.length).toBeLessThanOrEqual(PAYMENT_QR_MAX_BYTES);
+    const out = await processQrImage(decodeQrDataUrl(dataUrl('image/png', big)));
+    expect(out.resized).toBe(true);
+    expect(out.mimeType).toBe('image/png');
+    expect(out.extension).toBe('png');
+    const meta = await sharp(out.buffer).metadata();
+    expect(meta.format).toBe('png');
+    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBeLessThanOrEqual(1200);
+    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBeGreaterThan(0);
+  });
+
+  test('missing, non-string, malformed and non-image bodies are rejected', () => {
+    expect(() => decodeQrDataUrl(undefined)).toThrow(QrValidationError);
+    expect(() => decodeQrDataUrl('')).toThrow(QrValidationError);
+    expect(() => decodeQrDataUrl(42 as unknown as string)).toThrow(QrValidationError);
+    expect(() => decodeQrDataUrl('{"not":"a data url"}')).toThrow(QrValidationError);
+    expect(() => decodeQrDataUrl('data:image/png;base64,!!!not-base64!!!')).toThrow(QrValidationError);
+    // Declared MIME is never trusted: a text payload with an image prefix
+    // decodes fine here and is rejected later by the sharp sniff.
+    const text = Buffer.from('plain text, not pixels');
+    expect(() => decodeQrDataUrl(dataUrl('image/jpeg', text))).not.toThrow();
+  });
+
+  test('qrCodeUrl carries worker, filename and updatedAt cache-buster', () => {
+    const at = new Date('2026-09-01T00:00:00.000Z');
+    expect(buildQrCodeUrl('123', '123.png', at)).toBe(
+      `/api/v1/uploads/payment-qr/123/123.png?v=${at.getTime()}`,
+    );
+  });
+});

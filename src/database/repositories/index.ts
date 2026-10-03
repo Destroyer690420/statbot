@@ -13,3 +13,7 @@ export {
 } from './worker-portal-access.repository';
 export { inviteDetectionRepository, InviteDetectionRepository } from './invite-detection.repository';
 export { automationRepository, AutomationRepository } from './automation.repository';
+export {
+  workerPaymentInfoRepository,
+  WorkerPaymentInfoRepository,
+} from './worker-payment-info.repository';

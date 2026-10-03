@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Loader2,
   Users,
@@ -8,10 +8,10 @@ import {
   FileText,
   MessageSquare,
 } from 'lucide-react';
-import { getEligibleTasks, getWorkerDetail, payWorker } from '../../../api/client';
+import { getEligibleTasks, getWorkerDetail } from '../../../api/client';
 import { formatCurrency } from '../utils';
 import { WorkerDetail } from './WorkerDetail';
-import { ConfirmPayButton } from './ConfirmPayButton';
+import { PayWorkerModal } from './PayWorkerModal';
 
 interface WorkerBreakdownProps {
   dateParams: Record<string, string> | undefined;
@@ -22,7 +22,7 @@ interface WorkerBreakdownProps {
 
 export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInvalidate }: WorkerBreakdownProps) {
   const [expandedWorker, setExpandedWorker] = useState<string | null>(null);
-  const [confirmPayWorker, setConfirmPayWorker] = useState<string | null>(null);
+  const [payModalWorker, setPayModalWorker] = useState<{ workerId: string; workerName: string; totalAmount: number } | null>(null);
 
   const eligibleQuery = useQuery({
     queryKey: ['payout-eligible', dateParams],
@@ -36,14 +36,8 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
     enabled: !!expandedWorker,
   });
 
-  const payWorkerMutation = useMutation({
-    mutationFn: (workerId: string) => payWorker(workerId, dateParams),
-    onSuccess: () => {
-      setConfirmPayWorker(null);
-      setExpandedWorker(null);
-      onInvalidate();
-    },
-  });
+  const openPayModal = (w: any) =>
+    setPayModalWorker({ workerId: w.workerId, workerName: w.workerName, totalAmount: w.totalAmount });
 
   const workers = eligibleQuery.data?.data || [];
 
@@ -113,14 +107,9 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
                         </td>
                         {isCurrentWeek && (
                           <td className="py-3 px-2 text-center" onClick={e => e.stopPropagation()}>
-                            <ConfirmPayButton
-                              label="Pay Worker"
-                              isConfirming={confirmPayWorker === w.workerId}
-                              isPending={payWorkerMutation.isPending}
-                              onStartConfirm={() => setConfirmPayWorker(w.workerId)}
-                              onConfirm={() => payWorkerMutation.mutate(w.workerId)}
-                              onCancel={() => setConfirmPayWorker(null)}
-                            />
+                            <button onClick={() => openPayModal(w)} className="btn-primary text-xs py-1.5 px-3">
+                              Pay Worker
+                            </button>
                           </td>
                         )}
                       </tr>
@@ -182,14 +171,9 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
 
                   {isCurrentWeek && !expandedWorker && (
                     <div className="px-3.5 pb-3 flex justify-end" onClick={e => e.stopPropagation()}>
-                      <ConfirmPayButton
-                        label="Pay Worker"
-                        isConfirming={confirmPayWorker === w.workerId}
-                        isPending={payWorkerMutation.isPending}
-                        onStartConfirm={() => setConfirmPayWorker(w.workerId)}
-                        onConfirm={() => payWorkerMutation.mutate(w.workerId)}
-                        onCancel={() => setConfirmPayWorker(null)}
-                      />
+                      <button onClick={() => openPayModal(w)} className="btn-primary text-xs py-1.5 px-3">
+                        Pay Worker
+                      </button>
                     </div>
                   )}
 
@@ -198,14 +182,9 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
                     <div className="border-t border-dark-700/30 bg-dark-900/40 p-3.5">
                       {isCurrentWeek && (
                         <div className="mb-3 flex justify-end" onClick={e => e.stopPropagation()}>
-                          <ConfirmPayButton
-                            label="Pay Worker"
-                            isConfirming={confirmPayWorker === w.workerId}
-                            isPending={payWorkerMutation.isPending}
-                            onStartConfirm={() => setConfirmPayWorker(w.workerId)}
-                            onConfirm={() => payWorkerMutation.mutate(w.workerId)}
-                            onCancel={() => setConfirmPayWorker(null)}
-                          />
+                          <button onClick={() => openPayModal(w)} className="btn-primary text-xs py-1.5 px-3">
+                            Pay Worker
+                          </button>
                         </div>
                       )}
                       {workerDetailQuery.isLoading ? (
@@ -225,10 +204,21 @@ export function WorkerBreakdown({ dateParams, filterMode, isCurrentWeek, onInval
           </>
         )}
 
-        {payWorkerMutation.isError && (
-          <p className="mt-3 text-danger text-sm">{(payWorkerMutation.error as Error).message}</p>
-        )}
       </div>
+
+      {payModalWorker && (
+        <PayWorkerModal
+          workerId={payModalWorker.workerId}
+          workerName={payModalWorker.workerName}
+          totalAmount={payModalWorker.totalAmount}
+          dateParams={dateParams}
+          onClose={() => setPayModalWorker(null)}
+          onPaid={() => {
+            setExpandedWorker(null);
+            onInvalidate();
+          }}
+        />
+      )}
     </div>
   );
 }

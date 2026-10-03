@@ -13,6 +13,17 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     path: req.path,
   });
 
+  // body-parser limit rejections (e.g. a QR data URL past its scoped cap)
+  // surface as JSON 413s, not 500s.
+  const coded = err as Error & { status?: number; type?: string };
+  if (coded.status === 413 || coded.type === 'entity.too.large') {
+    res.status(413).json({
+      success: false,
+      message: 'Request body too large.',
+    });
+    return;
+  }
+
   // Don't leak error details in production
   const message = process.env.NODE_ENV === 'production'
     ? 'Internal server error.'

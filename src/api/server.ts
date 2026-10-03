@@ -72,6 +72,12 @@ export function createApiServer(discordClient: Client): express.Application {
   app.use('/api/', limiter);
 
   // ─── Body Parsing ──────────────────────────────────────────
+  // The worker QR upload posts a base64 data URL (up to ~4 MB of JSON for a
+  // 3 MB image), which does not fit the 1 MB global cap. This scoped parser
+  // runs first and marks the body parsed, so the global parser below skips
+  // this path; every other route keeps the 1 MB limit. The route itself
+  // still rejects decoded images over 3 MB with a clear 400.
+  app.use('/api/v1/worker/wallet/qr-code', express.json({ limit: '6mb' }));
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false }));
 

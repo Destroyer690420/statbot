@@ -392,6 +392,13 @@ model WorkerPortalAccess {
   updatedAt   DateTime @updatedAt
 }
 
+model WorkerPaymentInfo {
+  workerId   String   @id
+  filename   String
+  mimeType   String
+  updatedAt  DateTime @updatedAt
+}
+
 model BlockedSubreddit {
   subreddit String   @id
   reason    String?

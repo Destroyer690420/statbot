@@ -209,6 +209,12 @@ erDiagram
         timestamp lastSeenAt "most recent successful portal login"
         timestamp updatedAt
     }
+    WorkerPaymentInfo {
+        string workerId PK "Discord user id = Task.assignedUserId; the QR follows the worker, not the ticket"
+        string filename "current file: <workerId>.png|jpg|webp under uploads/payment-qr/"
+        string mimeType "sniffed format's MIME, never the declared one"
+        timestamp updatedAt "bumped on every upload; drives the ?v= cache-buster"
+    }
     OutreachSettings {
         string id PK "default 'outreach-message'"
         string message "configurable daily message"
@@ -368,6 +374,7 @@ Consequence: you **cannot delete a Task that has payout/commission items** (REST
 | PayoutBatch: `batchNumber`, `(weekStart, weekEnd)`, `weekEnd` | |
 | PayoutItem: `batchId`, `taskId` | no `workerId` index (known performance gap) |
 | WorkerPortalAccess: `channelId` | primary key |
+| WorkerPaymentInfo: `workerId` | primary key (no secondary indexes — always keyed by worker) |
 | Referral: `inviterId`, `(inviteeId, inviterId)`, `createdAt` | |
 | CommissionBatch: `batchNumber` | |
 | CommissionItem: `batchId`, `(referralId, inviterId, commissionKind)`, `(inviterId, sourceTaskId, commissionKind)` | |

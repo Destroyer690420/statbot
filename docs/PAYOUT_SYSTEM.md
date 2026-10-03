@@ -36,7 +36,9 @@ Amount per task = `type === POST ? postRate : commentRate`. No karma-based or ty
 ```
 Task completion → (any time) 
 → dashboard Payout page: week picker (current/previous/custom)
-→ POST /payouts/pay-worker/:workerId  OR  POST /payouts/pay-all   [admin]
+→ Pay Worker button → QR popup (worker name + amount + uploaded payment QR,
+   or a "No QR code uploaded yet" placeholder — paying is never blocked)
+→ Confirm → POST /payouts/pay-worker/:workerId  OR  POST /payouts/pay-all   [admin]
 → eligible set (filters above)
 → PayoutBatch:
      payWorker   → reuse existing batch for the week (getOrCreateCurrentBatch) or create (batchNumber = latest+1, paidAt null)
@@ -62,6 +64,10 @@ Task completion → (any time)
 - Best-effort: `sendPayoutNotification()` (`src/services/payout-notification.service.ts`) never throws — missing channel / send failure is logged (`warn`) and returned as `notification: { sent, channelId, reason? }` in the API response. **The payment is never rolled back because of a Discord failure.**
 - Wiring: `src/api/routes/payouts.ts` is a factory `createPayoutRoutes(discordClient)` (same shape as `tasks.ts`); mounted with the client in `src/api/server.ts`.
 
+## 4b. Pay-Worker QR popup (dashboard `PayWorkerModal`, no pay-logic change)
+
+Workers upload their own UPI payment QR once from the Worker Panel Wallet page (`WorkerPaymentInfo` row keyed by `workerId` = `Task.assignedUserId`, file at `uploads/payment-qr/<workerId>.<ext>`). The Worker Breakdown's "Pay Worker" button opens a popup showing that QR next to the worker name + amount (fetched via `GET /payouts/workers/:workerId/qr-code`); Confirm runs the exact same `payWorker` request as before (same params, same invalidation, same Discord "you've been paid" notification) and closes the popup. No QR uploaded → a plain placeholder, Confirm stays enabled: `payWorker` has no QR validation by design, so workers who never uploaded one are still payable exactly as before. QR validation details (PNG/JPEG/WebP by sniffed format, 3 MB cap, ≤1200px same-format resize, no lossy compression — a lossy pass can break QR modules) live in `src/utils/payment-qr.ts`; the design rationale in `docs/DECISIONS.md` Decision 22.
+
 ## 5. Reads (dashboard endpoints)
 
 | Endpoint | Returns |
@@ -69,6 +75,7 @@ Task completion → (any time)
 | `GET /payouts/summary` | `workersToPay`, `completedTasks`, `pendingAmount` (posts×postRate + comments×commentRate), `alreadyPaid` (**global all-time** sum), totals split, `weekLabel` |
 | `GET /payouts/eligible` | per-worker rows `{workerId, workerName (channelName || id.slice(0,8)), posts, comments, totalAmount, status:'Ready', tasks[]}`, sorted ₹ desc |
 | `GET /payouts/workers/:workerId` | detail incl. per-task `{id,type,externalTaskId,createdAt,completedAt,amount,paid}`, `status` (effectively always 'Ready' — tasks exclude paid) |
+| `GET /payouts/workers/:workerId/qr-code` | `{ qrCodeUrl, updatedAt }` (both null when never uploaded — paying stays possible) |
 | `GET /payouts/batches` / `:batchId` | history (weekEnd desc) / detail with worker names + externalTaskId enrichment |
 | `GET /payouts/export/csv` | `Worker Name, Posts, Comments, Total Amount (₹), Payment Date, Batch Number` (payment date = batch weekStart; empty for week mode) |
 

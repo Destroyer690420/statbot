@@ -1,4 +1,8 @@
 import express from 'express';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import sharp from 'sharp';
 
 jest.mock('../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -634,6 +638,101 @@ describe('worker isolation (HTTP)', () => {
       expect(mine.map((m) => m.taskId).sort()).toEqual(theirs);
       // tA3 completes 2026-08-22 (in week), tA6 completes 2026-08-23 (in week), tA4 paid (excluded).
       expect(theirs).toEqual(['tA3', 'tA6']);
+    });
+  });
+
+  describe('worker payment QR (upload + isolation)', () => {
+    const C = '810000000000000008';
+    const R = '820000000000000009';
+    let qrDir: string;
+    let tokenC: string;
+
+    const pngUrl = async (): Promise<string> => {
+      const buf = await sharp({
+        create: { width: 16, height: 16, channels: 3, background: { r: 10, g: 120, b: 200 } },
+      })
+        .png()
+        .toBuffer();
+      return `data:image/png;base64,${buf.toString('base64')}`;
+    };
+
+    beforeAll(() => {
+      qrDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qr-iso-'));
+      process.env.PAYMENT_QR_DIR = qrDir;
+      tokenC = svc.signWorkerToken({ workerId: C, channelId: 'chan-alice', name: 'Carol' });
+    });
+
+    afterAll(() => {
+      delete process.env.PAYMENT_QR_DIR;
+      fs.rmSync(qrDir, { recursive: true, force: true });
+    });
+
+    test('QR endpoints require worker auth', async () => {
+      const get = await api('/wallet/qr-code');
+      expect(get.status).toBe(401);
+      const post = await api('/wallet/qr-code', { method: 'POST', body: JSON.stringify({ image: 'x' }) });
+      expect(post.status).toBe(401);
+    });
+
+    test('a worker with no upload reads nulls', async () => {
+      const { status, body } = await api('/wallet/qr-code', undefined, tokenC);
+      expect(status).toBe(200);
+      expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null });
+    });
+
+    test('missing, non-string and spoofed images are rejected', async () => {
+      const missing = await api('/wallet/qr-code', { method: 'POST', body: JSON.stringify({}) }, tokenC);
+      expect(missing.status).toBe(400);
+      const num = await api('/wallet/qr-code', { method: 'POST', body: JSON.stringify({ image: 42 }) }, tokenC);
+      expect(num.status).toBe(400);
+      const spoof = await api(
+        '/wallet/qr-code',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            image: `data:image/png;base64,${Buffer.from('not pixels at all').toString('base64')}`,
+          }),
+        },
+        tokenC,
+      );
+      expect(spoof.status).toBe(400);
+    });
+
+    test('upload then fetch own QR; another worker sees nothing', async () => {
+      const up = await api('/wallet/qr-code', { method: 'POST', body: JSON.stringify({ image: await pngUrl() }) }, tokenA);
+      expect(up.status).toBe(200);
+      expect(up.body.data.qrCodeUrl).toContain(A);
+      expect(up.body.data.qrCodeUrl).toContain('?v=');
+      expect(typeof up.body.data.updatedAt).toBe('string');
+
+      const mine = await api('/wallet/qr-code', undefined, tokenA);
+      expect(mine.body.data).toEqual(up.body.data);
+
+      const other = await api('/wallet/qr-code', undefined, tokenC);
+      expect(other.body.data).toEqual({ qrCodeUrl: null, updatedAt: null });
+    });
+
+    test('a smuggled workerId in the body cannot touch another worker', async () => {
+      const evil = await api(
+        '/wallet/qr-code',
+        { method: 'POST', body: JSON.stringify({ image: await pngUrl(), workerId: C }) },
+        tokenA,
+      );
+      expect(evil.status).toBe(200);
+      // C's record is untouched: the smuggled id was ignored.
+      const c = await api('/wallet/qr-code', undefined, tokenC);
+      expect(c.body.data).toEqual({ qrCodeUrl: null, updatedAt: null });
+    });
+
+    test('rate limit triggers after the cap', async () => {
+      const tokenR = svc.signWorkerToken({ workerId: R, channelId: 'chan-alice', name: 'Rae' });
+      const image = await pngUrl();
+      for (let i = 0; i < 10; i++) {
+        const res = await api('/wallet/qr-code', { method: 'POST', body: JSON.stringify({ image }) }, tokenR);
+        expect(res.status).toBe(200);
+      }
+      const over = await api('/wallet/qr-code', { method: 'POST', body: JSON.stringify({ image }) }, tokenR);
+      expect(over.status).toBe(429);
     });
   });
 

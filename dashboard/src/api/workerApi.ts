@@ -92,6 +92,16 @@ export async function getWorkerWallet() {
   return data;
 }
 
+export async function getWorkerQrCode() {
+  const { data } = await workerApi.get('/wallet/qr-code');
+  return data;
+}
+
+export async function uploadWorkerQrCode(image: string) {
+  const { data } = await workerApi.post('/wallet/qr-code', { image });
+  return data;
+}
+
 export async function getWorkerInvites() {
   const { data } = await workerApi.get('/invites');
   return data;

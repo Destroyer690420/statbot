@@ -752,3 +752,21 @@ ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "profileReaskCount" INTE
 -- This is only a new audit action for that click. Schema-only and idempotent,
 -- like every other AuditAction addition in this file.
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_TICKET_ADDED';
+
+-- ============================================================
+-- Migration: Worker payment QR codes (worker-uploaded UPI QR)
+-- ============================================================
+-- One row per worker, keyed by the Discord user id (the same workerId
+-- used everywhere else: Task.assignedUserId, payouts, worker auth).
+-- The file itself lives on disk under uploads/payment-qr/ (the same
+-- volume that holds insight screenshots); this table only records which
+-- file is current plus its MIME type. One current file per worker: a new
+-- upload overwrites the old one, so no history is kept here.
+-- Schema-only, no data statements, safe to re-run.
+CREATE TABLE IF NOT EXISTS "WorkerPaymentInfo" (
+  "workerId" TEXT NOT NULL,
+  "filename" TEXT NOT NULL,
+  "mimeType" TEXT NOT NULL,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "WorkerPaymentInfo_pkey" PRIMARY KEY ("workerId")
+);

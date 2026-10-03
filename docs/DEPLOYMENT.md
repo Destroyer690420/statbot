@@ -148,7 +148,7 @@ Notes: the sweep logs in with `Guilds` + `GuildMembers` only, resolves each tick
 
 ## 9. Insight Image Storage
 
-Volume `insight-uploads` mounted at `/app/uploads` — screenshots live there with a 60h TTL cleanup (files deleted by the app; see `docs/INSIGHT_SYSTEM.md`).
+Volume `insight-uploads` mounted at `/app/uploads` — screenshots live there with a 60h TTL cleanup (files deleted by the app; see `docs/INSIGHT_SYSTEM.md`). Worker payment QR codes live under the same mount at `/app/uploads/payment-qr/<workerId>.<ext>` (one current file per worker, no TTL — they persist until replaced), so they ride along with any volume-level backup of `insight-uploads` automatically. Note there is still no automated backup mechanism in repo (§4) — if the owner backs up the volume, QRs are covered; if not, a volume loss means workers re-upload (the `WorkerPaymentInfo` rows survive in Postgres, but the files do not).
 
 ## 10. Logs
 

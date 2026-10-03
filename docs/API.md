@@ -13,7 +13,7 @@
 | helmet | defaults |
 | CORS | `origin: [DASHBOARD_URL, 'https://goparttime.net', 'https://www.goparttime.net']`, `credentials: true` (extension uses `GM_xmlhttpRequest` which bypasses CORS; plain fetch from goparttime.net allowed) |
 | Rate limit | `express-rate-limit`: **300 requests / 15 min / IP** on `/api/`, `standardHeaders: true`, custom JSON 429 message. Exempt (extension-key-gated, matched on `req.originalUrl` via `isRateLimitExempt` in `src/utils/rate-limit-exempt.ts`): `/automation/claims/pending`, `/automation/sightings`, `/automation/burst`, `/automation/eligibility-bundle`, `/goparttime/assign` |
-| Body | `express.json({ limit: '1mb' })` + urlencoded |
+| Body | `express.json({ limit: '1mb' })` + urlencoded; scoped exception `express.json({ limit: '6mb' })` on `POST /api/v1/worker/wallet/qr-code` only (a 3 MB QR is ~4 MB as a base64 data URL; the route still rejects decoded images over 3 MB with a 400, and bodies past the scoped cap surface as JSON 413, not 500) |
 | 404 | `{ success:false, message: 'Route <METHOD> <path> not found.' }` |
 | 500 | `{ success:false, message }` (`err.message` dev / `'Internal server error.'` prod) |
 
@@ -192,6 +192,7 @@ Week params (`weekStart`/`weekEnd`) accepted in **query or body** (parsed as Dat
 | GET | `/payouts/summary` | Dashboard cards | week params | `{ workersToPay, completedTasks, pendingAmount, alreadyPaid, totalPosts, totalComments, weekLabel }` | 500 |
 | GET | `/payouts/eligible` | Eligible tasks grouped by worker (unpaid only) | week params | `[{ workerId, workerName, posts, comments, totalAmount, status:'Ready', tasks[] }]` sorted ₹ desc | 500 |
 | GET | `/payouts/workers/:workerId` | Worker detail | week params | `{ workerName, posts, comments, totalAmount, postsEarnings, commentsEarnings, postRate, commentRate, status, tasks[{id,type,externalTaskId,createdAt,completedAt,amount,paid}] }` | 404 no eligible tasks |
+| GET | `/payouts/workers/:workerId/qr-code` | Worker payment QR for the Pay Worker popup (admin-only) | — | `{ qrCodeUrl, updatedAt }` (both null, **not an error**, when the worker never uploaded one — paying stays possible) | 403 non-admin; worker JWTs get 401 |
 | POST | `/payouts/pay-worker/:workerId` | Pay one worker (creates/reuses week batch; COMPLETED→ARCHIVED) | week params in body/query | `{ batch, items }` | 403; 400 none eligible/already paid |
 | POST | `/payouts/pay-all` | Pay all eligible workers (new batch, `paidAt=now`) | week params | `{ batch, items }` | 403; 400 |
 | GET | `/payouts/batches` | Batch history | `limit?` (default 20, cap 100) | `PayoutBatch[]` | 500 |
@@ -265,6 +266,8 @@ Auth: ticket-OTP login. The bot posts an 8-char code (alphabet `ABCDEFGHJKMNPQRS
 | GET | `/worker/tasks?tab=&sub=&type=&q=&page=&limit=` | worker JWT | Whitelisted task DTOs + `total/page/limit/counts` (limit ≤50, default 20; `sub` only on the completed tab) | 400 bad query; 401 |
 | GET | `/worker/tasks/:id` | worker JWT | DTO + timeline (same 404 whether missing or another worker's) | 404 |
 | GET | `/worker/wallet` | worker JWT | This/last IST week, awaiting (all weeks), lifetime paid, rates, worker-scoped payment history | 401 |
+| GET | `/worker/wallet/qr-code` | worker JWT | The worker's own payment QR: `{ qrCodeUrl, updatedAt }` (both null when never uploaded) — identity from the token `sub` only | 401 |
+| POST | `/worker/wallet/qr-code` | worker JWT + 10 req/hour/worker | Upload/replace own payment QR: `{ image: "data:image/png;base64,..." }` → validates (PNG/JPEG/WebP by sniffed format, ≤3 MB, ≤1200px resize same-format, corrupt rejected), saves `uploads/payment-qr/<workerId>.<ext>`, upserts `WorkerPaymentInfo`, returns the new `{ qrCodeUrl, updatedAt }` | 400 missing/non-image/oversize; 401; 429 past the cap |
 | GET | `/worker/invites` | worker JWT (either scope) | `{ summary:{invited, withTicket, qualified, paid, directPaid, directPending, chainPending, teamPaid, lastBatch:{amount, batchNumber, paidAt}}, invitees:[{name, ticket, tasks, threshold, qualified, earned}] }` — the signed-in worker's own non-closed referrals only | 401 |
 
 **Inviter login (ticket-less).** A person who invites but never receives a task has no ticket and no `Task.assignedUserId`, so the ticket-OTP path can never identify them. They authenticate with their Discord account instead:
@@ -297,6 +300,7 @@ Throttles (Redis): one active code per ticket; 60s cooldown; 5 codes/ticket/hour
 | Method | Path | Purpose | Notes |
 |---|---|---|---|
 | GET | `/api/v1/uploads/insights/:taskId/:filename` | Serve insight screenshot from `<cwd>/uploads/insights/` | Rejects `..`/`/` in both params (400 `'Invalid path.'`); 404 `'Image not found.'`; sendFile |
+| GET | `/api/v1/uploads/payment-qr/:workerId/:filename` | Serve a worker's payment QR from `<cwd>/uploads/payment-qr/` | Same traversal guards, plus the filename must be exactly `<workerId>.png\|jpg\|webp` (files are stored flat, one per worker); 404 `'Image not found.'`; sendFile. URLs carry `?v=<updatedAt ms>` for cache-busting (ignored by the route) |
 
 ---
 

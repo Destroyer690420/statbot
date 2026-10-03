@@ -222,6 +222,11 @@ export async function payWorker(workerId: string, params?: Record<string, string
   return data;
 }
 
+export async function getWorkerQrCode(workerId: string) {
+  const { data } = await api.get(`/payouts/workers/${encodeURIComponent(workerId)}/qr-code`);
+  return data;
+}
+
 export async function payAll(params?: Record<string, string>) {
   const { data } = await api.post('/payouts/pay-all', params);
   return data;

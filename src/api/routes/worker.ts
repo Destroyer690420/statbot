@@ -35,6 +35,8 @@ import {
   getWalletForWorker,
 } from '../../services/worker.service';
 import { getInvitesForWorker, resolveInviteeDmRef } from '../../services/worker-referrals.service';
+import { getWorkerQrInfo, saveWorkerQrCode } from '../../services/worker-payment-qr.service';
+import { QrValidationError } from '../../utils/payment-qr';
 
 /**
  * Read-only worker portal. Factory (needs the Discord client to post codes),
@@ -704,6 +706,66 @@ export default function createWorkerRoutes(discordClient: any): Router {
       res.status(500).json({ success: false, message: 'Internal server error.' });
     }
   });
+
+  // Uploads write files to disk, so the upload path is capped per worker.
+  // Keyed by the token's sub (identity comes only from the token — there is
+  // no workerId anywhere in these requests, so isolation holds by design).
+  const qrUploadLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Validation failures write nothing, so they don't burn the budget.
+    skipFailedRequests: true,
+    keyGenerator: (req) => (req as WorkerAuthRequest).worker?.sub || req.ip || 'unknown',
+    message: { success: false, message: 'Too many QR uploads. Please try again later.' },
+  });
+
+  const qrUploadSchema = z.object({
+    image: z.string().min(1, 'A QR image is required.'),
+  });
+
+  // ─── GET /wallet/qr-code — the worker's own current payment QR ───
+  router.get('/wallet/qr-code', workerAuthMiddleware, async (req: WorkerAuthRequest, res: Response): Promise<void> => {
+    try {
+      const data = await getWorkerQrInfo(req.worker!.sub);
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('GET /worker/wallet/qr-code failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  // ─── POST /wallet/qr-code — upload/replace the worker's own payment QR ───
+  // Body: { image: "data:image/png;base64,..." }. No delete endpoint:
+  // replacing is just uploading a new one (overwrites the old file).
+  router.post(
+    '/wallet/qr-code',
+    workerAuthMiddleware,
+    qrUploadLimiter,
+    async (req: WorkerAuthRequest, res: Response): Promise<void> => {
+      try {
+        const parsed = qrUploadSchema.safeParse(req.body || {});
+        if (!parsed.success) {
+          res.status(400).json({ success: false, message: 'A QR image is required. Upload a PNG, JPEG or WebP file.' });
+          return;
+        }
+        try {
+          const data = await saveWorkerQrCode(req.worker!.sub, parsed.data.image);
+          res.json({ success: true, data });
+        } catch (error) {
+          if (error instanceof QrValidationError) {
+            res.status(400).json({ success: false, message: error.message });
+            return;
+          }
+          throw error;
+        }
+      } catch (error) {
+        logger.error('POST /worker/wallet/qr-code failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
 
   router.get('/invites', workerAuthMiddleware, async (req: WorkerAuthRequest, res: Response): Promise<void> => {
     try {

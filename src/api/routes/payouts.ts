@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Client } from 'discord.js';
 import { payoutService } from '../../services/payout.service';
 import { sendPayoutNotification } from '../../services/payout-notification.service';
+import { getWorkerQrInfo } from '../../services/worker-payment-qr.service';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
@@ -86,6 +87,24 @@ router.get('/eligible', async (req: Request, res: Response): Promise<void> => {
     res.json({ success: true, data: breakdown });
   } catch (error) {
     logger.error('GET /payouts/eligible failed', { error });
+    res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
+/**
+ * GET /api/v1/payouts/workers/:workerId/qr-code
+ * The worker's uploaded payment QR for the Pay Worker popup. Nulls (not an
+ * error) when nothing was uploaded — paying without a QR stays possible.
+ * Admin-only like every other /payouts/* route that touches money.
+ */
+router.get('/workers/:workerId/qr-code', async (req: Request, res: Response): Promise<void> => {
+  if (!requireDashboardAdmin(req, res)) return;
+
+  try {
+    const data = await getWorkerQrInfo(String(req.params.workerId));
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('GET /payouts/workers/:workerId/qr-code failed', { error });
     res.status(500).json({ success: false, message: 'Internal server error.' });
   }
 });
