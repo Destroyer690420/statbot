@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-10-04
+### Deployed (2026-10-04 at `363fac0` — dashboard-only rebuild, no migration)
+- **Pay Worker QR enlarged to 256px** (was 176px, too small to scan reliably). `PayWorkerModal` image + skeleton + placeholder `h-44 w-44` → `h-64 w-64`; layout unchanged (fits `max-w-lg`, stacks on mobile). Verified: served `TaskPayments` chunk contains `h-64 w-64` with `h-44 w-44` gone, health 200, app/redis untouched. Backup `rtm-backup-20261004-qrsize.tar.gz`; host bundle + probe scripts removed.
+
 ## 2026-10-03
 ### Deployed (2026-10-03 at `f9f7f65` — app + dashboard rebuild, one idempotent migration)
 - **Worker-uploaded payment QR codes + Pay Worker QR popup live** (`161.118.164.85`; backup `rtm-backup-20261003-qrpay.tar.gz`; `WorkerPaymentInfo` migration applied via manual `migration.sql` re-run — 0 unexpected errors, 4 columns verified; host bundle + probe scripts removed).
