@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, QrCode, X } from 'lucide-react';
 import { getWorkerQrCode, payWorker } from '../../../api/client';
+import { CopyButton } from '../../../components/CopyButton';
 import { formatCurrency } from '../utils';
 
 interface PayWorkerModalProps {
@@ -43,6 +44,7 @@ export function PayWorkerModal({
   });
 
   const qrCodeUrl: string | null = qrQuery.data?.data?.qrCodeUrl ?? null;
+  const upiId: string | null = qrQuery.data?.data?.upiId ?? null;
   // Workers often upload a full payment poster instead of a tight QR crop,
   // so the code renders small in the fixed box — the lightbox shows the
   // image at near-natural size (up to the viewport) for reliable scanning.
@@ -94,6 +96,14 @@ export function PayWorkerModal({
                 Scan the QR to pay, then Confirm to record the payment.
                 {qrCodeUrl ? ' Click the code for a larger view.' : ''}
               </p>
+              {upiId ? (
+                <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900/40 px-2.5 py-1.5">
+                  <p className="min-w-0 flex-1 truncate font-mono text-xs text-text-primary" title={upiId}>
+                    {upiId}
+                  </p>
+                  <CopyButton value={upiId} title="Copy UPI ID" className="p-1.5" />
+                </div>
+              ) : null}
             </div>
           </div>
 

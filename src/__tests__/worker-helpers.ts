@@ -120,6 +120,7 @@ export interface FixturePaymentQr {
   workerId: string;
   filename: string;
   mimeType: string;
+  upiId?: string | null;
   updatedAt: Date;
 }
 
@@ -293,6 +294,7 @@ export function createMockDb(state: FixtureState): Record<string, any> {
     workerPaymentInfo: {
       findUnique: async (args: any) =>
         (state.paymentQr ?? []).find((row) => row.workerId === args?.where?.workerId) ?? null,
+      findMany: async () => [...(state.paymentQr ?? [])],
       upsert: async (args: any) => {
         const rows = (state.paymentQr ??= []);
         const existing = rows.find((row) => row.workerId === args.where.workerId);

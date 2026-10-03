@@ -258,6 +258,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-04**: **Worker QR auto-crop + UPI ID (implemented, NOT deployed — needs app + dashboard rebuild + idempotent migration + backfill run):** uploads decoded with `jsqr` and cropped to the QR region (same format, graceful fallback, tight uploads byte-for-byte); decodable `upi://pay` payloads record `upiId` (copy button in the popup); `backfillQrCrops()` recrops existing files in place. 12 new tests.
+
 - **2026-10-04**: **Pay Worker QR full-size lightbox (DEPLOYED 2026-10-04 at `79c4fe1`:** dashboard-only rebuild, no migration; backup `rtm-backup-20261004-qrzoom.tar.gz`; verified: served `TaskPayments` chunk contains the lightbox + zoom hint, health 200, app/redis untouched). Workers upload full payment posters rather than tight QR crops, so the code rendered tiny in the fixed box — the popup QR is now clickable into a `z-60` near-natural-size lightbox (`max-h-[85vh]`), with a "crop to just the QR" tip added to the Wallet upload card.
 
 - **2026-10-04**: **Pay Worker QR enlarged to 256px (DEPLOYED 2026-10-04 at `363fac0`:** dashboard-only rebuild, no migration; backup `rtm-backup-20261004-qrsize.tar.gz`; verified: served `TaskPayments` chunk contains `h-64 w-64` with `h-44 w-44` gone, health 200, app/redis untouched).

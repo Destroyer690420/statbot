@@ -5,12 +5,17 @@ export class WorkerPaymentInfoRepository {
     return getDb().workerPaymentInfo.findUnique({ where: { workerId } });
   }
 
-  async upsert(workerId: string, data: { filename: string; mimeType: string }) {
+  async list() {
+    return getDb().workerPaymentInfo.findMany();
+  }
+
+  async upsert(workerId: string, data: { filename: string; mimeType: string; upiId?: string | null }) {
     const now = new Date();
+    const upiId = data.upiId ?? null;
     return getDb().workerPaymentInfo.upsert({
       where: { workerId },
-      create: { workerId, filename: data.filename, mimeType: data.mimeType, updatedAt: now },
-      update: { filename: data.filename, mimeType: data.mimeType, updatedAt: now },
+      create: { workerId, filename: data.filename, mimeType: data.mimeType, upiId, updatedAt: now },
+      update: { filename: data.filename, mimeType: data.mimeType, upiId, updatedAt: now },
     });
   }
 }

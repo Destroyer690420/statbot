@@ -677,7 +677,7 @@ describe('worker isolation (HTTP)', () => {
     test('a worker with no upload reads nulls', async () => {
       const { status, body } = await api('/wallet/qr-code', undefined, tokenC);
       expect(status).toBe(200);
-      expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null });
+      expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null, upiId: null });
     });
 
     test('missing, non-string and spoofed images are rejected', async () => {
@@ -709,7 +709,7 @@ describe('worker isolation (HTTP)', () => {
       expect(mine.body.data).toEqual(up.body.data);
 
       const other = await api('/wallet/qr-code', undefined, tokenC);
-      expect(other.body.data).toEqual({ qrCodeUrl: null, updatedAt: null });
+      expect(other.body.data).toEqual({ qrCodeUrl: null, updatedAt: null, upiId: null });
     });
 
     test('a smuggled workerId in the body cannot touch another worker', async () => {
@@ -721,7 +721,7 @@ describe('worker isolation (HTTP)', () => {
       expect(evil.status).toBe(200);
       // C's record is untouched: the smuggled id was ignored.
       const c = await api('/wallet/qr-code', undefined, tokenC);
-      expect(c.body.data).toEqual({ qrCodeUrl: null, updatedAt: null });
+      expect(c.body.data).toEqual({ qrCodeUrl: null, updatedAt: null, upiId: null });
     });
 
     test('rate limit triggers after the cap', async () => {

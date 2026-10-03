@@ -213,6 +213,7 @@ erDiagram
         string workerId PK "Discord user id = Task.assignedUserId; the QR follows the worker, not the ticket"
         string filename "current file: <workerId>.png|jpg|webp under uploads/payment-qr/"
         string mimeType "sniffed format's MIME, never the declared one"
+        string upiId "nullable; payee address from a decodable upi://pay payload (auto-crop side-effect)"
         timestamp updatedAt "bumped on every upload; drives the ?v= cache-buster"
     }
     OutreachSettings {

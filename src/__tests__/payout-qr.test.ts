@@ -131,12 +131,12 @@ describe('admin worker QR endpoint + static serving', () => {
   test('a worker with no upload reads as nulls, not an error', async () => {
     const { status, body } = await api(`/payouts/workers/${WORKER}/qr-code`, undefined, adminToken);
     expect(status).toBe(200);
-    expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null });
+    expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null, upiId: null });
   });
 
   test('an uploaded QR is returned with a cache-busted URL', async () => {
     const at = new Date('2026-09-01T12:00:00.000Z');
-    rows[WORKER] = { workerId: WORKER, filename: `${WORKER}.png`, mimeType: 'image/png', updatedAt: at };
+    rows[WORKER] = { workerId: WORKER, filename: `${WORKER}.png`, mimeType: 'image/png', upiId: 'payee@upi', updatedAt: at };
     const buf = await sharp({
       create: { width: 16, height: 16, channels: 3, background: { r: 10, g: 120, b: 200 } },
     })
@@ -149,6 +149,7 @@ describe('admin worker QR endpoint + static serving', () => {
     expect(body.data).toEqual({
       qrCodeUrl: `/api/v1/uploads/payment-qr/${WORKER}/${WORKER}.png?v=${at.getTime()}`,
       updatedAt: at.toISOString(),
+      upiId: 'payee@upi',
     });
   });
 
@@ -161,7 +162,7 @@ describe('admin worker QR endpoint + static serving', () => {
     };
     const { status, body } = await api('/payouts/workers/ghost-worker/qr-code', undefined, adminToken);
     expect(status).toBe(200);
-    expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null });
+    expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null, upiId: null });
   });
 
   test('static QR serving: file bytes, traversal guard, name guard, 404', async () => {

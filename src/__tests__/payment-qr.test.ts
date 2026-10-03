@@ -1,9 +1,14 @@
 import sharp from 'sharp';
+import * as fs from 'fs';
+import * as path from 'path';
+import jsQR from 'jsqr';
 import {
   PAYMENT_QR_MAX_BYTES,
   QrValidationError,
   buildQrCodeUrl,
   decodeQrDataUrl,
+  detectQrRegion,
+  parseUpiId,
   processQrImage,
 } from '../utils/payment-qr';
 
@@ -110,5 +115,108 @@ describe('payment-qr image handling', () => {
     expect(buildQrCodeUrl('123', '123.png', at)).toBe(
       `/api/v1/uploads/payment-qr/123/123.png?v=${at.getTime()}`,
     );
+  });
+});
+
+const FIXTURE_UPI = path.join(__dirname, 'fixtures', 'qr-upi.png');
+const FIXTURE_TEXT = path.join(__dirname, 'fixtures', 'qr-text.png');
+
+function readFixture(p: string): Buffer {
+  return fs.readFileSync(p);
+}
+
+async function decodePayload(buf: Buffer): Promise<string | null> {
+  const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const found = jsQR(new Uint8ClampedArray(data), info.width, info.height, { inversionAttempts: 'attemptBoth' });
+  return found?.data ?? null;
+}
+
+/** Poster-like upload: a small QR pasted onto a large dark canvas. */
+async function posterBuffer(qrSize = 300, canvasW = 540, canvasH = 1200, inverted = false): Promise<Buffer> {
+  let qr = await sharp(readFixture(FIXTURE_UPI)).resize(qrSize, qrSize).toBuffer();
+  if (inverted) qr = await sharp(qr).negate().toBuffer();
+  const bg = inverted ? { r: 245, g: 245, b: 245 } : { r: 10, g: 10, b: 10 };
+  return sharp({ create: { width: canvasW, height: canvasH, channels: 3, background: bg } })
+    .composite([{ input: qr, left: Math.round((canvasW - qrSize) / 2), top: 150 }])
+    .png()
+    .toBuffer();
+}
+
+describe('payment-qr auto-crop + UPI ID', () => {
+  test('parseUpiId accepts upi:// payloads and rejects everything else', () => {
+    expect(parseUpiId('upi://pay?pa=testworker@okupi&pn=Test Worker')).toBe('testworker@okupi');
+    expect(parseUpiId('UPI://pay?pa=a@b')).toBe('a@b');
+    expect(parseUpiId('upi://pay?pn=NoAddress')).toBeNull();
+    expect(parseUpiId('https://example.com/pay?pa=a@b')).toBeNull();
+    expect(parseUpiId('just some text')).toBeNull();
+    expect(parseUpiId('')).toBeNull();
+  });
+
+  test('tight QR upload stays byte-for-byte but still records the UPI ID', async () => {
+    const raw = readFixture(FIXTURE_UPI);
+    const out = await processQrImage(raw);
+    expect(out.buffer.equals(raw)).toBe(true);
+    expect(out.cropped).toBe(false);
+    expect(out.resized).toBe(false);
+    expect(out.mimeType).toBe('image/png');
+    expect(out.upiId).toBe('testworker@okupi');
+  });
+
+  test('poster-like upload is cropped to the QR region and stays decodable', async () => {
+    const raw = await posterBuffer();
+    const out = await processQrImage(raw);
+    expect(out.cropped).toBe(true);
+    expect(out.resized).toBe(false);
+    expect(out.mimeType).toBe('image/png');
+    expect(out.extension).toBe('png');
+    expect(out.upiId).toBe('testworker@okupi');
+    const meta = await sharp(out.buffer).metadata();
+    expect((meta.width ?? 0)).toBeLessThan(540);
+    expect((meta.height ?? 0)).toBeLessThan(1200);
+    await expect(decodePayload(out.buffer)).resolves.toBe('upi://pay?pa=testworker@okupi&pn=Test Worker');
+  });
+
+  test('inverted (light-on-dark) poster is detected via the inversion pass', async () => {
+    const raw = await posterBuffer(300, 540, 1200, true);
+    const detected = await detectQrRegion(raw, 540, 1200);
+    expect(detected).not.toBeNull();
+    expect(detected?.crop).not.toBeNull();
+    expect(detected?.upiId).toBe('testworker@okupi');
+    const out = await processQrImage(raw);
+    expect(out.cropped).toBe(true);
+    expect(out.upiId).toBe('testworker@okupi');
+    await expect(decodePayload(out.buffer)).resolves.toBe('upi://pay?pa=testworker@okupi&pn=Test Worker');
+  });
+
+  test('non-payment QR crops without a UPI ID', async () => {
+    const raw = readFixture(FIXTURE_TEXT);
+    const out = await processQrImage(raw);
+    expect(out.upiId).toBeNull();
+    // The 300px text fixture already fills its frame, so nothing is cut —
+    // the point is a decodable non-UPI code never gains a UPI ID.
+    await expect(decodePayload(raw)).resolves.toBe('just some text not a payment link');
+  });
+
+  test('image with no QR keeps the legacy path (no crop, no UPI ID)', async () => {
+    const raw = await sharp({
+      create: { width: 16, height: 16, channels: 3, background: { r: 10, g: 120, b: 200 } },
+    })
+      .png()
+      .toBuffer();
+    const out = await processQrImage(raw);
+    expect(out.buffer.equals(raw)).toBe(true);
+    expect(out.cropped).toBe(false);
+    expect(out.upiId).toBeNull();
+  });
+
+  test('oversized poster is cropped first, then resized under the ceiling', async () => {
+    const raw = await posterBuffer(1500, 2000, 2000);
+    const out = await processQrImage(raw);
+    expect(out.cropped).toBe(true);
+    expect(out.resized).toBe(true);
+    expect(out.mimeType).toBe('image/png');
+    const meta = await sharp(out.buffer).metadata();
+    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBeLessThanOrEqual(1200);
+    await expect(decodePayload(out.buffer)).resolves.toBe('upi://pay?pa=testworker@okupi&pn=Test Worker');
   });
 });

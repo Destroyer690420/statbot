@@ -770,3 +770,13 @@ CREATE TABLE IF NOT EXISTS "WorkerPaymentInfo" (
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "WorkerPaymentInfo_pkey" PRIMARY KEY ("workerId")
 );
+
+-- ============================================================
+-- Migration: UPI ID on worker payment QR codes (auto-crop side-effect)
+-- ============================================================
+-- The upload pipeline decodes the QR region (to crop posters down to the
+-- code). When the payload is a upi://pay link, the payee address (pa) is
+-- stored here so the admin popup can offer it as a copy button next to the
+-- image. Nullable: non-payment QRs and undecodable uploads store NULL.
+-- Schema-only, no data statements, safe to re-run.
+ALTER TABLE "WorkerPaymentInfo" ADD COLUMN IF NOT EXISTS "upiId" TEXT;
