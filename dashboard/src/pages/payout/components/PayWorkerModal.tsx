@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, QrCode, X } from 'lucide-react';
 import { getWorkerQrCode, payWorker } from '../../../api/client';
@@ -42,6 +43,10 @@ export function PayWorkerModal({
   });
 
   const qrCodeUrl: string | null = qrQuery.data?.data?.qrCodeUrl ?? null;
+  // Workers often upload a full payment poster instead of a tight QR crop,
+  // so the code renders small in the fixed box — the lightbox shows the
+  // image at near-natural size (up to the viewport) for reliable scanning.
+  const [lightbox, setLightbox] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4" onClick={onClose}>
@@ -62,11 +67,18 @@ export function PayWorkerModal({
               {qrQuery.isLoading ? (
                 <div className="skeleton h-64 w-64 rounded-lg" />
               ) : qrCodeUrl ? (
-                <img
-                  src={qrCodeUrl}
-                  alt={`${workerName} payment QR code`}
-                  className="h-64 w-64 rounded-lg bg-white object-contain p-1.5"
-                />
+                <button
+                  type="button"
+                  onClick={() => setLightbox(true)}
+                  className="rounded-lg transition-opacity duration-150 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  title="View full size"
+                >
+                  <img
+                    src={qrCodeUrl}
+                    alt={`${workerName} payment QR code — click to view full size`}
+                    className="h-64 w-64 rounded-lg bg-white object-contain p-1.5"
+                  />
+                </button>
               ) : (
                 <div className="flex h-64 w-64 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-dark-700 bg-dark-900/40 px-3 text-center">
                   <QrCode className="w-7 h-7 text-dark-500" />
@@ -80,6 +92,7 @@ export function PayWorkerModal({
               <p className="mt-1 text-2xl font-semibold text-text-primary">{formatCurrency(totalAmount)}</p>
               <p className="mt-2 text-xs leading-5 text-dark-400">
                 Scan the QR to pay, then Confirm to record the payment.
+                {qrCodeUrl ? ' Click the code for a larger view.' : ''}
               </p>
             </div>
           </div>
@@ -103,6 +116,28 @@ export function PayWorkerModal({
           </div>
         </div>
       </div>
+      {lightbox && qrCodeUrl ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 sm:p-6"
+          onClick={() => setLightbox(false)}
+        >
+          <div className="relative max-h-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={qrCodeUrl}
+              alt={`${workerName} payment QR code, full size`}
+              className="max-h-[85vh] w-auto max-w-[90vw] rounded-lg bg-white object-contain p-2"
+            />
+            <button
+              type="button"
+              onClick={() => setLightbox(false)}
+              className="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center rounded-full bg-dark-800 text-text-primary shadow-pop transition-colors hover:text-white"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

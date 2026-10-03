@@ -130,6 +130,9 @@ function PaymentQrCard() {
             <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-worker-text-muted">
               Add your payment QR code so you get paid faster
             </p>
+            <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-worker-text-faint">
+              Tip: crop to just the QR code — a full poster screenshot is too small to scan.
+            </p>
             <button type="button" onClick={openPicker} disabled={uploading} className="worker-primary-button mt-4">
               {uploading ? (
                 <>
