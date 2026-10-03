@@ -60,15 +60,15 @@ export function PayWorkerModal({
           <div className="flex flex-col sm:flex-row gap-5">
             <div className="flex shrink-0 items-center justify-center">
               {qrQuery.isLoading ? (
-                <div className="skeleton h-44 w-44 rounded-lg" />
+                <div className="skeleton h-64 w-64 rounded-lg" />
               ) : qrCodeUrl ? (
                 <img
                   src={qrCodeUrl}
                   alt={`${workerName} payment QR code`}
-                  className="h-44 w-44 rounded-lg bg-white object-contain p-1.5"
+                  className="h-64 w-64 rounded-lg bg-white object-contain p-1.5"
                 />
               ) : (
-                <div className="flex h-44 w-44 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-dark-700 bg-dark-900/40 px-3 text-center">
+                <div className="flex h-64 w-64 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-dark-700 bg-dark-900/40 px-3 text-center">
                   <QrCode className="w-7 h-7 text-dark-500" />
                   <p className="text-xs text-dark-400">No QR code uploaded yet</p>
                 </div>
