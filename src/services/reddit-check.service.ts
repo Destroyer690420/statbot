@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { compareRedditFormat, FormatCheckStatus } from '../utils/reddit-format';
+import { summarizeRawPost, classifyRemoval, RemovalState } from '../utils/reddit-post-signals';
 import { redditSessionService } from './reddit-session.service';
 import { TaskType } from '../types';
 
@@ -9,6 +10,14 @@ export interface RedditPostSnapshot {
   author: string;
   subreddit: string;
   deleted: boolean;
+  /**
+   * Precise removal state (Phase 1). `deleted` stays the single backward-
+   * compatible flag (`state !== 'LIVE'`) so every existing consumer keeps its
+   * exact current behavior; new consumers read `removalState`.
+   */
+  removalState: RemovalState;
+  /** Raw `removed_by_category` token (null when the post stands). */
+  removedByCategory: string | null;
 }
 
 export interface FormatCheckOutcome {
@@ -158,13 +167,32 @@ export async function fetchRedditPost(redditUrl: string): Promise<RedditPostSnap
       const selftext = String(post.selftext ?? '');
       const author = String(post.author ?? '');
       const subreddit = String(post.subreddit ?? '');
-      const deleted =
-        title.trim() === '[deleted]' ||
-        title.trim() === '[removed]' ||
-        selftext.trim() === '[deleted]' ||
-        selftext.trim() === '[removed]' ||
-        author.trim() === '[deleted]';
-      return { title, selftext, author, subreddit, deleted };
+      // Precise state from the probed signal set (docs/REMOVAL_SIGNALS.md):
+      // exact `[deleted]`/`[removed]` markers, the `[ Removed by moderator ]`
+      // title form, and the `removed_by_category` token. `deleted` keeps its
+      // historical meaning (anything not LIVE) for existing consumers.
+      // Three deliberate verdict fixes vs the old exact-match block:
+      // `[deleted]` author with fully standing content → LIVE (account gone,
+      // post visible); mod-title variant with empty selftext → removed;
+      // mod-approved (`approved:true`) with stale markers → LIVE.
+      const signals = summarizeRawPost(post);
+      let removalState: RemovalState;
+      if (signals) {
+        removalState = classifyRemoval(signals);
+      } else {
+        // Malformed shape (no name/subreddit): keep the legacy exact check
+        // so behavior here cannot change under us.
+        const legacyDeleted =
+          title.trim() === '[deleted]' ||
+          title.trim() === '[removed]' ||
+          selftext.trim() === '[deleted]' ||
+          selftext.trim() === '[removed]' ||
+          author.trim() === '[deleted]';
+        removalState = legacyDeleted ? 'DELETED_BY_USER' : 'LIVE';
+      }
+      const removedByCategory = signals?.removedByCategory ?? null;
+      const deleted = removalState !== 'LIVE';
+      return { title, selftext, author, subreddit, deleted, removalState, removedByCategory };
     } catch (error) {
       // Session verdicts are final — never downgrade to a retried host.
       if (error instanceof RedditSessionExpiredError) throw error;

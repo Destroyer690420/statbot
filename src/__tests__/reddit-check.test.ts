@@ -1,5 +1,6 @@
 import {
   checkPostFormat,
+  fetchRedditPost,
   isShareUrl,
   resolveShareUrl,
 } from '../services/reddit-check.service';
@@ -140,5 +141,107 @@ describe('checkPostFormat with mocked fetch', () => {
     expect(r.status).toBe('MATCH');
     const calls = (global.fetch as jest.Mock).mock.calls.map((c) => String(c[0]));
     expect(calls[1]).toBe(canonical + '.json?raw_json=1');
+  });
+});
+
+describe('fetchRedditPost removalState (Phase 1, probed signals)', () => {
+  const realFetch = global.fetch;
+
+  // Full post objects (with `name`, so the signal path — not the legacy
+  // fallback — classifies them).
+  function fullPost(overrides: Record<string, unknown> = {}) {
+    return [
+      {
+        data: {
+          children: [
+            {
+              data: {
+                name: 't3_abc123',
+                id: 'abc123',
+                title: 'T',
+                selftext: 'only',
+                author: 'someone',
+                subreddit: 'Homesteading',
+                removed_by_category: null,
+                banned_by: null,
+                approved: false,
+                approved_by: null,
+                approved_at_utc: null,
+                banned_at_utc: null,
+                removal_reason: null,
+                mod_reason_title: null,
+                distinguished: null,
+                locked: false,
+                archived: false,
+                spam: false,
+                num_reports: 0,
+                over_18: false,
+                created_utc: 1760000000,
+                ...overrides,
+              },
+            },
+          ],
+        },
+      },
+    ];
+  }
+
+  const URL = 'https://www.reddit.com/r/Eve/comments/1qw14x3/title/';
+
+  beforeEach(() => {
+    mockedLoad.mockResolvedValue('edgebucket=x; reddit_session=y');
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    jest.clearAllMocks();
+  });
+
+  it('reports a standing post as LIVE with a null category', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce(jsonResponse(fullPost()));
+    const snap = await fetchRedditPost(URL);
+    expect(snap.deleted).toBe(false);
+    expect(snap.removalState).toBe('LIVE');
+    expect(snap.removedByCategory).toBeNull();
+  });
+
+  it('catches the mod-removal title form with empty selftext (missed before Phase 1)', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(fullPost({ title: '[ Removed by moderator ]', selftext: '', removed_by_category: 'moderator' })));
+    const snap = await fetchRedditPost(URL);
+    expect(snap.deleted).toBe(true);
+    expect(snap.removalState).toBe('REMOVED_BY_MODS');
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(fullPost({ title: '[ Removed by moderator ]', selftext: '', removed_by_category: 'moderator' })));
+    const r = await checkPostFormat({ taskType: 'POST', expectedTitle: 'T', expectedContent: 'only', redditUrl: URL });
+    expect(r.status).toBe('DELETED');
+  });
+
+  it('labels filter removal REMOVED_BY_FILTER but keeps the DELETED outcome', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce(jsonResponse(fullPost({ selftext: '[removed]', removed_by_category: 'reddit' })));
+    const snap = await fetchRedditPost(URL);
+    expect(snap.removalState).toBe('REMOVED_BY_FILTER');
+    expect(snap.removedByCategory).toBe('reddit');
+    global.fetch = jest.fn().mockResolvedValueOnce(jsonResponse(fullPost({ selftext: '[removed]', removed_by_category: 'reddit' })));
+    const r = await checkPostFormat({ taskType: 'POST', expectedTitle: 'T', expectedContent: 'only', redditUrl: URL });
+    expect(r.status).toBe('DELETED');
+  });
+
+  it('treats a mod-approved post with stale markers as live (compares format)', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(fullPost({ selftext: '[removed]', removed_by_category: 'reddit', approved: true, approved_by: 'somemod' })));
+    const snap = await fetchRedditPost(URL);
+    expect(snap.deleted).toBe(false);
+    expect(snap.removalState).toBe('LIVE');
+  });
+
+  it('treats a gone author with standing content as live (account gone, post visible)', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce(jsonResponse(fullPost({ author: '[deleted]' })));
+    const snap = await fetchRedditPost(URL);
+    expect(snap.deleted).toBe(false);
+    expect(snap.removalState).toBe('LIVE');
   });
 });

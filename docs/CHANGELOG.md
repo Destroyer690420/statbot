@@ -3,6 +3,9 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-08
+### Implemented (NOT deployed)
+- **Removal-state Phase 1: precise snapshot.** `fetchRedditPost` returns `removalState` (LIVE/DELETED_BY_USER/REMOVED_BY_MODS/REMOVED_BY_FILTER/REMOVED_OTHER) + `removedByCategory`; `deleted` unchanged in meaning; three verdict fixes (gone-author-standing → LIVE, mod-title form → REMOVED, approved-stale → LIVE); survival verdict maps to existing buckets. Verified: typecheck clean, 60 suites / 834 tests (12 classifier + 5 service tests new). No auto-marking, no message changes.
+- **Removal-state Phase 0: signal probe.** Live probe of 10 production URLs → `docs/REMOVAL_SIGNALS.md` matrix (live/filter/mod-removed/mixed/404 + `old.reddit.com` currently 403s the session) + 7 certainty rules for the later auto-mark phase.
 ### Deployed (2026-10-08 at `755bff4` — app + dashboard rebuild, one idempotent migration)
 - **10-minute survival screenshots live** (`161.118.164.85`; backup `rtm-backup-20261008-survival.tar.gz`; survival migration applied via manual `migration.sql` re-run — 50 "already exists" + 0 unexpected errors, 6 `Task` columns + 2 `AuditAction` values verified; host bundle + probe scripts removed). Verified: 3 services Up, health healthy (DB+Redis), boot "Survival queue/worker initialized" + "All systems online!", re-hydration backfilled 6 recent POSTs (all captured ALIVE within ~2 min of boot — the vaulted session works from the host IP), all 7 live-`dist` gates, root + all three userscripts 200, served `TaskDetails-C7DdsGzK.js` carries the proof UI, 0 app errors since boot.
 

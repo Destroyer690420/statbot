@@ -112,3 +112,65 @@ export function describeSignals(s: RedditPostSignals): string {
   if (s.spam === true) tokens.push('spam=true');
   return [...markers, ...tokens].join(' | ') || 'stands (no markers, no removal tokens)';
 }
+
+/**
+ * Precise removal state, derived ONLY from probed signals
+ * (`docs/REMOVAL_SIGNALS.md`). Phase 1 of the removal-state work.
+ *
+ * Certainty discipline (a wrong verdict auto-marks tasks in Phase 3, so the
+ * default is LIVE unless the evidence is explicit):
+ * - `approved === true` always wins → LIVE (a mod put it back up, even if a
+ *   stale removal token lingers).
+ * - A `[deleted]` author ALONE (full content, no category) → LIVE: the
+ *   account is gone but the post stands (`REMOVAL_SIGNALS.md` rule 4).
+ * - Post-state evidence outranks account-state: a `removed_by_category`
+ *   token decides the bucket even when the author is also `[deleted]` (the
+ *   token describes the post's visibility; the author field describes the
+ *   account).
+ * - Any other non-null `removed_by_category` we have not observed live
+ *   (`automod_filtered` counts as filter) lands in REMOVED_OTHER, never in a
+ *   named bucket we cannot prove.
+ */
+export type RemovalState =
+  | 'LIVE'
+  | 'DELETED_BY_USER'
+  | 'REMOVED_BY_MODS'
+  | 'REMOVED_BY_FILTER'
+  | 'REMOVED_OTHER';
+
+function isRedactedExact(text: string): boolean {
+  const val = text.trim();
+  return val === '[deleted]' || val === '[removed]';
+}
+
+/** `[ Removed by moderator ]` and case/spacing variants (probed 2026-10-08). */
+function isModRemovalTitle(title: string): boolean {
+  return /^\[\s*removed\s+by\s+moderator\s*\]$/i.test(title.trim());
+}
+
+export function classifyRemoval(s: RedditPostSignals): RemovalState {
+  // A mod approval puts the post back up — trust it over stale tokens.
+  if (s.approved === true) return 'LIVE';
+
+  const titleGone = isRedactedExact(s.title) || isModRemovalTitle(s.title);
+  const textGone = isRedactedExact(s.selftext);
+  const authorGone = s.author.trim() === '[deleted]';
+  const category = (s.removedByCategory || '').toLowerCase();
+
+  // Account gone but content fully standing: not a deletion signal.
+  if (authorGone && !titleGone && !textGone && !category) return 'LIVE';
+
+  if (!titleGone && !textGone && !authorGone) return 'LIVE';
+
+  if (category === 'moderator' || isModRemovalTitle(s.title)) return 'REMOVED_BY_MODS';
+  if (category === 'deleted' || category === 'author') return 'DELETED_BY_USER';
+  if (category === 'reddit' || category === 'automod_filtered') return 'REMOVED_BY_FILTER';
+  if (authorGone && (titleGone || textGone)) return 'DELETED_BY_USER';
+  if (titleGone || textGone) {
+    if (category && category !== 'null') return 'REMOVED_OTHER';
+    // Bare redaction markers with no token: historically user deletion, and
+    // this is exactly what production already treats as deleted.
+    return 'DELETED_BY_USER';
+  }
+  return 'LIVE';
+}

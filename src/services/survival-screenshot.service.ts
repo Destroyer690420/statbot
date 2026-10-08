@@ -194,10 +194,18 @@ export async function captureSurvivalScreenshot(redditUrl: string): Promise<Surv
 async function resolveVerdict(redditUrl: string): Promise<'ALIVE' | 'REMOVED' | 'DELETED'> {
   try {
     const snap = await fetchRedditPost(redditUrl);
-    if (!snap.deleted) return 'ALIVE';
-    const blob = `${snap.title}\n${snap.selftext}\n${snap.author}`.toLowerCase();
-    if (blob.includes('[removed]')) return 'REMOVED';
-    return 'DELETED';
+    // Precise state, same three buckets the dashboard already renders:
+    // both removal kinds stay REMOVED, user deletion stays DELETED.
+    switch (snap.removalState) {
+      case 'LIVE':
+        return 'ALIVE';
+      case 'DELETED_BY_USER':
+        return 'DELETED';
+      case 'REMOVED_BY_MODS':
+      case 'REMOVED_BY_FILTER':
+      case 'REMOVED_OTHER':
+        return 'REMOVED';
+    }
   } catch (error) {
     if (error instanceof RedditSessionExpiredError) throw new SurvivalSessionExpiredError();
     const msg = error instanceof Error ? error.message : String(error);

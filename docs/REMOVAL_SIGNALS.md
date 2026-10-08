@@ -32,3 +32,11 @@
 5. 404 on www (JSON "Not Found") → post not found. NOT auto-marked: indistinguishable from a mistyped URL with certainty <100%.
 6. 403/429/network/`NO_SESSION` → infrastructure, never a verdict. Already the codebase rule; unchanged.
 7. Every auto-mark requires the signal on the canonical URL (post share-resolution) and stability across one retry. Admin dropdown override always wins.
+
+## Phase 1 implementation (2026-10-08, NOT deployed)
+
+- `fetchRedditPost` now returns `removalState` (`LIVE | DELETED_BY_USER | REMOVED_BY_MODS | REMOVED_BY_FILTER | REMOVED_OTHER`) + `removedByCategory` via `summarizeRawPost`/`classifyRemoval` (`src/utils/reddit-post-signals.ts`). `deleted` keeps its historical meaning (`state !== 'LIVE'`) so `checkPostFormat` (DELETED outcome), the dashboard badge, and the survival buckets behave exactly as before.
+- Three deliberate verdict fixes vs the old exact-match block: `[deleted]` author with fully standing content → LIVE (account gone, post visible — was wrongly DELETED); `[ Removed by moderator ]` title with empty selftext → REMOVED (was missed entirely); `approved:true` with stale markers → LIVE.
+- `REMOVED_OTHER` is the honesty bucket: any unobserved non-null category with markers lands there, never in a named bucket. Survival maps it to REMOVED (same dashboard bucket as the other removals).
+- Precedence rule (pinned by test): post-state evidence (`removed_by_category`) outranks account-state (`[deleted]` author) when both are present.
+- Verified: typecheck clean, full suite 60/834 (new: 12 classifier + 5 service tests). No auto-marking, no message changes — those are Phases 3/4.

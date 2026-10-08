@@ -1,4 +1,4 @@
-import { summarizeRawPost, describeSignals } from '../utils/reddit-post-signals';
+import { summarizeRawPost, describeSignals, classifyRemoval } from '../utils/reddit-post-signals';
 
 // NOTE: utils-only imports — reddit-post-signals.ts is env-free, so this
 // suite needs no logger/env mocks (see docs/TESTING.md §1).
@@ -100,5 +100,81 @@ describe('summarizeRawPost', () => {
 describe('describeSignals', () => {
   it('says a standing post stands', () => {
     expect(describeSignals(summarizeRawPost(post())!)).toBe('stands (no markers, no removal tokens)');
+  });
+});
+
+describe('classifyRemoval (probed matrix, docs/REMOVAL_SIGNALS.md)', () => {
+  it('LIVE for a standing post', () => {
+    expect(classifyRemoval(summarizeRawPost(post())!)).toBe('LIVE');
+  });
+
+  it('REMOVED_BY_FILTER for filter removal (title intact, [removed] text)', () => {
+    const s = summarizeRawPost(post({ selftext: '[removed]', removed_by_category: 'reddit' }))!;
+    expect(classifyRemoval(s)).toBe('REMOVED_BY_FILTER');
+  });
+
+  it('REMOVED_BY_FILTER for automod_filtered (same bucket, unobserved live)', () => {
+    const s = summarizeRawPost(post({ selftext: '[removed]', removed_by_category: 'automod_filtered' }))!;
+    expect(classifyRemoval(s)).toBe('REMOVED_BY_FILTER');
+  });
+
+  it('REMOVED_BY_MODS for the probed mod title, even with empty selftext and no category', () => {
+    const s = summarizeRawPost(
+      post({ title: '[ Removed by moderator ]', selftext: '', removed_by_category: null }),
+    )!;
+    expect(classifyRemoval(s)).toBe('REMOVED_BY_MODS');
+  });
+
+  it('REMOVED_BY_MODS for the moderator category', () => {
+    const s = summarizeRawPost(post({ selftext: '[removed]', removed_by_category: 'moderator' }))!;
+    expect(classifyRemoval(s)).toBe('REMOVED_BY_MODS');
+  });
+
+  it('DELETED_BY_USER for [deleted] shells', () => {
+    const s = summarizeRawPost(
+      post({ title: '[deleted]', selftext: '[deleted]', author: '[deleted]', removed_by_category: 'deleted' }),
+    )!;
+    expect(classifyRemoval(s)).toBe('DELETED_BY_USER');
+  });
+
+  it('DELETED_BY_USER for bare [deleted] markers with no token (legacy production shape)', () => {
+    const s = summarizeRawPost(post({ selftext: '[deleted]', removed_by_category: null }))!;
+    expect(classifyRemoval(s)).toBe('DELETED_BY_USER');
+  });
+
+  it('REMOVED_BY_FILTER when filter evidence accompanies a gone author (post-state outranks account-state)', () => {
+    const s = summarizeRawPost(
+      post({ author: '[deleted]', selftext: '[removed]', removed_by_category: 'reddit' }),
+    )!;
+    expect(classifyRemoval(s)).toBe('REMOVED_BY_FILTER');
+  });
+
+  it('DELETED_BY_USER for a gone author plus redaction with no category token', () => {
+    const s = summarizeRawPost(
+      post({ author: '[deleted]', selftext: '[deleted]', removed_by_category: null }),
+    )!;
+    expect(classifyRemoval(s)).toBe('DELETED_BY_USER');
+  });
+
+  it('LIVE for a gone author with fully standing content (account gone, post visible)', () => {
+    const s = summarizeRawPost(post({ author: '[deleted]', removed_by_category: null }))!;
+    expect(classifyRemoval(s)).toBe('LIVE');
+  });
+
+  it('LIVE for a mod-approved post even with stale removal tokens', () => {
+    const s = summarizeRawPost(
+      post({ selftext: '[removed]', removed_by_category: 'reddit', approved: true, approved_by: 'somemod' }),
+    )!;
+    expect(classifyRemoval(s)).toBe('LIVE');
+  });
+
+  it('REMOVED_OTHER for an unobserved category with markers (never a named bucket)', () => {
+    const s = summarizeRawPost(post({ selftext: '[removed]', removed_by_category: 'community_ops' }))!;
+    expect(classifyRemoval(s)).toBe('REMOVED_OTHER');
+  });
+
+  it('LIVE when nothing is redacted, even with a stray token and no approval', () => {
+    const s = summarizeRawPost(post({ removed_by_category: 'reddit' }))!;
+    expect(classifyRemoval(s)).toBe('LIVE');
   });
 });
