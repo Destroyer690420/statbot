@@ -1,0 +1,34 @@
+# REMOVAL_SIGNALS.md — Phase 0: what the spare account actually sees
+
+> Live probe (`scripts/probe-removal-signals.ts`) against real production URLs, run 2026-10-08. All requests are read-only authed `.json` GETs (the same path `fetchRedditPost` uses). Vault cookie works from the host IP (3004 chars, never printed). ~25 requests total, serial with 2 s gaps.
+
+## Observed matrix (www.reddit.com, authenticated as non-mod third party)
+
+| # | Real state | HTTP | title | selftext | author | `removed_by_category` | Notes |
+|---|---|---|---|---|---|---|---|
+| 1 | Live post | 200 JSON | full | full | full | null | No markers, no tokens. Clean ALIVE. |
+| 2 | Spam-filter removal | 200 JSON | full | `[removed]` | full | `reddit` | All 5 admin-`deleted` samples looked like this. Post sits in the sub's modqueue — a moderator can still approve it. |
+| 3 | Mod removal | 200 JSON | `[ Removed by moderator ]` | `[removed]` | full | `moderator` | Title token has spaces + capital R — the current exact-match `[removed]` check does **not** catch this title form (caught here only via selftext). |
+| 4 | Filter removal + user gone | 200 JSON | full | `[removed]` | `[deleted]` | `reddit` | Mixed: account/post deleted by user AND filter-removed. |
+| 5 | Never-existed id | 404 JSON `{"message":"Not Found"}` | — | — | — | — | Distinct from every removal: no listing at all. |
+
+## Infrastructure findings
+
+- **Share links (`/s/<id>`) resolve fine** on www via 302-follow (all 9 samples). Probe reuses `resolveShareUrl`.
+- **`old.reddit.com` currently 403s the vaulted session** (HTML block page) on every request, including share resolution — the `www → old` host fallback in `reddit-check.service.ts` / `survival-screenshot.service.ts` is effectively www-only right now. Production is unaffected (www succeeds first); the fallback is harmless dead weight, not a bug to fix under pressure.
+- A fabricated id on `old` also 403s (indistinguishable from the session wall), so 404-verdicts must come from www only.
+
+## States NOT observed (no sample found)
+
+- Pure user-deleted shell (`[deleted]` title/selftext + category `deleted`/`author`). The marker logic for it already exists in production (`isRedacted`) — Phase 1 keeps it, first live observation confirms.
+- A distinct "awaiting approval" signal. Justification for treating it as covered: an unapproved post is filter-held, i.e. signal #2. From outside, "awaiting approval" and "filter-removed" are the same row — the honest label is *"removed by Reddit's filters — a moderator can still approve it"*, never a claimed distinction.
+
+## 100%-sure rules for Phase 3 (derived, not yet implemented)
+
+1. `removed_by_category = moderator` + any redaction marker → mod-removed. Certain.
+2. `removed_by_category = reddit` + `[removed]` marker → filter-removed (may still be approved). Certain as *removed*; never claim permanence.
+3. Author `[deleted]` + any redaction marker → user-deleted. Certain.
+4. Author `[deleted]` with full content → account gone, post may stand. NOT a deletion signal.
+5. 404 on www (JSON "Not Found") → post not found. NOT auto-marked: indistinguishable from a mistyped URL with certainty <100%.
+6. 403/429/network/`NO_SESSION` → infrastructure, never a verdict. Already the codebase rule; unchanged.
+7. Every auto-mark requires the signal on the canonical URL (post share-resolution) and stability across one retry. Admin dropdown override always wins.
