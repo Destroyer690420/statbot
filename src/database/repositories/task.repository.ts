@@ -303,6 +303,74 @@ export class TaskRepository {
     });
   }
 
+  /**
+   * Persists the 10-minute survival proof. REMOVED/DELETED still carry
+   * their screenshot (proof of state); hard failures carry the status +
+   * error with null image fields.
+   */
+  async saveSurvivalProof(
+    taskId: string,
+    data: {
+      status: string;
+      imageUrl: string | null;
+      imageName: string | null;
+      error?: string | null;
+    },
+  ) {
+    return getDb().task.update({
+      where: { id: taskId },
+      data: {
+        survivalStatus: data.status,
+        survivalImageUrl: data.imageUrl,
+        survivalImageName: data.imageName,
+        survivalCheckedAt: new Date(),
+        survivalError: data.error ?? null,
+        updatedAt: new Date(),
+      } as any,
+    });
+  }
+
+  /** Resets survival state so a resubmitted URL restarts the 11-min timer. */
+  async resetSurvival(taskId: string) {
+    return getDb().task.update({
+      where: { id: taskId },
+      data: {
+        survivalStatus: 'PENDING',
+        survivalImageUrl: null,
+        survivalImageName: null,
+        survivalCheckedAt: null,
+        survivalError: null,
+        updatedAt: new Date(),
+      } as any,
+    });
+  }
+
+  async updateSurvivalJobId(taskId: string, jobId: string | null) {
+    return getDb().task.update({
+      where: { id: taskId },
+      data: { survivalJobId: jobId, updatedAt: new Date() } as any,
+    });
+  }
+
+  /**
+   * POST tasks that still owe a survival screenshot: survivalStatus NULL or
+   * PENDING, not cancelled/archived, with a usable URL (submittedRedditUrl
+   * for GoPartTime, redditUrl for manual /task). Used by boot + periodic
+   * re-hydration so Redis restarts never lose the 11-min timer.
+   */
+  async findSurvivalPending(limit = 200) {
+    const rows = await getDb().task.findMany({
+      where: {
+        type: 'POST' as any,
+        status: { notIn: ['ARCHIVED' as any, 'CANCELLED' as any] },
+        OR: [{ survivalStatus: null }, { survivalStatus: 'PENDING' }],
+      } as any,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    return rows.filter((t: any) => (t.submittedRedditUrl || t.redditUrl) && !t.cancelledReason);
+  }
+
   async markReviewed(taskId: string, reviewedBy: string) {
     return getDb().task.update({
       where: { id: taskId },

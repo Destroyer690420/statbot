@@ -30,7 +30,7 @@
 | **Admin (Discord IDs)** `isAdmin(userId)` from `src/utils/permissions.ts` | settings.ts PUT, commissions.ts rates PUT: checks `env.ADMIN_USER_IDS` | — |
 | **Extension Bearer** (`extensionAuth` in `src/api/middleware/extensionAuth.ts`) | all `/goparttime/*`; token compared with `crypto.timingSafeEqual` vs `env.GOPARTTIME_API_KEY`; 503 if key unconfigured, 401 mismatch; sets `req.userId='goparttime-extension'` | `GOPARTTIME_API_KEY` |
 
-**Unauthenticated endpoints**: `POST /auth/login`, `POST /auth/verify`, `GET /health`, `POST /owner/verify`, `GET /owner/daily-earnings`, `GET /owner/daily-earnings/history`, `GET /owner/weekly-earnings`, `GET /uploads/insights/:taskId/:filename`.
+**Unauthenticated endpoints**: `POST /auth/login`, `POST /auth/verify`, `GET /health`, `POST /owner/verify`, `GET /owner/daily-earnings`, `GET /owner/daily-earnings/history`, `GET /owner/weekly-earnings`, `GET /uploads/insights/:taskId/:filename`, `GET /uploads/survival/:taskId/:filename`.
 
 ---
 
@@ -63,6 +63,7 @@ Query params shared: `status`, `type`, `assignedUserId`, `channelId`, `redditUrl
 | POST | `/api/v1/tasks/assign-from-goparttime` | JWT twin of `/goparttime/assign` (dashboard) | `goPartTimePayloadSchema` | 201 `{ success, data: result.task, failed }` | **409** `'Task for task <id> already exists.'`; 400; 500 |
 | POST | `/api/v1/tasks/:id/submit-url` | Record worker's submitted Reddit URL (GoPartTime tasks); runs the auto format check and persists `formatCheckStatus/Detail/CheckedAt` | `{ redditUrl }` | `{ success, data: task }` | 400 invalid/wrong-state; **409 dup URL on another task** |
 | POST | `/api/v1/tasks/:id/recheck-format` | Re-run the Reddit format check for a submitted URL | — | `{ success, data: task }` | 400 no submitted URL / task not found |
+| POST | `/api/v1/tasks/:id/retry-survival` | Recapture the 10-min survival screenshot immediately (e.g. after fixing the session); resets to PENDING then captures now | — | `{ success, data: task }` | 400 task not found / not a POST / no URL |
 | GET | `/api/v1/tasks/:id/live-reddit` | **Read-only**: server-side (vault-session) snapshot of the submitted post for the diff modal. Never exposes the cookie | `{ success, data: { title, selftext, author, deleted } }` | 404 task not found; 400 `NO_URL` / `NO_SESSION` / `SESSION_EXPIRED`; 502 `FETCH_ERROR` |
 | POST | `/api/v1/tasks/:id/done` | Activate ACCEPTED task → PENDING + schedule reminders | — | `{ success, data: task }` | 404; 400 not SENT/not ACCEPTED |
 | POST | `/api/v1/tasks/:id/reassign` | Move ACCEPTED task to another ticket (delete old delivery, re-deliver) | `{ ticket }` | `{ success, data: task }` | 404; 400 not ACCEPTED/bad channel/multiple workers/same ticket |
@@ -301,6 +302,7 @@ Throttles (Redis): one active code per ticket; 60s cooldown; 5 codes/ticket/hour
 |---|---|---|---|
 | GET | `/api/v1/uploads/insights/:taskId/:filename` | Serve insight screenshot from `<cwd>/uploads/insights/` | Rejects `..`/`/` in both params (400 `'Invalid path.'`); 404 `'Image not found.'`; sendFile |
 | GET | `/api/v1/uploads/payment-qr/:workerId/:filename` | Serve a worker's payment QR from `<cwd>/uploads/payment-qr/` | Same traversal guards, plus the filename must be exactly `<workerId>.png\|jpg\|webp` (files are stored flat, one per worker); 404 `'Image not found.'`; sendFile. URLs carry `?v=<updatedAt ms>` for cache-busting (ignored by the route) |
+| GET | `/api/v1/uploads/survival/:taskId/:filename` | Serve a 10-min survival screenshot from `<cwd>/uploads/survival/` (15-day TTL, same volume as insights) | Same traversal guards, plus the filename must match `survival-<attempt>.png`; 404 `'Image not found.'`; sendFile |
 
 ---
 

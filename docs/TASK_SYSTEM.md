@@ -14,6 +14,7 @@ Key fields (full list in `docs/DATABASE.md`):
 - `type` — `POST|COMMENT`; `status`; `guildId`, `channelId` (ticket), `channelName`.
 - `assignedUserId`, `assignedUserName`, `createdById`, `notes`, `cancelledReason`.
 - GoPartTime delivery fields: `source='goparttime'`, `externalTaskId`, `sourceUrl`, `subreddit`, `subredditUrl`, `flair`, `title`, `postLink`, `contentHtml`, `formattedContent`, `payment`, `deadline`, `taskImages` (JSONB), `deliveryMessages` (JSONB), `assignmentStatus` (`PENDING|SENT|FAILED`), `assignmentError`, `submittedRedditUrl`, `submittedAt/By`, `reviewedAt/By` (reviewed columns currently unused by any flow beyond being stored), `formatCheckStatus/Detail/CheckedAt` (auto format-check verdict from `recordSubmission`/`recheckFormat`; POST only, COMMENT = SKIPPED).
+- Survival proof fields (POST only): `survivalImageUrl/Name/Status/CheckedAt/Error/JobId` — full-page screenshot at `submittedAt` (GoPartTime) or `createdAt` (manual) `+ 11min` via the `survival-queue`; status `PENDING|ALIVE|REMOVED|DELETED|NO_SESSION|SESSION_EXPIRED|FETCH_ERROR|BLOCKED`; files under `uploads/survival/<taskId>/`, 15-day TTL.
 - `createdAt`, `updatedAt`.
 
 ## 2. Creation Paths

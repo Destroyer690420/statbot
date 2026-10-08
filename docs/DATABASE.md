@@ -75,6 +75,12 @@ erDiagram
         string formatCheckStatus "nullable: MATCH|PARA_MISMATCH|TITLE_MISMATCH|TEXT_MISMATCH|FETCH_ERROR|DELETED|SKIPPED|NO_SESSION|SESSION_EXPIRED"
         string formatCheckDetail "nullable: JSON {expectedParas,actualParas,titleMatch,error?}"
         timestamp formatCheckedAt "nullable"
+        string survivalImageUrl "nullable: /api/v1/uploads/survival/<taskId>/survival-<attempt>.png"
+        string survivalImageName "nullable"
+        string survivalStatus "nullable: PENDING|ALIVE|REMOVED|DELETED|NO_SESSION|SESSION_EXPIRED|FETCH_ERROR|BLOCKED"
+        timestamp survivalCheckedAt "nullable"
+        string survivalError "nullable"
+        string survivalJobId "nullable"
         timestamp createdAt
         timestamp updatedAt
     }

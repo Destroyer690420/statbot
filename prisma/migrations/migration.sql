@@ -780,3 +780,26 @@ CREATE TABLE IF NOT EXISTS "WorkerPaymentInfo" (
 -- image. Nullable: non-payment QRs and undecodable uploads store NULL.
 -- Schema-only, no data statements, safe to re-run.
 ALTER TABLE "WorkerPaymentInfo" ADD COLUMN IF NOT EXISTS "upiId" TEXT;
+
+-- ============================================================
+-- Migration: 10-minute survival proof (POST only)
+-- ============================================================
+-- Timer starts at submittedAt (GoPartTime recordSubmission) or createdAt
+-- (manual /task with redditUrl). A BullMQ survival-queue job captures a
+-- full-page Reddit screenshot at +11min as proof the post survived >10min.
+-- Files live on disk under uploads/survival/<taskId>/ (15-day TTL, swept by
+-- the housekeeping loop); these columns only record which file is current.
+-- survivalStatus: PENDING | ALIVE | REMOVED | DELETED | NO_SESSION |
+-- SESSION_EXPIRED | FETCH_ERROR | BLOCKED. REMOVED/DELETED still keep
+-- their screenshot (proof of state); hard failures keep the status with
+-- survivalError and no image. survivalJobId lets resubmission cancel and
+-- restart the timer (latest URL wins). Schema-only, no data statements.
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalImageUrl" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalImageName" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalStatus" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalCheckedAt" TIMESTAMP(3);
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalError" TEXT;
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalJobId" TEXT;
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_CAPTURED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_FAILED';

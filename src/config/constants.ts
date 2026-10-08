@@ -45,6 +45,27 @@ export const MEDIA = {
 /** BullMQ queue name */
 export const QUEUE_NAME = 'reminder-queue';
 
+/** BullMQ queue name for 10-minute survival screenshots (separate from reminders) */
+export const SURVIVAL_QUEUE_NAME = 'survival-queue';
+
+/**
+ * Delay from Reddit URL submission to the survival screenshot.
+ * Proof that a post survived >10 minutes: capture at 11 minutes.
+ */
+export const SURVIVAL_CHECK_DELAY_MS = 11 * 60 * 1000;
+
+/** Survival screenshot retries after a transient failure (rate-limit/network). */
+export const SURVIVAL_RETRY_DELAYS_MS = [2 * 60 * 1000, 5 * 60 * 1000] as const;
+
+/** Maximum survival capture attempts (initial + retries). */
+export const SURVIVAL_MAX_ATTEMPTS = 3;
+
+/**
+ * Survival proof retention. Payment evidence, so much longer than the 60h
+ * insight TTL — 15 days, then swept by the same housekeeping loop.
+ */
+export const SURVIVAL_TTL_MS = 15 * 24 * 60 * 60 * 1000;
+
 /** Source identifier for tasks delivered from the GoPartTime extension */
 export const GOPARTTIME_SOURCE = 'goparttime';
 

@@ -173,6 +173,24 @@ export default function createTaskRoutes(discordClient: Client): Router {
   });
 
   /**
+   * POST /api/v1/tasks/:id/retry-survival
+   * Manual recapture of the 10-minute survival screenshot (e.g. after the
+   * automatic attempt was blocked and the session was fixed). Captures
+   * immediately — a post alive now necessarily survived its first 10 min.
+   */
+  router.post('/:id/retry-survival', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { retrySurvivalNow } = await import('../../services/survival.service');
+      await retrySurvivalNow(String(req.params.id));
+      const task = await taskService.findById(String(req.params.id));
+      res.json({ success: true, data: task });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      res.status(400).json({ success: false, message });
+    }
+  });
+
+  /**
    * GET /api/v1/tasks/:id/live-reddit
    * Server-side (vault-session) snapshot of the submitted Reddit post for
    * the dashboard diff modal. The browser-direct fetch is anonymous and
@@ -299,6 +317,12 @@ export default function createTaskRoutes(discordClient: Client): Router {
           // Non-null → stop future reminders, keep current status
           updated = await taskService.updateCancelledReason(taskId, reason, userId);
           await cancelTaskJobs(taskId);
+          try {
+            const { cancelSurvivalJob } = await import('../../services/survival.service');
+            await cancelSurvivalJob(taskId);
+          } catch {
+            // best-effort
+          }
         } else {
           // Null → restore normal operation
           if (task.status === TaskStatus.CANCELLED) {
@@ -341,6 +365,12 @@ export default function createTaskRoutes(discordClient: Client): Router {
       const taskId = String(req.params.id);
 
       await cancelTaskJobs(taskId);
+      try {
+        const { cancelSurvivalJob } = await import('../../services/survival.service');
+        await cancelSurvivalJob(taskId);
+      } catch {
+        // best-effort
+      }
       await taskService.delete(taskId, 'api');
 
       res.json({ success: true, data: { deleted: taskId } });

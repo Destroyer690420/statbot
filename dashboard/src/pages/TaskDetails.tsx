@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTask, getReminders, doneTask, retryAssignment, submitTaskUrl } from '../api/client';
+import { getTask, getReminders, doneTask, retryAssignment, submitTaskUrl, retrySurvival } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
 import { FormatBadge } from '../components/FormatBadge';
@@ -48,6 +48,13 @@ export function TaskDetails() {
     onSuccess: () => {
       setSubmitUrl('');
       setReplacing(false);
+      queryClient.invalidateQueries({ queryKey: ['task', id] });
+    },
+  });
+
+  const survivalRetryMutation = useMutation({
+    mutationFn: () => retrySurvival(id!),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
     },
   });
@@ -590,6 +597,85 @@ export function TaskDetails() {
                   </p>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* 10-Minute Survival Proof (POST only) */}
+          {task.type === 'POST' && (
+            <div className="pt-2 border-t border-dark-700/50 space-y-3">
+              <p className="text-dark-400 text-sm font-medium">10-Minute Survival Proof</p>
+
+              {task.survivalImageUrl ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`status-badge border ${
+                      task.survivalStatus === 'ALIVE'
+                        ? 'bg-success-muted text-success border-success/30'
+                        : task.survivalStatus === 'REMOVED'
+                          ? 'bg-warning-muted text-warning border-warning/30'
+                          : 'bg-danger-muted text-danger border-danger/30'
+                    }`}>
+                      {task.survivalStatus === 'ALIVE'
+                        ? 'SURVIVED 10+ MIN'
+                        : task.survivalStatus === 'REMOVED'
+                          ? 'REMOVED BY MODS'
+                          : 'DELETED'}
+                    </span>
+                    {task.survivalCheckedAt && (
+                      <span className="text-[11px] text-dark-500">
+                        captured {new Date(task.survivalCheckedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <a href={task.survivalImageUrl} target="_blank" rel="noreferrer" className="block">
+                    <img
+                      src={task.survivalImageUrl}
+                      alt="10-minute survival proof"
+                      className="w-full rounded-lg border border-dark-700/50 cursor-pointer hover:opacity-90 transition-opacity"
+                      style={{ maxHeight: '420px', objectFit: 'contain' }}
+                    />
+                  </a>
+                  <a
+                    href={task.survivalImageUrl}
+                    download={task.survivalImageName || 'survival.png'}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download proof
+                  </a>
+                </div>
+              ) : task.survivalStatus === 'PENDING' ? (
+                <p className="text-xs text-dark-400 flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Screenshot scheduled for {new Date(new Date(task.submittedAt || task.createdAt).getTime() + 11 * 60 * 1000).toLocaleString()} (11 min after submission).
+                </p>
+              ) : task.survivalStatus ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-danger flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Capture failed ({String(task.survivalStatus).replace(/_/g, ' ')}{task.survivalError ? `: ${task.survivalError}` : ''}). An admin was DM'd.
+                  </p>
+                  <button
+                    onClick={() => survivalRetryMutation.mutate()}
+                    disabled={survivalRetryMutation.isPending}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-400 border border-primary-500/30 hover:bg-primary-500/20 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {survivalRetryMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    Retry Capture
+                  </button>
+                  {survivalRetryMutation.isError && (
+                    <p className="text-xs text-danger">
+                      {(survivalRetryMutation.error as Error)?.message || 'Could not retry capture.'}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-dark-500">
+                  {(task.submittedRedditUrl || task.redditUrl)
+                    ? 'Proof will appear here once the 11-minute capture runs.'
+                    : 'The screenshot is scheduled automatically once the Reddit URL is submitted.'}
+                </p>
+              )}
             </div>
           )}
         </div>

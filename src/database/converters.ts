@@ -28,6 +28,9 @@ type PrismaTask = {
   reviewedAt: Date | null; reviewedBy: string | null;
   formatCheckStatus?: string | null; formatCheckDetail?: string | null;
   formatCheckedAt?: Date | null;
+  survivalImageUrl?: string | null; survivalImageName?: string | null;
+  survivalStatus?: string | null; survivalCheckedAt?: Date | null;
+  survivalError?: string | null; survivalJobId?: string | null;
   createdAt: Date; updatedAt: Date;
 };
 
@@ -54,6 +57,12 @@ export function toTask(t: PrismaTask): Task {
     formatCheckStatus: (t as any).formatCheckStatus ?? null,
     formatCheckDetail: (t as any).formatCheckDetail ?? null,
     formatCheckedAt: (t as any).formatCheckedAt ?? null,
+    survivalImageUrl: (t as any).survivalImageUrl ?? null,
+    survivalImageName: (t as any).survivalImageName ?? null,
+    survivalStatus: (t as any).survivalStatus ?? null,
+    survivalCheckedAt: (t as any).survivalCheckedAt ?? null,
+    survivalError: (t as any).survivalError ?? null,
+    survivalJobId: (t as any).survivalJobId ?? null,
     createdAt: t.createdAt, updatedAt: t.updatedAt,
   };
 }

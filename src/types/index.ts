@@ -73,6 +73,19 @@ export interface Task {
   formatCheckDetail: string | null;
   formatCheckedAt: Date | null;
 
+  // ─── 10-minute survival proof (POST only) ──────────────
+  // Timer starts at submittedAt (GoPartTime) or createdAt (manual /task with
+  // redditUrl). Screenshot is taken at +11min via the survival queue and kept
+  // 15 days. Status: PENDING | ALIVE | REMOVED | DELETED | NO_SESSION |
+  // SESSION_EXPIRED | FETCH_ERROR | BLOCKED. Image is present for ALIVE /
+  // REMOVED / DELETED; hard failures persist the status with no image.
+  survivalImageUrl: string | null;
+  survivalImageName: string | null;
+  survivalStatus: string | null;
+  survivalCheckedAt: Date | null;
+  survivalError: string | null;
+  survivalJobId: string | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -169,6 +182,8 @@ export enum AuditAction {
   AUTOMATION_SESSION_UPDATED = 'AUTOMATION_SESSION_UPDATED',
   AUTOMATION_STOPPED = 'AUTOMATION_STOPPED',
   REDDIT_SESSION_UPDATED = 'REDDIT_SESSION_UPDATED',
+  SURVIVAL_PROOF_CAPTURED = 'SURVIVAL_PROOF_CAPTURED',
+  SURVIVAL_PROOF_FAILED = 'SURVIVAL_PROOF_FAILED',
 }
 
 export interface AuditLog {
@@ -366,6 +381,24 @@ export interface ReminderJobData {
   isRetry: boolean;
   retryCount: number;
 }
+
+// ─── Survival Screenshot Job Data ────────────────────────────
+
+export interface SurvivalJobData {
+  taskId: string;
+  redditUrl: string;
+  attempt: number;
+}
+
+export type SurvivalStatus =
+  | 'PENDING'
+  | 'ALIVE'
+  | 'REMOVED'
+  | 'DELETED'
+  | 'NO_SESSION'
+  | 'SESSION_EXPIRED'
+  | 'FETCH_ERROR'
+  | 'BLOCKED';
 
 // ─── Automation (GoPartTime auto-accept) ───────────────────────
 

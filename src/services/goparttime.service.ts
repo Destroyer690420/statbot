@@ -249,6 +249,20 @@ class GoPartTimeService {
         checkSuffix,
     );
 
+    // 10-minute survival proof (POST only): latest URL wins — the timer
+    // restarts from this submission. Never fails the submission itself.
+    if (task.type === TaskType.POST) {
+      try {
+        const { scheduleSurvivalForTask } = await import('./survival.service');
+        await scheduleSurvivalForTask(task.id);
+      } catch (error) {
+        logger.warn('Survival scheduling failed (non-fatal)', {
+          taskId: task.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
     return updated;

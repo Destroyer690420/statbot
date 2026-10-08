@@ -2,6 +2,7 @@ import {
   Task,
   CreateTaskInput,
   TaskStatus,
+  TaskType,
   TaskFilters,
   AuditAction,
 } from '../types';
@@ -79,6 +80,12 @@ class TaskService {
       formatCheckStatus: null,
       formatCheckDetail: null,
       formatCheckedAt: null,
+      survivalImageUrl: null,
+      survivalImageName: null,
+      survivalStatus: null,
+      survivalCheckedAt: null,
+      survivalError: null,
+      survivalJobId: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -102,6 +109,22 @@ class TaskService {
 
     logger.info('Task created', { taskId: task.id, type: task.type });
     await auditLogService.log(AuditAction.TASK_CREATED, task.id, input.createdById, `Task created: ${task.type}`);
+
+    // 10-minute survival proof for manual POST tasks: the Reddit URL is
+    // known at creation, so the timer starts from createdAt. GoPartTime
+    // tasks schedule from submittedAt instead (see recordSubmission).
+    // Never fails creation — the queue may not exist in tests.
+    if (task.type === TaskType.POST) {
+      try {
+        const { scheduleSurvivalForTask } = await import('./survival.service');
+        await scheduleSurvivalForTask(task.id);
+      } catch (error) {
+        logger.warn('Survival scheduling failed (non-fatal)', {
+          taskId: task.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     return task;
   }
@@ -197,6 +220,13 @@ class TaskService {
       await taskRepository.updateCancelledReason(taskId, reason);
     }
 
+    try {
+      const { cancelSurvivalJob } = await import('./survival.service');
+      await cancelSurvivalJob(taskId);
+    } catch {
+      // best-effort
+    }
+
     logger.info('Task cancelled', { taskId, reason, from: task.status });
 
     await auditLogService.log(
@@ -234,6 +264,15 @@ class TaskService {
 
     await taskRepository.updateCancelledReason(taskId, reason);
 
+    if (reason !== null) {
+      try {
+        const { cancelSurvivalJob } = await import('./survival.service');
+        await cancelSurvivalJob(taskId);
+      } catch {
+        // best-effort
+      }
+    }
+
     const logReason = reason === null ? 'cleared' : reason;
     logger.info('Task cancelledReason updated', { taskId, reason: logReason });
 
@@ -250,6 +289,19 @@ class TaskService {
   async delete(taskId: string, userId: string): Promise<void> {
     const task = await this.findById(taskId);
     if (!task) throw new Error('Task not found.');
+
+    try {
+      const { cancelSurvivalJob } = await import('./survival.service');
+      await cancelSurvivalJob(taskId);
+    } catch {
+      // best-effort
+    }
+    try {
+      const { survivalStorageService } = await import('./survival-storage.service');
+      await survivalStorageService.deleteTaskDir(taskId);
+    } catch {
+      // best-effort
+    }
 
     const db = getDb();
     await db.$transaction([

@@ -66,6 +66,8 @@ enum AuditAction {
   AUTOMATION_SESSION_UPDATED
   AUTOMATION_STOPPED
   REDDIT_SESSION_UPDATED
+  SURVIVAL_PROOF_CAPTURED
+  SURVIVAL_PROOF_FAILED
 }
 
 enum ReferralStatus {
@@ -126,6 +128,15 @@ model Task {
   formatCheckStatus String?
   formatCheckDetail String?
   formatCheckedAt  DateTime?
+
+  // 10-minute survival proof (POST only). Timer starts at submittedAt
+  // (GoPartTime) or createdAt (manual /task). Screenshot at +11min, 15-day TTL.
+  survivalImageUrl   String?
+  survivalImageName  String?
+  survivalStatus     String?
+  survivalCheckedAt  DateTime?
+  survivalError      String?
+  survivalJobId      String?
 
   createdAt        DateTime
   updatedAt        DateTime

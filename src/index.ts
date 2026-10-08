@@ -1,6 +1,9 @@
 import { Client } from 'discord.js';
 import { initializeQueue, getQueue } from './scheduler/queue';
 import { initializeWorker } from './scheduler/worker';
+import { initializeSurvivalQueue } from './services/survival.service';
+import { initializeSurvivalWorker } from './scheduler/survival-worker';
+import { rehydrateSurvivalJobs } from './services/survival.service';
 import { createBotClient, startBot } from './bot';
 import { createApiServer, startApiServer } from './api/server';
 import { logger } from './utils/logger';
@@ -115,9 +118,22 @@ async function main(): Promise<void> {
     logger.info('[4/6] Initializing BullMQ worker...');
     initializeWorker(discordClient);
 
+    // 4b. Survival screenshot queue + worker (10-min proof, POST only)
+    try {
+      initializeSurvivalQueue();
+      initializeSurvivalWorker(discordClient);
+    } catch (error) {
+      logger.error('Survival worker failed to start', { error });
+    }
+
     // 5. Re-hydrate reminder jobs from PostgreSQL (recover from Redis/bot restarts)
     logger.info('[5/6] Re-hydrating reminder jobs...');
     await rehydrateReminders();
+    try {
+      await rehydrateSurvivalJobs();
+    } catch (error) {
+      logger.error('Survival re-hydration failed', { error });
+    }
 
     // 6. Start REST API server
     logger.info('[6/6] Starting REST API server...');
@@ -266,9 +282,31 @@ async function main(): Promise<void> {
     } catch (error) {
       logger.error('Periodic reminder re-hydration failed', { error });
     }
+    try {
+      const { rehydrateSurvivalJobs } = await import('./services/survival.service');
+      await rehydrateSurvivalJobs();
+    } catch (error) {
+      logger.error('Periodic survival re-hydration failed', { error });
+    }
   }, REHYDRATE_INTERVAL_MS);
 
   logger.info('Reminder reconciliation scheduled (every 30 minutes)');
+
+  // ─── Survival Proof Cleanup (15-day TTL) ───────────────────
+
+  const SURVIVAL_CLEANUP_INTERVAL = 60 * 60 * 1000;
+
+  const survivalCleanupInterval = setInterval(async () => {
+    try {
+      const { survivalStorageService } = await import('./services/survival-storage.service');
+      const deleted = await survivalStorageService.cleanup();
+      if (deleted > 0) {
+        logger.info(`Cleaned up ${deleted} expired survival screenshots`);
+      }
+    } catch (error) {
+      logger.error('Survival cleanup failed', { error });
+    }
+  }, SURVIVAL_CLEANUP_INTERVAL);
 
   // ─── Graceful Shutdown ──────────────────────────────────────
 
@@ -279,17 +317,22 @@ async function main(): Promise<void> {
       clearInterval(archiveInterval);
       clearInterval(insightCleanupInterval);
       clearInterval(rehydrateInterval);
+      clearInterval(survivalCleanupInterval);
 
       discordClient.destroy();
       logger.info('Discord client destroyed');
 
       const { closeQueue } = await import('./scheduler/queue');
       const { closeWorker } = await import('./scheduler/worker');
+      const { closeSurvivalQueue } = await import('./services/survival.service');
+      const { closeSurvivalWorker } = await import('./scheduler/survival-worker');
       const { stopAutomationScheduler } = await import('./services/automation/scheduler');
       const { closePoller } = await import('./services/automation/poller.service');
 
       stopAutomationScheduler();
       await closePoller().catch(() => undefined);
+      await closeSurvivalWorker().catch(() => undefined);
+      await closeSurvivalQueue().catch(() => undefined);
       await closeWorker();
       await closeQueue();
 

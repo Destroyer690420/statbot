@@ -31,6 +31,35 @@ router.get('/uploads/insights/:taskId/:filename', (req: Request, res: Response):
   }
 });
 
+router.get('/uploads/survival/:taskId/:filename', (req: Request, res: Response): void => {
+  try {
+    const taskId = req.params.taskId as string;
+    const filename = req.params.filename as string;
+
+    if (filename.includes('..') || taskId.includes('..') || filename.includes('/') || taskId.includes('/')) {
+      res.status(400).json({ success: false, message: 'Invalid path.' });
+      return;
+    }
+    // Survival files are always survival-<attempt>.png from our own saver.
+    if (!/^survival-\d+\.png$/.test(filename)) {
+      res.status(400).json({ success: false, message: 'Invalid path.' });
+      return;
+    }
+
+    const filePath = path.join(UPLOADS_DIR, 'survival', taskId, filename);
+
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({ success: false, message: 'Image not found.' });
+      return;
+    }
+
+    res.sendFile(filePath);
+  } catch (error) {
+    logger.error('Failed to serve upload', { error });
+    res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
 const PAYMENT_QR_EXTENSIONS = new Set(['png', 'jpg', 'webp']);
 
 router.get('/uploads/payment-qr/:workerId/:filename', (req: Request, res: Response): void => {

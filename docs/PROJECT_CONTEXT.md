@@ -36,7 +36,7 @@ React dashboard (nginx)           PostgreSQL (Prisma 7, external host) + Redis 7
 - **Backend** (`src/`): Express 4 REST API (`/api/v1`), discord.js 14 bot, BullMQ worker, services/repositories pattern with Prisma 7 (PostgreSQL via `@prisma/adapter-pg`).
 - **Frontend** (`dashboard/`): React 18 + Vite + Tailwind + Recharts SPA served by nginx; PWA-capable.
 - **Database**: PostgreSQL (single hand-maintained migration file), previously Firestore (fully cut over 2026-07-26, legacy config files remain).
-- **Scheduling**: Redis + BullMQ queue `reminder-queue`; delayed jobs for reminders; `setInterval` loops for auto-archive, insight-image cleanup (60h TTL), and reminder re-hydration.
+- **Scheduling**: Redis + BullMQ queues (`reminder-queue` + `survival-queue`); delayed jobs for reminders and 11-min survival screenshots; `setInterval` loops for auto-archive, image cleanup (insights 60h TTL, survival 15d TTL), and reminder/survival re-hydration.
 - **External integrations**: GoPartTime (userscript → API), Discord (bot), Reddit (submitted URLs validated, deletion tracking via manual override), sentry-style local logging (winston).
 
 ---
@@ -52,8 +52,9 @@ React dashboard (nginx)           PostgreSQL (Prisma 7, external host) + Redis 7
 | Prisma | ^7.9.0 (client + CLI) | ORM | `prisma/`, `src/database/` |
 | PostgreSQL | (external, version UNKNOWN) | Database | database |
 | Redis | 7-alpine (container) | BullMQ broker | `docker-compose.yml` |
-| BullMQ | ^5.25.6 / ioredis ^5.4.1 | Delayed reminder jobs | `src/scheduler/` |
+| BullMQ | ^5.25.6 / ioredis ^5.4.1 | Delayed reminder + survival jobs | `src/scheduler/`, `src/services/survival.service.ts` |
 | React / ReactDOM | ^18.3.1 | Dashboard UI | `dashboard/src/` |
+| Playwright (`playwright-core`) | ^1.63.0 | Headless Chromium: GoPartTime poller + 10-min survival screenshots (system Chromium in Docker) | `src/services/automation/poller.service.ts`, `src/services/survival-screenshot.service.ts` |
 | Vite | ^6.0.3 | Dashboard bundler/dev server | `dashboard/` |
 | Tailwind CSS | ^3.4.16 | Styling | `dashboard/` |
 | TanStack React Query | ^5.62.0 | Data fetching | `dashboard/src/` |
@@ -126,6 +127,8 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 
 19. **One-time Reddit profile ask in every EXISTING ticket (RAN 2026-09-27, git `5ff1097`; 243 sent / 0 failed, migration applied, no rebuild)**: `scripts/ask-reddit-profile-links.ts` asked each existing `ticket-*` channel's worker, once, `TICKET_REDDIT_PROFILE_REQUEST_MESSAGE` — `Hey {user}, please share the reddit profile link you will be posting from. if you are posting or wanna start posting, sharing your reddit profile link is mandatory.` Owner-scoped to existing tickets on purpose, so **no `channelCreate`/`messageCreate` hook exists** and future tickets keep only welcome + guide. Exactly-once is persisted in the new nullable `TicketOnboarding.redditProfileRequestedAt`, stamped only after Discord accepts the send, so a re-run resumes a partial run instead of re-asking (`--force` overrides); the one dangerous state (delivered but not recorded) is reported separately from safe-to-retry failures. Worker = the single non-bot non-staff `channel.members` entry; `0`/`>1` candidates and non-`ticket-*` channels are skipped **with a reported reason** rather than tagged — 9 of 252 tickets were skipped for having no resolvable worker. Planning/formatting/summary is pure + unit-tested (`src/utils/reddit-profile-request.ts`, 18 tests); new repo methods `markRedditProfileRequested` / `findRedditProfileRequestedChannelIds`. **Host-side gotcha:** the host `.env` `DATABASE_URL` uses `host.docker.internal`, so a host process must rewrite it to `localhost` (see `docs/DEPLOYMENT.md` §5).
 
+20. **10-minute survival screenshots (Implemented 2026-10-08, NOT deployed)**: POST-only payment proof — a `survival-queue` BullMQ job captures a full-page Reddit screenshot at `submittedAt` (GoPartTime) or `createdAt` (manual `/task`) `+ 11min` via server Playwright + the vaulted spare-account cookie (`www` → `old` fallback), verdict ALIVE/REMOVED/DELETED from the same authed `.json` path as the format check. Resubmission cancels + restarts the timer (latest URL wins); 429/network retries at +2/+5min (max 3 attempts); `NO_SESSION`/`SESSION_EXPIRED`/`BLOCKED` fail fast with a Discord DM to all admins/managers. Shown in TaskDetails ("10-Minute Survival Proof" + Retry Capture via `POST /tasks/:id/retry-survival`); files `uploads/survival/<taskId>/`, 15-day TTL, `Task.survivalImageUrl/Name/Status/CheckedAt/Error/JobId` + `SURVIVAL_PROOF_CAPTURED/FAILED` audits. See `docs/BACKGROUND_JOBS.md` §1b + `docs/DECISIONS.md` Decision 24.
+
 ---
 
 ## 6. Current System State
@@ -135,6 +138,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 | Firestore → PostgreSQL cutover | **Complete** (2026-07-26). Legacy: `firebase.json`, `firestore.indexes.json`, stale `.env.example` block, one stale comment in `src/index.ts:156`, `formatFirestoreDate` helper in `dashboard/src/pages/Payout.tsx` |
 | Discord bot + commands | Implemented (12 commands, guild-scoped) |
 | Reminder/insight engine | Implemented (20h/70h, retries, overdue pings) |
+| 10-min survival proof | **Implemented 2026-10-08, NOT deployed** (POST only: `survival-queue` screenshot at submission/creation +11min, 15-day TTL, TaskDetails proof + admin DM on failure; migration not yet applied) |
 | Insight image storage | Implemented (local disk, 60h TTL); `deleteTaskDir()` helper unused |
 | GoPartTime integration | Implemented (userscript + backend + delivery + submission + activation + reassign/retry + Submit View screenshot automation + preview + mobile-disable — userscript v1.4.0 + `GET /goparttime/insight/:externalTaskId`, **deployed 2026-08-17 at `e0112f2`**). Submit Link autofill + `GET /goparttime/submission/:externalTaskId` (userscript v1.5.0) **deployed 2026-10-02 at `9b72df8`**; endpoint verified live against real data, autofill itself awaits a Tampermonkey update + first real click. **Video task delivery DEPLOYED 2026-10-02 at `fbc21a1`** (userscript v1.6.0 + `utils/video-processor.ts` + ffmpeg in the image; live fetch of the real clip verified inside the container; **awaits a Tampermonkey update + a first real click** since extraction is browser-side) |
 | Payout system | Implemented (weekly IST window, batches, CSV, restore-unpaid) |
@@ -147,7 +151,7 @@ Full file inventory and responsibilities: `docs/ARCHITECTURE.md`.
 | PWA | Implemented (manifest, sw.js network-first API fallback) |
 | `dist/` (root) | **Stale build** (gitignored, regenerated by Docker); do not use |
 | Generated Prisma client (`src/generated/prisma`) | **Stale locally** (missing `ACCEPTED` + 5 AuditAction enum values vs schema); regenerated at Docker build |
-| Cron | **None anywhere.** All timing is BullMQ delayed jobs + `setInterval` |
+| Cron | **None anywhere.** All timing is BullMQ delayed jobs (`reminder-queue`, `survival-queue`) + `setInterval` |
 
 ---
 
@@ -162,6 +166,7 @@ goPartTime.net → userscript extracts {taskId,type,ticket,title,subreddit,flair
 → deliver metadata/content/images/instruction messages into the ticket → assignmentStatus SENT
 → worker replies to instruction message with Reddit URL (exactly 1, validated)
 → recordSubmission (+ automatic format check for POSTs → bot verdict reply; verdict in `formatCheckStatus/Detail/CheckedAt`)
+→ **for POSTs: survival timer (re)starts from `submittedAt` → full-page screenshot at +11min (`survival-queue`, proof in `survivalImageUrl/Status`)**
 → manager reviews format badge/diff (Recheck if needed) → clicks Done (POST /tasks/:id/done) → ACCEPTED→PENDING + reminders scheduled
 ```
 
@@ -257,6 +262,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 ---
 
 ## 13. Recent Changes
+
+- **2026-10-08**: **10-minute survival screenshots (Implemented, NOT deployed — needs app + dashboard rebuild + manual `migration.sql` re-run).** POST-only payment proof: `survival-queue` job at submission/creation +11min captures a full-page Reddit screenshot (server Playwright + vaulted spare-account cookie, `www` → `old` fallback; verdict ALIVE/REMOVED/DELETED from the authed `.json` path), shown in TaskDetails with Retry Capture (`POST /tasks/:id/retry-survival`); resubmission restarts the timer; 429/network retries +2/+5min; hard failures DM all admins/managers. Files `uploads/survival/<taskId>/` (existing volume), 15-day TTL; 6 new `Task` columns + 2 `AuditAction` values. Verified: typecheck clean, 59 suites / 808 tests (new `survival.test.ts`, 10), dashboard `tsc && vite build` clean. No live capture run yet — the first real submission after deploy is the true test.
 
 - **2026-10-04**: **Worker QR auto-crop + UPI ID (DEPLOYED 2026-10-04 at `1ea454e` + lock-fix `c56068d`:** app + dashboard rebuild; `upiId` migration applied, 0 unexpected errors; backup `rtm-backup-20261004-qrcrop.tar.gz`; backfill over 14 existing uploads: 12 recropped + 12 UPI IDs, 2 kept as-is, 0 missing; verified live dist + 200 serve + UPI copy row in served chunk + zero app errors + health 200).
 

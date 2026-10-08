@@ -80,6 +80,11 @@ export async function recheckFormat(id: string) {
   return data;
 }
 
+export async function retrySurvival(id: string) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/retry-survival`);
+  return data;
+}
+
 export async function getLiveReddit(id: string) {
   const { data } = await api.get(`/tasks/${encodeURIComponent(id)}/live-reddit`);
   return data;
