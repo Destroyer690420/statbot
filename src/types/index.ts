@@ -85,6 +85,8 @@ export interface Task {
   survivalCheckedAt: Date | null;
   survivalError: string | null;
   survivalJobId: string | null;
+  /** Precise capture-time state (Phase 2); null on pre-Phase-2 rows. */
+  survivalRemovalState: string | null;
 
   createdAt: Date;
   updatedAt: Date;

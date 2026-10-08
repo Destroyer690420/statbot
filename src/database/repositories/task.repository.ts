@@ -315,6 +315,7 @@ export class TaskRepository {
       imageUrl: string | null;
       imageName: string | null;
       error?: string | null;
+      removalState?: string | null;
     },
   ) {
     return getDb().task.update({
@@ -325,6 +326,7 @@ export class TaskRepository {
         survivalImageName: data.imageName,
         survivalCheckedAt: new Date(),
         survivalError: data.error ?? null,
+        survivalRemovalState: data.removalState ?? null,
         updatedAt: new Date(),
       } as any,
     });
@@ -340,6 +342,7 @@ export class TaskRepository {
         survivalImageName: null,
         survivalCheckedAt: null,
         survivalError: null,
+        survivalRemovalState: null,
         updatedAt: new Date(),
       } as any,
     });

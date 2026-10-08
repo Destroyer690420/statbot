@@ -801,5 +801,14 @@ ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalCheckedAt" TIMESTAMP(3);
 ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalError" TEXT;
 ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalJobId" TEXT;
 
+-- Phase 2 (removal states): precise capture-time state for the survival
+-- proof card (LIVE | DELETED_BY_USER | REMOVED_BY_MODS | REMOVED_BY_FILTER
+-- | REMOVED_OTHER, plus NOT_FOUND when the URL resolves to nothing).
+-- Nullable: rows captured before this deploy keep NULL
+-- and the dashboard falls back to survivalStatus. Ships with the batched
+-- phase deploy (code writes this column, so migration and code go live
+-- together). Schema-only, no data statements, safe to re-run.
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalRemovalState" TEXT;
+
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_CAPTURED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_FAILED';

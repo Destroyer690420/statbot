@@ -86,6 +86,7 @@ class TaskService {
       survivalCheckedAt: null,
       survivalError: null,
       survivalJobId: null,
+      survivalRemovalState: null,
       createdAt: now,
       updatedAt: now,
     };

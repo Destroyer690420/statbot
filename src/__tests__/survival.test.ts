@@ -11,6 +11,7 @@ import {
   normalizeSurvivalUrl,
   parseCookieHeader,
   mapSurvivalError,
+  mapRemovalStateToVerdict,
 } from '../utils/survival-proof';
 
 // NOTE: imports stay in utils/constants only — survival.service pulls
@@ -64,6 +65,16 @@ describe('parseCookieHeader', () => {
     const out = parseCookieHeader('reddit_session=abc123; token=def456; Path=/; empty=; =novalue');
     expect(out.map((c) => c.name)).toEqual(['reddit_session', 'token']);
     expect(out[0]).toMatchObject({ domain: '.reddit.com', path: '/', secure: true });
+  });
+});
+
+describe('mapRemovalStateToVerdict', () => {
+  it('keeps the dashboard buckets stable across precise states', () => {
+    expect(mapRemovalStateToVerdict('LIVE')).toBe('ALIVE');
+    expect(mapRemovalStateToVerdict('DELETED_BY_USER')).toBe('DELETED');
+    expect(mapRemovalStateToVerdict('REMOVED_BY_MODS')).toBe('REMOVED');
+    expect(mapRemovalStateToVerdict('REMOVED_BY_FILTER')).toBe('REMOVED');
+    expect(mapRemovalStateToVerdict('REMOVED_OTHER')).toBe('REMOVED');
   });
 });
 

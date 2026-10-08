@@ -40,3 +40,9 @@
 - `REMOVED_OTHER` is the honesty bucket: any unobserved non-null category with markers lands there, never in a named bucket. Survival maps it to REMOVED (same dashboard bucket as the other removals).
 - Precedence rule (pinned by test): post-state evidence (`removed_by_category`) outranks account-state (`[deleted]` author) when both are present.
 - Verified: typecheck clean, full suite 60/834 (new: 12 classifier + 5 service tests). No auto-marking, no message changes — those are Phases 3/4.
+
+## Phase 2 implementation (2026-10-08, NOT deployed)
+
+- Capture persists `survivalRemovalState` (new nullable `Task` column; pre-Phase-2 rows stay NULL and the card falls back to the coarse bucket exactly as before). `NOT_FOUND` is recorded honestly for unresolvable URLs — never auto-marked in Phase 3.
+- Proof card names the state: SURVIVED 10+ MIN / DELETED / REMOVED BY MODERATORS / REMOVED BY REDDIT FILTERS (+ modqueue hint) / REMOVED / POST NOT FOUND (+ verify-URL hint). PENDING/error/Retry paths unchanged.
+- Verified: typecheck clean, dashboard `tsc && vite build` clean, full suite 60/835 (bucket-mapping helper pinned by test). No auto-marking, no ticket-message changes — those are Phases 3/4. Ships with the batched phase deploy (migration + code go live together).

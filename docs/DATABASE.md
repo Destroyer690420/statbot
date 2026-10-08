@@ -81,6 +81,7 @@ erDiagram
         timestamp survivalCheckedAt "nullable"
         string survivalError "nullable"
         string survivalJobId "nullable"
+        string survivalRemovalState "nullable: LIVE|DELETED_BY_USER|REMOVED_BY_MODS|REMOVED_BY_FILTER|REMOVED_OTHER|NOT_FOUND (null on pre-Phase-2 rows)"
         timestamp createdAt
         timestamp updatedAt
     }

@@ -8,6 +8,46 @@ import { FormatBadge } from '../components/FormatBadge';
 import { FormatDiffModal } from '../components/FormatDiffModal';
 import { ArrowLeft, ExternalLink, Clock, CheckCircle2, AlertCircle, Loader2, PlusCircle, CalendarDays, Bell, RefreshCw, Flag, Download, Image, RotateCcw, Link2, Send, Edit3 } from 'lucide-react';
 
+/**
+ * Precise survival-proof wording (Phase 2). `survivalRemovalState` is the
+ * capture-time state; rows captured before Phase 2 carry null and fall back
+ * to the coarse `survivalStatus` bucket exactly as before.
+ */
+function survivalProofLabel(task: any): string {
+  switch (task.survivalRemovalState) {
+    case 'LIVE': return 'SURVIVED 10+ MIN';
+    case 'DELETED_BY_USER': return 'DELETED';
+    case 'REMOVED_BY_MODS': return 'REMOVED BY MODERATORS';
+    case 'REMOVED_BY_FILTER': return 'REMOVED BY REDDIT FILTERS';
+    case 'REMOVED_OTHER': return 'REMOVED';
+    case 'NOT_FOUND': return 'POST NOT FOUND';
+    default:
+      return task.survivalStatus === 'ALIVE'
+        ? 'SURVIVED 10+ MIN'
+        : task.survivalStatus === 'REMOVED'
+          ? 'REMOVED BY MODS'
+          : 'DELETED';
+  }
+}
+
+function survivalProofTone(task: any): string {
+  const label = survivalProofLabel(task);
+  if (label === 'SURVIVED 10+ MIN') return 'bg-success-muted text-success border-success/30';
+  if (label === 'DELETED' || label === 'POST NOT FOUND') return 'bg-danger-muted text-danger border-danger/30';
+  return 'bg-warning-muted text-warning border-warning/30';
+}
+
+function survivalProofHint(task: any): string | null {
+  switch (task.survivalRemovalState) {
+    case 'REMOVED_BY_FILTER':
+      return 'The post sits in the subreddit modqueue — a moderator can still approve it.';
+    case 'NOT_FOUND':
+      return 'The link resolves to nothing (deleted, purged, or mistyped). Verify the URL.';
+    default:
+      return null;
+  }
+}
+
 export function TaskDetails() {
   const { id } = useParams<{ id: string }>();
 
@@ -608,18 +648,8 @@ export function TaskDetails() {
               {task.survivalImageUrl ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className={`status-badge border ${
-                      task.survivalStatus === 'ALIVE'
-                        ? 'bg-success-muted text-success border-success/30'
-                        : task.survivalStatus === 'REMOVED'
-                          ? 'bg-warning-muted text-warning border-warning/30'
-                          : 'bg-danger-muted text-danger border-danger/30'
-                    }`}>
-                      {task.survivalStatus === 'ALIVE'
-                        ? 'SURVIVED 10+ MIN'
-                        : task.survivalStatus === 'REMOVED'
-                          ? 'REMOVED BY MODS'
-                          : 'DELETED'}
+                    <span className={`status-badge border ${survivalProofTone(task)}`}>
+                      {survivalProofLabel(task)}
                     </span>
                     {task.survivalCheckedAt && (
                       <span className="text-[11px] text-dark-500">
@@ -627,6 +657,9 @@ export function TaskDetails() {
                       </span>
                     )}
                   </div>
+                  {survivalProofHint(task) && (
+                    <p className="text-xs text-dark-400">{survivalProofHint(task)}</p>
+                  )}
                   <a href={task.survivalImageUrl} target="_blank" rel="noreferrer" className="block">
                     <img
                       src={task.survivalImageUrl}

@@ -137,6 +137,11 @@ model Task {
   survivalCheckedAt  DateTime?
   survivalError      String?
   survivalJobId      String?
+  // Precise capture-time state (Phase 2: LIVE | DELETED_BY_USER |
+  // REMOVED_BY_MODS | REMOVED_BY_FILTER | REMOVED_OTHER, or NOT_FOUND when
+  // the URL resolves to nothing). Null on rows captured before Phase 2 —
+  // the dashboard falls back to survivalStatus.
+  survivalRemovalState String?
 
   createdAt        DateTime
   updatedAt        DateTime

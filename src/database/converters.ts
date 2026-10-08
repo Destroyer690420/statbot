@@ -31,6 +31,7 @@ type PrismaTask = {
   survivalImageUrl?: string | null; survivalImageName?: string | null;
   survivalStatus?: string | null; survivalCheckedAt?: Date | null;
   survivalError?: string | null; survivalJobId?: string | null;
+  survivalRemovalState?: string | null;
   createdAt: Date; updatedAt: Date;
 };
 
@@ -63,6 +64,7 @@ export function toTask(t: PrismaTask): Task {
     survivalCheckedAt: (t as any).survivalCheckedAt ?? null,
     survivalError: (t as any).survivalError ?? null,
     survivalJobId: (t as any).survivalJobId ?? null,
+    survivalRemovalState: (t as any).survivalRemovalState ?? null,
     createdAt: t.createdAt, updatedAt: t.updatedAt,
   };
 }

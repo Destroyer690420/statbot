@@ -1,5 +1,6 @@
 import { SURVIVAL_CHECK_DELAY_MS } from '../config/constants';
 import type { SurvivalStatus } from '../types';
+import type { RemovalState } from './reddit-post-signals';
 
 /**
  * Pure survival-proof helpers (no I/O — safe for unit tests).
@@ -26,6 +27,25 @@ export function resolveSurvivalUrl(task: {
   redditUrl: string | null;
 }): string | null {
   return (task.submittedRedditUrl || '').trim() || (task.redditUrl || '').trim() || null;
+}
+
+/**
+ * Maps the precise capture-time removal state onto the three proof buckets
+ * the dashboard renders. Both removal kinds (mods, filters, other) stay
+ * REMOVED; only user deletion is DELETED. Pure so Phase 2 display wording
+ * and the capture verdict cannot drift apart.
+ */
+export function mapRemovalStateToVerdict(state: RemovalState): 'ALIVE' | 'REMOVED' | 'DELETED' {
+  switch (state) {
+    case 'LIVE':
+      return 'ALIVE';
+    case 'DELETED_BY_USER':
+      return 'DELETED';
+    case 'REMOVED_BY_MODS':
+    case 'REMOVED_BY_FILTER':
+    case 'REMOVED_OTHER':
+      return 'REMOVED';
+  }
 }
 
 export function normalizeSurvivalUrl(url: string): string | null {

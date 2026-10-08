@@ -3,6 +3,7 @@ import { fetchRedditPost, RedditSessionExpiredError } from './reddit-check.servi
 import {
   normalizeSurvivalUrl,
   parseCookieHeader,
+  mapRemovalStateToVerdict,
 } from '../utils/survival-proof';
 import { logger } from '../utils/logger';
 
@@ -101,6 +102,8 @@ async function launchContext(cookie: string) {
 export interface SurvivalCapture {
   buffer: Buffer;
   verdict: 'ALIVE' | 'REMOVED' | 'DELETED';
+  /** Precise capture-time state (Phase 2), persisted for the proof card. */
+  removalState: string;
 }
 
 /**
@@ -156,8 +159,8 @@ export async function captureSurvivalScreenshot(redditUrl: string): Promise<Surv
       browser = null;
 
       // Verdict via the authed .json path (same session, same hosts).
-      const verdict = await resolveVerdict(redditUrl);
-      return { buffer: Buffer.from(buffer), verdict };
+      const resolved = await resolveVerdict(redditUrl);
+      return { buffer: Buffer.from(buffer), verdict: resolved.verdict, removalState: resolved.removalState };
     } catch (error) {
       try {
         await browser?.close()?.catch(() => undefined);
@@ -191,27 +194,22 @@ export async function captureSurvivalScreenshot(redditUrl: string): Promise<Surv
   throw new Error(lastError);
 }
 
-async function resolveVerdict(redditUrl: string): Promise<'ALIVE' | 'REMOVED' | 'DELETED'> {
+async function resolveVerdict(redditUrl: string): Promise<{ verdict: 'ALIVE' | 'REMOVED' | 'DELETED'; removalState: string }> {
   try {
     const snap = await fetchRedditPost(redditUrl);
     // Precise state, same three buckets the dashboard already renders:
     // both removal kinds stay REMOVED, user deletion stays DELETED.
-    switch (snap.removalState) {
-      case 'LIVE':
-        return 'ALIVE';
-      case 'DELETED_BY_USER':
-        return 'DELETED';
-      case 'REMOVED_BY_MODS':
-      case 'REMOVED_BY_FILTER':
-      case 'REMOVED_OTHER':
-        return 'REMOVED';
-    }
+    // The state itself is returned too, so the proof card can name it.
+    return { verdict: mapRemovalStateToVerdict(snap.removalState), removalState: snap.removalState };
   } catch (error) {
     if (error instanceof RedditSessionExpiredError) throw new SurvivalSessionExpiredError();
     const msg = error instanceof Error ? error.message : String(error);
-    // A fresh-post 404 at +11min is near-impossible; treat unresolvable
-    // posts as deleted so the proof still records a state, not a mystery.
-    if (/404|not found|deleted|removed|private|parse/i.test(msg)) return 'DELETED';
+    // Unresolvable posts (404/never-existed/purged) keep the DELETED bucket
+    // so the proof still records a state, but the precise state is NOT_FOUND
+    // — honestly ambiguous, and Phase 3 must never auto-mark on it.
+    if (/404|not found|deleted|removed|private|parse/i.test(msg)) {
+      return { verdict: 'DELETED', removalState: 'NOT_FOUND' };
+    }
     throw new Error(msg);
   }
 }

@@ -174,17 +174,18 @@ export async function runSurvivalCapture(
   }
 
   try {
-    const { buffer, verdict } = await captureSurvivalScreenshot(redditUrl);
+    const { buffer, verdict, removalState } = await captureSurvivalScreenshot(redditUrl);
     const saved = await survivalStorageService.save(taskId, attempt, buffer);
     await taskRepository.saveSurvivalProof(taskId, {
       status: verdict,
       imageUrl: saved.url,
       imageName: saved.filename,
+      removalState,
     });
     await auditLogService
-      .log(AuditAction.SURVIVAL_PROOF_CAPTURED, taskId, null, `10-min survival proof captured (${verdict})`)
+      .log(AuditAction.SURVIVAL_PROOF_CAPTURED, taskId, null, `10-min survival proof captured (${verdict}, ${removalState})`)
       .catch(() => undefined);
-    logger.info('Survival proof captured', { taskId, verdict });
+    logger.info('Survival proof captured', { taskId, verdict, removalState });
   } catch (error) {
     const mapped = mapCaptureError(error);
     const canRetry = mapped.retryable && attempt < SURVIVAL_MAX_ATTEMPTS && attempt <= SURVIVAL_RETRY_DELAYS_MS.length;

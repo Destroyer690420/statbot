@@ -3,7 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-08
-### Implemented (NOT deployed)
+### Implemented (NOT deployed — batched phase deploy at the end)
+- **Removal-state Phase 2: precise proof card.** Capture persists `survivalRemovalState` (nullable `Task` column, old rows fall back); card names the state + hints; `NOT_FOUND` recorded honestly, never auto-marked. Verified: typecheck + dashboard build clean, 60/835.
 - **Removal-state Phase 1: precise snapshot.** `fetchRedditPost` returns `removalState` (LIVE/DELETED_BY_USER/REMOVED_BY_MODS/REMOVED_BY_FILTER/REMOVED_OTHER) + `removedByCategory`; `deleted` unchanged in meaning; three verdict fixes (gone-author-standing → LIVE, mod-title form → REMOVED, approved-stale → LIVE); survival verdict maps to existing buckets. Verified: typecheck clean, 60 suites / 834 tests (12 classifier + 5 service tests new). No auto-marking, no message changes.
 - **Removal-state Phase 0: signal probe.** Live probe of 10 production URLs → `docs/REMOVAL_SIGNALS.md` matrix (live/filter/mod-removed/mixed/404 + `old.reddit.com` currently 403s the session) + 7 certainty rules for the later auto-mark phase.
 ### Deployed (2026-10-08 at `755bff4` — app + dashboard rebuild, one idempotent migration)
