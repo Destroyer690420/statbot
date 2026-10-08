@@ -3,7 +3,9 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-08
-### Implemented (NOT deployed — batched phase deploy at the end)
+### Deployed (2026-10-08 at `501225d` — app + dashboard rebuild, one idempotent migration)
+- **Removal-state phases 0–4 live** (`161.118.164.85`; backup `rtm-backup-20261008-phases.tar.gz`; removal migration applied via manual `migration.sql` re-run — 51 "already exists" + 0 unexpected errors, `survivalRemovalState` column + `AUTO_MARKED_DELETED` value verified; host bundle + probe scripts removed). Verified: 3 services Up, health healthy (DB+Redis), boot "Survival queue/worker initialized" + "All systems online!", all 8 live-`dist` gates, root + all three userscripts + tasks route 200, served `TaskDetails-BObHAhUG.js` carries the precise proof wording (`REMOVED BY REDDIT FILTERS`), 0 app errors since boot.
+### Built (shipped in the `501225d` deploy above)
 - **Removal-state Phase 4: real-reason ticket replies.** Detail JSON carries `removalState`; new tested `submission-reply.ts` (deleted / mods / filters+modqueue / generic / not-found); all other branches identical. Verified: typecheck clean, 62/866.
 - **Removal-state Phase 3: auto-mark `deleted`.** `maybeAutoMarkDeleted` marks + stops reminders + audits (`AUTO_MARKED_DELETED`) only on 100%-sure states; POST-only, active statuses only, first mark wins, never cancels the survival job. Triggers: capture success, screenshot-failure state check, submission format check, Recheck. Failure path + DM name a confirmed state. Verified: typecheck clean, 61/855, dashboard build clean.
 - **Removal-state Phase 2: precise proof card.** Capture persists `survivalRemovalState` (nullable `Task` column, old rows fall back); card names the state + hints; `NOT_FOUND` recorded honestly, never auto-marked. Verified: typecheck + dashboard build clean, 60/835.

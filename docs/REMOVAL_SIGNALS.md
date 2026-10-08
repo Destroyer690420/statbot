@@ -33,7 +33,7 @@
 6. 403/429/network/`NO_SESSION` → infrastructure, never a verdict. Already the codebase rule; unchanged.
 7. Every auto-mark requires the signal on the canonical URL (post share-resolution) and stability across one retry. Admin dropdown override always wins.
 
-## Phase 1 implementation (2026-10-08, NOT deployed)
+## Phase 1 implementation (2026-10-08, DEPLOYED at `501225d`)
 
 - `fetchRedditPost` now returns `removalState` (`LIVE | DELETED_BY_USER | REMOVED_BY_MODS | REMOVED_BY_FILTER | REMOVED_OTHER`) + `removedByCategory` via `summarizeRawPost`/`classifyRemoval` (`src/utils/reddit-post-signals.ts`). `deleted` keeps its historical meaning (`state !== 'LIVE'`) so `checkPostFormat` (DELETED outcome), the dashboard badge, and the survival buckets behave exactly as before.
 - Three deliberate verdict fixes vs the old exact-match block: `[deleted]` author with fully standing content → LIVE (account gone, post visible — was wrongly DELETED); `[ Removed by moderator ]` title with empty selftext → REMOVED (was missed entirely); `approved:true` with stale markers → LIVE.
@@ -41,13 +41,13 @@
 - Precedence rule (pinned by test): post-state evidence (`removed_by_category`) outranks account-state (`[deleted]` author) when both are present.
 - Verified: typecheck clean, full suite 60/834 (new: 12 classifier + 5 service tests). No auto-marking, no message changes — those are Phases 3/4.
 
-## Phase 2 implementation (2026-10-08, NOT deployed)
+## Phase 2 implementation (2026-10-08, DEPLOYED at `501225d`)
 
 - Capture persists `survivalRemovalState` (new nullable `Task` column; pre-Phase-2 rows stay NULL and the card falls back to the coarse bucket exactly as before). `NOT_FOUND` is recorded honestly for unresolvable URLs — never auto-marked in Phase 3.
 - Proof card names the state: SURVIVED 10+ MIN / DELETED / REMOVED BY MODERATORS / REMOVED BY REDDIT FILTERS (+ modqueue hint) / REMOVED / POST NOT FOUND (+ verify-URL hint). PENDING/error/Retry paths unchanged.
 - Verified: typecheck clean, dashboard `tsc && vite build` clean, full suite 60/835 (bucket-mapping helper pinned by test). No auto-marking, no ticket-message changes — those are Phases 3/4. Ships with the batched phase deploy (migration + code go live together).
 
-## Phase 3 implementation (2026-10-08, NOT deployed — ships with the batched phase deploy)
+## Phase 3 implementation (2026-10-08, DEPLOYED at `501225d` — shipped with the batched phase deploy)
 
 - `maybeAutoMarkDeleted` (`src/services/removal-auto-mark.service.ts`): marks `cancelledReason='deleted'` + stops reminder jobs + single `AUTO_MARKED_DELETED` audit (actor `system`) ONLY for `REMOVED_BY_MODS` / `REMOVED_BY_FILTER` / `DELETED_BY_USER`. Never for `NOT_FOUND`/`REMOVED_OTHER`/infra states; POST-only; active-pipeline statuses only (COMPLETED/ARCHIVED/CANCELLED stay manual — paid tasks are never auto-touched); first mark wins (never overwrites manual or prior marks); never cancels the survival job.
 - Triggers: survival capture success (after proof stored), survival screenshot failure (cheap `.json` state check — screenshot and verdict are independent), submission-time format check, manual Recheck. Submission-time marking still force-schedules the 11-min job, so the screenshot proof always follows the mark, never precedes it.
@@ -55,7 +55,7 @@
 - Capture guard relaxed: `cancelledReason` alone no longer blocks a missing proof (proof is wanted for deleted tasks); CANCELLED/ARCHIVED + already-recorded still skip; re-hydration still excludes cancelled tasks (a restart in the mark→capture window is covered by manual Retry Capture instead — conservative by design).
 - Verified: typecheck clean, full suite 61/855 (new `removal-auto-mark.test.ts`: gate set, no-mark cases, terminal statuses, first-mark-wins, comments/missing), dashboard build clean. No ticket-message changes — Phase 4.
 
-## Phase 4 implementation (2026-10-08, NOT deployed — ships with the batched phase deploy)
+## Phase 4 implementation (2026-10-08, DEPLOYED at `501225d` — shipped with the batched phase deploy)
 
 - `formatCheckDetail` JSON now carries `removalState` (written by `recordSubmission`/`recheckFormat`; additive key — the diff modal never reads it). The ticket reply (`src/utils/submission-reply.ts`, pure + unit-tested, imported by `messageCreate.ts`) names the real reason: deleted / removed by moderators / removed by Reddit's filters (= waiting in the modqueue, ask mods to approve) / generic removed; 404 fetch errors ask for the link instead of claiming unverifiable format. All other branches (MATCH, mismatch hints, NO_SESSION, SESSION_EXPIRED, neutral retry) byte-identical.
 - Verified: typecheck clean, full suite 62/866 (new `submission-reply.test.ts`, 11 tests). All four phases ship together in the batched deploy.
