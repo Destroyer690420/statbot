@@ -6,6 +6,7 @@ import { insightStorageService } from '../../services/insight-storage.service';
 import { outreachService } from '../../services/outreach.service';
 import { handleAutomationReply } from '../../services/automation/worker-manager.service';
 import { isSupportedImage, isValidRedditUrl } from '../../utils/validators';
+import { formatSubmissionReply } from '../../utils/submission-reply';
 import { taskRepository } from '../../database/repositories';
 import { TaskStatus, AuditAction } from '../../types';
 import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
@@ -137,62 +138,6 @@ async function handleInstructionReply(message: Message): Promise<boolean> {
     await message.reply(`⚠️ ${messageText}`);
   }
   return true;
-}
-
-/**
- * Submission acknowledgement reflecting the automatic format check that
- * `recordSubmission` just ran (POST tasks only). MATCH tells the worker the
- * post looks right; anything else points at the dashboard diff.
- */
-function formatSubmissionReply(task: { formatCheckStatus?: string | null; formatCheckDetail?: string | null }): string {
-  const status = task.formatCheckStatus;
-  if (!status || status === 'SKIPPED') return '✅ Submission recorded. Waiting for manager review.';
-  if (status === 'MATCH') {
-    const counts = parseParaCounts(task.formatCheckDetail);
-    return `✅ Submission recorded. ✅ Post matches${counts ? ` (${counts.actual}/${counts.expected} ¶, title OK)` : ''} — ready for review.`;
-  }
-  if (status === 'NO_SESSION') {
-    return '✅ Submission recorded. ⚠️ Format check is not set up yet — manager must paste the Reddit session cookie in dashboard Settings, then Recheck.';
-  }
-  if (status === 'SESSION_EXPIRED') {
-    const detail = parseCheckDetail(task.formatCheckDetail);
-    return `✅ Submission recorded. ⚠️ Reddit session expired${detail?.error ? ` (${detail.error})` : ''} — manager must re-paste the cookie in dashboard Settings, then Recheck.`;
-  }
-  if (status === 'FETCH_ERROR' || status === 'DELETED') {
-    const detail = parseCheckDetail(task.formatCheckDetail);
-    return `✅ Submission recorded. ⚠️ Could not verify formatting yet${detail?.error ? `: ${detail.error}` : ''} — try Recheck from the dashboard.`;
-  }
-  const counts = parseParaCounts(task.formatCheckDetail);
-  const countStr = counts ? ` (${counts.actual}/${counts.expected} ¶)` : '';
-  const hint =
-    status === 'PARA_MISMATCH'
-      ? ' Paragraphs look collapsed — make sure there is a blank line between each paragraph on Reddit.'
-      : status === 'TITLE_MISMATCH'
-        ? ' The title does not match — copy it exactly.'
-        : ' The text differs — check for missing or altered paragraphs.';
-  return `✅ Submission recorded. 🔴 Formatting mismatch${countStr}.${hint}`;
-}
-
-function parseCheckDetail(detail?: string | null): { error?: string } | null {
-  if (!detail) return null;
-  try {
-    return JSON.parse(detail);
-  } catch {
-    return null;
-  }
-}
-
-function parseParaCounts(detail?: string | null): { expected: number; actual: number } | null {
-  if (!detail) return null;
-  try {
-    const d = JSON.parse(detail);
-    if (typeof d.expectedParas === 'number' && typeof d.actualParas === 'number') {
-      return { expected: d.expectedParas, actual: d.actualParas };
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 function extractRedditUrls(content: string): string[] {

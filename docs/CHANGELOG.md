@@ -4,6 +4,7 @@
 
 ## 2026-10-08
 ### Implemented (NOT deployed — batched phase deploy at the end)
+- **Removal-state Phase 4: real-reason ticket replies.** Detail JSON carries `removalState`; new tested `submission-reply.ts` (deleted / mods / filters+modqueue / generic / not-found); all other branches identical. Verified: typecheck clean, 62/866.
 - **Removal-state Phase 3: auto-mark `deleted`.** `maybeAutoMarkDeleted` marks + stops reminders + audits (`AUTO_MARKED_DELETED`) only on 100%-sure states; POST-only, active statuses only, first mark wins, never cancels the survival job. Triggers: capture success, screenshot-failure state check, submission format check, Recheck. Failure path + DM name a confirmed state. Verified: typecheck clean, 61/855, dashboard build clean.
 - **Removal-state Phase 2: precise proof card.** Capture persists `survivalRemovalState` (nullable `Task` column, old rows fall back); card names the state + hints; `NOT_FOUND` recorded honestly, never auto-marked. Verified: typecheck + dashboard build clean, 60/835.
 - **Removal-state Phase 1: precise snapshot.** `fetchRedditPost` returns `removalState` (LIVE/DELETED_BY_USER/REMOVED_BY_MODS/REMOVED_BY_FILTER/REMOVED_OTHER) + `removedByCategory`; `deleted` unchanged in meaning; three verdict fixes (gone-author-standing → LIVE, mod-title form → REMOVED, approved-stale → LIVE); survival verdict maps to existing buckets. Verified: typecheck clean, 60 suites / 834 tests (12 classifier + 5 service tests new). No auto-marking, no message changes.

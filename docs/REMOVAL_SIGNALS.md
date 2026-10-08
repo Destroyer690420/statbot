@@ -54,3 +54,8 @@
 - Failure path records a certain state without an image when known; the error card + failure DM name the confirmed state (DM notes the auto-mark).
 - Capture guard relaxed: `cancelledReason` alone no longer blocks a missing proof (proof is wanted for deleted tasks); CANCELLED/ARCHIVED + already-recorded still skip; re-hydration still excludes cancelled tasks (a restart in the mark→capture window is covered by manual Retry Capture instead — conservative by design).
 - Verified: typecheck clean, full suite 61/855 (new `removal-auto-mark.test.ts`: gate set, no-mark cases, terminal statuses, first-mark-wins, comments/missing), dashboard build clean. No ticket-message changes — Phase 4.
+
+## Phase 4 implementation (2026-10-08, NOT deployed — ships with the batched phase deploy)
+
+- `formatCheckDetail` JSON now carries `removalState` (written by `recordSubmission`/`recheckFormat`; additive key — the diff modal never reads it). The ticket reply (`src/utils/submission-reply.ts`, pure + unit-tested, imported by `messageCreate.ts`) names the real reason: deleted / removed by moderators / removed by Reddit's filters (= waiting in the modqueue, ask mods to approve) / generic removed; 404 fetch errors ask for the link instead of claiming unverifiable format. All other branches (MATCH, mismatch hints, NO_SESSION, SESSION_EXPIRED, neutral retry) byte-identical.
+- Verified: typecheck clean, full suite 62/866 (new `submission-reply.test.ts`, 11 tests). All four phases ship together in the batched deploy.

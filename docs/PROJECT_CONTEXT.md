@@ -263,6 +263,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-08**: **Removal-state Phase 4 complete (real-reason ticket replies, NOT deployed — ships with the batched phase deploy).** `formatCheckDetail` carries `removalState`; new tested `utils/submission-reply.ts` names the reason (deleted / mods / filters+modqueue / generic / not-found-asks-link); all other branches identical. Full suite 62/866. All four phases now built, verified, committed — awaiting your deploy approval.
+
 - **2026-10-08**: **Removal-state Phase 3 complete (auto-mark `deleted`, NOT deployed — ships with the batched phase deploy).** Certain-state marks from capture/format-check/Recheck (+ screenshot-failure state check); stops reminders but never the survival job; first mark wins; terminal/paid tasks untouched; `AUTO_MARKED_DELETED` audit; DM + error card name confirmed states. Full suite 61/855. No ticket-message changes (Phase 4).
 
 - **2026-10-08**: **Removal-state Phase 2 complete (precise proof card, NOT deployed — ships with the batched phase deploy).** Capture persists `survivalRemovalState` (new nullable `Task` column; old rows fall back to the coarse badge); card names the state (SURVIVED/DELETED/REMOVED BY MODERATORS/REMOVED BY REDDIT FILTERS + modqueue hint/REMOVED/POST NOT FOUND + hint). Typecheck + dashboard build clean, full suite 60/835. No auto-marking, no ticket-message changes (Phases 3/4).

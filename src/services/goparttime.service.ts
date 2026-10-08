@@ -225,6 +225,8 @@ class GoPartTimeService {
               actualParas: outcome.actualParas,
               titleMatch: outcome.titleMatch,
               ...(outcome.error ? { error: outcome.error } : {}),
+              // Phase 4: the ticket reply names the real removal reason.
+              removalState: outcome.removalState,
             });
       await taskRepository.saveFormatCheck(task.id, { status: outcome.status, detail });
       checkSuffix =
@@ -237,7 +239,7 @@ class GoPartTimeService {
       const message = error instanceof Error ? error.message : String(error);
       await taskRepository.saveFormatCheck(task.id, {
         status: 'FETCH_ERROR',
-        detail: JSON.stringify({ expectedParas: 0, actualParas: 0, titleMatch: false, error: message }),
+        detail: JSON.stringify({ expectedParas: 0, actualParas: 0, titleMatch: false, error: message, removalState: null }),
       });
       checkSuffix = ` Format check failed: ${message}`;
       logger.warn('Format auto-check failed (non-fatal)', { taskId: task.id, error: message });
@@ -299,6 +301,8 @@ class GoPartTimeService {
             actualParas: outcome.actualParas,
             titleMatch: outcome.titleMatch,
             ...(outcome.error ? { error: outcome.error } : {}),
+            // Phase 4: the ticket reply names the real removal reason.
+            removalState: outcome.removalState,
           });
     await taskRepository.saveFormatCheck(task.id, { status: outcome.status, detail });
     // Phase 3: a manual Recheck that finds a 100%-certain removal marks the
