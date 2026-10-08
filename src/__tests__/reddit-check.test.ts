@@ -244,4 +244,17 @@ describe('fetchRedditPost removalState (Phase 1, probed signals)', () => {
     expect(snap.deleted).toBe(false);
     expect(snap.removalState).toBe('LIVE');
   });
+
+  it('carries removalState on every outcome for Phase 3 callers', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce(jsonResponse(fullPost({ selftext: '[removed]', removed_by_category: 'reddit' })));
+    const deleted = await checkPostFormat({ taskType: 'POST', expectedTitle: 'T', expectedContent: 'only', redditUrl: URL });
+    expect(deleted).toMatchObject({ status: 'DELETED', removalState: 'REMOVED_BY_FILTER' });
+
+    global.fetch = jest.fn().mockResolvedValueOnce(jsonResponse(fullPost()));
+    const match = await checkPostFormat({ taskType: 'POST', expectedTitle: 'T', expectedContent: 'only', redditUrl: URL });
+    expect(match).toMatchObject({ status: 'MATCH', removalState: 'LIVE' });
+
+    const skipped = await checkPostFormat({ taskType: 'COMMENT', expectedTitle: null, expectedContent: null, redditUrl: URL });
+    expect(skipped).toMatchObject({ status: 'SKIPPED', removalState: null });
+  });
 });

@@ -207,6 +207,7 @@ class GoPartTimeService {
     // title/paragraph structure against the delivered content (POST only).
     // Never fails the submission — failures persist as FETCH_ERROR.
     let checkSuffix = '';
+    let formatRemovalState: string | null = null;
     try {
       const { checkPostFormat } = await import('./reddit-check.service');
       const outcome = await checkPostFormat({
@@ -215,6 +216,7 @@ class GoPartTimeService {
         expectedContent: task.formattedContent,
         redditUrl: url,
       });
+      formatRemovalState = outcome.removalState;
       const detail =
         outcome.status === 'SKIPPED'
           ? null
@@ -253,8 +255,15 @@ class GoPartTimeService {
     // restarts from this submission. Never fails the submission itself.
     if (task.type === TaskType.POST) {
       try {
+        // Phase 3: a 100%-certain removal at submission time marks the task
+        // deleted right away — but the survival job is still (re)scheduled
+        // afterwards with force, so the 11-minute screenshot proof follows.
+        if (formatRemovalState) {
+          const { maybeAutoMarkDeleted } = await import('./removal-auto-mark.service');
+          await maybeAutoMarkDeleted(task.id, formatRemovalState, 'format-check-at-submission');
+        }
         const { scheduleSurvivalForTask } = await import('./survival.service');
-        await scheduleSurvivalForTask(task.id);
+        await scheduleSurvivalForTask(task.id, true);
       } catch (error) {
         logger.warn('Survival scheduling failed (non-fatal)', {
           taskId: task.id,
@@ -292,6 +301,20 @@ class GoPartTimeService {
             ...(outcome.error ? { error: outcome.error } : {}),
           });
     await taskRepository.saveFormatCheck(task.id, { status: outcome.status, detail });
+    // Phase 3: a manual Recheck that finds a 100%-certain removal marks the
+    // task deleted too (same gate as the submission-time check; terminal and
+    // already-marked tasks are left alone inside the helper).
+    if (outcome.removalState) {
+      try {
+        const { maybeAutoMarkDeleted } = await import('./removal-auto-mark.service');
+        await maybeAutoMarkDeleted(task.id, outcome.removalState, 'format-recheck');
+      } catch (error) {
+        logger.warn('Removal auto-mark failed (non-fatal)', {
+          taskId: task.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
     return updated;

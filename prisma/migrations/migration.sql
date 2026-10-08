@@ -810,5 +810,10 @@ ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalJobId" TEXT;
 -- together). Schema-only, no data statements, safe to re-run.
 ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "survivalRemovalState" TEXT;
 
+-- Phase 3 (removal auto-mark): audit trail for bot-driven `deleted` marks.
+-- The mark itself reuses the existing nullable `cancelledReason` column (no
+-- table change); only the audit action is new. Schema-only, idempotent.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTO_MARKED_DELETED';
+
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_CAPTURED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_FAILED';

@@ -263,6 +263,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-08**: **Removal-state Phase 3 complete (auto-mark `deleted`, NOT deployed — ships with the batched phase deploy).** Certain-state marks from capture/format-check/Recheck (+ screenshot-failure state check); stops reminders but never the survival job; first mark wins; terminal/paid tasks untouched; `AUTO_MARKED_DELETED` audit; DM + error card name confirmed states. Full suite 61/855. No ticket-message changes (Phase 4).
+
 - **2026-10-08**: **Removal-state Phase 2 complete (precise proof card, NOT deployed — ships with the batched phase deploy).** Capture persists `survivalRemovalState` (new nullable `Task` column; old rows fall back to the coarse badge); card names the state (SURVIVED/DELETED/REMOVED BY MODERATORS/REMOVED BY REDDIT FILTERS + modqueue hint/REMOVED/POST NOT FOUND + hint). Typecheck + dashboard build clean, full suite 60/835. No auto-marking, no ticket-message changes (Phases 3/4).
 
 - **2026-10-08**: **Removal-state Phase 1 complete (enriched snapshot, NOT deployed).** `fetchRedditPost` returns `removalState` + `removedByCategory` (`classifyRemoval`, 12 unit tests); `deleted` keeps its exact meaning so format check, badges, and survival buckets behave identically. Three verdict fixes: gone-author-with-standing-content → LIVE, mod-title form → REMOVED, approved-with-stale-markers → LIVE. Survival verdict maps the precise states to its existing ALIVE/REMOVED/DELETED buckets. Full suite 60/834 green. No auto-marking, no ticket-message changes (Phases 3/4).

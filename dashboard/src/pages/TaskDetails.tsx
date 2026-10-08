@@ -688,6 +688,12 @@ export function TaskDetails() {
                     <AlertCircle className="w-3.5 h-3.5" />
                     Capture failed ({String(task.survivalStatus).replace(/_/g, ' ')}{task.survivalError ? `: ${task.survivalError}` : ''}). An admin was DM'd.
                   </p>
+                  {task.survivalRemovalState && (
+                    <p className="text-xs text-dark-400">
+                      Post state is confirmed: {survivalProofLabel({ survivalRemovalState: task.survivalRemovalState, survivalStatus: task.survivalStatus })}
+                      {task.cancelledReason === 'deleted' ? ' — the task was auto-marked deleted.' : '.'} Only the image is missing; retry below.
+                    </p>
+                  )}
                   <button
                     onClick={() => survivalRetryMutation.mutate()}
                     disabled={survivalRetryMutation.isPending}

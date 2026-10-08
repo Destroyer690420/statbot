@@ -46,3 +46,11 @@
 - Capture persists `survivalRemovalState` (new nullable `Task` column; pre-Phase-2 rows stay NULL and the card falls back to the coarse bucket exactly as before). `NOT_FOUND` is recorded honestly for unresolvable URLs — never auto-marked in Phase 3.
 - Proof card names the state: SURVIVED 10+ MIN / DELETED / REMOVED BY MODERATORS / REMOVED BY REDDIT FILTERS (+ modqueue hint) / REMOVED / POST NOT FOUND (+ verify-URL hint). PENDING/error/Retry paths unchanged.
 - Verified: typecheck clean, dashboard `tsc && vite build` clean, full suite 60/835 (bucket-mapping helper pinned by test). No auto-marking, no ticket-message changes — those are Phases 3/4. Ships with the batched phase deploy (migration + code go live together).
+
+## Phase 3 implementation (2026-10-08, NOT deployed — ships with the batched phase deploy)
+
+- `maybeAutoMarkDeleted` (`src/services/removal-auto-mark.service.ts`): marks `cancelledReason='deleted'` + stops reminder jobs + single `AUTO_MARKED_DELETED` audit (actor `system`) ONLY for `REMOVED_BY_MODS` / `REMOVED_BY_FILTER` / `DELETED_BY_USER`. Never for `NOT_FOUND`/`REMOVED_OTHER`/infra states; POST-only; active-pipeline statuses only (COMPLETED/ARCHIVED/CANCELLED stay manual — paid tasks are never auto-touched); first mark wins (never overwrites manual or prior marks); never cancels the survival job.
+- Triggers: survival capture success (after proof stored), survival screenshot failure (cheap `.json` state check — screenshot and verdict are independent), submission-time format check, manual Recheck. Submission-time marking still force-schedules the 11-min job, so the screenshot proof always follows the mark, never precedes it.
+- Failure path records a certain state without an image when known; the error card + failure DM name the confirmed state (DM notes the auto-mark).
+- Capture guard relaxed: `cancelledReason` alone no longer blocks a missing proof (proof is wanted for deleted tasks); CANCELLED/ARCHIVED + already-recorded still skip; re-hydration still excludes cancelled tasks (a restart in the mark→capture window is covered by manual Retry Capture instead — conservative by design).
+- Verified: typecheck clean, full suite 61/855 (new `removal-auto-mark.test.ts`: gate set, no-mark cases, terminal statuses, first-mark-wins, comments/missing), dashboard build clean. No ticket-message changes — Phase 4.

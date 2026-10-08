@@ -91,11 +91,16 @@ export async function cancelSurvivalJob(taskId: string): Promise<void> {
 /**
  * (Re)starts the 11-min timer. POST only. Called from recordSubmission
  * (GoPartTime, latest URL wins) and from manual task creation.
+ *
+ * `force` bypasses the cancelledReason guard: the submission-time auto-mark
+ * (Phase 3) marks first and still wants the screenshot proof afterwards.
+ * CANCELLED/ARCHIVED statuses are always respected.
  */
-export async function scheduleSurvivalForTask(taskId: string): Promise<void> {
+export async function scheduleSurvivalForTask(taskId: string, force = false): Promise<void> {
   const task = await taskService.findById(taskId);
   if (!task || task.type !== TaskType.POST) return;
-  if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED || task.cancelledReason !== null) return;
+  if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED) return;
+  if (!force && task.cancelledReason !== null) return;
   const url = resolveSurvivalUrl(task);
   if (!url) return;
   await cancelSurvivalJob(taskId);
@@ -159,7 +164,12 @@ export async function runSurvivalCapture(
     return;
   }
   if (task.type !== TaskType.POST) return;
-  if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED || task.cancelledReason !== null) {
+  // Phase 3: a `cancelledReason` (manual or auto-marked) no longer blocks the
+  // capture itself — the proof is still wanted for deleted tasks, and the
+  // queued job is what manual marks cancel. CANCELLED/ARCHIVED statuses and
+  // an already-recorded proof still skip. Re-hydration keeps excluding
+  // cancelled tasks, so only a live scheduled job can reach here.
+  if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.ARCHIVED) {
     logger.info('Survival capture skipped: task no longer active', { taskId });
     return;
   }
@@ -186,8 +196,34 @@ export async function runSurvivalCapture(
       .log(AuditAction.SURVIVAL_PROOF_CAPTURED, taskId, null, `10-min survival proof captured (${verdict}, ${removalState})`)
       .catch(() => undefined);
     logger.info('Survival proof captured', { taskId, verdict, removalState });
+    // Phase 3: the capture-time state is 100%-certain by construction here —
+    // mark deleted now that the screenshot proof is safely stored.
+    try {
+      const { maybeAutoMarkDeleted } = await import('./removal-auto-mark.service');
+      await maybeAutoMarkDeleted(taskId, removalState, 'survival-capture');
+    } catch (error) {
+      logger.warn('Removal auto-mark failed (non-fatal)', {
+        taskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   } catch (error) {
     const mapped = mapCaptureError(error);
+    // Phase 3: the screenshot and the state check are independent — a failed
+    // capture (blocked renderer, dead browser) must not block a certain
+    // verdict. One cheap `.json` read decides; the image keeps its normal
+    // retry path below regardless of the outcome here.
+    let certainState: string | null = null;
+    try {
+      const { fetchRedditPost } = await import('./reddit-check.service');
+      const snap = await fetchRedditPost(redditUrl);
+      const { maybeAutoMarkDeleted } = await import('./removal-auto-mark.service');
+      if (await maybeAutoMarkDeleted(taskId, snap.removalState, 'survival-screenshot-failed')) {
+        certainState = snap.removalState;
+      }
+    } catch {
+      // State unknown — the mapped failure path below decides alone.
+    }
     const canRetry = mapped.retryable && attempt < SURVIVAL_MAX_ATTEMPTS && attempt <= SURVIVAL_RETRY_DELAYS_MS.length;
     if (canRetry) {
       const delayMs = SURVIVAL_RETRY_DELAYS_MS[attempt - 1] ?? SURVIVAL_RETRY_DELAYS_MS[0];
@@ -196,7 +232,15 @@ export async function runSurvivalCapture(
       return;
     }
     await taskRepository
-      .saveSurvivalProof(taskId, { status: mapped.status, imageUrl: null, imageName: null, error: mapped.label })
+      .saveSurvivalProof(taskId, {
+        status: mapped.status,
+        imageUrl: null,
+        imageName: null,
+        error: mapped.label,
+        // When the state was certain despite the screenshot failing, record
+        // it so the card can name it (Phase 2) instead of showing UNKNOWN.
+        removalState: certainState,
+      })
       .catch(() => undefined);
     await auditLogService
       .log(AuditAction.SURVIVAL_PROOF_FAILED, taskId, null, `10-min survival proof failed (${mapped.status}): ${mapped.label}`)
@@ -230,10 +274,16 @@ export async function retrySurvivalNow(taskId: string): Promise<void> {
 export async function notifyAdminsSurvivalFailed(client: Client, taskId: string, label: string): Promise<void> {
   const task = await taskService.findById(taskId).catch(() => null);
   const url = task ? resolveSurvivalUrl(task) : null;
+  // Phase 3: when the post state was certain despite the screenshot failing,
+  // the task is already auto-marked — say so, or the DM reads as fully failed.
+  const marked =
+    task && task.cancelledReason === 'deleted' && task.survivalRemovalState
+      ? ` Post state is confirmed (${task.survivalRemovalState.replace(/_/g, ' ')}) and the task was auto-marked deleted — only the image is missing.`
+      : '';
   const text =
     `⚠️ Survival screenshot failed for task \`${taskId}\`` +
     (url ? ` (<${url}>)` : '') +
-    `: ${label}. Open the task in the dashboard to retry.`;
+    `: ${label}.${marked} Open the task in the dashboard to retry.`;
   for (const adminId of getAdminOrManagerIds()) {
     try {
       const user = await client.users.fetch(adminId);

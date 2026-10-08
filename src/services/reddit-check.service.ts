@@ -26,6 +26,8 @@ export interface FormatCheckOutcome {
   actualParas: number;
   titleMatch: boolean;
   error?: string;
+  /** Precise capture-time state (Phase 1+); null when nothing was fetched. */
+  removalState: string | null;
 }
 
 const FETCH_TIMEOUT_MS = 12_000;
@@ -219,17 +221,17 @@ export async function checkPostFormat(args: {
   redditUrl: string;
 }): Promise<FormatCheckOutcome> {
   if (args.taskType !== TaskType.POST) {
-    return { status: 'SKIPPED', expectedParas: 0, actualParas: 0, titleMatch: true };
+    return { status: 'SKIPPED', expectedParas: 0, actualParas: 0, titleMatch: true, removalState: null };
   }
   let snapshot: RedditPostSnapshot;
   try {
     snapshot = await fetchRedditPost(args.redditUrl);
   } catch (error) {
     if (error instanceof RedditSessionRequiredError) {
-      return { status: 'NO_SESSION', expectedParas: 0, actualParas: 0, titleMatch: false, error: error.message };
+      return { status: 'NO_SESSION', expectedParas: 0, actualParas: 0, titleMatch: false, error: error.message, removalState: null };
     }
     if (error instanceof RedditSessionExpiredError) {
-      return { status: 'SESSION_EXPIRED', expectedParas: 0, actualParas: 0, titleMatch: false, error: error.message };
+      return { status: 'SESSION_EXPIRED', expectedParas: 0, actualParas: 0, titleMatch: false, error: error.message, removalState: null };
     }
     return {
       status: 'FETCH_ERROR',
@@ -237,10 +239,11 @@ export async function checkPostFormat(args: {
       actualParas: 0,
       titleMatch: false,
       error: error instanceof Error ? error.message : String(error),
+      removalState: null,
     };
   }
   if (snapshot.deleted) {
-    return { status: 'DELETED', expectedParas: 0, actualParas: 0, titleMatch: false };
+    return { status: 'DELETED', expectedParas: 0, actualParas: 0, titleMatch: false, removalState: snapshot.removalState };
   }
   const compared = compareRedditFormat({
     expectedTitle: args.expectedTitle,
@@ -253,5 +256,6 @@ export async function checkPostFormat(args: {
     expectedParas: compared.expectedParas,
     actualParas: compared.actualParas,
     titleMatch: compared.titleMatch,
+    removalState: snapshot.removalState,
   };
 }
