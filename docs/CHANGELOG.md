@@ -3,8 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-09
-### Built (not yet deployed)
-- **Submit Link silent success (userscript v1.6.1).** Clicking a card's **Submit Task** button no longer pops an alert when the worker's link exists — it is pasted silently (console log only). The popup now appears **only when there is no link to fill yet** (missing `redditUrl` → "No submitted URL for this task yet…" + Discord-reply hint) or on a real error (unconfigured key, dialog/field not found, fetch failure). The already-filled case is silent too (no clobber, no popup). `scripts/` ↔ `dashboard/public/` copies kept byte-identical; `node --check` + `userscript-media` suite (15 tests) green. Requires a Tampermonkey update + tab reload; deploy is dashboard-only (no migration, no app rebuild).
+### Deployed (2026-10-09 at `657ec0b` — dashboard-only rebuild, no migration)
+- **Submit Link silent-success (userscript v1.6.1) live** (`161.118.164.85`; backup `rtm-backup-20261009-submitlink-silent.tar.gz`; **no DB migration**, no env change, no slash-command redeploy, app/redis untouched — app container not restarted; pushed to GitHub `0949916..657ec0b`; host bundle removed). Verified: 3 services Up, health healthy (DB+Redis), root + all three userscripts 200, served `goparttime-send.user.js` carries `@version 1.6.1` + silent-success marker with 0 refs to the old success alert, zero app errors from this deploy (only pre-existing `Unknown Channel` blast noise from 11:40, before the deploy). **Tampermonkey update required** — the fix is browser-side: update the "Discord Task Sender" script to v1.6.1 + reload GoPartTime tabs.
 
 ## 2026-10-08
 ### Deployed (2026-10-08 at `501225d` — app + dashboard rebuild, one idempotent migration)
