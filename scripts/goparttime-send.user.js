@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.6.0
+// @version      1.6.1
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,10 @@
 // ==/UserScript==
 
 /**
+ * v1.6.1 — Submit Link autofill is now silent on success: the link is pasted
+ * with no alert popup. The alert only appears when there is no link to fill
+ * yet (or on a real error), so the manager is interrupted only when action
+ * is needed.
  * v1.6.0 — Video tasks are no longer dropped. A task whose media is a video
  * renders as <video poster="…jpg"><source src="…mp4"></video> with no <img>
  * anywhere, so the old img-only extractor sent zero media and the bot never
@@ -619,8 +623,9 @@
       }
 
       // Never clobber a link the manager typed or corrected by hand.
+      // Silent either way: an alert is only for "no link available yet".
       if ((input.value || '').trim()) {
-        alert('The URL field is already filled — left it untouched.');
+        try { console.log('[Send Task] Submit Link: URL field already filled — left untouched.'); } catch (e) {}
         return;
       }
 
@@ -634,7 +639,9 @@
       }
 
       setReactInputValue(input, data.redditUrl);
-      alert('✅ Link filled for task ' + taskId + '. Check it, then click Submit.');
+      // Silent success: the link is pasted, the manager reviews it and clicks
+      // Submit. Alerts are reserved for the no-link / error cases below.
+      try { console.log('[Send Task] Submit Link: link filled for task ' + taskId + '.'); } catch (e) {}
     } catch (err) {
       alert('⚠️ ' + (err && err.message ? err.message : 'Submit Link failed.'));
     } finally {

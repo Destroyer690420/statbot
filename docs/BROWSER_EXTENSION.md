@@ -1,6 +1,6 @@
 # BROWSER_EXTENSION.md — GoPartTime Userscript
 
-> Verified against `scripts/goparttime-send.user.js` (identical to `dashboard/public/goparttime-send.user.js`, SHA-256 `B4052F66…` byte-for-byte) on 2026-10-02 (v1.6.0). Served publicly at `https://statbot.duckdns.org/goparttime-send.user.js`.
+> Verified against `scripts/goparttime-send.user.js` (identical to `dashboard/public/goparttime-send.user.js`) on 2026-10-09 (v1.6.1). Served publicly at `https://statbot.duckdns.org/goparttime-send.user.js`.
 >
 > `scripts/goparttime-auto.user.js` (the auto-accept watcher, SHA-256 `0B2715A8…`) carries the **same** media extractor at v1.6.0 — parity is asserted by `src/__tests__/userscript-media.test.ts`.
 
@@ -8,7 +8,7 @@
 
 ## 1. Identity
 
-Tampermonkey userscript **"Discord Task Sender"** (v1.6.0, author "Manager"), designed for desktop and mobile (Kiwi Browser / Edge Canary noted in the header and `ANDROID_SETUP.md`). Works as a plain bookmarklet/non-GM fallback too (localStorage + fetch). **v1.6.0 extracts `<video>` media** (see §5f) — a task whose media is a video previously sent nothing at all, because its markup contains no `<img>`. **v1.5.0 added Submit Link autofill** (see §5d) — clicking a card's "Submit Task" button prefills the dialog with the link the worker already sent in Discord. v1.4.3 **surfaces Zod validation details** (`Validation failed: field: message` + `errors` array shown in Tampermonkey) and keeps v1.4.2 image-only fix (empty `div.prose` allowed when `images>0` e.g. #880072 `r/Nocfree`); v1.4.0 disabled Submit View on narrow (mobile) viewports — insights are only submitted from the PC; everything else (Send Task, settings, desktop preview) is unchanged. v1.3.0 added the **insight screenshot preview** to the v1.2.0 **Submit View** automation (which itself sits on top of v1.1.0's send flow).
+Tampermonkey userscript **"Discord Task Sender"** (v1.6.1, author "Manager"), designed for desktop and mobile (Kiwi Browser / Edge Canary noted in the header and `ANDROID_SETUP.md`). Works as a plain bookmarklet/non-GM fallback too (localStorage + fetch). **v1.6.1 made Submit Link silent on success** (popup only when no link exists yet or on error — see §5d). **v1.6.0 extracts `<video>` media** (see §5f) — a task whose media is a video previously sent nothing at all, because its markup contains no `<img>`. **v1.5.0 added Submit Link autofill** (see §5d) — clicking a card's "Submit Task" button prefills the dialog with the link the worker already sent in Discord. v1.4.3 **surfaces Zod validation details** (`Validation failed: field: message` + `errors` array shown in Tampermonkey) and keeps v1.4.2 image-only fix (empty `div.prose` allowed when `images>0` e.g. #880072 `r/Nocfree`); v1.4.0 disabled Submit View on narrow (mobile) viewports — insights are only submitted from the PC; everything else (Send Task, settings, desktop preview) is unchanged. v1.3.0 added the **insight screenshot preview** to the v1.2.0 **Submit View** automation (which itself sits on top of v1.1.0's send flow).
 
 ## 2. Metadata & Permissions
 
@@ -77,7 +77,7 @@ Tampermonkey userscript **"Discord Task Sender"** (v1.6.0, author "Manager"), de
 
 Step 2 on a comment → 400 "Comments have only one view-data step (COMMENT_20H)."; invalid step → 400; unknown task → 404 "Task not found."; non-numeric id → 400. Tasks created manually (not via the userscript) are found too — the backend falls back to ids like `POST #688318`/`Comment #688318` (both case conventions) when no GoPartTime-linked task exists.
 
-## 5d. Submit Link Autofill (v1.5.0)
+## 5d. Submit Link Autofill (v1.5.0, silent-success since v1.6.1)
 
 **Purpose**: GoPartTime's `/my-tasks` page has a per-card **Submit Task** button that opens a dialog asking for the post/comment URL. That URL already exists on Statbot — the worker replied with it in their Discord ticket, `recordSubmission` stored it in `Task.submittedRedditUrl`, and the dashboard's Accepted section renders it — so without help the manager has to alt-tab to the dashboard, find the task, copy the link and paste it by hand, once per task. This flow closes that loop.
 
@@ -88,8 +88,8 @@ Step 2 on a comment → 400 "Comments have only one view-data step (COMMENT_20H)
 1. **Fetch** — `GET /submission/{taskId}` (see §5e) → `{ redditUrl, … }`.
 2. **Dialog** — reused if already open, else polled for ≤2 s for `div[role="dialog"][data-slot="dialog-content"]` containing `input[name="redditUrl"]` (the dialog is opened by the very click being reacted to, so it may not be mounted yet).
 3. **Fill** — `setReactInputValue()` writes through the native `HTMLInputElement.prototype` value setter and dispatches a bubbling `input` event. Assigning `input.value` directly is **not** enough: the field is React-controlled, so a plain assignment updates the DOM but not React's state tracker and the next render reverts it to empty. This is the one non-obvious requirement in the whole flow.
-4. **Never clobber** — if the field already has a non-empty value (typed or corrected by hand), the flow leaves it alone and says so.
-5. **Handoff** — success alert: link filled → check it, then click Submit.
+4. **Never clobber** — if the field already has a non-empty value (typed or corrected by hand), the flow leaves it alone silently (console log only, no popup).
+5. **Handoff (v1.6.1: silent success)** — when the link is filled, there is **no alert popup**: the link is pasted, the manager reviews it and clicks Submit. The alert popup appears **only when there is no link to fill yet** (or on a real error), so the manager is interrupted only when action is needed.
 
 **Deliberate non-features**, matching the rest of the script: it never clicks the dialog's Submit button and never reports success to GoPartTime. The manager still reviews the link and submits.
 
@@ -169,7 +169,7 @@ Compression of an oversized video is **server-side only** — the browser never 
 - Depends on GoPartTime's DOM structure (Radix/Vaul dialogs, `div.prose`, named inputs) — fragile to site changes; hence the debug tool.
 - Single shared API key for all workers (no per-worker identity).
 - Submit View: desktop-only (auto-disabled on narrow/mobile viewports, v1.4.0); works only after a card's Submit View/countdown button was clicked (tracking); comments currently render no Submit View button in the GoPartTime UI (step 1 assumed); screenshots expire after 60h; the preview lets the manager read the count but the script still does not verify GoPartTime actually accepted the attached file.
-- Submit Link (v1.5.0): depends on the GoPartTime card button text being exactly "Submit Task" and the dialog input being `name="redditUrl"`; depends on the React-controlled-input technique holding if GoPartTime changes framework; only fills an **empty** field, so a retry after a failed submit needs the field cleared first; useless for any task whose worker never replied with a link in Discord (no such link exists server-side to fetch).
+- Submit Link (v1.5.0, silent success since v1.6.1): depends on the GoPartTime card button text being exactly "Submit Task" and the dialog input being `name="redditUrl"`; depends on the React-controlled-input technique holding if GoPartTime changes framework; only fills an **empty** field, so a retry after a failed submit needs the field cleared first; useless for any task whose worker never replied with a link in Discord (no such link exists server-side to fetch — this is the one case that still pops an alert).
 
 ## 10. Second Script — Reddit Format Check (Session, v1.0.0)
 

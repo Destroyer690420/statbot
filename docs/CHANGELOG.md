@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-10-09
+### Built (not yet deployed)
+- **Submit Link silent success (userscript v1.6.1).** Clicking a card's **Submit Task** button no longer pops an alert when the worker's link exists — it is pasted silently (console log only). The popup now appears **only when there is no link to fill yet** (missing `redditUrl` → "No submitted URL for this task yet…" + Discord-reply hint) or on a real error (unconfigured key, dialog/field not found, fetch failure). The already-filled case is silent too (no clobber, no popup). `scripts/` ↔ `dashboard/public/` copies kept byte-identical; `node --check` + `userscript-media` suite (15 tests) green. Requires a Tampermonkey update + tab reload; deploy is dashboard-only (no migration, no app rebuild).
+
 ## 2026-10-08
 ### Deployed (2026-10-08 at `501225d` — app + dashboard rebuild, one idempotent migration)
 - **Removal-state phases 0–4 live** (`161.118.164.85`; backup `rtm-backup-20261008-phases.tar.gz`; removal migration applied via manual `migration.sql` re-run — 51 "already exists" + 0 unexpected errors, `survivalRemovalState` column + `AUTO_MARKED_DELETED` value verified; host bundle + probe scripts removed). Verified: 3 services Up, health healthy (DB+Redis), boot "Survival queue/worker initialized" + "All systems online!", all 8 live-`dist` gates, root + all three userscripts + tasks route 200, served `TaskDetails-BObHAhUG.js` carries the precise proof wording (`REMOVED BY REDDIT FILTERS`), 0 app errors since boot.
