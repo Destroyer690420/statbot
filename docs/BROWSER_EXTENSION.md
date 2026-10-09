@@ -139,6 +139,26 @@ Both scripts (`goparttime-send.user.js` and the auto-accept `goparttime-auto.use
 
 Compression of an oversized video is **server-side only** — the browser never touches the bytes. See `docs/GOPARTTIME.md` §5 for the ladder.
 
+## 5g. Mobile companion — `goparttime-mobile.user.js` (v1.0.0)
+
+A stripped-down script for phones with exactly two jobs and no Submit View
+baggage: a floating 📤 button (Send Task → ticket picker → `POST /assign`)
+and automatic Submit Link autofill that runs when the site's own
+**Submit Task** button is tapped (no second button — the fill is the feature).
+Same silent-success rule as §5d (popup only on no-link / error), plus a
+small auto-hiding toast for feedback instead of desktop alerts.
+
+Mobile hardening: the card-button match is tolerant (`includes('Submit Task')`
+in case mobile wraps the label), card lookup falls back to climbing ancestors
+for the "Task ID" label, the submit dialog is waited up to ~4s, and the media
+extractor is the same sentinel-bracketed copy (video-capable). It shares
+storage keys (`gpt_api_url`, `gpt_api_key`) with the desktop script, so a key
+already saved on the device is reused; first run with no key prompts once.
+Source: `scripts/goparttime-mobile.user.js`; served at
+`https://statbot.duckdns.org/goparttime-mobile.user.js`. Install it
+**instead of** (not alongside) the desktop script on the phone — running both
+would double-fire the autofill.
+
 ## 6. User-Facing Error Mapping (`parseStatus`)
 
 | Backend status | Message shown |
