@@ -145,7 +145,7 @@ A worker sees their own invite list and what they earned from it on the worker p
 
 ## 8. Owner-Earnings Integration
 
-`owner-earnings.service` treats active special referrals as a **cost**: per-task commissions (₹20/₹10) subtracted from revenue for referred workers whose referral is direct-special OR carries `indirectSpecialInviterId`; below-threshold referrals subtract the one-time bonus later; already-paid bonuses are skipped (`alreadyPaid`). See `docs/FRONTEND.md` §OwnerEarnings.
+`owner-earnings.service` treats active referrals as a **cost** on a creation basis: every task created in the window counts revenue (₹250/₹100) + worker cost (live `PayoutSettings`) except `CANCELLED` / any non-null `cancelledReason` (deleted posts = zero everywhere, retroactively). Per-task commission (₹20/₹10, direct-special or `indirectSpecialInviterId`) accrues on the task's creation day only when the invitee's all-time payable-completed count meets the **special** threshold; each one-time bonus (normal ₹100 / special ₹50) is deducted exactly once on the creation day of the threshold-reaching task (ordered by completion time), with Sunday payment only flipping `awaiting → paid`. See `docs/FRONTEND.md` §OwnerEarnings.
 
 ## 9. Edge Cases & Known Behaviors
 

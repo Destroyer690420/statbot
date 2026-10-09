@@ -39,7 +39,7 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 | `plain-task-message.test.ts` | `buildTaskMessagePlan` metadata/content chunking; `buildInstructionMessage` post/comment variants |
 | `html-to-discord.test.ts` | HTML→markdown mapping (bold, links, lists, blockquotes, code, headings, img ignored) |
 
-**No test coverage** for: most services (task/payout/commission/reminder/goparttime/owner-earnings/analytics), most repositories, bot commands/events, scheduler/worker, or the dashboard (no frontend tests exist). Worker Portal access repository behavior is covered by `worker-portal-access.test.ts`, and the worker-scoped referral view by `worker-referrals.test.ts` + `worker-isolation.test.ts`.
+**No test coverage** for: most services (task/payout/commission/reminder/goparttime/analytics), most repositories, bot commands/events, scheduler/worker, or the dashboard (no frontend tests exist). Worker Portal access repository behavior is covered by `worker-portal-access.test.ts`, and the worker-scoped referral view by `worker-referrals.test.ts` + `worker-isolation.test.ts`. Owner earnings is covered by `owner-earnings.test.ts` (6: creation-basis universe incl. PENDING / deleted+CANCELLED exclusion / settings-driven worker cost / per-task gating incl. indirect special threshold / one-time bonus attributed once to the threshold task's creation day / paid-label flip with unchanged totals / per-inviter bonus, no last-wins).
 
 ### Worker portal suites (2026-09-25)
 | File | Covers |
