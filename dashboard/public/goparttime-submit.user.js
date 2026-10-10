@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Link Submitter
 // @namespace    https://goparttime.net/
-// @version      1.1.1
+// @version      1.1.2
 // @description  Dedicated executor tab for GoPartTime link auto-submit: polls Statbot for verified worker links, finds each task card across /my-tasks/todo pages, fills the Submit Task dialog, and clicks Submit. Never accepts tasks, never consumes accept-claim leases.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+ * v1.1.2 - Fresh list per job: a newly leased job reloads /my-tasks/todo
+ * before hunting (newly accepted posts never render without a reload, so a
+ * stale DOM could never find them). One reload per job; the saved active job
+ * resumes on the next tick. No flow changes otherwise.
+ *
  * v1.1.1 - Fix: the fill step's `var input` declaration was merged into a
  * comment line (ReferenceError "input is not defined" on every job — the
  * dialog opened but nothing was ever filled). No flow changes.
@@ -66,7 +71,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.1.1';
+  var VERSION = '1.1.2';
   var DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/goparttime',
     apiKey: '',
@@ -674,6 +679,17 @@
         active = { jobId: next.jobId, externalTaskId: next.externalTaskId, url: next.submittedRedditUrl, attempt: next.attempt || 1 };
         saveActive(active);
         setStatus(true, 'leased task #' + active.externalTaskId);
+        // Fresh list first: newly accepted posts never render without a
+        // reload, so a job must never hunt on a stale DOM. After the reload
+        // the same active job resumes on the next tick (re-takes its own
+        // lease) on the current list. One reload per job — jobs are
+        // infrequent, polls are not. If the reload itself fails, the next
+        // tick resumes on whatever DOM is current (page-walk still applies).
+        try {
+          if (/^\/my-tasks\/todo\/?$/.test(window.location.pathname)) window.location.reload();
+          else window.location.href = '/my-tasks/todo';
+        } catch (e) { /* next tick resumes regardless */ }
+        return;
       } else {
         // Re-take our own lease so a slow multi-page hunt never looks stuck.
         try {
