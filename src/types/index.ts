@@ -187,6 +187,8 @@ export enum AuditAction {
   SURVIVAL_PROOF_CAPTURED = 'SURVIVAL_PROOF_CAPTURED',
   SURVIVAL_PROOF_FAILED = 'SURVIVAL_PROOF_FAILED',
   AUTO_MARKED_DELETED = 'AUTO_MARKED_DELETED',
+  GPT_LINK_SUBMITTED = 'GPT_LINK_SUBMITTED',
+  GPT_LINK_SUBMIT_FAILED = 'GPT_LINK_SUBMIT_FAILED',
 }
 
 export interface AuditLog {
@@ -402,6 +404,19 @@ export type SurvivalStatus =
   | 'SESSION_EXPIRED'
   | 'FETCH_ERROR'
   | 'BLOCKED';
+
+// ─── GoPartTime link auto-submit (browser-tab executor) ─────────────
+
+/** One BullMQ job in the submission-queue (schedule/lease store only). */
+export interface SubmissionJobData {
+  taskId: string;
+  externalTaskId: string | null;
+  submittedRedditUrl: string;
+  submittedAtISO: string | null;
+  attempt: number;
+  leasedBy: string | null;
+  leasedAt: number | null;
+}
 
 // ─── Automation (GoPartTime auto-accept) ───────────────────────
 

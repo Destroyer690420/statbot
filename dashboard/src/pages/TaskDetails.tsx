@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTask, getReminders, doneTask, retryAssignment, submitTaskUrl, retrySurvival } from '../api/client';
+import { getTask, getReminders, doneTask, retryAssignment, submitTaskUrl, retrySurvival, retrySubmission } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
 import { FormatBadge } from '../components/FormatBadge';
@@ -94,6 +94,13 @@ export function TaskDetails() {
 
   const survivalRetryMutation = useMutation({
     mutationFn: () => retrySurvival(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', id] });
+    },
+  });
+
+  const submissionRetryMutation = useMutation({
+    mutationFn: () => retrySubmission(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
     },
@@ -520,6 +527,27 @@ export function TaskDetails() {
                         </span>
                       )}
                     </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => submissionRetryMutation.mutate()}
+                        disabled={submissionRetryMutation.isPending}
+                        title="Re-queue the GoPartTime link auto-submit (executor tab picks it up)"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-400 border border-primary-500/30 hover:bg-primary-500/20 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {submissionRetryMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        Retry GoPartTime Submit
+                      </button>
+                      {submissionRetryMutation.isSuccess && (
+                        <span className="text-[11px] text-dark-500">
+                          {(submissionRetryMutation.data as any)?.reason || 'Re-queued — the executor tab picks it up.'}
+                        </span>
+                      )}
+                    </div>
+                    {submissionRetryMutation.isError && (
+                      <p className="text-xs text-danger">
+                        {(submissionRetryMutation.error as Error)?.message || 'Could not re-queue the submit.'}
+                      </p>
+                    )}
                     {diffOpen && (
                       <FormatDiffModal
                         task={task}

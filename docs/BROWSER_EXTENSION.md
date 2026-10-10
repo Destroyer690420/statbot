@@ -140,7 +140,6 @@ Both scripts (`goparttime-send.user.js` and the auto-accept `goparttime-auto.use
 Compression of an oversized video is **server-side only** — the browser never touches the bytes. See `docs/GOPARTTIME.md` §5 for the ladder.
 
 ## 5g. Mobile companion — `goparttime-mobile.user.js` (v1.0.0)
-
 A stripped-down script for phones with exactly two jobs and no Submit View
 baggage: a floating 📤 button (Send Task → ticket picker → `POST /assign`)
 and automatic Submit Link autofill that runs when the site's own
@@ -158,6 +157,22 @@ Source: `scripts/goparttime-mobile.user.js`; served at
 `https://statbot.duckdns.org/goparttime-mobile.user.js`. Install it
 **instead of** (not alongside) the desktop script on the phone — running both
 would double-fire the autofill.
+
+## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.0.0, NOT deployed)
+
+Dedicated tab that finishes the Submit Link loop: polls `GET /submit-jobs/pending`
+every ~5s (own tab id), leases one job, walks `/my-tasks/todo?page=N` (bounded 10)
+for the card by Task ID, clicks its exact-text **Submit Task** button, fills
+`input[name="redditUrl"]` via `setReactInputValue` (never clobbers a filled field),
+waits 3–8s human-like, clicks the dialog's exact-text **Submit**, verifies, and
+reports to `POST /submit-jobs/:id/result`. In-flight job survives `?page=` hops via
+sessionStorage; status pill bottom-left (Send owns bottom-right). Shares storage
+keys (`gpt_api_url`, `gpt_api_key`) so no new configuration. Runs ALONE on its tab —
+never the watcher tab (it never touches `/tasks`, claims, or accept buttons).
+Source: `scripts/goparttime-submit.user.js`; served at
+`https://statbot.duckdns.org/goparttime-submit.user.js` after the dashboard rebuild.
+Success verification is heuristic until a real Submit is captured in devtools —
+see the `TODO-DISCOVERY` seam in the script.
 
 ## 6. User-Facing Error Mapping (`parseStatus`)
 

@@ -3,6 +3,7 @@ import { initializeQueue, getQueue } from './scheduler/queue';
 import { initializeWorker } from './scheduler/worker';
 import { initializeSurvivalQueue } from './services/survival.service';
 import { initializeSurvivalWorker } from './scheduler/survival-worker';
+import { initializeSubmissionQueue } from './services/submission.service';
 import { rehydrateSurvivalJobs } from './services/survival.service';
 import { createBotClient, startBot } from './bot';
 import { createApiServer, startApiServer } from './api/server';
@@ -124,6 +125,14 @@ async function main(): Promise<void> {
       initializeSurvivalWorker(discordClient);
     } catch (error) {
       logger.error('Survival worker failed to start', { error });
+    }
+
+    // 4c. GoPartTime link submission queue (browser-tab executor polls it;
+    // no server worker — the datacenter IP cannot reach GoPartTime).
+    try {
+      initializeSubmissionQueue();
+    } catch (error) {
+      logger.error('Submission queue failed to start', { error });
     }
 
     // 5. Re-hydrate reminder jobs from PostgreSQL (recover from Redis/bot restarts)
@@ -325,6 +334,7 @@ async function main(): Promise<void> {
       const { closeQueue } = await import('./scheduler/queue');
       const { closeWorker } = await import('./scheduler/worker');
       const { closeSurvivalQueue } = await import('./services/survival.service');
+      const { closeSubmissionQueue } = await import('./services/submission.service');
       const { closeSurvivalWorker } = await import('./scheduler/survival-worker');
       const { stopAutomationScheduler } = await import('./services/automation/scheduler');
       const { closePoller } = await import('./services/automation/poller.service');
@@ -333,6 +343,7 @@ async function main(): Promise<void> {
       await closePoller().catch(() => undefined);
       await closeSurvivalWorker().catch(() => undefined);
       await closeSurvivalQueue().catch(() => undefined);
+      await closeSubmissionQueue().catch(() => undefined);
       await closeWorker();
       await closeQueue();
 

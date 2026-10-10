@@ -14,6 +14,11 @@ import { taskRepository } from '../../database/repositories';
 import { toTask } from '../../database/converters';
 import { GOPARTTIME_SOURCE } from '../../config/constants';
 import { Task } from '../../types';
+import {
+  leaseSubmissionJob,
+  pendingSubmissionJobs,
+  reportSubmissionResult,
+} from '../../services/submission.service';
 
 /**
  * Endpoints used by the GoPartTime browser extension. Authenticated with the
@@ -268,12 +273,96 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
   });
 
   /**
+   * GET /api/v1/goparttime/submit-jobs/pending
+   * Due + unleased link-submit jobs for the dedicated executor tab (own tab
+   * id, polls every few seconds). Jobs carry the verified worker link; the
+   * tab leases one, submits it in-page on goparttime.net, and reports back.
+   * This tab never touches /tasks and never consumes an accept-claim lease.
+   */
+  router.get('/submit-jobs/pending', async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const jobs = await pendingSubmissionJobs();
+      res.json({
+        success: true,
+        data: {
+          jobs: jobs.map((j) => ({
+            jobId: j.jobId,
+            taskId: j.taskId,
+            externalTaskId: j.externalTaskId,
+            submittedRedditUrl: j.submittedRedditUrl,
+            attempt: j.attempt,
+          })),
+        },
+      });
+    } catch (error) {
+      logger.error('GET /goparttime/submit-jobs/pending failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /**
+   * POST /api/v1/goparttime/submit-jobs/:id/lease
+   * Per-tab lease on a job (separate lease from accept-claims). A fresh
+   * foreign lease rejects (409) so two executor tabs never double-submit;
+   * a stale lease (>5min, stuck tab) is reclaimable.
+   */
+  router.post(
+    '/submit-jobs/:id/lease',
+    validateBody(z.object({ tabId: z.string().min(1).max(64) })),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const outcome = await leaseSubmissionJob(String(req.params.id), req.body.tabId);
+        if (!outcome.leased) {
+          const code = outcome.reason === 'job not found (done, replaced, or expired)' ? 404 : 409;
+          res.status(code).json({ success: false, message: outcome.reason });
+          return;
+        }
+        res.json({ success: true, data: { leased: true, jobId: String(req.params.id) } });
+      } catch (error) {
+        logger.error('POST /goparttime/submit-jobs/:id/lease failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
+
+  /**
+   * POST /api/v1/goparttime/submit-jobs/:id/result
+   * Executor verdict. Success removes the job + audits GPT_LINK_SUBMITTED.
+   * Transient failure re-queues (+2/+5min, max 3 attempts); give-up removes
+   * the job, audits GPT_LINK_SUBMIT_FAILED, and tags the manager in the
+   * ticket for manual submission.
+   */
+  router.post(
+    '/submit-jobs/:id/result',
+    validateBody(z.object({
+      ok: z.boolean(),
+      failureReason: z.string().max(500).optional().nullable(),
+    })),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const outcome = await reportSubmissionResult(
+          String(req.params.id),
+          { ok: req.body.ok, failureReason: req.body.failureReason ?? null },
+          discordClient,
+        );
+        if (!outcome.recorded) {
+          res.status(404).json({ success: false, message: 'Job not found (done, replaced, or expired).', stale: true });
+          return;
+        }
+        res.json({ success: true, data: outcome });
+      } catch (error) {
+        logger.error('POST /goparttime/submit-jobs/:id/result failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
+
+  /**
    * POST /api/v1/goparttime/reddit-session
    * Paste/refresh the spare Reddit account's login cookie (self-service,
    * no SSH). Same vault + validation as the dashboard path. The secret is
    * never echoed back.
-   */
-  router.post(
+   */  router.post(
     '/reddit-session',
     validateBody(z.object({
       cookie: z.string().min(50).max(12000),

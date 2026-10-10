@@ -49,6 +49,23 @@ export const QUEUE_NAME = 'reminder-queue';
 export const SURVIVAL_QUEUE_NAME = 'survival-queue';
 
 /**
+ * BullMQ queue for GoPartTime link auto-submit (browser-tab executor).
+ * The queue is a schedule/lease store only — no server worker ever pops it
+ * (the datacenter IP is Vercel-blocked, so only the manager's browser can
+ * touch GoPartTime). The executor tab polls GET /submit-jobs/pending.
+ */
+export const SUBMISSION_QUEUE_NAME = 'submission-queue';
+/** Grace window after a submission before the executor may pick it up — a
+ *  corrected resubmission inside this window replaces the pending job. */
+export const SUBMISSION_INITIAL_DELAY_MS = 60 * 1000;
+/** Transient-failure retries (page not loaded, dialog missing), then give up. */
+export const SUBMISSION_RETRY_DELAYS_MS = [2 * 60 * 1000, 5 * 60 * 1000] as const;
+/** Maximum submit attempts (initial + retries). */
+export const SUBMISSION_MAX_ATTEMPTS = 3;
+/** Executor lease: a job held longer than this without a verdict is
+ *  reclaimable (stuck-tab reclaim, mirrors the accept-claim lease). */
+export const SUBMISSION_LEASE_TIMEOUT_MS = 5 * 60 * 1000;
+/**
  * Delay from Reddit URL submission to the survival screenshot.
  * Proof that a post survived >10 minutes: capture at 11 minutes.
  */

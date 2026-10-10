@@ -817,3 +817,8 @@ ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTO_MARKED_DELETED';
 
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_CAPTURED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_FAILED';
+
+-- GoPartTime link auto-submit (browser-tab executor): audit trail for
+-- automatic link submissions. Schema-only, idempotent, safe to re-run.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'GPT_LINK_SUBMITTED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'GPT_LINK_SUBMIT_FAILED';

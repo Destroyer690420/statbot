@@ -85,6 +85,11 @@ export async function retrySurvival(id: string) {
   return data;
 }
 
+export async function retrySubmission(id: string) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/retry-submission`);
+  return data;
+}
+
 export async function getLiveReddit(id: string) {
   const { data } = await api.get(`/tasks/${encodeURIComponent(id)}/live-reddit`);
   return data;

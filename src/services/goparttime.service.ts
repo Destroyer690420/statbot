@@ -276,6 +276,24 @@ class GoPartTimeService {
 
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
+
+    // GoPartTime link auto-submit: enqueue async, never block or fail the
+    // Discord reply path. Latest submission wins (replaces any pending job);
+    // the gate (MATCH/SKIPPED only) decides inside the enqueue.
+    try {
+      const { enqueueSubmissionJob } = await import('./submission.service');
+      void enqueueSubmissionJob(updated).catch((error) =>
+        logger.warn('Submission enqueue failed (non-fatal)', {
+          taskId: task.id,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } catch (error) {
+      logger.warn('Submission enqueue failed (non-fatal)', {
+        taskId: task.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return updated;
   }
 
@@ -321,6 +339,15 @@ class GoPartTimeService {
     }
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
+    // A recheck can flip a task into submittable state (e.g. FETCH_ERROR →
+    // MATCH) without any resubmission — re-run the submit gate (no-op unless
+    // the gate now passes). Never fails the recheck itself.
+    try {
+      const { enqueueSubmissionJob } = await import('./submission.service');
+      void enqueueSubmissionJob(updated).catch(() => undefined);
+    } catch {
+      // ignore — observability lives inside the enqueue
+    }
     return updated;
   }
 

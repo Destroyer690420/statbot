@@ -191,6 +191,24 @@ export default function createTaskRoutes(discordClient: Client): Router {
   });
 
   /**
+   * POST /api/v1/tasks/:id/retry-submission
+   * Manual re-queue of a failed GoPartTime link auto-submit (mirrors Retry
+   * Capture on survival proofs). Re-gates the task — a still-mismatched
+   * link stays manual-only.
+   */
+  router.post('/:id/retry-submission', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { retrySubmissionNow } = await import('../../services/submission.service');
+      const outcome = await retrySubmissionNow(String(req.params.id));
+      const task = await taskService.findById(String(req.params.id));
+      res.json({ success: true, data: { task, ...outcome } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      res.status(400).json({ success: false, message });
+    }
+  });
+
+  /**
    * GET /api/v1/tasks/:id/live-reddit
    * Server-side (vault-session) snapshot of the submitted Reddit post for
    * the dashboard diff modal. The browser-direct fetch is anonymous and

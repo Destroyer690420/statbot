@@ -26,6 +26,12 @@ const MIRRORS = [
   path.join(ROOT, 'dashboard', 'public', 'goparttime-auto.user.js'),
 ];
 
+// The link-submit executor carries no media extractor (it never sends task
+// content), so it joins only the mirror-sync + version assertions below.
+const SUBMIT_COPIES = [path.join(ROOT, 'scripts', 'goparttime-submit.user.js')];
+
+const SUBMIT_MIRRORS = [path.join(ROOT, 'dashboard', 'public', 'goparttime-submit.user.js')];
+
 type ExtractImages = (root: { querySelectorAll: (selector: string) => unknown[] }) => Array<{
   order: number;
   url: string;
@@ -183,14 +189,18 @@ describe('GoPartTime media extraction', () => {
 });
 
 describe('shipped userscript copies', () => {
-  test.each(COPIES.map((file, i) => [path.basename(file), file, MIRRORS[i]]))(
+  test.each([...COPIES, ...SUBMIT_COPIES].map((file, i) => [
+    path.basename(file),
+    file,
+    [...MIRRORS, ...SUBMIT_MIRRORS][i],
+  ]))(
     '%s is byte-identical to its dashboard/public mirror',
     (_name, source, mirror) => {
       expect(fs.readFileSync(mirror, 'utf8')).toBe(fs.readFileSync(source, 'utf8'));
     },
   );
 
-  test.each(COPIES)('%s declares a version', (file) => {
+  test.each([...COPIES, ...SUBMIT_COPIES])('%s declares a version', (file) => {
     const source = fs.readFileSync(file, 'utf8');
     expect(source).toMatch(/^\/\/ @version\s+\d+\.\d+\.\d+$/m);
   });
