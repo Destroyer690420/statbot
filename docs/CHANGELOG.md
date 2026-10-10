@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-10
+### Deployed (2026-10-10 at `3d83a63` — dashboard-only rebuild, no migration)
+- **Pure-black page background live** (`161.118.164.85`; app/redis untouched — app container not restarted; no migration, no userscript change; host bundle removed). Page-background tokens `dark-950` + `--background` `#0B0D0F` → `#000000` (Layout shell, Login, loader, `html`/`body`); cards/surfaces/text/accent untouched. Verified: 3 services Up, health healthy (DB+Redis), served CSS 200 with 3 black-background refs and 0 old-bg refs, card surface `#171B20` intact, identical chunk hashes local vs host builder.
 ### Deployed (2026-10-10 at `d9dce91` — dashboard-only rebuild, no migration)
 - **Mobile page scrollbar hidden live** (`161.118.164.85`; app/redis untouched — app container not restarted; no migration, no userscript change; host bundle removed). The shared `main` scroll container in `Layout.tsx` gains an `app-scroll` class, hidden below 768px via `scrollbar-width: none` + `::-webkit-scrollbar: display:none` (Chrome/Safari/Edge/Firefox); `overflow-y-auto` unchanged so scrolling works as before on every admin page. Desktop unaffected. Verified: 3 services Up, health healthy (DB+Redis), root 200, served CSS 200 carrying the new rule, typecheck + build clean locally and in the host builder (identical chunk hashes).
 ### Deployed (2026-10-10 at `8bd2bed` — dashboard-only rebuild, no migration)

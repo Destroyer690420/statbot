@@ -264,6 +264,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-10**: **Pure-black page background DEPLOYED live at `3d83a63`:** dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, served CSS 200 (black bg ×3, old bg ×0, card surface intact), identical hashes local vs host. Page tokens only (`dark-950`, `--background`); cards/surfaces/text/accent unchanged.
+
 - **2026-10-10**: **Mobile page scrollbar hidden DEPLOYED live at `d9dce91`:** dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, root 200, served CSS 200 with the rule, identical chunk hashes local vs host builder. `Layout.tsx` `main` + `app-scroll` CSS (≤768px only, scroll behavior unchanged, desktop unaffected). Covers every admin page (single shared scroll container).
 
 - **2026-10-10**: **Payout page mobile cleanup DEPLOYED live at `8bd2bed`:** dashboard-only rebuild (app/redis untouched, no migration); backup `rtm-backup-20261010-payout-cleanup.tar.gz`; host bundle removed. Verified: 3 services Up, health healthy (DB+Redis), root 200, served `TaskPayments`/`Commissions` chunks 200 with 0 refs to the removed UI ("Pay All"/"Restore Unpaid"/"Export CSV"/"All Unpaid"/"Custom Range") and "Pay Worker" still present, 0 app errors. Design-only, no logic change (backend/API/DB untouched; `PayoutHeader`/`PayAllBanner` components + `FilterMode` type + custom-range logic intact).
