@@ -5,11 +5,11 @@
 @layer base {
   :root {
     /* ── Global design tokens (§2–§8, §29) ── */
-    --background: #000000;
-    --background-secondary: #0a0a0b;
-    --surface: #000000;
-    --surface-hover: #101012;
-    --surface-active: #18181b;
+    --background: #0b0d0f;
+    --background-secondary: #111418;
+    --surface: #171b20;
+    --surface-hover: #1d2229;
+    --surface-active: #222832;
     --border: #272d35;
     --border-subtle: #20252c;
     --text-primary: #f2f4f7;
@@ -245,12 +245,12 @@
   /* ── Skeletons (§24) ──────────────────────── */
   .skeleton {
     @apply rounded-md motion-safe:animate-pulse;
-    background: #1b1b1f;
+    background: #1d2229;
   }
 
   .skeleton-block {
     @apply rounded-md motion-safe:animate-pulse h-4 w-full;
-    background: #1b1b1f;
+    background: #1d2229;
   }
 
   /* ── Empty states (§23) ───────────────────── */

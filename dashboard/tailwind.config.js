@@ -6,7 +6,7 @@ export default {
     extend: {
       colors: {
         // ── Premium neutral scale (Linear/Vercel-like hierarchy) ──
-        // Page #000000 → secondary #0A0A0B → surface #000000 (pure-black chrome).
+        // Page #0B0D0F → secondary #111418 → surface #171B20.
         // Numeric increase = darker, preserving Tailwind ordering.
         dark: {
           50: '#F2F4F7',
@@ -17,9 +17,9 @@ export default {
           500: '#66707C',
           600: '#3A424D',
           700: '#272D35',
-          800: '#000000',
-          900: '#0A0A0B',
-          950: '#000000',
+          800: '#171B20',
+          900: '#111418',
+          950: '#0B0D0F',
         },
         // ── Primary accent: restrained soft blue ──
         primary: {
@@ -36,11 +36,11 @@ export default {
           950: '#181D33',
         },
         // ── Layered surfaces (explicit tokens, §29) ──
-        background: '#000000',
-        'background-secondary': '#0A0A0B',
-        surface: '#000000',
-        'surface-hover': '#101012',
-        'surface-active': '#18181b',
+        background: '#0B0D0F',
+        'background-secondary': '#111418',
+        surface: '#171B20',
+        'surface-hover': '#1D2229',
+        'surface-active': '#222832',
         appborder: '#272D35',
         'appborder-subtle': '#20252C',
         // ── Text tokens ──

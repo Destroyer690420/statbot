@@ -20,7 +20,7 @@ function isDeleted(task: any): boolean {
 const CHART_PRIMARY = '#6C8CFF';
 const CHART_GRID = '#20252C';
 const CHART_LABEL = '#66707C';
-const CHART_TOOLTIP_BG = '#000000';
+const CHART_TOOLTIP_BG = '#111418';
 const CHART_TOOLTIP_BORDER = '#272D35';
 
 export function Dashboard() {

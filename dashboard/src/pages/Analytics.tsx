@@ -90,7 +90,7 @@ export function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#20252C" vertical={false} />
                   <XAxis dataKey="date" stroke="#66707C" tick={{fill: '#66707C', fontSize: 12}} axisLine={false} tickLine={false} />
                   <YAxis stroke="#66707C" tick={{fill: '#66707C'}} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ backgroundColor: '#000000', borderColor: '#272D35', borderRadius: '12px' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#111418', borderColor: '#272D35', borderRadius: '12px' }} />
                   <Area type="monotone" dataKey="count" stroke="#6C8CFF" strokeWidth={2} fillOpacity={1} fill="url(#colorDaily)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -124,7 +124,7 @@ export function Analytics() {
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#000000', borderColor: '#272D35', borderRadius: '12px' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#111418', borderColor: '#272D35', borderRadius: '12px' }} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -148,7 +148,7 @@ export function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#20252C" vertical={false} />
                   <XAxis dataKey="userId" stroke="#66707C" tick={{fill: '#66707C', fontSize: 12}} axisLine={false} tickLine={false} />
                   <YAxis stroke="#66707C" tick={{fill: '#66707C'}} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ backgroundColor: '#000000', borderColor: '#272D35', borderRadius: '12px' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#111418', borderColor: '#272D35', borderRadius: '12px' }} />
                   <Legend />
                   <Bar dataKey="total" name="Total Tasks" fill="#6C8CFF" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="completed" name="Completed" fill="#4CAF82" radius={[4, 4, 0, 0]} />
