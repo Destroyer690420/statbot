@@ -5,7 +5,7 @@ import { AuditAction, DetectedGoPartTimeTask } from '../../types';
 import { AUTOMATION } from '../../config/constants';
 import { getIstDayBoundaries, getIstHourStart } from '../../utils/ist-time';
 import { logger } from '../../utils/logger';
-import { evaluateForBurst } from './validator.service';
+import { evaluateForBurst, loadSeenSubs } from './validator.service';
 import { diffNewTasks, isBurstActive, isMergeAllowed, parsePooledTasks, pickNextTask, serializePooledTasks } from './eligibility';
 import { outreachService, DAILY_POST_CAP } from '../outreach.service';
 
@@ -97,12 +97,23 @@ async function validateInputs(inputs: BurstTaskInput[], cycleId: string): Promis
     inputs.length === 0
       ? new Set<string>()
       : new Set((await automationRepository.listBlocked()).map((row) => row.subreddit));
+  // Tier-0 seen set, fetched once per report (excludes this cycle's own logs —
+  // the batch being validated must not count as "seen before").
+  const seenSubs = inputs.length === 0 ? new Set<string>() : await loadSeenSubs(cycleId);
 
   for (const t of inputs) {
     const detected = toDetected(t);
     // Listed + available means takeable: an accepted task vanishes from the
     // listing, so history never disqualifies a listed task here.
-    const v = evaluateForBurst(detected, blockedSubs);
+    const v = evaluateForBurst(detected, blockedSubs, seenSubs);
+    if (v.eligible && v.needsContentReview) {
+      logger.info('Tier-0 content screen flagged task for Tier-1 scrutiny', {
+        cycleId,
+        task: detected.subTaskId,
+        subreddit: detected.subreddit,
+        signal: v.screenSignal,
+      });
+    }
     await automationRepository.logTask({
       cycleId,
       externalTaskId: detected.subTaskId,

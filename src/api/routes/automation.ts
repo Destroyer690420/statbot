@@ -5,7 +5,10 @@ import { automationRepository, outreachRepository, taskRepository } from '../../
 import { sessionService } from '../../services/automation/session.service';
 import { redditSessionService } from '../../services/reddit-session.service';
 import { normalizeSubreddit } from '../../services/automation/subreddit';
-import { validateDetectedTask } from '../../services/automation/validator.service';
+import { validateDetectedTask, loadSeenSubs } from '../../services/automation/validator.service';
+import { handleAutoBlockReport } from '../../services/automation/content-block.service';
+import { recordScreenEvent } from '../../services/automation/screen-events';
+import { screenTitle } from '../../utils/content-screen';
 import { scanTasks, acceptTask } from '../../services/automation/poller.service';
 import { runCycle } from '../../services/automation/cycle.service';
 import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
@@ -21,7 +24,7 @@ import { extensionAuth } from '../middleware/extensionAuth';
 import { validateBody } from '../middleware/validate';
 import { auditLogService } from '../../services/audit.service';
 import { AuditAction } from '../../types';
-import { GOPARTTIME_SOURCE, AUTOMATION } from '../../config/constants';
+import { GOPARTTIME_SOURCE, AUTOMATION, CONTENT_SCREEN } from '../../config/constants';
 import { getAllAdminIds } from '../../utils/permissions';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
@@ -93,6 +96,24 @@ export const claimResultSchema = z.object({
   // Phase-0 instrumentation from the watcher (shared schema — old watcher
   // versions omit it entirely).
   timings: claimTimingsSchema,
+  // Tier-1 content screen: the browser aborted an accept on a full-content
+  // hit and asks the SERVER to auto-block (verdict-flag path — the companion
+  // never calls the dashboard-authed block endpoints itself).
+  autoBlock: z.object({
+    subreddit: z.string().max(80),
+    signal: z.enum(['sex', 'vape', 'non-en']),
+    matched: z.string().max(120).optional().nullable(),
+    snippet: z.string().max(300).optional().nullable(),
+  }).optional().nullable(),
+  // Tier-1 screen outcome on EVERY verdict (hit or pass): dry-run candidates
+  // are browser-console-only otherwise, invisible to the server and to the
+  // bot-DM `blocks` report. Old watchers omit it entirely.
+  screenReport: z.object({
+    subreddit: z.string().max(80).optional().nullable(),
+    signal: z.enum(['sex', 'vape', 'non-en']).optional().nullable(),
+    matched: z.string().max(120).optional().nullable(),
+    dryRun: z.boolean().optional().nullable(),
+  }).optional().nullable(),
 });
 
 const rehearseSchema = z.object({
@@ -117,6 +138,34 @@ export function logClaimTimings(
     logger.info('Claim timings', buildClaimTimingsLog(claim, ok, timings));
   } catch {
     // ignore — timing must never break verdicts
+  }
+}
+
+type ScreenReportBody = {
+  subreddit?: string | null;
+  signal?: 'sex' | 'vape' | 'non-en' | null;
+  matched?: string | null;
+  dryRun?: boolean | null;
+} | null | undefined;
+
+/**
+ * Dry-run visibility for Tier-1: a verdict carrying a screen hit lands in the
+ * in-memory event feed behind the bot-DM `blocks` report (browser console
+ * alone is invisible to the server). Passes (null signal) are noise and
+ * skipped. Never throws — observability must not break verdicts.
+ */
+function recordScreenReport(report: ScreenReportBody, externalTaskId: string): void {
+  try {
+    if (!report || !report.signal) return;
+    recordScreenEvent({
+      subreddit: report.subreddit ?? null,
+      signal: report.signal,
+      matched: report.matched ?? null,
+      externalTaskId,
+      dryRun: report.dryRun ?? CONTENT_SCREEN.DRY_RUN,
+    });
+  } catch {
+    // ignore — observability must never break verdicts
   }
 }
 
@@ -503,7 +552,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         return;
       }
 
-      const v = await validateDetectedTask(detected);
+      const v = await validateDetectedTask(detected, { seenSubs: await loadSeenSubs().catch(() => undefined) });
       await automationRepository.logTask({
         cycleId: contact.cycleId, externalTaskId, taskType: detected.type,
         subreddit: detected.subreddit, status: v.reason, workerId: contact.workerId,
@@ -651,7 +700,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         karmaLimit: null,
         earnings: null,
       };
-      const v = await validateDetectedTask(detected);
+      const v = await validateDetectedTask(detected, { seenSubs: await loadSeenSubs().catch(() => undefined) });
 
       const settings = await automationRepository.getSettings();
       const dryRun = settings?.dryRun ?? true;
@@ -958,15 +1007,33 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       // Expected subreddit for the browser's drawer ground-truth check
       // (aborts the accept on mismatch — never accept on a heuristic miss).
       let claimSubreddit: string | null = null;
+      // Tier-0 flag for Tier-1: whether the sub was seen in a PRIOR cycle,
+      // plus the title-only signal when unseen. Computed from the pooled
+      // details the report already stored — no extra schema, no migration.
+      // Per-claim cost only (not per poll): claims are rare, polls are not.
+      let seenBefore: boolean | null = null;
+      let contentReview: string | null = null;
       try {
         const bursts = await automationRepository.listBurstsByCycle(claim.cycleId);
         const latest = bursts[bursts.length - 1];
         if (latest) {
           const details = parsePooledTasks(latest.taskDetails, latest.taskIds);
-          claimSubreddit = details.find((d) => d.id === claim.externalTaskId)?.subreddit ?? null;
+          const pooled = details.find((d) => d.id === claim.externalTaskId);
+          claimSubreddit = pooled?.subreddit ?? null;
+          const normalized = normalizeSubreddit(claimSubreddit);
+          if (normalized) {
+            const seen = await loadSeenSubs(claim.cycleId).catch(() => null);
+            if (seen) {
+              seenBefore = seen.has(normalized);
+              if (!seenBefore) {
+                const hit = screenTitle(pooled?.title ?? null);
+                if (hit) contentReview = hit.signal;
+              }
+            }
+          }
         }
       } catch {
-        // leave null — the browser skips the check without an expectation
+        // leave nulls — the browser skips Tier-1 without these hints
       }
       res.json({
         success: true,
@@ -987,6 +1054,8 @@ export default function createAutomationRoutes(discordClient: Client): Router {
             ticket: claim.channelId,
             workerId: claim.workerId,
             subreddit: claimSubreddit,
+            seenBefore,
+            contentReview,
             createdAt: claim.createdAt,
             expiresAt: claim.expiresAt,
           },
@@ -1044,6 +1113,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       if (req.body.ok) {
         await automationRepository.resolveClaim(claim.id, 'CLAIMED');
         logClaimTimings(claim, true, req.body.timings);
+        recordScreenReport(req.body.screenReport, claim.externalTaskId);
         const pushed = req.body.pushed === true;
         try {
           const contacts = await automationRepository.listCycleContacts(claim.cycleId);
@@ -1078,6 +1148,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         const reason = req.body.failureReason || 'Companion reported failure';
         await automationRepository.resolveClaim(claim.id, 'FAILED', reason);
         logClaimTimings(claim, false, req.body.timings);
+        recordScreenReport(req.body.screenReport, claim.externalTaskId);
         try {
           const contacts = await automationRepository.listCycleContacts(claim.cycleId);
           const held = contacts.find(
@@ -1092,6 +1163,38 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           AuditAction.AUTOMATION_TASK_FAILED, null, 'companion',
           `Task ${claim.externalTaskId} failed via companion: ${reason}`,
         );
+        // Tier-1 server half: the browser aborted on a full-content hit and
+        // asks for an auto-block. Never breaks the verdict — the failure is
+        // already recorded above; the move-on retry below still runs.
+        if (req.body.autoBlock) {
+          try {
+            const seen = await loadSeenSubs(claim.cycleId).catch(() => undefined);
+            const outcome = await handleAutoBlockReport(
+              {
+                subreddit: req.body.autoBlock.subreddit,
+                signal: req.body.autoBlock.signal,
+                matched: req.body.autoBlock.matched ?? null,
+                snippet: req.body.autoBlock.snippet ?? null,
+              },
+              { seenSubs: seen },
+            );
+            logger.info('Tier-1 auto-block verdict processed', {
+              claimId: claim.id,
+              task: claim.externalTaskId,
+              outcome: outcome.outcome,
+            });
+            if (outcome.notice && outcome.subreddit) {
+              await blastApprovalService
+                .sendAutoBlockNotice(discordClient, outcome.notice, {
+                  subreddit: outcome.subreddit,
+                  externalTaskId: claim.externalTaskId,
+                })
+                .catch(() => undefined);
+            }
+          } catch (error) {
+            logger.warn('Tier-1 auto-block handling failed (verdict kept)', { claimId: claim.id, error });
+          }
+        }
         // Move on: the worker replied but this task failed — queue them for
         // the next unheld task instead of abandoning a willing winner. Each
         // iteration excludes one more task id, so this chain terminates.

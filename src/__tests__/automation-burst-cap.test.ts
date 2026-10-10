@@ -132,6 +132,71 @@ describe('evaluateForBurst == validateDetectedTask(skipDuplicate)', () => {
   });
 });
 
+describe('Tier-0 flagging agrees and never blocks', () => {
+  // Injected lists: production lists live in constants — the flagging path is
+  // exercised here with explicit sample terms instead.
+  const LISTS = { sexualHigh: ['escort'], sexualAmbiguous: [], vapeHigh: ['vape'], vapeAmbiguous: [] };
+  const SEEN = new Set<string>(['oldsub']);
+
+  function flagged(over: Partial<DetectedGoPartTimeTask> = {}): DetectedGoPartTimeTask {
+    return detected({ subreddit: 'FreshSub', title: 'my vape pen review', ...over });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (taskRepository.findBySourceExternal as jest.Mock).mockResolvedValue(null);
+    (automationRepository.isBlocked as jest.Mock).mockResolvedValue(false);
+  });
+
+  it('both validators flag an unseen sub with a title hit — identically', async () => {
+    const task = flagged();
+    const single = await validateDetectedTask(task, { skipDuplicate: true, seenSubs: SEEN, screenLists: LISTS });
+    const batched = evaluateForBurst(task, new Set(), SEEN, LISTS);
+    for (const v of [single, batched]) {
+      expect(v.eligible).toBe(true);
+      expect(v.reason).toBe('ELIGIBLE');
+      expect(v.needsContentReview).toBe(true);
+      expect(v.screenSignal).toBe('vape');
+    }
+  });
+
+  it('Tier-0 alone never blocks: flagged tasks stay ELIGIBLE', async () => {
+    const task = flagged();
+    const single = await validateDetectedTask(task, { skipDuplicate: true, seenSubs: SEEN, screenLists: LISTS });
+    expect(single.eligible).toBe(true);
+    const batched = evaluateForBurst(task, new Set(), SEEN, LISTS);
+    expect(batched.eligible).toBe(true);
+  });
+
+  it('no flag for seen subs, clean titles, or non-posts — identically', async () => {
+    const cases: DetectedGoPartTimeTask[] = [
+      flagged({ subreddit: 'r/OldSub' }),
+      flagged({ title: 'cute cat pictures' }),
+      flagged({ type: 'comment' }),
+      flagged({ subreddit: null }),
+    ];
+    for (const task of cases) {
+      const single = await validateDetectedTask(task, { skipDuplicate: true, seenSubs: SEEN, screenLists: LISTS });
+      const batched = evaluateForBurst(task, new Set(), SEEN, LISTS);
+      expect(batched.needsContentReview).toBe(single.needsContentReview);
+      expect(batched.screenSignal).toBe(single.screenSignal);
+      if (task.type === 'post' && task.subreddit) {
+        expect(single.needsContentReview).toBeFalsy();
+      }
+    }
+  });
+
+  it('inactive without a seen set — identically (old behavior preserved)', async () => {
+    const task = flagged();
+    const single = await validateDetectedTask(task, { skipDuplicate: true, screenLists: LISTS });
+    const batched = evaluateForBurst(task, new Set(), undefined, LISTS);
+    expect(single.needsContentReview).toBeFalsy();
+    expect(batched.needsContentReview).toBeFalsy();
+    expect(single.eligible).toBe(true);
+    expect(batched.eligible).toBe(true);
+  });
+});
+
 describe('downstream consumers tolerate more than 20 tasks', () => {
   const logs = Array.from({ length: 40 }, (_, i) => ({
     externalTaskId: String(1000 + i),

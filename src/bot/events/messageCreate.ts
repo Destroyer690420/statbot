@@ -7,7 +7,9 @@ import { outreachService } from '../../services/outreach.service';
 import { handleAutomationReply } from '../../services/automation/worker-manager.service';
 import { isSupportedImage, isValidRedditUrl } from '../../utils/validators';
 import { formatSubmissionReply } from '../../utils/submission-reply';
-import { taskRepository } from '../../database/repositories';
+import { taskRepository, automationRepository } from '../../database/repositories';
+import { buildBlocksReport, listScreenEvents } from '../../services/automation/screen-events';
+import { CONTENT_SCREEN } from '../../config/constants';
 import { TaskStatus, AuditAction } from '../../types';
 import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
 import { auditLogService } from '../../services/audit.service';
@@ -68,8 +70,10 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 }
 
 /**
- * Bot-DM handler. The only command is `scan` (exact word, any case):
- * queues one on-demand watcher scan and acks with what happens next.
+ * Bot-DM handler. Two commands, both exact word (any case), managers only:
+ * - `scan`: queues one on-demand watcher scan (same flow as automatic).
+ * - `blocks`: replies with the auto-block report (actual auto-blocks from the
+ *   DB + dry-run WOULD_BLOCK candidates from the screen event feed).
  * Everything else — and everyone unauthorized — gets silence.
  */
 async function handleDirectMessage(message: Message): Promise<void> {
@@ -79,6 +83,22 @@ async function handleDirectMessage(message: Message): Promise<void> {
     return;
   }
   const text = (message.content || '').trim().toLowerCase();
+  if (text === 'blocks') {
+    if (!isAdminOrManager(message.author.id)) return;
+    try {
+      const rows = await automationRepository.listAutoBlocked(20).catch(() => []);
+      const report = buildBlocksReport({
+        autoBlocked: rows.map((r) => ({ subreddit: r.subreddit, reason: r.reason, createdAt: r.createdAt })),
+        events: listScreenEvents(),
+        dryRun: CONTENT_SCREEN.DRY_RUN,
+      });
+      await message.reply(report);
+      logger.info('Blocks report sent via DM', { userId: message.author.id });
+    } catch {
+      await message.reply('Could not build the blocks report — try again in a minute.').catch(() => undefined);
+    }
+    return;
+  }
   if (text !== 'scan') return;
   if (!isAdminOrManager(message.author.id)) return;
   const result = requestScanCommand(message.author.id);

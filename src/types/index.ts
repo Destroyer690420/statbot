@@ -405,6 +405,8 @@ export type SurvivalStatus =
 
 // ─── Automation (GoPartTime auto-accept) ───────────────────────
 
+export type ContentScreenSignal = 'sex' | 'vape' | 'non-en';
+
 export type AutomationCycleStatus = 'RUNNING' | 'DONE' | 'STOPPED';
 
 export type AutomationContactStatus =
@@ -446,4 +448,11 @@ export interface ValidationResult {
   eligible: boolean;
   reason: AutomationTaskStatus;
   detail?: string;
+  /**
+   * Tier-0 content-screen flag (title-only, informational). NEVER affects
+   * `eligible` — title-only is too weak to block on. When true, Tier-1 runs
+   * with extra suspicion logged if this task reaches an accept attempt.
+   */
+  needsContentReview?: boolean;
+  screenSignal?: ContentScreenSignal;
 }

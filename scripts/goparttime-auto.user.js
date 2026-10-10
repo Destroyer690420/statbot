@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.6.0
+// @version      1.6.3
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,41 @@
 // ==/UserScript==
 
 /**
+   * v1.6.3 - ENFORCE + screen-report verdicts + bot-DM `blocks` report.
+   * CONTENT_SCREEN_DRY_RUN is now false: Tier-1 hits really abort and
+   * auto-block (server owns addBlocked + audit + instant admin DM). Every
+   * verdict also carries screenReport (sub/signal/matched, hit or pass) so
+   * the server can summarize screen outcomes; messaging `blocks` in the bot
+   * DM replies with recent auto-blocks (DB) + recent dry-run candidates.
+   * Otherwise identical to v1.6.2 below.
+   *
+   * v1.6.2 - Owner keyword lists encoded (four tiers, still dry-run).
+   * High-confidence sex/vape terms (words + literal phrases) trigger alone;
+   * ambiguous singles (mod, pod, sexy, coil, ...) never trigger alone and
+   * only enrich the hit detail; ambiguous phrases (mech mod, adult content)
+   * trigger as exact phrases; longest listed term wins. 'dab pen' excluded
+   * (cannabis-adjacent, out of scope). Server lists in
+   * src/config/constants.ts stay the source of truth — this copy is manually
+   * synced to them. Otherwise identical to v1.6.1 below.
+   *
+   * v1.6.1 - Tier-1 content screen for brand-new subreddits (dry-run/shadow).
+   * At the exact point the drawer's contentHtml is already extracted during
+   * an accept (right before Confirm), unseen-before-this-cycle + unblocked
+   * subs run the full-content check (title + drawer text, same keyword lists
+   * + non-English signal as the server's src/utils/content-screen.ts).
+   * Shadow mode: logs WOULD_BLOCK + signal + trigger, then proceeds to
+   * Confirm exactly as before — never aborts, never blocks. Flip
+   * CONTENT_SCREEN_DRY_RUN to false (and the server's matching flag) to
+   * enforce after tuning: then a hit aborts via the same cancel path as a
+   * ground-truth subreddit mismatch and reports autoBlock on the verdict,
+   * and the SERVER owns addBlocked + audit + admin DM (verdict-flag path).
+   * Also adds a force-refreshed blocked re-check right before Confirm (race
+   * cover for two tabs hitting a new sub at the same instant) and threads
+   * the server's Tier-0 title flag (claim.contentReview) as extra scrutiny
+   * logging. In-page filterEligible attaches the title signal as `review`
+   * (stripped by the server schema — informational only, no behavior change).
+   * Otherwise identical to v1.6.0 below.
+   *
    * v1.6.0 - Video tasks are no longer dropped by the auto-accept drawer path.
  * A video task renders as <video poster="...jpg"><source src="...mp4"></video>
  * with no <img> in it, so the img-only extractor sent zero media and the
@@ -244,7 +279,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.5.0';
+  const VERSION = '1.6.3';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -806,11 +841,178 @@
     return s;
   }
 
+  // --- content-screen:start --- (JS mirror of src/utils/content-screen.ts +
+  // BLOCK_KEYWORDS_* in src/config/constants.ts. MANUALLY SYNCED: this script
+  // cannot import the Node file, so when the server lists change, paste them
+  // here verbatim — same terms, same thresholds. Matching contract: whole
+  // word / literal phrase, case-insensitive, longest listed term wins; HIGH
+  // terms trigger alone; AMBIGUOUS singles never trigger alone (secondary
+  // detail only); AMBIGUOUS phrases trigger as exact phrases.)
+  var CONTENT_SCREEN_DRY_RUN = false; // mirrors CONTENT_SCREEN.DRY_RUN (enforce: hits really block)
+  var CONTENT_SCREEN_SEX_HIGH = [ // mirrors BLOCK_KEYWORDS_SEXUAL_HIGH_CONFIDENCE
+    'porn', 'porno', 'pornography', 'nsfw', 'xxx', 'hentai', 'rule34',
+    'nude', 'nudes', 'nudity', 'naked', 'sext', 'sexting',
+    'masturbate', 'masturbating', 'masturbation', 'jerking off', 'jerk off',
+    'blowjob', 'handjob', 'deepthroat', 'deepthroating',
+    'anal sex', 'anal beads', 'buttplug', 'butt plug',
+    'dildo', 'vibrator', 'fleshlight', 'sex doll', 'sex toy', 'sex toys',
+    'cumshot', 'creampie', 'bukkake', 'gangbang', 'threesome', 'orgy',
+    'squirting', 'orgasm', 'orgasms',
+    'dick pic', 'dick pics', 'cock pic', 'nude pic', 'nude pics',
+    'onlyfans', 'only fans', 'fansly',
+    'camgirl', 'cam girl', 'cam boy', 'webcam girl',
+    'escort', 'escorts', 'hooker', 'prostitute', 'stripper', 'strip club',
+    'bdsm', 'dominatrix', 'fetish porn',
+    'condom', 'condoms', 'lube', 'lubricant',
+    'milf', 'pussy', 'vagina', 'penis', 'cock', 'dick', 'boobs', 'tits'
+  ];
+  var CONTENT_SCREEN_SEX_AMBIGUOUS = [ // mirrors BLOCK_KEYWORDS_SEXUAL_AMBIGUOUS
+    'kink', 'submissive', 'sexy', 'breasts', 'adult content', 'fetish'
+  ];
+  var CONTENT_SCREEN_VAPE_HIGH = [ // mirrors BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE
+    'vape', 'vaping', 'vaper', 'vapers', 'vape pen', 'vape mod', 'box mod',
+    'vape juice', 'e-liquid', 'eliquid', 'e juice', 'e-juice',
+    'e-cig', 'ecig', 'e-cigarette', 'ecigarette', 'e cigarette',
+    'nicotine', 'nic salt', 'nic salts', 'nicsalt',
+    'disposable vape', 'puff bar', 'elf bar', 'geek bar', 'lost mary',
+    'esco bar', 'flum pebble', 'juul', 'juuling', 'juulpod',
+    'vape shop', 'vape store', 'vape trick', 'vape tricks',
+    'cloud chasing', 'sub ohm', 'sub-ohm',
+    'rda', 'rta', 'rdta'
+  ];
+  // mirrors BLOCK_KEYWORDS_VAPE_AMBIGUOUS ('dab pen' excluded: cannabis device,
+  // out of scope until it gets its own category).
+  var CONTENT_SCREEN_VAPE_AMBIGUOUS = ['mod', 'pod', 'cart', 'coil', 'mech mod', 'smoking'];
+  var CONTENT_SCREEN_COMMON_WORDS = [ // mirrors CONTENT_SCREEN.COMMON_ENGLISH_WORDS
+    'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for',
+    'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at', 'this', 'but', 'his',
+    'by', 'from', 'they', 'we', 'say', 'her', 'she', 'or', 'an', 'will', 'my',
+    'one', 'all', 'would', 'there', 'their', 'what', 'so', 'up', 'out', 'if',
+    'about', 'who', 'get', 'which', 'go', 'me', 'when', 'make', 'can', 'like',
+    'just', 'know', 'take', 'into', 'your', 'good', 'some', 'could', 'them',
+    'see', 'other', 'than', 'then', 'now', 'only', 'come', 'its', 'over',
+    'also', 'after', 'how', 'our', 'well', 'even', 'new', 'want', 'any',
+    'these', 'give', 'most', 'is', 'are', 'was', 'were', 'has', 'had', 'been'
+  ];
+  var CONTENT_SCREEN_NON_LATIN_MIN_LETTERS = 8;
+  var CONTENT_SCREEN_NON_LATIN_MAX_LATIN_FRACTION = 0.5;
+  var CONTENT_SCREEN_COMMON_WORD_MIN_WORDS = 8;
+  var CONTENT_SCREEN_COMMON_WORD_MIN_FRACTION = 0.2;
+
+  function screenEscapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function screenIsPhrase(term) {
+    return /\s/.test(String(term || '').trim());
+  }
+
+  // Word-boundary, case-insensitive, no stemming, longest listed term wins —
+  // mirrors matchKeyword (list order never matters).
+  function screenMatchKeyword(text, keywords) {
+    if (!text || !keywords || keywords.length === 0) return null;
+    var terms = [];
+    for (var i = 0; i < keywords.length; i++) {
+      var q = String(keywords[i] || '').trim();
+      if (q) terms.push(q);
+    }
+    terms.sort(function (a, b) { return b.length - a.length; });
+    for (var j = 0; j < terms.length; j++) {
+      try {
+        if (new RegExp('\\b' + screenEscapeRegExp(terms[j]) + '\\b', 'i').test(text)) return terms[j];
+      } catch (e) { /* ignore bad term */ }
+    }
+    return null;
+  }
+
+  // Cheap non-English signal — mirrors looksNonEnglish (approximate only).
+  function screenLooksNonEnglish(text) {
+    if (!text || !String(text).trim()) return false;
+    var t = String(text);
+    var letters = t.match(/\p{L}/gu) || [];
+    if (letters.length >= CONTENT_SCREEN_NON_LATIN_MIN_LETTERS) {
+      var latin = t.match(/[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g) || [];
+      if (latin.length / letters.length < CONTENT_SCREEN_NON_LATIN_MAX_LATIN_FRACTION) return true;
+    }
+    var words = t.toLowerCase().match(/[a-z']+/g) || [];
+    if (words.length >= CONTENT_SCREEN_COMMON_WORD_MIN_WORDS) {
+      var common = {};
+      for (var i = 0; i < CONTENT_SCREEN_COMMON_WORDS.length; i++) common[CONTENT_SCREEN_COMMON_WORDS[i]] = true;
+      var hits = 0;
+      for (var j = 0; j < words.length; j++) if (common[words[j]]) hits++;
+      if (hits / words.length < CONTENT_SCREEN_COMMON_WORD_MIN_FRACTION) return true;
+    }
+    return false;
+  }
+
+  // Core screen — mirrors screenText: high-confidence first (sex, vape),
+  // then ambiguous exact phrases, then the non-English signal. Ambiguous
+  // singles from either list only enrich the detail of a high hit.
+  function screenTextFor(text) {
+    var clean = String(text || '').trim();
+    if (!clean) return null;
+    var secondary = function () {
+      var pool = CONTENT_SCREEN_SEX_AMBIGUOUS.concat(CONTENT_SCREEN_VAPE_AMBIGUOUS);
+      var out = [];
+      for (var i = 0; i < pool.length; i++) {
+        if (screenIsPhrase(pool[i])) continue;
+        if (screenMatchKeyword(clean, [pool[i]]) !== null) out.push(String(pool[i]).trim());
+      }
+      return out;
+    };
+    var withAlso = function (base) {
+      var also = secondary();
+      return base + (also.length > 0 ? ' (also: ' + also.join(', ') + ')' : '');
+    };
+    var sexHigh = screenMatchKeyword(clean, CONTENT_SCREEN_SEX_HIGH);
+    if (sexHigh) return { signal: 'sex', matched: sexHigh, detail: withAlso('keyword "' + sexHigh + '"') };
+    var vapeHigh = screenMatchKeyword(clean, CONTENT_SCREEN_VAPE_HIGH);
+    if (vapeHigh) return { signal: 'vape', matched: vapeHigh, detail: withAlso('keyword "' + vapeHigh + '"') };
+    var sexPhrase = screenMatchKeyword(clean, CONTENT_SCREEN_SEX_AMBIGUOUS.filter(function (t) { return screenIsPhrase(t); }));
+    if (sexPhrase) return { signal: 'sex', matched: sexPhrase, detail: 'ambiguous phrase "' + sexPhrase + '"' };
+    var vapePhrase = screenMatchKeyword(clean, CONTENT_SCREEN_VAPE_AMBIGUOUS.filter(function (t) { return screenIsPhrase(t); }));
+    if (vapePhrase) return { signal: 'vape', matched: vapePhrase, detail: 'ambiguous phrase "' + vapePhrase + '"' };
+    if (screenLooksNonEnglish(clean)) return { signal: 'non-en', matched: null, detail: 'non-English signal' };
+    return null;
+  }
+
+  function screenTitleSignal(title) {
+    var text = String(title || '').trim();
+    if (!text) return null;
+    var hit = screenTextFor(text);
+    if (!hit) return null;
+    return { signal: hit.signal, matched: hit.matched, detail: hit.detail + ' in title' };
+  }
+
+  function screenFullContent(title, contentText) {
+    var text = (String(title || '').trim() + '\n' + String(contentText || '').trim()).trim();
+    if (!text) return null;
+    var hit = screenTextFor(text);
+    if (!hit) return null;
+    return { signal: hit.signal, matched: hit.matched, detail: hit.detail + ' in title/content' };
+  }
+
+  // Drawer HTML to plain text for screening (DOM-based, no regex tag strip).
+  function stripDrawerText(html) {
+    try {
+      var d = document.createElement('div');
+      d.innerHTML = String(html || '');
+      return ((d.textContent || '').replace(/\s+/g, ' ')).trim();
+    } catch (e) {
+      return '';
+    }
+  }
+  // --- content-screen:end ---
+
   /**
    * In-page eligibility mirror of filterEligibleIds
    * (src/services/automation/eligibility.ts): Post-only, not recently
    * accepted, subreddit not blocked. The server re-validates on /burst -
    * this only skips the obvious rejects in milliseconds.
+   *
+   * Tier-0 mirror: attaches the title-only signal as `review` (null when
+   * clean). The /burst schema strips it — purely informational, no behavior
+   * change. The server recomputes Tier-0 authoritatively in validateInputs.
    */
   function filterEligible(tasks, bundle) {
     // JS mirror of server filterEligibleIds: Post-only, readable subreddit,
@@ -827,11 +1029,14 @@
       const n = normalizeSub(t.subreddit);
       if (!n) continue;
       if (blocked[n]) continue;
+      var reviewHit = null;
+      try { reviewHit = screenTitleSignal(t.title || ''); } catch (e) { reviewHit = null; }
       out.push({
         subTaskId: Number(t.subTaskId),
         type: t.type,
         subreddit: t.subreddit || null,
         title: t.title || null,
+        review: reviewHit ? reviewHit.signal : null,
       });
     }
     // No cap. This used to `slice(0, 20)`, which silently discarded the
@@ -847,19 +1052,21 @@
    * for an hour in memory + GM storage. Failures fall back to cache, then
    * to an empty bundle (server still validates - fail-open, never blocks).
    */
-  async function getBundle(settings) {
+  async function getBundle(settings, forceRefresh) {
     const now = Date.now();
-    if (bundleCache && now - bundleCache.at < BUNDLE_TTL_MS) return bundleCache;
-    try {
-      const stored = storageGet('gpt_bundle_json');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && now - (parsed.at || 0) < BUNDLE_TTL_MS) {
-          bundleCache = parsed;
-          return parsed;
+    if (!forceRefresh && bundleCache && now - bundleCache.at < BUNDLE_TTL_MS) return bundleCache;
+    if (!forceRefresh) {
+      try {
+        const stored = storageGet('gpt_bundle_json');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && now - (parsed.at || 0) < BUNDLE_TTL_MS) {
+            bundleCache = parsed;
+            return parsed;
+          }
         }
-      }
-    } catch (e) { /* fall through to fetch */ }
+      } catch (e) { /* fall through to fetch */ }
+    }
     try {
       const res = await request(settings, 'GET', '/eligibility-bundle');
       const data = (res && res.data) || {};
@@ -1600,14 +1807,21 @@
     } catch (e) { /* ignore */ }
   }
 
-  async function reportClaim(settings, claim, ok, failureReason, pushed) {
+  async function reportClaim(settings, claim, ok, failureReason, pushed, autoBlock) {
     try {
-      await request(settings, 'POST', '/claims/' + encodeURIComponent(claim.id) + '/result', {
+      var body = {
         ok: !!ok,
         failureReason: failureReason || null,
         pushed: pushed === true,
         timings: claimTimings(claim),
-      }, null, CLAIM_API_TIMEOUT_MS);
+      };
+      // Tier-1 verdict-flag path: the server owns addBlocked + audit + DM.
+      if (autoBlock) body.autoBlock = autoBlock;
+      // Tier-1 screen outcome on every verdict (hit or pass): dry-run hits
+      // are browser-console-only otherwise — the server feeds them to the
+      // bot-DM `blocks` report. Stashed during step 3b below.
+      if (claim._screen) body.screenReport = claim._screen;
+      await request(settings, 'POST', '/claims/' + encodeURIComponent(claim.id) + '/result', body, null, CLAIM_API_TIMEOUT_MS);
     } catch (e) {
       console.log('[Auto Watcher] claim report failed:', e && e.message);
     }
@@ -2073,6 +2287,67 @@
         closeOpenDrawer();
         await reportClaim(settings, claim, false, 'Subreddit mismatch (expected r/' + expectedSub + ', drawer shows r/' + gotSub + ') - aborted for safety.');
         setStatus(false, 'claim #' + subTaskId + ' aborted: subreddit mismatch');
+        return;
+      }
+    } catch (e) { /* fall through to accept on check failure */ }
+
+    // 3b. Tier-1 content screen (auto-decide new subreddits).
+    // Scope: subreddit still unblocked AND still unseen-before-this-cycle
+    // (claim.seenBefore, computed server-side excluding this cycle's logs).
+    // Runs the full-content check (title + drawer text) inline in this accept
+    // flow, right where contentHtml is already extracted.
+    // ENFORCE MODE (CONTENT_SCREEN_DRY_RUN === false): a hit aborts via the
+    // ground-truth-mismatch cancel path and reports autoBlock on the verdict
+    // (the server owns addBlocked + audit + admin DM). Shadow mode only logs
+    // WOULD_BLOCK and proceeds to Confirm. Either way the outcome is stashed
+    // on claim._screen so every verdict carries it to the server (dry-run
+    // hits feed the bot-DM `blocks` report — console alone is invisible).
+    // Fail-open everywhere: any check failure falls through to accept.
+    // Fail-closed on blocking: without an explicit seenBefore === false this
+    // script never auto-blocks (older servers omit the new claim fields).
+    try {
+      var tierSub = normalizeSub(detail.subreddit);
+      // Force-refreshed bundle: covers brand-new blocks AND the pre-Confirm
+      // race re-check (two tabs hitting a new sub at the same instant).
+      var freshBundle = await getBundle(settings, true);
+      var blockedNow = !!tierSub && ((freshBundle && freshBundle.blocked) || []).indexOf(tierSub) !== -1;
+      var tierHit = screenFullContent(detail.title || '', stripDrawerText(detail.contentHtml || ''));
+      try {
+        claim._screen = {
+          subreddit: tierSub || null,
+          signal: (tierSub && tierHit) ? tierHit.signal : null,
+          matched: (tierSub && tierHit && tierHit.matched) ? tierHit.matched : null,
+          dryRun: CONTENT_SCREEN_DRY_RUN,
+        };
+      } catch (e2) { /* stash must never break the claim */ }
+      if (claim.contentReview) {
+        console.log('[Auto Watcher] Tier-0 flagged claim #' + subTaskId + ' for extra scrutiny (title signal: ' + claim.contentReview + ')');
+      }
+      if (tierSub && tierHit && claim.seenBefore === false && !blockedNow) {
+        if (CONTENT_SCREEN_DRY_RUN) {
+          console.log('[Auto Watcher] Tier-1 WOULD_BLOCK r/' + tierSub + ' (' + tierHit.signal +
+            (tierHit.matched ? ', keyword "' + tierHit.matched + '"' : '') + ') task #' + subTaskId +
+            ' title: ' + String(detail.title || '').slice(0, 120));
+        } else {
+          closeOpenDrawer();
+          await reportClaim(settings, claim, false,
+            'Tier-1 auto-block: r/' + tierSub + ' hit the ' + tierHit.signal + ' screen — aborted for safety.',
+            false,
+            {
+              subreddit: tierSub,
+              signal: tierHit.signal,
+              matched: tierHit.matched || null,
+              snippet: String(detail.title || '').slice(0, 300),
+            });
+          setStatus(false, 'claim #' + subTaskId + ' Tier-1 auto-blocked r/' + tierSub);
+          return;
+        }
+      } else if (tierSub && blockedNow) {
+        // Pre-Confirm race re-check: another tab (or the manager) blocked
+        // this sub after the report. Same cancel path as a ground-truth miss.
+        closeOpenDrawer();
+        await reportClaim(settings, claim, false, 'r/' + tierSub + ' is now blocked — aborted for safety.');
+        setStatus(false, 'claim #' + subTaskId + ' aborted: newly blocked');
         return;
       }
     } catch (e) { /* fall through to accept on check failure */ }

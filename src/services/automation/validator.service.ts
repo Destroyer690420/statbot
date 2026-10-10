@@ -1,7 +1,31 @@
 import { automationRepository, taskRepository } from '../../database/repositories';
 import { GOPARTTIME_SOURCE } from '../../config/constants';
 import { normalizeSubreddit } from './subreddit';
+import { buildSeenSet, tier0Screen, ScreenLists } from '../../utils/content-screen';
 import type { DetectedGoPartTimeTask, ValidationResult } from '../../types';
+
+/**
+ * Seen subreddits for Tier-0, EXCLUDING one cycle's own logs.
+ *
+ * Exclusion matters: the scan being validated is already being logged, so a
+ * literal "not in listSeenSubreddits()" check could never fire — the current
+ * report logged the sub seconds ago. "Seen before" means seen in a PRIOR
+ * scan. (The digest's newSubs uses the un-excluded query, which is why its
+ * NEW line can never fire once the round is logged — Tier-1 deliberately
+ * differs here; digest fix deferred, out of scope.)
+ */
+export async function loadSeenSubs(excludeCycleId?: string | null): Promise<Set<string>> {
+  const all = await automationRepository.listSeenSubreddits();
+  const seen = buildSeenSet(all);
+  if (excludeCycleId) {
+    const current = await automationRepository.listCycleLogs(excludeCycleId).catch(() => []);
+    for (const log of current) {
+      const n = normalizeSubreddit(log.subreddit);
+      if (n) seen.delete(n);
+    }
+  }
+  return seen;
+}
 
 /**
  * Validation engine (spec §11-12, §51 rules 1-3):
@@ -18,7 +42,7 @@ import type { DetectedGoPartTimeTask, ValidationResult } from '../../types';
  */
 export async function validateDetectedTask(
   task: DetectedGoPartTimeTask,
-  opts: { skipDuplicate?: boolean } = {},
+  opts: { skipDuplicate?: boolean; seenSubs?: ReadonlySet<string>; screenLists?: ScreenLists } = {},
 ): Promise<ValidationResult> {
   if (task.type !== 'post') {
     return { eligible: false, reason: 'SKIPPED_COMMENT', detail: `Task ${task.subTaskId} type=${task.type}` };
@@ -38,6 +62,15 @@ export async function validateDetectedTask(
   const blocked = await automationRepository.isBlocked(normalized);
   if (blocked) {
     return { eligible: false, reason: 'BLOCKED', detail: `r/${normalized} is blocked` };
+  }
+
+  // Tier-0: title-only, flag-only. `eligible` stays true no matter what —
+  // a weak title signal must never cost a good subreddit on its own.
+  // (No logging here: this module stays logger-free so unit tests never pull
+  // in env.ts. Callers log flagged tasks.)
+  const flag = tier0Screen(task, opts.seenSubs, opts.screenLists);
+  if (flag) {
+    return { eligible: true, reason: 'ELIGIBLE', needsContentReview: true, screenSignal: flag.signal };
   }
 
   return { eligible: true, reason: 'ELIGIBLE' };
@@ -62,6 +95,8 @@ export async function validateDetectedTask(
 export function evaluateForBurst(
   task: DetectedGoPartTimeTask,
   blockedSubs: ReadonlySet<string>,
+  seenSubs?: ReadonlySet<string>,
+  screenLists?: ScreenLists,
 ): ValidationResult {
   if (task.type !== 'post') {
     return { eligible: false, reason: 'SKIPPED_COMMENT', detail: `Task ${task.subTaskId} type=${task.type}` };
@@ -73,6 +108,13 @@ export function evaluateForBurst(
   }
   if (blockedSubs.has(normalized)) {
     return { eligible: false, reason: 'BLOCKED', detail: `r/${normalized} is blocked` };
+  }
+
+  // Tier-0 mirror of validateDetectedTask: flag-only, never affects `eligible`.
+  // (Kept logging-free so this stays pure/sync; the caller logs flagged tasks.)
+  const flag = tier0Screen(task, seenSubs, screenLists);
+  if (flag) {
+    return { eligible: true, reason: 'ELIGIBLE', needsContentReview: true, screenSignal: flag.signal };
   }
 
   return { eligible: true, reason: 'ELIGIBLE' };

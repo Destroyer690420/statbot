@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-10
+### Built (NOT deployed — needs Tampermonkey update + host deploy)
+- **Tier-0/Tier-1 automatic content screen ENFORCE + DM report.** `CONTENT_SCREEN.DRY_RUN=false` both sides (Tier-1 hits really block); instant per-block admin DM + on-demand `blocks` bot-DM command (recent `auto-content:*` rows from DB + `screenReport` event feed on every verdict). Owner four-tier word lists encoded verbatim (`BLOCK_KEYWORDS_*`, whole-word/phrase, longest-wins; ambiguous singles never standalone; 'dab pen' excluded as out-of-scope) with a manually synced watcher v1.6.3 copy. No migration, additive to the exact-match blocked list. Typecheck + build clean, 66 suites / 912 tests green. Rollback: flip `DRY_RUN` back (no revert). See Decision 26, `docs/GOPARTTIME.md` §14.
 ### Deployed (2026-10-10 at `260efca` — dashboard-only rebuild, no migration)
 - **Pure-black theme reverted to original surfaces** (`161.118.164.85`; app/redis untouched — app container not restarted; no migration, no userscript change; host bundle removed). Reverts `4156826` + `e400062` + `3d83a63`: page `#0B0D0F`, sidebar/navbar `#111418`, cards `#171B20`, tooltips/skeletons restored; mobile scrollbar-hide (`d9dce91`) kept. Verified: 3 services Up, health healthy (DB+Redis), served CSS 200 carrying the original card/sidebar colors plus the scrollbar rule.
 ### Deployed (2026-10-10 at `4156826` — dashboard-only rebuild, no migration)

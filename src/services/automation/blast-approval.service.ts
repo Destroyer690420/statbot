@@ -54,6 +54,38 @@ export interface DigestDelivery {
   failed: { id: string; error: string }[];
 }
 
+/**
+ * Visibility DM for a Tier-1 auto-block (not a confirmation request — the
+ * block already happened server-side via the claim verdict). Best-effort:
+ * never throws. Points at the dashboard blocked editor as the unblock path.
+ */
+export async function sendAutoBlockNotice(
+  discordClient: Client,
+  notice: string,
+  context: { subreddit: string; externalTaskId?: string | null },
+): Promise<DigestDelivery> {
+  const delivery: DigestDelivery = { sentTo: [], failed: [] };
+  const approvers = [...new Set(getAdminOrManagerIds())];
+  if (approvers.length === 0) {
+    logger.warn('Auto-block notice skipped: no admin/manager ids configured', context);
+    return delivery;
+  }
+  const taskSuffix = context.externalTaskId ? ` (task #${context.externalTaskId})` : '';
+  const message = `${notice}${taskSuffix}`;
+  for (const approverId of approvers) {
+    try {
+      const user = await discordClient.users.fetch(approverId);
+      await user.send({ content: message });
+      delivery.sentTo.push(approverId);
+      logger.info('Auto-block notice DM sent', { to: approverId, ...context });
+    } catch (error) {
+      delivery.failed.push({ id: approverId, error: deliveryError(error) });
+      logger.warn('Auto-block notice DM failed for recipient', { to: approverId, error, ...context });
+    }
+  }
+  return delivery;
+}
+
 function deliveryError(error: unknown): string {
   if (error instanceof Error) return error.message.slice(0, 200);
   try {

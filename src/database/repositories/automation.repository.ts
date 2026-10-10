@@ -25,6 +25,15 @@ export class AutomationRepository {
     return !!row;
   }
 
+  /** Newest-first automatic blocks (reason `auto-content:*`) — the DM report feed. */
+  async listAutoBlocked(limit = 20) {
+    return getDb().blockedSubreddit.findMany({
+      where: { reason: { startsWith: 'auto-content' } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
   // ─── Settings (singleton id='automation') ───
   async getSettings() {
     return getDb().automationSettings.findUnique({ where: { id: 'automation' } });

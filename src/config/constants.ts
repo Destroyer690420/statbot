@@ -69,6 +69,110 @@ export const SURVIVAL_TTL_MS = 15 * 24 * 60 * 60 * 1000;
 /** Source identifier for tasks delivered from the GoPartTime extension */
 export const GOPARTTIME_SOURCE = 'goparttime';
 
+/**
+ * Tier-0/Tier-1 automatic content screen for new subreddits (language / sex / vape).
+ *
+ * Shadow mode: DRY_RUN=true logs WOULD_BLOCK + signal + triggering text without
+ * calling addBlocked or aborting any accept. Tune the lists against real traffic,
+ * then flip DRY_RUN to false to enforce. Rollback = flip back to true (no revert).
+ *
+ * The BLOCK_KEYWORDS_* lists below are the single source of truth. The
+ * Tampermonkey companion (scripts/goparttime-auto.user.js) carries a
+ * MANUALLY SYNCED copy — the userscript cannot import this file, so when these
+ * lists change, paste them into the script's content-screen block verbatim
+ * (same terms, same thresholds below).
+ *
+ * Matching contract (implemented in src/utils/content-screen.ts, mirrored in
+ * the userscript): every term matches as a whole word / literal phrase
+ * (case-insensitive `\bterm\b`) — never as a plain substring, so "class"
+ * cannot trip on "ass". HIGH_CONFIDENCE terms (words and phrases) trigger on
+ * their own. AMBIGUOUS single words NEVER trigger alone — they only enrich
+ * the log detail when a high-confidence hit fired alongside, or match as an
+ * exact multi-word phrase (multi-word AMBIGUOUS entries only).
+ *
+ * Upkeep: vape brand names turn over fast — revisit this list periodically.
+ * The dry-run WOULD_BLOCK logs are the drift detector.
+ */
+export const BLOCK_KEYWORDS_SEXUAL_HIGH_CONFIDENCE = [
+  'porn', 'porno', 'pornography', 'nsfw', 'xxx', 'hentai', 'rule34',
+  'nude', 'nudes', 'nudity', 'naked', 'sext', 'sexting',
+  'masturbate', 'masturbating', 'masturbation', 'jerking off', 'jerk off',
+  'blowjob', 'handjob', 'deepthroat', 'deepthroating',
+  'anal sex', 'anal beads', 'buttplug', 'butt plug',
+  'dildo', 'vibrator', 'fleshlight', 'sex doll', 'sex toy', 'sex toys',
+  'cumshot', 'creampie', 'bukkake', 'gangbang', 'threesome', 'orgy',
+  'squirting', 'orgasm', 'orgasms',
+  'dick pic', 'dick pics', 'cock pic', 'nude pic', 'nude pics',
+  'onlyfans', 'only fans', 'fansly',
+  'camgirl', 'cam girl', 'cam boy', 'webcam girl',
+  'escort', 'escorts', 'hooker', 'prostitute', 'stripper', 'strip club',
+  'bdsm', 'dominatrix', 'fetish porn',
+  'condom', 'condoms', 'lube', 'lubricant',
+  'milf', 'pussy', 'vagina', 'penis', 'cock', 'dick', 'boobs', 'tits',
+] as const;
+
+export const BLOCK_KEYWORDS_SEXUAL_AMBIGUOUS = [
+  // Use only as part of an exact phrase, or alongside a high-confidence hit.
+  'kink',        // kink-shaming, kinky hair (phrase: "kink community", "into kink")
+  'submissive',  // dog training, corporate culture (phrase: "submissive partner")
+  'sexy',        // "sexy car", "sexy recipe" are extremely common SFW slang
+  'breasts',     // breastfeeding/medical subreddits use this constantly
+  'adult content', // "adult content creator" vs "adult content warning"
+  'fetish',      // "food fetish", "shoe fetish" as harmless hyperbole
+] as const;
+
+export const BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE = [
+  'vape', 'vaping', 'vaper', 'vapers', 'vape pen', 'vape mod', 'box mod',
+  'vape juice', 'e-liquid', 'eliquid', 'e juice', 'e-juice',
+  'e-cig', 'ecig', 'e-cigarette', 'ecigarette', 'e cigarette',
+  'nicotine', 'nic salt', 'nic salts', 'nicsalt',
+  'disposable vape', 'puff bar', 'elf bar', 'geek bar', 'lost mary',
+  'esco bar', 'flum pebble', 'juul', 'juuling', 'juulpod',
+  'vape shop', 'vape store', 'vape trick', 'vape tricks',
+  'cloud chasing', 'sub ohm', 'sub-ohm',
+  'rda', 'rta', 'rdta', // rebuildable-coil tech acronyms — rarely used outside vaping
+] as const;
+
+export const BLOCK_KEYWORDS_VAPE_AMBIGUOUS = [
+  // Standalone, these are hopeless false-positive magnets.
+  'mod',    // Reddit moderator — would false-positive on huge swaths of Reddit
+  'pod',    // generic word; pair as "vape pod" instead
+  'cart',   // shopping cart, golf cart; pair as "vape cart"/"thc cart" instead
+  'coil',   // guitar pickups, plumbing, electronics subreddits all use this
+  'mech mod', // "mod" problem again, but the full phrase is safer than bare "mod"
+  'smoking', // covers tobacco cigarettes and cannabis too, not vape-specific
+  // 'dab pen' deliberately excluded: cannabis concentrate device, adjacent but
+  // not vape/nicotine — out of scope until it gets its own category.
+] as const;
+
+export const CONTENT_SCREEN = {
+  // ENFORCE MODE: Tier-1 hits really block (auto-content:*) + instant admin
+  // DM per block. Flip back to true for shadow mode (log-only WOULD_BLOCK).
+  DRY_RUN: false,
+  /** Short common-English-word list for the lightweight non-English signal. */
+  COMMON_ENGLISH_WORDS: [
+    'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for',
+    'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at', 'this', 'but', 'his',
+    'by', 'from', 'they', 'we', 'say', 'her', 'she', 'or', 'an', 'will', 'my',
+    'one', 'all', 'would', 'there', 'their', 'what', 'so', 'up', 'out', 'if',
+    'about', 'who', 'get', 'which', 'go', 'me', 'when', 'make', 'can', 'like',
+    'just', 'know', 'take', 'into', 'your', 'good', 'some', 'could', 'them',
+    'see', 'other', 'than', 'then', 'now', 'only', 'come', 'its', 'over',
+    'also', 'after', 'how', 'our', 'well', 'even', 'new', 'want', 'any',
+    'these', 'give', 'most', 'is', 'are', 'was', 'were', 'has', 'had', 'been',
+  ] as readonly string[],
+  /** Minimum letters before the non-Latin-ratio check may fire. */
+  NON_LATIN_MIN_LETTERS: 8,
+  /** Fires when fewer than this fraction of the text's letters are Latin. */
+  NON_LATIN_MAX_LATIN_FRACTION: 0.5,
+  /** Minimum words before the common-word-fraction check may fire. */
+  COMMON_WORD_MIN_WORDS: 8,
+  /** Fires when fewer than this fraction of the text's words are common English. */
+  COMMON_WORD_MIN_FRACTION: 0.2,
+  /** Reason-string prefix for automatic blocks (reads differently from manual blocks). */
+  AUTO_BLOCK_REASON_PREFIX: 'auto-content',
+} as const;
+
 /** Automated GoPartTime acceptance — human-like, Oracle-safe schedule */
 export const AUTOMATION = {
   /** Mandatory scans each hour (minutes) + routine 10-min grid */
