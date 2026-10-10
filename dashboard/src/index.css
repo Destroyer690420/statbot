@@ -5,7 +5,7 @@
 @layer base {
   :root {
     /* ── Global design tokens (§2–§8, §29) ── */
-    --background: #0b0d0f;
+    --background: #000000;
     --background-secondary: #111418;
     --surface: #171b20;
     --surface-hover: #1d2229;
