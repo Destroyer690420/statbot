@@ -116,7 +116,7 @@ Theme picker (**stub — no effect**; `<html class="dark">` is hardcoded); Payou
 
 Worker portal (`worker/*`, `--wp-*` tokens, Sora display face, `wallet-gradient`) is explicitly out of scope and untouched.
 
-- **Tokens** (`tailwind.config.js`): remapped `dark` scale to the app hierarchy (`950 #000000` → `900 #111418` → `800 #171B20`, borders `700 #272D35`, text `500 #66707C` / `400/300 #98A1AD` / `50 #F2F4F7`); `primary` centered on `#6C8CFF` (hover `#829EFF`); explicit `background`/`surface`/`appborder`/`text-*` colors plus `success #4CAF82` / `warning #D6A85A` / `danger #D66B72` / `info #6C8CFF` with `*-muted` fills; radius 6–12px; `pop`/`subtle` shadows only.
+- **Tokens** (`tailwind.config.js`): remapped `dark` scale to the app hierarchy (`950 #000000` → `900 #0A0A0B` → `800 #131315`, borders `700 #272D35`, text `500 #66707C` / `400/300 #98A1AD` / `50 #F2F4F7`); `primary` centered on `#6C8CFF` (hover `#829EFF`); explicit `background`/`surface`/`appborder`/`text-*` colors plus `success #4CAF82` / `warning #D6A85A` / `danger #D66B72` / `info #6C8CFF` with `*-muted` fills; radius 6–12px; `pop`/`subtle` shadows only.
 - **Components** (`index.css`): `glass-card`/`stat-card`/`summary-card` (surface + border, no blur/glow), `btn-primary`/`btn-secondary`/`btn-danger` (+ legacy bare `.btn` → secondary), `input-field` (blue focus ring), `status-badge` + `badge-{success,warning,danger,info,neutral}`, `app-table` (muted 12px header on `#111418`), `segmented-control`, `skeleton`, `empty-state`, `modal-panel` (150ms fade+scale, replacing the inert `animate-in` classes), backdrop `bg-black/65`.
 - **Conventions**: no gradients/glows in admin chrome, no emoji in badges/notes, compact icon buttons, chevron pagination everywhere, Inter only.
 

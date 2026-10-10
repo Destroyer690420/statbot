@@ -6,7 +6,7 @@ export default {
     extend: {
       colors: {
         // ── Premium neutral scale (Linear/Vercel-like hierarchy) ──
-        // Page #000000 → secondary #111418 → surface #171B20.
+        // Page #000000 → secondary #0A0A0B → surface #131315.
         // Numeric increase = darker, preserving Tailwind ordering.
         dark: {
           50: '#F2F4F7',
@@ -17,8 +17,8 @@ export default {
           500: '#66707C',
           600: '#3A424D',
           700: '#272D35',
-          800: '#171B20',
-          900: '#111418',
+          800: '#131315',
+          900: '#0A0A0B',
           950: '#000000',
         },
         // ── Primary accent: restrained soft blue ──
@@ -37,10 +37,10 @@ export default {
         },
         // ── Layered surfaces (explicit tokens, §29) ──
         background: '#000000',
-        'background-secondary': '#111418',
-        surface: '#171B20',
-        'surface-hover': '#1D2229',
-        'surface-active': '#222832',
+        'background-secondary': '#0A0A0B',
+        surface: '#131315',
+        'surface-hover': '#1B1B1F',
+        'surface-active': '#222227',
         appborder: '#272D35',
         'appborder-subtle': '#20252C',
         // ── Text tokens ──

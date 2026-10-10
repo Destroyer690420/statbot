@@ -6,10 +6,10 @@
   :root {
     /* ── Global design tokens (§2–§8, §29) ── */
     --background: #000000;
-    --background-secondary: #111418;
-    --surface: #171b20;
-    --surface-hover: #1d2229;
-    --surface-active: #222832;
+    --background-secondary: #0a0a0b;
+    --surface: #131315;
+    --surface-hover: #1b1b1f;
+    --surface-active: #222227;
     --border: #272d35;
     --border-subtle: #20252c;
     --text-primary: #f2f4f7;
@@ -245,12 +245,12 @@
   /* ── Skeletons (§24) ──────────────────────── */
   .skeleton {
     @apply rounded-md motion-safe:animate-pulse;
-    background: #1d2229;
+    background: #1b1b1f;
   }
 
   .skeleton-block {
     @apply rounded-md motion-safe:animate-pulse h-4 w-full;
-    background: #1d2229;
+    background: #1b1b1f;
   }
 
   /* ── Empty states (§23) ───────────────────── */
