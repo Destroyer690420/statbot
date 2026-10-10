@@ -218,5 +218,5 @@
 - **Context**: The blast flow was built phone-approval-first (digest DM + Blast tap) because auto-bursts were paused. The owner runs the system to be fully automatic: the tap is a chore on every round, and "no tap = no blast" silently drops hours.
 - **Decision**: Settled automatic reports validate, DM the digest, then open the blast themselves (live + in-window) — report-first, awaited, no tap. `AUTO_PAUSED_REASON` removed; Blast Now stays as window-gate override + fallback (skips the pre-blast digest); on-demand scans keep their own per-request digest; merges keep their one-info-DM rule. DM buttons stay (Block acts on future rounds; post-release taps answer gracefully). Dynamic import for the approval module inside `createBurstFlow` (it imports the burst module back — static would cycle).
 - **Consequences**: no migration, no schema; one deleted export; the only behavior change is automatic rounds now message workers instead of waiting.
-- **Status**: Implemented 2026-10-10, NOT deployed.
+- **Status**: Implemented + deployed 2026-10-10 at `1a0fc66` (app-only rebuild, no migration; verified live).
 
