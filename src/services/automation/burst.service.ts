@@ -16,9 +16,6 @@ export interface BurstTaskInput {
   title: string | null;
 }
 
-/** Returned when a settled auto-report validated fine but only a manual start may blast. */
-export const AUTO_PAUSED_REASON = 'auto bursts paused — use Blast Now';
-
 /** Returned when a settled report validated but nothing is eligible (all blocked/unreadable). */
 export const NO_ELIGIBLE_REASON = 'no eligible tasks found';
 
@@ -142,12 +139,16 @@ function dedupeInputs(tasks: BurstTaskInput[]): BurstTaskInput[] {
 
 /**
  * Burst auto-accept flow — the exact contract:
- *   manual Blast Now (force) -> validate -> blast (slots = eligible N) ->
- *   each blast reply -> one AutomationClaim for the next unheld task.
- * - Blasts open ONLY from an explicit manual start (Blast Now button,
- *   forceWindow). Automatic hourly bursts are paused: settled :10 reports
- *   still validate + log for observability but never message.
- * - One blast per IST hour: the manual report opens it; later reports hit
+ *   settled :10 report -> validate -> digest DM (report) -> blast
+ *   (slots = eligible N) -> each blast reply -> one AutomationClaim.
+ * - Automatic hourly rounds open their own blast as soon as validation
+ *   finishes (live + in-window): the settled report DMs the digest first,
+ *   then opens the blast — no tap needed, no waiting.
+ * - Manual Blast Now (forceWindow) is explicit human intent: it bypasses the
+ *   window gate only and skips the pre-blast digest (the manager is looking
+ *   at the page); validation, live gate, and one-blast-per-hour dedupe still
+ *   apply.
+ * - One blast per IST hour: the first report opens it; later reports hit
  *   the frozen pool and change nothing (late arrivals wait for next hour).
  * - Every validated-eligible listed post counts (blocked / duplicate /
  *   unreadable-subreddit / comment rules still exclude).
@@ -261,10 +262,6 @@ export async function createBurstFlow(
   if (eligible.length === 0) reason = NO_ELIGIBLE_REASON;
   else if (!live) reason = dryRun ? 'dry-run is on' : 'automation disabled';
   else if (!inWindow) reason = 'outside the blast window';
-  // Automatic hourly bursts are paused — only an explicit manual start
-  // (Blast Now, forceWindow) may open a blast. Auto reports still validated
-  // + logged above; they just never message.
-  else if (!opts.forceWindow) reason = AUTO_PAUSED_REASON;
   if (reason) {
     await automationRepository.updateCycle(cycleId, { status: 'DONE', endedAt: new Date() });
     return {
@@ -282,6 +279,25 @@ export async function createBurstFlow(
       added: [],
       reason,
     };
+  }
+
+  // Fully automatic rounds DM the digest BEFORE the blast opens: the report
+  // first, then the messages — no tap, no waiting. Awaited (not
+  // fire-and-forget) so the DM provably precedes the first blast message;
+  // delivery is best-effort inside (a DM failure only logs — the blast still
+  // opens). Manual starts (Blast Now / restart releases) skip this: the
+  // manager is looking at the page or already saw a digest for the round.
+  // Dynamic import: blast-approval.service imports this module back
+  // (createBurstFlow for DM-button releases), so a static import would cycle.
+  // On-demand scans (freshCycleOnly) are excluded: they answer with their own
+  // per-request digest via the route, never the hourly one.
+  if (!opts.forceWindow && opts.freshCycleOnly !== true) {
+    try {
+      const approval = await import('./blast-approval.service');
+      await approval.maybeSendDigest(discordClient, cycleId, candidates.length);
+    } catch (error) {
+      logger.warn('Pre-blast digest DM failed (blast still opens)', { cycleId, error });
+    }
   }
 
   // The pool is registered BEFORE the first message goes out: replies

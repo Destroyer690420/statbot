@@ -12,7 +12,7 @@ import { screenTitle } from '../../utils/content-screen';
 import { scanTasks, acceptTask } from '../../services/automation/poller.service';
 import { runCycle } from '../../services/automation/cycle.service';
 import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
-import { AUTO_PAUSED_REASON, NO_ELIGIBLE_REASON, createBurstFlow } from '../../services/automation/burst.service';
+import { NO_ELIGIBLE_REASON, createBurstFlow } from '../../services/automation/burst.service';
 import * as blastApprovalService from '../../services/automation/blast-approval.service';
 import * as scanRequestService from '../../services/automation/scan-request.service';
 import { parsePooledTasks, pickNextTask } from '../../services/automation/eligibility';
@@ -865,14 +865,13 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           .sendManualDigest(discordClient, result.cycleId, manualRequest.requestId, manualRequest.requestedBy)
           .catch(() => undefined);
       }
-      // Phone-approval flow: a settled report lands — DM the manager the
-      // digest (fire-and-forget; never delay or break the watcher's
-      // confirmed report). Fresh settled reports DM on ANY content
-      // (eligible, banned-only, or empty — "nothing listed") so no hour
-      // stays silent. A merge into an already-live hour blast DMs once as
-      // information (manual blast preempted the round).
+      // Digest DMs: the pre-blast report for a freshly opened automatic blast
+      // already went out inside createBurstFlow (awaited, DM-before-blast).
+      // What remains here: rounds that opened NOTHING still report (banned-only
+      // or empty — "nothing listed" — so no hour stays silent), and merges
+      // into a live hour blast DM once as information.
       if (!isManualReport && req.body.force !== true && result.blast === null && !result.merged &&
-        (result.reason === AUTO_PAUSED_REASON || result.reason === NO_ELIGIBLE_REASON)
+        result.reason === NO_ELIGIBLE_REASON
       ) {
         void blastApprovalService
           .maybeSendDigest(discordClient, result.cycleId, result.scanned)

@@ -213,3 +213,10 @@
 - **Consequences**: additive migration (2 audit-enum values, idempotent); closing the executor tab fully disables auto-submit with zero server change; verification is authoritative since v1.1.0 (real Submit capture: Server Action + `success:true` + dialog-close/button-gone corroboration).
 - **Status**: Implemented + deployed 2026-10-10 at `144139e` (executor v1.1.0, authoritative verify; migration applied, 0 unexpected errors; dedicated tab install still pending).
 
+## Decision 28: Hourly blasts open themselves — the digest DM is a report, not a gate
+
+- **Context**: The blast flow was built phone-approval-first (digest DM + Blast tap) because auto-bursts were paused. The owner runs the system to be fully automatic: the tap is a chore on every round, and "no tap = no blast" silently drops hours.
+- **Decision**: Settled automatic reports validate, DM the digest, then open the blast themselves (live + in-window) — report-first, awaited, no tap. `AUTO_PAUSED_REASON` removed; Blast Now stays as window-gate override + fallback (skips the pre-blast digest); on-demand scans keep their own per-request digest; merges keep their one-info-DM rule. DM buttons stay (Block acts on future rounds; post-release taps answer gracefully). Dynamic import for the approval module inside `createBurstFlow` (it imports the burst module back — static would cycle).
+- **Consequences**: no migration, no schema; one deleted export; the only behavior change is automatic rounds now message workers instead of waiting.
+- **Status**: Implemented 2026-10-10, NOT deployed.
+

@@ -23,15 +23,15 @@ import {
 } from './blast-digest';
 
 /**
- * Phone-approval flow for burst rounds (manager DMs).
+ * Digest DMs for burst rounds (manager DMs).
  *
- * The watcher settles each hour's scan into POST /burst; with auto-bursts
- * paused the server validates + logs but never blasts. This service DMs the
- * manager that settled set with Blast / Hold / per-subreddit Block buttons,
- * so the xx:10 routine needs no Remote Desktop session. Claim creation
- * rules (order, one-win, caps, busy, subreddit ground-truth) are untouched —
- * approval only releases the already-validated set through the normal
- * createBurstFlow path with forceWindow.
+ * The watcher settles each hour's scan into POST /burst; the server
+ * validates, DMs the manager that settled set (report-first, awaited before
+ * the blast opens), then blasts automatically — no tap, no Remote Desktop.
+ * The DM keeps its Blast / Hold / per-subreddit Block buttons: Block still
+ * acts on future rounds, and taps on an already-released round answer
+ * gracefully instead of double-opening. Claim creation rules (order,
+ * one-win, caps, busy, subreddit ground-truth) are untouched.
  */
 
 const APPROVAL_EXPIRY_MS = 90 * 60 * 1000;

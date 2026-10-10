@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-10
+### Built (NOT deployed — needs app rebuild)
+- **Fully automatic hourly blasts (report-first, no tap).** `AUTO_PAUSED_REASON` removed: settled auto reports validate → DM the digest (awaited inside `createBurstFlow`, dynamic import against the approval↔burst cycle) → open the blast themselves when live + in-window. Blast Now stays as override + fallback; on-demand scans and merges untouched; DM buttons stay (Block acts forward, post-release taps answer gracefully). Typecheck clean, 68 suites / 929 tests green. No migration. See Decision 28, `docs/GOPARTTIME.md` §16.
 ### Deployed (2026-10-10 at `bda595e` — dashboard-only rebuild, no migration)
 - **Submit executor v1.1.2 live** (`161.118.164.85`; app/redis untouched; host bundle removed). Each newly leased job reloads `/my-tasks/todo` before hunting — newly accepted posts never render without a reload, so a stale DOM could never find them. Verified served v1.1.2. **Tampermonkey update to v1.1.2 + executor tab reload required.**
 ### Deployed (2026-10-10 at `4d01bf1` — dashboard-only rebuild, no migration)
