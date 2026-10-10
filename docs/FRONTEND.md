@@ -66,11 +66,11 @@ Read-only ARCHIVED list + search + CSV; spec table header (12px muted on `#11141
 
 ### Payments (`dashboard/src/pages/payout/`)
 Modular redesign split across 17 clean components:
-- `PayoutLayout.tsx`: Header, sub-navigation tabs (`/payout/tasks` & `/payout/commissions`), segmented-control DateFilter (Previous/Current/All/Custom), shared week query & Outlet context.
-- `TaskPayments.tsx`: muted summary cards (thin accent bars, no left-border rainbows), Pay All banner, worker breakdown table (desktop) / cards (mobile) with inline accordion worker details, collapsible Payout History.
+- `PayoutLayout.tsx`: no page header (the old `PayoutHeader` with the "Payments" title, week-range line, Restore Unpaid + Export CSV buttons is no longer rendered — the file stays in place with its logic intact). Full-width 2-column sub-navigation tabs (`/payout/tasks` & `/payout/commissions`, equal 50/50 halves, centered labels), segmented-control DateFilter (Previous/Current only — `FilterMode` still includes `all`/`custom` and the custom-range logic is untouched, just not selectable), shared week query & Outlet context.
+- `TaskPayments.tsx`: muted summary cards (thin accent bars, no left-border rainbows), worker breakdown table (desktop) / cards (mobile) with inline accordion worker details, collapsible Payout History. No Pay All banner (the `payAll` API + `PayAllBanner` component are untouched, only the banner UI + its mutation wiring were removed). Per-worker "Pay Worker" buttons unchanged.
 - `WorkerBreakdown.tsx` + `PayWorkerModal.tsx`: the "Pay Worker" button (desktop row + both mobile-card spots) opens a QR popup (`workerId`, `workerName`, `totalAmount`, `dateParams`, `onClose`, `onPaid`) instead of the old inline `ConfirmPayButton` confirm. The modal fetches `getWorkerQrCode(workerId)` (`['worker-qr', workerId]`), shows the QR beside the name + amount (skeleton while loading, "No QR code uploaded yet" placeholder when missing — Confirm stays enabled either way; click the code for a near-natural-size lightbox since uploads are often full posters), plus the decoded `upiId` with a `CopyButton` when present, and Confirms through the same `payWorker(workerId, dateParams)` mutation + invalidation before closing; mutation errors surface inside the modal. `ConfirmPayButton` itself is untouched and still serves the referral/commission flow (`InviterBreakdown.tsx`, unchanged).
-- `Commissions.tsx`: muted summary cards, Pay All Commissions banner, inviter breakdown table/cards with inline inviter details, collapsible Commission History.
-- Restore Unpaid Archived button & CSV exports per tab.
+- `Commissions.tsx`: muted summary cards, inviter breakdown table/cards with inline inviter details, collapsible Commission History. No Pay All Commissions banner (the `payAllCommissions` API + `PayAllBanner` component are untouched, only the banner UI + its mutation wiring were removed).
+- Restore Unpaid Archived + CSV export logic lives on in `PayoutHeader.tsx` / `api/client.ts` but no payout page renders those buttons anymore.
 - Date formatters in `payout/utils.ts`.
 
 ### OwnerEarnings

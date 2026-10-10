@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Loader2,
   Users,
@@ -10,10 +9,9 @@ import {
   FileText,
   MessageSquare,
 } from 'lucide-react';
-import { getPayoutSummary, getEligibleTasks, payAll } from '../../api/client';
+import { getPayoutSummary } from '../../api/client';
 import { formatCurrency } from './utils';
 import { SummaryCards } from './components/SummaryCards';
-import { PayAllBanner } from './components/PayAllBanner';
 import { WorkerBreakdown } from './components/WorkerBreakdown';
 import { BatchHistory } from './components/BatchHistory';
 import type { PayoutContext } from './PayoutLayout';
@@ -21,28 +19,12 @@ import type { PayoutContext } from './PayoutLayout';
 export function TaskPayments() {
   const { dateParams, filterMode, isCurrentWeek } = useOutletContext<PayoutContext>();
   const queryClient = useQueryClient();
-  const [confirmPayAll, setConfirmPayAll] = useState(false);
 
   // ─── Data Queries ─────────────────────────────────────────
   const summaryQuery = useQuery({
     queryKey: ['payout-summary', dateParams],
     queryFn: () => getPayoutSummary(dateParams),
     enabled: filterMode === 'all' || !!dateParams,
-  });
-
-  const eligibleQuery = useQuery({
-    queryKey: ['payout-eligible', dateParams],
-    queryFn: () => getEligibleTasks(dateParams),
-    enabled: filterMode === 'all' || !!dateParams,
-  });
-
-  // ─── Mutations ────────────────────────────────────────────
-  const payAllMutation = useMutation({
-    mutationFn: () => payAll(dateParams),
-    onSuccess: () => {
-      setConfirmPayAll(false);
-      invalidatePayoutQueries();
-    },
   });
 
   function invalidatePayoutQueries() {
@@ -53,8 +35,6 @@ export function TaskPayments() {
   }
 
   const summary = summaryQuery.data?.data;
-  const workers = eligibleQuery.data?.data || [];
-  const readyWorkers = workers.filter((w: any) => w.status === 'Ready');
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -78,7 +58,7 @@ export function TaskPayments() {
               icon: <CheckCircle2 className="w-5 h-5 text-success" />,
               accent: 'green',
               subtitle: (
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-1">
                   <span className="text-dark-400 text-xs flex items-center gap-1">
                     <FileText className="w-3 h-3" /> {summary?.totalPosts ?? 0} Posts
                   </span>
@@ -101,27 +81,6 @@ export function TaskPayments() {
               accent: 'blue',
             },
           ]}
-        />
-      )}
-
-      {/* Pay All Banner */}
-      {isCurrentWeek && readyWorkers.length > 0 && (
-        <PayAllBanner
-          title="Weekly Payout"
-          subtitle={`${readyWorkers.length} worker${readyWorkers.length !== 1 ? 's' : ''} — ${summary?.completedTasks ?? 0} task${(summary?.completedTasks ?? 0) !== 1 ? 's' : ''} — ${formatCurrency(summary?.pendingAmount ?? 0)}`}
-          confirmMessage={`Pay all ${readyWorkers.length} workers?`}
-          isConfirming={confirmPayAll}
-          setIsConfirming={setConfirmPayAll}
-          isPending={payAllMutation.isPending}
-          isError={payAllMutation.isError}
-          isSuccess={payAllMutation.isSuccess}
-          errorMessage={(payAllMutation.error as Error)?.message}
-          successContent={
-            <span>
-              Paid {payAllMutation.data?.data?.items?.length ?? 0} tasks — Batch #{payAllMutation.data?.data?.batch?.batchNumber}
-            </span>
-          }
-          onConfirm={() => payAllMutation.mutate()}
         />
       )}
 

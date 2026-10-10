@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Loader2,
   Users,
@@ -8,10 +7,9 @@ import {
   IndianRupee,
   Wallet,
 } from 'lucide-react';
-import { getCommissionSummary, getCommissionBreakdown, payAllCommissions } from '../../api/client';
+import { getCommissionSummary } from '../../api/client';
 import { formatCurrency } from './utils';
 import { SummaryCards } from './components/SummaryCards';
-import { PayAllBanner } from './components/PayAllBanner';
 import { InviterBreakdown } from './components/InviterBreakdown';
 import { CommissionBatchHistory } from './components/CommissionBatchHistory';
 import type { PayoutContext } from './PayoutLayout';
@@ -19,28 +17,12 @@ import type { PayoutContext } from './PayoutLayout';
 export function Commissions() {
   const { dateParams, filterMode, isCurrentWeek } = useOutletContext<PayoutContext>();
   const queryClient = useQueryClient();
-  const [confirmPayAll, setConfirmPayAll] = useState(false);
 
   // ─── Data Queries ─────────────────────────────────────────
   const summaryQuery = useQuery({
     queryKey: ['commission-summary', dateParams],
     queryFn: () => getCommissionSummary(dateParams),
     enabled: filterMode === 'all' || !!dateParams,
-  });
-
-  const breakdownQuery = useQuery({
-    queryKey: ['commission-breakdown', dateParams],
-    queryFn: () => getCommissionBreakdown(dateParams),
-    enabled: filterMode === 'all' || !!dateParams,
-  });
-
-  // ─── Mutations ────────────────────────────────────────────
-  const payAllMutation = useMutation({
-    mutationFn: payAllCommissions,
-    onSuccess: () => {
-      setConfirmPayAll(false);
-      invalidateCommissionQueries();
-    },
   });
 
   function invalidateCommissionQueries() {
@@ -52,8 +34,6 @@ export function Commissions() {
   }
 
   const summary = summaryQuery.data?.data;
-  const inviters = breakdownQuery.data?.data || [];
-  const readyInviters = inviters.filter((i: any) => i.status === 'Ready');
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -83,7 +63,7 @@ export function Commissions() {
               icon: <IndianRupee className="w-5 h-5 text-warning" />,
               accent: 'amber',
               subtitle: (
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-1">
                   <span className="text-dark-400 text-xs">
                     Bonus: {formatCurrency(summary?.totalBonusAmount ?? 0)}
                   </span>
@@ -100,27 +80,6 @@ export function Commissions() {
               accent: 'blue',
             },
           ]}
-        />
-      )}
-
-      {/* Pay All Commissions Banner */}
-      {isCurrentWeek && readyInviters.length > 0 && (
-        <PayAllBanner
-          title="Commission Payout"
-          subtitle={`${readyInviters.length} inviter${readyInviters.length !== 1 ? 's' : ''} with unpaid commissions`}
-          confirmMessage={`Pay all ${readyInviters.length} inviters?`}
-          isConfirming={confirmPayAll}
-          setIsConfirming={setConfirmPayAll}
-          isPending={payAllMutation.isPending}
-          isError={payAllMutation.isError}
-          isSuccess={payAllMutation.isSuccess}
-          errorMessage={(payAllMutation.error as Error)?.message}
-          successContent={
-            <span>
-              Paid {payAllMutation.data?.data?.invitersPaid ?? 0} inviters — {formatCurrency(payAllMutation.data?.data?.totalAmount ?? 0)}
-            </span>
-          }
-          onConfirm={() => payAllMutation.mutate()}
         />
       )}
 

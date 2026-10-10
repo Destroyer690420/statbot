@@ -3,9 +3,7 @@ import { Outlet, NavLink, useLocation, Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Wallet, UserPlus } from 'lucide-react';
 import { getPayoutWeek } from '../../api/client';
-import { PayoutHeader } from './PayoutHeader';
 import { DateFilter } from './DateFilter';
-import { formatSimpleDate } from './utils';
 import type { FilterMode } from './DateFilter';
 
 // Context type shared with child routes via Outlet
@@ -53,20 +51,6 @@ export function PayoutLayout() {
   const isCurrentWeek = filterMode === 'all' || filterMode === 'current' || filterMode === 'previous' || (filterMode === 'custom' && !!customStart && !!customEnd);
   const weekData = weekQuery.data?.data;
 
-  const weekLabel = useMemo(() => {
-    if (filterMode === 'previous' && weekData?.previous?.weekLabel) {
-      return `To Pay This Week (${weekData.previous.weekLabel})`;
-    }
-    if (filterMode === 'current' && weekData?.current?.weekLabel) {
-      return `Current Active Cycle (${weekData.current.weekLabel})`;
-    }
-    if (filterMode === 'all') return 'All Unpaid Tasks';
-    if (filterMode === 'custom' && customStart && customEnd) {
-      return `${formatSimpleDate(customStart)} — ${formatSimpleDate(customEnd)}`;
-    }
-    return '';
-  }, [filterMode, weekData, customStart, customEnd]);
-
   // Determine active sub-route
   const activeRoute = location.pathname.endsWith('/commissions') ? 'commissions' : 'tasks';
 
@@ -93,18 +77,11 @@ export function PayoutLayout() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Header */}
-      <PayoutHeader
-        weekLabel={weekLabel}
-        dateParams={dateParams}
-        activeRoute={activeRoute}
-      />
-
       {/* Sub-navigation tabs */}
-      <div className="flex gap-1 bg-dark-900/40 p-1 rounded-xl border border-dark-700/30 w-fit">
+      <div className="grid grid-cols-2 gap-1 bg-dark-900/40 p-1 rounded-xl border border-dark-700/30 w-full">
         <NavLink
           to="/payout/tasks"
-          className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 ${
+          className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 ${
             activeRoute === 'tasks'
               ? 'bg-primary-600/20 text-primary-400 shadow-sm'
               : 'text-dark-400 hover:text-text-primary hover:bg-dark-800/40'
@@ -115,7 +92,7 @@ export function PayoutLayout() {
         </NavLink>
         <NavLink
           to="/payout/commissions"
-          className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 ${
+          className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 ${
             activeRoute === 'commissions'
               ? 'bg-primary-600/20 text-primary-400 shadow-sm'
               : 'text-dark-400 hover:text-text-primary hover:bg-dark-800/40'

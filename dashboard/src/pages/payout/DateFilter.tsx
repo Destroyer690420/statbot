@@ -12,8 +12,6 @@ interface DateFilterProps {
 const filterOptions: { mode: FilterMode; label: string; shortLabel: string }[] = [
   { mode: 'previous', label: 'Previous Cycle', shortLabel: 'Previous' },
   { mode: 'current', label: 'Current Cycle', shortLabel: 'Current' },
-  { mode: 'all', label: 'All Unpaid', shortLabel: 'All' },
-  { mode: 'custom', label: 'Custom Range', shortLabel: 'Custom' },
 ];
 
 export function DateFilter({
