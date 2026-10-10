@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Link Submitter
 // @namespace    https://goparttime.net/
-// @version      1.1.0
+// @version      1.1.1
 // @description  Dedicated executor tab for GoPartTime link auto-submit: polls Statbot for verified worker links, finds each task card across /my-tasks/todo pages, fills the Submit Task dialog, and clicks Submit. Never accepts tasks, never consumes accept-claim leases.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,10 @@
 // ==/UserScript==
 
 /**
+ * v1.1.1 - Fix: the fill step's `var input` declaration was merged into a
+ * comment line (ReferenceError "input is not defined" on every job — the
+ * dialog opened but nothing was ever filled). No flow changes.
+ *
  * v1.1.0 - Authoritative submit path (discovery closed with a real capture).
  * Submit is a Next.js Server Action: POST <this page URL> with
  * Accept: text/x-component, Content-Type: text/plain;charset=UTF-8,
@@ -62,7 +66,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.1.1';
   var DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/goparttime',
     apiKey: '',
@@ -598,7 +602,8 @@
     }
 
     // 4. Fill (never clobber a manager-typed value — their correction wins,
-    // and the submit below then submits exactly what they typed).    var input = dialog.querySelector('input[name="redditUrl"]');
+    // and the submit below then submits exactly what they typed).
+    var input = dialog.querySelector('input[name="redditUrl"]');
     if (!input) {
       await reportResult(settings, active.jobId, false, 'Submit dialog has no URL field.');
       saveActive(null);
