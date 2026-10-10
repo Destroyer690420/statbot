@@ -264,6 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-10**: **Submit executor v1.1.1 hotfix DEPLOYED live at `4d01bf1`** (dashboard-only rebuild; fixed commented-out `var input` that broke every fill + new hygiene guard test; verified served v1.1.1; host bundle removed). **Tampermonkey update + executor tab reload required to retest.**
 - **2026-10-10**: **Link auto-submit Part 2 DEPLOYED live at `144139e`** (app + dashboard rebuild; migration re-run clean, both audit values live; verified: 3 services Up, health healthy, submission queue init, served submit script v1.1.0, 0 app errors; host bundle removed). **Dedicated executor tab install still required.** See Decision 27, `docs/GOPARTTIME.md` §15.
 - **2026-10-10**: **Content screen Tier-0/Tier-1 DEPLOYED live at `488a323`** (ENFORCE + blocks DM report; app + dashboard rebuild, no migration; backup `rtm-backup-20261010-contentscreen.tar.gz`; verified: 3 services Up, health healthy, boot clean, live-dist gates, served auto script v1.6.3, 0 app errors; host bundle removed). **Tampermonkey update to v1.6.3 still required on all watcher tabs.** See Decision 26, `docs/GOPARTTIME.md` §14.
 
