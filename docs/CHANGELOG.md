@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-10
+### Deployed (2026-10-10 at `4156826` — dashboard-only rebuild, no migration)
+- **Pure-black cards + navbar live** (`161.118.164.85`; app/redis untouched — app container not restarted; no migration, no userscript change; host bundle removed). Card `surface`/`dark-800` → `#000000` (hover `#101012`, active `#18181b`, chart tooltips follow); navbar decoupled from the sidebar token to `bg-black/95`; sidebar stays `#0A0A0B`. Text, borders, accent, page bg, elements untouched. Verified: 3 services Up, health healthy (DB+Redis), served CSS 200 with black surfaces, identical chunk hashes local vs host builder.
 ### Deployed (2026-10-10 at `e400062` — dashboard-only rebuild, no migration)
 - **Cards/sidebar/navbar matched to pure-black theme live** (`161.118.164.85`; app/redis untouched — app container not restarted; no migration, no userscript change; host bundle removed). Surface tokens only: cards `surface`/`dark-800` `#171B20` → `#131315` (hover `#1B1B1F`, active `#222227`, skeletons + chart tooltips follow), sidebar/navbar `background-secondary`/`dark-900` `#111418` → `#0A0A0B`. Text, borders, accent `#6C8CFF`, page `#000000` untouched; no layout/element changes. Verified: 3 services Up, health healthy (DB+Redis), served CSS 200 carrying the new card/sidebar colors, identical chunk hashes local vs host builder.
 ### Deployed (2026-10-10 at `3d83a63` — dashboard-only rebuild, no migration)
