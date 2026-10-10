@@ -158,7 +158,7 @@ Source: `scripts/goparttime-mobile.user.js`; served at
 **instead of** (not alongside) the desktop script on the phone — running both
 would double-fire the autofill.
 
-## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.1.0, DEPLOYED 2026-10-10 — tab install still required)
+## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.1.2, DEPLOYED 2026-10-10 — tab update still required)
 
 Dedicated tab that finishes the Submit Link loop: polls `GET /submit-jobs/pending`
 every ~5s (own tab id), leases one job, walks `/my-tasks/todo?page=N` (bounded 10)
