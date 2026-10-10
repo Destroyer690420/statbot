@@ -264,6 +264,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-10**: **Cards/sidebar/navbar matched to pure-black theme DEPLOYED live at `e400062`:** dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, served CSS 200 with new colors, identical hashes local vs host. Surface tokens only (cards `#131315`, sidebar/navbar `#0A0A0B`); text/borders/accent/elements unchanged.
+
 - **2026-10-10**: **Pure-black page background DEPLOYED live at `3d83a63`:** dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, served CSS 200 (black bg ×3, old bg ×0, card surface intact), identical hashes local vs host. Page tokens only (`dark-950`, `--background`); cards/surfaces/text/accent unchanged.
 
 - **2026-10-10**: **Mobile page scrollbar hidden DEPLOYED live at `d9dce91`:** dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, root 200, served CSS 200 with the rule, identical chunk hashes local vs host builder. `Layout.tsx` `main` + `app-scroll` CSS (≤768px only, scroll behavior unchanged, desktop unaffected). Covers every admin page (single shared scroll container).
