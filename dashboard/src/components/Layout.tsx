@@ -166,7 +166,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden w-full min-w-0 relative">
         <header
-          className={`bg-background-secondary/95 backdrop-blur border-b border-appborder-subtle z-10 flex items-center justify-between transition-transform duration-150 fixed top-0 left-0 right-0 h-14 px-4 ${showHeader ? 'translate-y-0' : '-translate-y-full'
+          className={`bg-black/95 backdrop-blur border-b border-appborder-subtle z-10 flex items-center justify-between transition-transform duration-150 fixed top-0 left-0 right-0 h-14 px-4 ${showHeader ? 'translate-y-0' : '-translate-y-full'
             } lg:static lg:translate-y-0 lg:h-16 lg:px-8`}
         >
           <div className="flex items-center space-x-3 min-w-0">
