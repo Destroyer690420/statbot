@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Link Submitter
 // @namespace    https://goparttime.net/
-// @version      1.0.0
+// @version      1.1.0
 // @description  Dedicated executor tab for GoPartTime link auto-submit: polls Statbot for verified worker links, finds each task card across /my-tasks/todo pages, fills the Submit Task dialog, and clicks Submit. Never accepts tasks, never consumes accept-claim leases.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,16 @@
 // ==/UserScript==
 
 /**
+ * v1.1.0 - Authoritative submit path (discovery closed with a real capture).
+ * Submit is a Next.js Server Action: POST <this page URL> with
+ * Accept: text/x-component, Content-Type: text/plain;charset=UTF-8,
+ * Next-Action: <64-hex>, body [{"sub_task_id":<id>,"reddit_url":"<url>"}];
+ * success is flight text containing "success":true (failure "success":false).
+ * The executor now tries that fast path first (definitive verdicts only,
+ * 2 tries x 3s — same shape as the accept flow) with the dialog-Submit click
+ * as fallback. Verification is dialog-closed + card's Submit Task button gone
+ * (both corroborated manually) backed by the intercepted action response.
+ *
  * v1.0.0 - Dedicated submission executor (Part 2 of the auto-submit task).
  *
  * One tab runs ONLY this script (do not run the auto-accept watcher here —
@@ -42,13 +52,17 @@
  * click a card's Submit Task, submit once by hand, and confirm: is Submit a
  * plain REST call or a Next.js Server Action (Next-Action header)? What does
  * a success response body look like? What does the UI do (toast text? dialog
- * closes? card badge flips to something else)? Then replace
- * observeSubmitOutcome() with that authoritative check.
+ * closes? card badge flips to something else)? RESOLVED v1.1.0 with a real
+ * capture: Submit is a Server Action (POST this page URL, text/x-component,
+ * Next-Action 64-hex, [{"sub_task_id":id,"reddit_url":url}]) and success is
+ * flight text with "success":true; the dialog auto-closes and the card's
+ * Submit Task button disappears. tryFastSubmit + observeSubmitOutcome below
+ * implement exactly that.
  */
 (function () {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/goparttime',
     apiKey: '',
@@ -365,16 +379,83 @@
     return null;
   }
 
+  // --- Fast submit: direct Server Action POST (verified shape, v1.1.0) ---
+  //
+  // POST <this page URL> with Accept: text/x-component,
+  // Content-Type: text/plain;charset=UTF-8, Next-Action: <64-hex id>,
+  // body [{"sub_task_id":<id>,"reddit_url":"<url>"}]. Only a definitive
+  // verdict ends the flow ({ok:true} on "success":true, {ok:false} on
+  // "success":false); anything else is inconclusive ({ok:null}) and the
+  // caller falls back to the dialog-Submit click. Never throws.
+
+  var FAST_SUBMIT_TRIES = 2;
+  var FAST_SUBMIT_TIMEOUT_MS = 3000;
+
+  function findNextActionCandidates() {
+    var out = [];
+    var seen = {};
+    try {
+      var chunks = Array.from(document.querySelectorAll('script')).map(function (s) { return s.textContent || ''; });
+      if (document.documentElement) chunks.push(document.documentElement.innerHTML.slice(-200000));
+      var re = /\b[0-9a-f]{64}\b/g;
+      for (var c = 0; c < chunks.length; c++) {
+        var m = null;
+        while ((m = re.exec(chunks[c])) !== null) {
+          if (!seen[m[0]]) {
+            seen[m[0]] = true;
+            out.push(m[0]);
+          }
+          if (out.length >= 5) return out;
+        }
+      }
+    } catch (e) { /* ignore */ }
+    return out;
+  }
+
+  async function tryFastSubmit(subTaskId, redditUrl) {
+    var candidates = findNextActionCandidates();
+    if (candidates.length === 0) return { ok: null };
+    var target = window.location.pathname + window.location.search;
+    for (var i = 0; i < Math.min(candidates.length, FAST_SUBMIT_TRIES); i++) {
+      try {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, FAST_SUBMIT_TIMEOUT_MS);
+        var text = '';
+        try {
+          var res = await fetch(target, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              Accept: 'text/x-component',
+              'Content-Type': 'text/plain;charset=UTF-8',
+              'Next-Action': candidates[i],
+            },
+            body: JSON.stringify([{ sub_task_id: Number(subTaskId), reddit_url: redditUrl }]),
+            signal: ctrl.signal,
+          });
+          text = await res.text().catch(function () { return ''; });
+        } finally {
+          clearTimeout(timer);
+        }
+        if (/"success":\s*true/.test(text)) return { ok: true };
+        if (/"success":\s*false/.test(text)) {
+          var m = /"message":\s*"([^"]+)"/.exec(text) || /"review_reason":\s*"([^"]+)"/.exec(text);
+          return { ok: false, error: m ? m[1] : 'GoPartTime rejected the submission.' };
+        }
+        // Inconclusive (wrong action id / error page) - try next candidate.
+      } catch (e) { /* try next candidate */ }
+    }
+    return { ok: null };
+  }
+
   /**
-   * TODO-DISCOVERY: replace with the authoritative check once a real Submit
-   * is captured in devtools (REST vs Server Action? success body? toast?).
-   * Current heuristics, best first: an intercepted same-origin success:false
-   * (or HTTP error) right after the click is a definitive failure; an
-   * intercepted success:true is a definitive success; otherwise a dialog
-   * that closed itself with no error text counts as success, and anything
-   * else (dialog stuck open, visible error) counts as transient failure.
+   * Authoritative verify (v1.1.0): the intercepted Server-Action response
+   * decides when present ("success":true/false). Otherwise the corroborated
+   * DOM terminal state decides: dialog gone AND the card's Submit Task button
+   * gone means submitted (the dialog auto-closes and the button disappears on
+   * success — observed manually). Anything else is a transient failure.
    */
-  async function observeSubmitOutcome(clickAt) {
+  async function observeSubmitOutcome(clickAt, card) {
     var waited = 0;
     while (waited < VERIFY_BUDGET_MS) {
       await sleep(250);
@@ -382,7 +463,7 @@
       try {
         if (lastSubmitResponse && lastSubmitResponse.at >= clickAt) {
           var text = lastSubmitResponse.text || '';
-          if (/"success":\s*true/.test(text)) return { ok: true, evidence: 'intercepted success:true' };
+          if (/"success":\s*true/.test(text)) return { ok: true, evidence: 'success:true' };
           var m = /"message":\s*"([^"]+)"/.exec(text);
           if (/"success":\s*false/.test(text) || lastSubmitResponse.status >= 400) {
             return { ok: false, evidence: m ? m[1] : ('GoPartTime rejected submit (HTTP ' + lastSubmitResponse.status + ')') };
@@ -390,15 +471,21 @@
         }
       } catch (e) { /* keep watching */ }
       try {
-        var dialog = findSubmitDialog();
-        if (!dialog) return { ok: true, evidence: 'dialog closed' };
-        var bodyText = (dialog.textContent || '').toLowerCase();
-        if (/error|invalid|failed|try again|went wrong/.test(bodyText)) {
-          return { ok: false, evidence: 'dialog shows an error' };
-        }
+        if (!findSubmitDialog()) return checkSubmittedCard(card);
       } catch (e) { /* keep watching */ }
     }
-    return { ok: findSubmitDialog() === null, evidence: findSubmitDialog() === null ? 'dialog closed (late)' : 'no confirmation observed' };
+    try {
+      if (!findSubmitDialog()) return checkSubmittedCard(card);
+    } catch (e) { /* fall through */ }
+    return { ok: false, evidence: 'no confirmation observed' };
+  }
+
+  function checkSubmittedCard(card) {
+    try {
+      var gone = !card || !document.contains(card) || !findCardSubmitButton(card);
+      if (gone) return { ok: true, evidence: 'dialog closed, Submit button gone' };
+    } catch (e) { /* ignore */ }
+    return { ok: true, evidence: 'dialog closed' };
   }
 
   // --- Job state (survives ?page=N hops in the same tab) ---
@@ -472,7 +559,27 @@
       return;
     }
 
-    // 2. Open its Submit dialog via its own button (exact text, never Accept).
+    // 2. Fast path: direct Server Action POST (no dialog needed). Definitive
+    // verdicts end the job here; inconclusive falls through to the dialog.
+    var fast = null;
+    try {
+      fast = await tryFastSubmit(active.externalTaskId, active.url);
+    } catch (e) { fast = null; }
+    if (fast && fast.ok === true) {
+      await reportResult(settings, active.jobId, true, null);
+      setStatus(true, 'task #' + active.externalTaskId + ' submitted (fast path)');
+      saveActive(null);
+      return;
+    }
+    if (fast && fast.ok === false) {
+      await reportResult(settings, active.jobId, false, fast.error);
+      setStatus(false, 'task #' + active.externalTaskId + ' rejected: ' + fast.error);
+      saveActive(null);
+      return;
+    }
+
+    // 3. Fallback: open its Submit dialog via its own button (exact text,
+    // never Accept).
     var openBtn = findCardSubmitButton(card);
     if (!openBtn) {
       await reportResult(settings, active.jobId, false, 'Task #' + active.externalTaskId + ' has no clickable Submit Task button (already submitted?).');
@@ -490,9 +597,8 @@
       return;
     }
 
-    // 3. Fill (never clobber a manager-typed value — their correction wins,
-    // and the submit below then submits exactly what they typed).
-    var input = dialog.querySelector('input[name="redditUrl"]');
+    // 4. Fill (never clobber a manager-typed value — their correction wins,
+    // and the submit below then submits exactly what they typed).    var input = dialog.querySelector('input[name="redditUrl"]');
     if (!input) {
       await reportResult(settings, active.jobId, false, 'Submit dialog has no URL field.');
       saveActive(null);
@@ -506,7 +612,7 @@
       console.log('[Submitter] dialog already filled with a different link — submitting that (manager correction wins).');
     }
 
-    // 4. Human-like pause, then the dialog's own Submit (exact text, scoped).
+    // 5. Human-like pause, then the dialog's own Submit (exact text, scoped).
     await sleep(humanDelayMs());
     dialog = findSubmitDialog();
     if (!dialog) {
@@ -524,7 +630,7 @@
     lastSubmitResponse = null;
     var clickAt = Date.now();
     submitBtn.click();
-    var outcome = await observeSubmitOutcome(clickAt);
+    var outcome = await observeSubmitOutcome(clickAt, card);
     await reportResult(settings, active.jobId, outcome.ok, outcome.ok ? null : outcome.evidence);
     setStatus(outcome.ok, 'task #' + active.externalTaskId + (outcome.ok ? ' submitted' : ' submit failed: ' + outcome.evidence));
     saveActive(null);

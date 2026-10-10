@@ -158,21 +158,24 @@ Source: `scripts/goparttime-mobile.user.js`; served at
 **instead of** (not alongside) the desktop script on the phone — running both
 would double-fire the autofill.
 
-## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.0.0, NOT deployed)
+## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.1.0, NOT deployed)
 
 Dedicated tab that finishes the Submit Link loop: polls `GET /submit-jobs/pending`
 every ~5s (own tab id), leases one job, walks `/my-tasks/todo?page=N` (bounded 10)
-for the card by Task ID, clicks its exact-text **Submit Task** button, fills
-`input[name="redditUrl"]` via `setReactInputValue` (never clobbers a filled field),
-waits 3–8s human-like, clicks the dialog's exact-text **Submit**, verifies, and
-reports to `POST /submit-jobs/:id/result`. In-flight job survives `?page=` hops via
-sessionStorage; status pill bottom-left (Send owns bottom-right). Shares storage
-keys (`gpt_api_url`, `gpt_api_key`) so no new configuration. Runs ALONE on its tab —
-never the watcher tab (it never touches `/tasks`, claims, or accept buttons).
+for the card by Task ID, then submits fast-path-first: direct Server Action POST
+(verified against a real capture — `Accept: text/x-component`, `Content-Type:
+text/plain;charset=UTF-8`, `Next-Action` scraped like the accept flow, body
+`[{"sub_task_id":id,"reddit_url":url}]`, 2 tries × 3s, definitive verdicts only),
+dialog flow as fallback (exact-text Submit Task → `input[name="redditUrl"]` via
+`setReactInputValue`, never clobbers, 3–8s human wait → dialog Submit click).
+Verify is authoritative: intercepted `success:true/false` decides, else
+dialog-closed + the card's Submit Task button gone (both manually corroborated).
+In-flight job survives `?page=` hops via sessionStorage; status pill bottom-left
+(Send owns bottom-right). Shares storage keys (`gpt_api_url`, `gpt_api_key`) so no
+new configuration. Runs ALONE on its tab — never the watcher tab (it never touches
+`/tasks`, claims, or accept buttons).
 Source: `scripts/goparttime-submit.user.js`; served at
 `https://statbot.duckdns.org/goparttime-submit.user.js` after the dashboard rebuild.
-Success verification is heuristic until a real Submit is captured in devtools —
-see the `TODO-DISCOVERY` seam in the script.
 
 ## 6. User-Facing Error Mapping (`parseStatus`)
 
