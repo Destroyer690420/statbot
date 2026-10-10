@@ -204,7 +204,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <main
           ref={mainRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4 pt-20 sm:p-6 sm:pt-24 lg:p-8 lg:pt-8"
+          className="app-scroll flex-1 overflow-y-auto p-4 pt-20 sm:p-6 sm:pt-24 lg:p-8 lg:pt-8"
         >
           <div className="max-w-[1200px] mx-auto w-full">
             {children}
