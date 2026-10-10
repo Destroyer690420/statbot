@@ -264,7 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-10-10**: **Content screen Tier-0/Tier-1 BUILT, NOT deployed (ENFORCE-ready).** Tier-0 title flag + Tier-1 drawer-time check with verdict-flag auto-block (`auto-content:*` reasons) + instant per-block DM + on-demand `blocks` DM report; `DRY_RUN=false` both sides; owner four-tier lists encoded (watcher v1.6.3 needs a Tampermonkey update). Typecheck + build clean, 66 suites / 912 tests green. See Decision 26, `docs/GOPARTTIME.md` §14.
+- **2026-10-10**: **Content screen Tier-0/Tier-1 DEPLOYED live at `488a323`** (ENFORCE + blocks DM report; app + dashboard rebuild, no migration; backup `rtm-backup-20261010-contentscreen.tar.gz`; verified: 3 services Up, health healthy, boot clean, live-dist gates, served auto script v1.6.3, 0 app errors; host bundle removed). **Tampermonkey update to v1.6.3 still required on all watcher tabs.** See Decision 26, `docs/GOPARTTIME.md` §14.
 
 - **2026-10-10**: **Pure-black theme REVERTED live at `260efca`** (reverts `4156826`/`e400062`/`3d83a63`): dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, served CSS 200 with original colors + scrollbar rule. Page/cards/sidebar/navbar back to `#0B0D0F`/`#171B20`/`#111418`; scrollbar-hide kept.
 

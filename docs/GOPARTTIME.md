@@ -260,7 +260,7 @@ The exact hourly contract (all server-enforced): scan at exactly xx:10 → valid
 
 Full panel (restored Sept 11 from the Sept-9-removed page, plus new cards): live/dry-run status + master switches (enabled/dry-run/server-polling-dormant), stat cards (last cycle eligible/confirmed/accepted, blocked count), browser-watcher heartbeat + pending claims, manual single-task test card, **rehearse card** (task ID + ticket + optional subreddit + Live checkbox → real claim or dry check), blocked-subreddit editor (exact match, add/remove), session paste, recent-cycles table (detected/eligible/confirmed/**accepted**) with drill-down (worker contacts, per-task decisions, **linked blasts with slots filled/total + task IDs**). Backend: same `/api/v1/automation/*` endpoints; `GET /cycles/:id` additionally returns `bursts[]` (blast link, ordered task ids, live fill).
 
-## 14. Automatic content screen for new subreddits (Tier-0/Tier-1, dry-run — NOT deployed)
+## 14. Automatic content screen for new subreddits (Tier-0/Tier-1, ENFORCE — DEPLOYED 2026-10-10 at `488a323`)
 
 Two-tier auto-decide for never-seen-before subreddits (language / sex / vape), additive to the exact-match `BlockedSubreddit` list (which, `isBlocked`, and the manual digest Block buttons all work exactly as before). See Decision 26.
 
