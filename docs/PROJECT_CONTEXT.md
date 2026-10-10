@@ -264,6 +264,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-10**: **Pure-black theme REVERTED live at `260efca`** (reverts `4156826`/`e400062`/`3d83a63`): dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, served CSS 200 with original colors + scrollbar rule. Page/cards/sidebar/navbar back to `#0B0D0F`/`#171B20`/`#111418`; scrollbar-hide kept.
+
 - **2026-10-10**: **Pure-black cards + navbar DEPLOYED live at `4156826`:** dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, served CSS 200, identical hashes local vs host. Cards `#000000`, navbar `bg-black/95`, sidebar unchanged (`#0A0A0B`); text/borders/accent/elements unchanged.
 
 - **2026-10-10**: **Cards/sidebar/navbar matched to pure-black theme DEPLOYED live at `e400062`:** dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, served CSS 200 with new colors, identical hashes local vs host. Surface tokens only (cards `#131315`, sidebar/navbar `#0A0A0B`); text/borders/accent/elements unchanged.

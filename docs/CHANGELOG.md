@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-10
+### Deployed (2026-10-10 at `260efca` — dashboard-only rebuild, no migration)
+- **Pure-black theme reverted to original surfaces** (`161.118.164.85`; app/redis untouched — app container not restarted; no migration, no userscript change; host bundle removed). Reverts `4156826` + `e400062` + `3d83a63`: page `#0B0D0F`, sidebar/navbar `#111418`, cards `#171B20`, tooltips/skeletons restored; mobile scrollbar-hide (`d9dce91`) kept. Verified: 3 services Up, health healthy (DB+Redis), served CSS 200 carrying the original card/sidebar colors plus the scrollbar rule.
 ### Deployed (2026-10-10 at `4156826` — dashboard-only rebuild, no migration)
 - **Pure-black cards + navbar live** (`161.118.164.85`; app/redis untouched — app container not restarted; no migration, no userscript change; host bundle removed). Card `surface`/`dark-800` → `#000000` (hover `#101012`, active `#18181b`, chart tooltips follow); navbar decoupled from the sidebar token to `bg-black/95`; sidebar stays `#0A0A0B`. Text, borders, accent, page bg, elements untouched. Verified: 3 services Up, health healthy (DB+Redis), served CSS 200 with black surfaces, identical chunk hashes local vs host builder.
 ### Deployed (2026-10-10 at `e400062` — dashboard-only rebuild, no migration)
