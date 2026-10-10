@@ -264,7 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-10-10**: **Link auto-submit Part 2 BUILT, NOT deployed (authoritative verify, needs deploy).** Submission queue + gate + submit-jobs API + executor v1.1.0 (Server-Action fast path + dialog fallback, verified shape) + dashboard retry; needs migration re-run + rebuild + dedicated tab install. Typecheck + dashboard build clean, 67 suites / 922 tests green. See Decision 27, `docs/GOPARTTIME.md` §15.
+- **2026-10-10**: **Link auto-submit Part 2 DEPLOYED live at `144139e`** (app + dashboard rebuild; migration re-run clean, both audit values live; verified: 3 services Up, health healthy, submission queue init, served submit script v1.1.0, 0 app errors; host bundle removed). **Dedicated executor tab install still required.** See Decision 27, `docs/GOPARTTIME.md` §15.
 - **2026-10-10**: **Content screen Tier-0/Tier-1 DEPLOYED live at `488a323`** (ENFORCE + blocks DM report; app + dashboard rebuild, no migration; backup `rtm-backup-20261010-contentscreen.tar.gz`; verified: 3 services Up, health healthy, boot clean, live-dist gates, served auto script v1.6.3, 0 app errors; host bundle removed). **Tampermonkey update to v1.6.3 still required on all watcher tabs.** See Decision 26, `docs/GOPARTTIME.md` §14.
 
 - **2026-10-10**: **Pure-black theme REVERTED live at `260efca`** (reverts `4156826`/`e400062`/`3d83a63`): dashboard-only rebuild (app/redis untouched, no migration); host bundle removed. Verified: 3 services Up, health healthy, served CSS 200 with original colors + scrollbar rule. Page/cards/sidebar/navbar back to `#0B0D0F`/`#171B20`/`#111418`; scrollbar-hide kept.

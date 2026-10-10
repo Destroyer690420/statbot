@@ -269,7 +269,7 @@ Two-tier auto-decide for never-seen-before subreddits (language / sex / vape), a
 - **DM report**: message `blocks` (exact word, any case) in the bot DM (managers only, same pattern as `scan`) → replies with recent auto-blocks from the DB (`listAutoBlocked`, reason `auto-content:*`, newest 20) + recent dry-run WOULD_BLOCK candidates from the event feed (shadow mode only; bounded 100, 7-day TTL, restart-volatile by design — the DB stays the record of real blocks). Instant per-block DMs fire on every actual auto-block regardless.
 - **Rollout**: ENFORCE since v1.6.3 (`CONTENT_SCREEN.DRY_RUN=false` server + script — Tier-1 hits really block). Rollback = flip both flags back to true (log-only WOULD_BLOCK, no revert). No migration, no new tables. Requires a Tampermonkey update to the matching watcher version (`scripts/` + byte-identical `dashboard/public/` copy).
 
-## 15. GoPartTime link auto-submit (dedicated executor tab — NOT deployed)
+## 15. GoPartTime link auto-submit (dedicated executor tab — DEPLOYED 2026-10-10 at `144139e`)
 
 Closes the Submit Link loop: the worker's Discord-submitted link is submitted on GoPartTime automatically once verified, instead of the manager copy-pasting it into the Submit Task dialog. See Decision 27.
 
