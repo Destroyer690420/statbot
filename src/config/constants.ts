@@ -49,6 +49,22 @@ export const QUEUE_NAME = 'reminder-queue';
 export const SURVIVAL_QUEUE_NAME = 'survival-queue';
 
 /**
+ * BullMQ queue for post-link nudges (10-min reminder + 15-min escalation).
+ * Delayed jobs only — the worker sends the tagged reminder, then hands
+ * overdue tasks to the escalation flow. Re-deliveries replace the pending
+ * job (stable id, latest wins); every fire re-reads task state, so stale
+ * jobs self-cancel.
+ */
+export const NUDGE_QUEUE_NAME = 'nudge-queue';
+/** Delay from post delivery (SENT) to the tagged link reminder. */
+export const LINK_NUDGE_DELAY_MS = 10 * 60 * 1000;
+/** Delay from the reminder to escalation when the link still has not arrived. */
+export const LINK_ESCALATE_DELAY_MS = 5 * 60 * 1000;
+/** Boot backfill ignores tasks delivered longer ago than this (ancient
+ *  tickets need a manager, not an automated nudge). */
+export const NUDGE_BACKFILL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
  * BullMQ queue for GoPartTime link auto-submit (browser-tab executor).
  * The queue is a schedule/lease store only — no server worker ever pops it
  * (the datacenter IP is Vercel-blocked, so only the manager's browser can

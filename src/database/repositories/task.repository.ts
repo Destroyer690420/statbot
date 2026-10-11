@@ -213,6 +213,26 @@ export class TaskRepository {
   }
 
   /**
+   * Link-nudge candidates: delivered GoPartTime POSTs still waiting for
+   * their Reddit link. ACCEPTED only (reassign refuses PENDING, and a
+   * PENDING task means the manager already took over). Due math (10/15 min
+   * from the instruction delivery) runs in JS — deliveryMessages is JSON.
+   */
+  async findUnsubmittedSentPosts() {
+    return getDb().task.findMany({
+      where: {
+        source: 'goparttime',
+        type: 'POST' as any,
+        status: 'ACCEPTED' as any,
+        assignmentStatus: 'SENT',
+        submittedRedditUrl: null,
+        cancelledReason: null,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
    * Batched projection of the two fields callers need to decorate a row with a
    * task reference. Used by the audit-log enrich, which previously issued one
    * `findById` per log row.

@@ -836,3 +836,8 @@ CREATE TABLE IF NOT EXISTS "AllowedSubreddit" (
 ALTER TABLE "AutomationCycle" ADD COLUMN IF NOT EXISTS "quarantined" INTEGER NOT NULL DEFAULT 0;
 
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_ALLOWED';
+
+-- Post-link nudge + escalation: audit trail for the 10-min tagged reminder
+-- and the 15-min re-blast. Schema-only, idempotent, safe to re-run.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'LINK_NUDGE_SENT';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'LINK_ESCALATED';

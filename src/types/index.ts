@@ -190,6 +190,8 @@ export enum AuditAction {
   AUTO_MARKED_DELETED = 'AUTO_MARKED_DELETED',
   GPT_LINK_SUBMITTED = 'GPT_LINK_SUBMITTED',
   GPT_LINK_SUBMIT_FAILED = 'GPT_LINK_SUBMIT_FAILED',
+  LINK_NUDGE_SENT = 'LINK_NUDGE_SENT',
+  LINK_ESCALATED = 'LINK_ESCALATED',
 }
 
 export interface AuditLog {
@@ -417,6 +419,14 @@ export interface SubmissionJobData {
   attempt: number;
   leasedBy: string | null;
   leasedAt: number | null;
+}
+
+// ─── Post-link nudge jobs (10-min reminder + 15-min escalation) ───
+
+/** One BullMQ job in the nudge-queue. Fire-time state decides everything. */
+export interface NudgeJobData {
+  taskId: string;
+  stage: 'nudge' | 'escalate';
 }
 
 // ─── Automation (GoPartTime auto-accept) ───────────────────────
