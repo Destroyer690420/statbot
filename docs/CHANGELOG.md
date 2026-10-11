@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-11
+### Built (NOT deployed — needs dashboard rebuild only, no migration)
+- **Watcher v1.6.4: deterministic return-to-/tasks.** `history.back()` stranded tabs on Discord / the Chrome home page (relative fallback then resolved off-site); now absolute `location.replace(origin + '/tasks')` with a 3s absolute retry. Mirror in sync, hygiene green.
 ### Deployed (2026-10-11 at `d8760ed` — app + dashboard rebuild; migration re-run clean, 0 unexpected errors)
 - **Lenient format check + link nudge/escalation live** (`161.118.164.85`; backup `rtm-backup-20261011-deploy2.tar.gz`; redis untouched; host bundle/runners removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!" (nudge queue + worker init, re-hydration 0 scheduled), live-dist gates (PARA_SHORT, escalation wiring), served format-check script v1.1.0, dashboard root 200 (previous deploy), 0 app errors. Details: lenient verdicts (`PARA_EXTRA`/title/text pass + queue link; `PARA_SHORT` fails + owner tag), image-order reminder, format-check userscript v1.1.0 (mirror in sync), 10-min nudge + 15-min escalation re-blast. Typecheck clean, 72 suites / 993 tests green. See Decisions 30–31.
 ### Deployed (2026-10-11 at `a9bf75c` — app + dashboard rebuild; quarantine migration re-run clean, 0 unexpected errors)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.6.3
+// @version      1.6.4
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,12 @@
 // ==/UserScript==
 
 /**
+   * v1.6.4 - Deterministic return-to-/tasks: history.back() stranded tabs
+   * on whatever came before (Discord, the Chrome home page) and the relative
+   * fallback then resolved off-site. Now location.replace() with an absolute
+   * same-origin URL - always lands on /tasks, back-stack stays clean.
+   * Otherwise identical to v1.6.3 below.
+   *
    * v1.6.3 - ENFORCE + screen-report verdicts + bot-DM `blocks` report.
    * CONTENT_SCREEN_DRY_RUN is now false: Tier-1 hits really abort and
    * auto-block (server owns addBlocked + audit + instant admin DM). Every
@@ -200,7 +206,9 @@
  * /my-tasks/todo on every accept, which stalled the watcher (monitor +
  * drawer matching only run on /tasks). After each claim verdict (success
  * or failure) the script now navigates the same tab back to /tasks, so
- * the next claim proceeds with no manual reload. Otherwise identical to
+ * the next claim proceeds with no manual reload. (v1.6.4: history.back()
+ * banned - it stranded tabs on Discord / the Chrome home page; absolute
+ * replace() instead.) Otherwise identical to
  * v1.2.0 below.
  *
  * v1.2.0 - Blast Now button (bottom-right, above the gear): manual immediate
@@ -1869,22 +1877,25 @@
   }
 
   // GoPartTime auto-navigates the tab to /my-tasks/todo on every accept.
-  // Phase-1: prefer client-side back navigation so this script instance
-  // (and its fast poll timers) survives - no full reload, no reboot, no
-  // 5s settle. One-shot full-load fallback if the pathname does not
-  // restore. Guarded by pathname: a no-op when already on /tasks (never a
-  // reload loop). Never throws - navigation must not break the claim flow.
+  // Deterministic return: history.back() is banned — the tab's prior entry
+  // can be anything (Discord, the Chrome home page, a login screen), which
+  // stranded watcher tabs off-site, and the old relative fallback then
+  // resolved against the wrong origin. location.replace() with an absolute
+  // same-origin URL always lands on /tasks and keeps the back-stack clean
+  // (no todo-page trail, no back-button loop). Guarded by pathname: a no-op
+  // when already on /tasks. Never throws - navigation must not break the
+  // claim flow.
   function returnToTasks() {
     try {
       if (/^\/tasks\/?$/.test(window.location.pathname)) return;
-      try {
-        history.back();
-      } catch (e) { /* fall through to full load */ }
+      window.location.replace(window.location.origin + '/tasks');
       setTimeout(function () {
         try {
-          if (!/^\/tasks\/?$/.test(window.location.pathname)) window.location.href = '/tasks';
+          if (!/^\/tasks\/?$/.test(window.location.pathname)) {
+            window.location.replace(window.location.origin + '/tasks');
+          }
         } catch (e) { /* never break claim flow for navigation */ }
-      }, 5000);
+      }, 3000);
     } catch (e) { /* never break claim flow for navigation */ }
   }
 
