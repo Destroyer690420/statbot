@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-11
+### Built (NOT deployed — needs app rebuild + migration re-run for 2 audit values)
+- **Post-link nudge + escalation re-blast.** 10-min tagged link reminder with 5-min reassignment warning; +15-min combined re-blast (slackers excluded, winners get posts reassigned, owner tagged on no-winners). Typecheck clean, full suite green. See Decision 31.
 ### Built (NOT deployed — needs app + dashboard rebuild, no migration)
 - **Lenient format check + image-order reminder.** `PARA_EXTRA`/title/text verdicts pass and queue the GoPartTime link; only `PARA_SHORT` fails (no queue, repost ask, owner tagged). Image-order reminder after the instruction message for 2+ image posts. Format-check userscript v1.1.0 (mirror in sync). Typecheck clean, 70 suites / 968 tests green, dashboard builds. No migration, no companion change. See Decision 30.
 ### Deployed (2026-10-11 at `a9bf75c` — app + dashboard rebuild; quarantine migration re-run clean, 0 unexpected errors)

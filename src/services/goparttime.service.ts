@@ -18,6 +18,7 @@ import { buildGoPartTimeTaskId } from '../utils/task-display';
 import { Task, TaskType, TaskStatus, DeliveryMessage, AuditAction } from '../types';
 import { getAllAdminIds } from '../utils/permissions';
 import { transition } from './state-machine';
+import { scheduleNudgeForTask } from './nudge.service';
 import { logger } from '../utils/logger';
 
 export interface AssignmentResult {
@@ -112,6 +113,9 @@ class GoPartTimeService {
       const delivery = await this.deliverToChannel(channel, parsed, formattedContent, member.id);
       await taskRepository.updateAssignment(task.id, { assignmentStatus: 'SENT' });
       await taskRepository.updateDeliveryMessages(task.id, delivery);
+      // Post-link nudge clock starts at delivery (fire-and-forget: the
+      // scheduler never breaks assignment).
+      void scheduleNudgeForTask(task.id);
 
       await auditLogService.log(
         AuditAction.TASK_ASSIGNED,
@@ -446,6 +450,8 @@ deliveryMessages: null as any,
       const delivery = await this.deliverTaskToChannel(channel, updated);
       await taskRepository.updateAssignment(task.id, { assignmentStatus: 'SENT' });
       await taskRepository.updateDeliveryMessages(task.id, delivery);
+      // New worker, fresh 10-min clock.
+      void scheduleNudgeForTask(task.id);
 
       await auditLogService.log(
         AuditAction.TASK_ASSIGNED,
@@ -534,6 +540,8 @@ deliveryMessages: null as any,
 
       await taskRepository.updateAssignment(task.id, { assignmentStatus: 'SENT', assignmentError: null });
       await taskRepository.updateDeliveryMessages(task.id, delivery);
+      // Retried delivery restarts the nudge clock from the fresh send.
+      void scheduleNudgeForTask(task.id);
       await auditLogService.log(
         AuditAction.ASSIGNMENT_RETRIED,
         task.id,

@@ -91,3 +91,27 @@ export function buildNudgeMessage(workerId: string | null | undefined): string {
     `after that this post will be given to someone else.`
   );
 }
+
+/**
+ * Fire-time decision for a nudge job (keeps the BullMQ wrapper trivial and
+ * the rules unit-tested): submitted/moved tasks drop, re-delivered tasks
+ * reschedule from the fresh clock, due tasks send.
+ */
+export function nudgeFireDecision(
+  task: NudgeTaskState,
+  nowMs: number = Date.now(),
+): { action: 'drop' } | { action: 'reschedule'; delayMs: number } | { action: 'send' } {
+  if (!isNudgeCandidate(task)) return { action: 'drop' };
+  if (!isNudgeDue(task, nowMs)) return { action: 'reschedule', delayMs: msUntilNudge(task, nowMs) };
+  return { action: 'send' };
+}
+
+/** Fire-time decision for an escalation job (same shape as the nudge one). */
+export function escalateFireDecision(
+  task: NudgeTaskState,
+  nowMs: number = Date.now(),
+): { action: 'drop' } | { action: 'reschedule'; delayMs: number } | { action: 'escalate' } {
+  if (!isNudgeCandidate(task)) return { action: 'drop' };
+  if (!isEscalateDue(task, nowMs)) return { action: 'reschedule', delayMs: msUntilEscalation(task, nowMs) };
+  return { action: 'escalate' };
+}

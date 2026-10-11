@@ -135,6 +135,17 @@ async function main(): Promise<void> {
       logger.error('Submission queue failed to start', { error });
     }
 
+    // 4d. Post-link nudge queue + worker (10-min reminder, 15-min
+    // escalation re-blast for link-less delivered posts).
+    try {
+      const { initializeNudgeQueue } = await import('./services/nudge.service');
+      const { initializeNudgeWorker } = await import('./scheduler/nudge-worker');
+      initializeNudgeQueue();
+      initializeNudgeWorker(discordClient);
+    } catch (error) {
+      logger.error('Nudge worker failed to start', { error });
+    }
+
     // 5. Re-hydrate reminder jobs from PostgreSQL (recover from Redis/bot restarts)
     logger.info('[5/6] Re-hydrating reminder jobs...');
     await rehydrateReminders();
@@ -142,6 +153,13 @@ async function main(): Promise<void> {
       await rehydrateSurvivalJobs();
     } catch (error) {
       logger.error('Survival re-hydration failed', { error });
+    }
+    try {
+      const { rehydrateNudgeJobs } = await import('./services/nudge.service');
+      const { NUDGE_BACKFILL_MAX_AGE_MS } = await import('./config/constants');
+      await rehydrateNudgeJobs(NUDGE_BACKFILL_MAX_AGE_MS);
+    } catch (error) {
+      logger.error('Nudge re-hydration failed', { error });
     }
 
     // 6. Start REST API server

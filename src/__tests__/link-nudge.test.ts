@@ -8,11 +8,13 @@ import { TaskStatus, TaskType } from '../types';
 import {
   buildNudgeMessage,
   deliverySentAt,
+  escalateFireDecision,
   isEscalateDue,
   isNudgeCandidate,
   isNudgeDue,
   msUntilEscalation,
   msUntilNudge,
+  nudgeFireDecision,
   nudgeJobIdFor,
   type NudgeTaskState,
 } from '../utils/link-nudge';
@@ -111,5 +113,24 @@ describe('buildNudgeMessage', () => {
 
   it('works without a known worker', () => {
     expect(buildNudgeMessage(null)).not.toContain('<@');
+  });
+});
+
+describe('fire decisions (BullMQ wrapper rules)', () => {
+  it('nudge: due sends, early reschedules, non-candidates drop', () => {
+    expect(nudgeFireDecision(task(), T0 + 10 * 60 * 1000)).toEqual({ action: 'send' });
+    expect(nudgeFireDecision(task(), T0)).toEqual({ action: 'reschedule', delayMs: 10 * 60 * 1000 });
+    expect(nudgeFireDecision(task({ submittedRedditUrl: 'https://www.reddit.com/r/x/1' }), T0 + 3600000)).toEqual({
+      action: 'drop',
+    });
+  });
+
+  it('escalation: due escalates, early reschedules, non-candidates drop', () => {
+    expect(escalateFireDecision(task(), T0 + 15 * 60 * 1000)).toEqual({ action: 'escalate' });
+    expect(escalateFireDecision(task(), T0 + 10 * 60 * 1000)).toEqual({
+      action: 'reschedule',
+      delayMs: 5 * 60 * 1000,
+    });
+    expect(escalateFireDecision(task({ status: 'PENDING' }), T0 + 3600000)).toEqual({ action: 'drop' });
   });
 });

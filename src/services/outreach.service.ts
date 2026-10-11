@@ -135,13 +135,20 @@ export const DAILY_POST_CAP = 2;
 
 export interface BlastHooks {
   /** A blast reply won a slot (after dedupe + cap checks). */
-  onReply?: (blastId: string, channelId: string, workerId: string) => Promise<unknown>;
+  onReply?: (blastId: string, channelId: string, workerId: string, discordClient?: Client) => Promise<unknown>;
   /** A blast just closed (filled or superseded). */
   onClosed?: (blastId: string) => Promise<unknown>;
 }
 
 class OutreachService {
   private blastHooks: BlastHooks = {};
+  /**
+   * Per-blast hook overrides (escalation rounds). An override wins for its
+   * blast id; everything else falls back to the boot-registered default.
+   * Overrides are dropped when their blast closes — a stale override can
+   * never steal a later round's replies.
+   */
+  private blastHookOverrides = new Map<string, BlastHooks>();
   private portalAccessUnavailableLogged = false;
   /**
    * Serializes worker-message handling in Discord-arrival order. The chain
@@ -158,6 +165,25 @@ class OutreachService {
    */
   setBlastHooks(hooks: BlastHooks): void {
     this.blastHooks = hooks;
+  }
+
+  /** Registers per-blast hook overrides (cleared automatically on close). */
+  setBlastHooksFor(blastId: string, hooks: BlastHooks): void {
+    this.blastHookOverrides.set(blastId, hooks);
+  }
+
+  /** Drops a per-blast override (idempotent). */
+  clearBlastHooksFor(blastId: string): void {
+    this.blastHookOverrides.delete(blastId);
+  }
+
+  private hooksFor(blastId: string): BlastHooks {
+    const override = this.blastHookOverrides.get(blastId);
+    if (!override) return this.blastHooks;
+    return {
+      onReply: override.onReply ?? this.blastHooks.onReply,
+      onClosed: override.onClosed ?? this.blastHooks.onClosed,
+    };
   }
   /**
    * Full page state: every ticket channel + its daily outreach state.
@@ -337,9 +363,11 @@ class OutreachService {
       const filled = await outreachRepository.countReplies(previous.id).catch(() => 0);
       await outreachRepository.closeBlast(previous.id, filled).catch(() => undefined);
       try {
-        await this.blastHooks.onClosed?.(previous.id);
+        await this.hooksFor(previous.id).onClosed?.(previous.id);
       } catch (error) {
         logger.warn('Blast closed hook failed', { blastId: previous.id, error });
+      } finally {
+        this.clearBlastHooksFor(previous.id);
       }
       try {
         const winners = new Set(await outreachRepository.listReplyChannelIds(previous.id).catch(() => []));
@@ -380,9 +408,11 @@ class OutreachService {
     const filled = await outreachRepository.countReplies(previous.id).catch(() => 0);
     await outreachRepository.closeBlast(previous.id, filled).catch(() => undefined);
     try {
-      await this.blastHooks.onClosed?.(previous.id);
+      await this.hooksFor(previous.id).onClosed?.(previous.id);
     } catch (error) {
       logger.warn('Blast restart close hook failed', { blastId: previous.id, error });
+    } finally {
+      this.clearBlastHooksFor(previous.id);
     }
     const winners = new Set(await outreachRepository.listReplyChannelIds(previous.id).catch(() => []));
     const cleaned = await this.deleteBlastMessages(discordClient, previous.id, winners);
@@ -442,6 +472,7 @@ class OutreachService {
     discordClient: Client,
     blast: { id: string; slotsTotal: number },
     senderId: string | null,
+    opts: { excludeWorkerIds?: ReadonlySet<string> } = {},
   ): Promise<{ sent: SendResult[]; skipped: SkippedTicket[] }> {
     const { dayStart, dayEnd } = getIstDayBoundaries();
     const message = await this.getMessage();
@@ -566,6 +597,16 @@ class OutreachService {
           channelId: target.channelId,
           channelName: target.name,
           reason: 'no worker in ticket',
+        });
+        return;
+      }
+      // Escalation rounds exclude the slackers being replaced: they keep
+      // their ticket, they just don't get asked again in this round.
+      if (opts.excludeWorkerIds && opts.excludeWorkerIds.has(target.workerId)) {
+        skipped.push({
+          channelId: target.channelId,
+          channelName: target.name,
+          reason: 'excluded from escalation round',
         });
         return;
       }
@@ -779,7 +820,7 @@ class OutreachService {
       // Burst automation: convert the win into an accept claim (best-effort;
       // a missing hook means a manual blast — nothing happens).
       try {
-        await this.blastHooks.onReply?.(blast.id, channelId, userId);
+        await this.hooksFor(blast.id).onReply?.(blast.id, channelId, userId, discordClient);
       } catch (error) {
         logger.warn('Blast reply hook failed', { blastId: blast.id, channelId, error });
       }
@@ -789,9 +830,11 @@ class OutreachService {
       // Slots full: close the blast and remove our message everywhere else.
       await outreachRepository.closeBlast(blast.id, filled);
       try {
-        await this.blastHooks.onClosed?.(blast.id);
+        await this.hooksFor(blast.id).onClosed?.(blast.id);
       } catch (error) {
         logger.warn('Blast closed hook failed', { blastId: blast.id, error });
+      } finally {
+        this.clearBlastHooksFor(blast.id);
       }
       const winners = new Set(await outreachRepository.listReplyChannelIds(blast.id));
       const cleaned = await this.deleteBlastMessages(discordClient, blast.id, winners);

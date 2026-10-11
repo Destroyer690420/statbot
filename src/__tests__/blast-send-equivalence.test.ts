@@ -20,6 +20,8 @@ jest.mock('../services/audit.service', () => ({
 jest.mock('../database/repositories', () => ({
   outreachRepository: {
     findAll: jest.fn(),
+    findByChannelId: jest.fn(),
+    markAvailable: jest.fn(),
     getMessage: jest.fn(),
     resetCycle: jest.fn(),
     getBlast: jest.fn(),
@@ -28,10 +30,15 @@ jest.mock('../database/repositories', () => ({
     listReplyChannelIds: jest.fn(),
     listBlastMessages: jest.fn(),
     getOpenBlast: jest.fn(),
+    hasWorkerReplied: jest.fn(),
+    recordReply: jest.fn(),
+    countReplies: jest.fn(),
+    closeBlast: jest.fn(),
   },
   taskRepository: {
     countGoPartTimePostsByWorkerInRange: jest.fn(),
     findByCreatedAt: jest.fn(),
+    findAwaitingSubmissionInChannel: jest.fn(),
   },
   workerPortalAccessRepository: { findAll: jest.fn() },
 }));
@@ -615,6 +622,101 @@ describe('blast cleanup deletes in one round trip per message', () => {
 
   it('is a no-op when the blast has no recorded messages', async () => {
     await expect(fillAndSweep([], [])).resolves.toMatchObject({ sent: expect.any(Array) });
+  });
+});
+
+describe('sendBlastMessages - escalation exclusion', () => {
+  it('skips excluded workers without messaging them', async () => {
+    (outreachRepository.findAll as jest.Mock).mockResolvedValue([outreachRow('c1'), outreachRow('c2')]);
+    const channels = new Map<string, TextChannel>([
+      ['c1', makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w-slacker', user: { bot: false } }] })],
+      ['c2', makeChannel({ id: 'c2', name: 't2', members: [{ id: 'w2', user: { bot: false } }] })],
+    ]);
+
+    const { sent, skipped } = await service.sendBlastMessages(
+      makeClient(channels),
+      BLAST,
+      'link-escalation',
+      { excludeWorkerIds: new Set(['w-slacker']) },
+    );
+
+    expect(sent.filter((s) => s.ok).map((s) => s.channelId)).toEqual(['c2']);
+    expect(skipped).toEqual([
+      { channelId: 'c1', channelName: 't1', reason: 'excluded from escalation round' },
+    ]);
+    expect(channels.get('c1')!.send).not.toHaveBeenCalled();
+  });
+
+  it('sends to everyone when no exclusion is given', async () => {
+    (outreachRepository.findAll as jest.Mock).mockResolvedValue([outreachRow('c1')]);
+    const channels = new Map<string, TextChannel>([
+      ['c1', makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w1', user: { bot: false } }] })],
+    ]);
+
+    const { sent, skipped } = await service.sendBlastMessages(
+      makeClient(channels),
+      BLAST,
+      'manager',
+    );
+
+    expect(sent.filter((s) => s.ok)).toHaveLength(1);
+    expect(skipped).toEqual([]);
+  });
+});
+
+describe('per-blast hook overrides (escalation routing)', () => {
+  function replySetup() {
+    (outreachRepository.findByChannelId as jest.Mock).mockResolvedValue({
+      channelId: 'c1',
+      selected: true,
+      messageSentAt: new Date(),
+      availableAt: new Date(),
+    });
+    (outreachRepository.getOpenBlast as jest.Mock).mockResolvedValue({
+      id: 'blast-e1',
+      status: 'OPEN',
+      slotsTotal: 1,
+      slotsFilled: 0,
+    });
+    (outreachRepository.hasWorkerReplied as jest.Mock).mockResolvedValue(false);
+    (outreachRepository.recordReply as jest.Mock).mockResolvedValue({ row: {}, duplicate: false });
+    (outreachRepository.countReplies as jest.Mock).mockResolvedValue(1);
+    (outreachRepository.closeBlast as jest.Mock).mockResolvedValue({});
+    (outreachRepository.listReplyChannelIds as jest.Mock).mockResolvedValue(['c1']);
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([]);
+    (taskRepository.findAwaitingSubmissionInChannel as jest.Mock).mockResolvedValue(null);
+  }
+
+  function replyClient() {
+    return makeClient(
+      new Map([['c1', makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w9', user: { bot: false } }] })]]),
+    );
+  }
+
+  it('routes a matching blast to its override, not the default', async () => {
+    replySetup();
+    const overrideReply = jest.fn().mockResolvedValue('Post #1');
+    const defaultReply = jest.fn().mockResolvedValue(null);
+    service.setBlastHooks({ onReply: defaultReply });
+    service.setBlastHooksFor('blast-e1', { onReply: overrideReply });
+
+    const client = replyClient();
+    await service.onWorkerMessage('c1', 'w9', client);
+
+    expect(overrideReply).toHaveBeenCalledWith('blast-e1', 'c1', 'w9', client);
+    expect(defaultReply).not.toHaveBeenCalled();
+    service.clearBlastHooksFor('blast-e1');
+  });
+
+  it('falls back to the default hooks without an override', async () => {
+    replySetup();
+    const defaultReply = jest.fn().mockResolvedValue(null);
+    const defaultClosed = jest.fn().mockResolvedValue(undefined);
+    service.setBlastHooks({ onReply: defaultReply, onClosed: defaultClosed });
+
+    await service.onWorkerMessage('c1', 'w9', replyClient());
+
+    expect(defaultReply).toHaveBeenCalledWith('blast-e1', 'c1', 'w9', expect.anything());
   });
 });
 

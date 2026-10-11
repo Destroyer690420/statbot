@@ -235,3 +235,10 @@
 - **Consequences**: no migration (`formatCheckStatus` is TEXT; old `PARA_MISMATCH` rows stay historical, Recheck re-evaluates them); resubmits self-heal (latest-wins re-check + re-enqueue). No companion change; Tampermonkey update needed for the format-check script only.
 - **Status**: Implemented 2026-10-11, NOT deployed.
 
+## Decision 31: Post-link nudge (10-min warning) + escalation re-blast (15-min reassign)
+
+- **Context**: Blast winners went silent after the post landed in their ticket — no link, no chase, the post died quietly. The instruction message already says "within 10 minutes" but nothing enforced it.
+- **Decision**: Every delivered GoPartTime POST (blast-won or not, ACCEPTED only) runs a 10-min clock from delivery (`nudge-queue` BullMQ, stable job id, latest-wins on re-delivery, fire-time state checks so stale jobs self-cancel). +10 min with no link → tagged reminder + 5-min reassignment warning. +15 min with no link → one combined escalation re-blast for everything overdue (first-N repliers each take one post, most overdue first; slackers excluded from that round; daily-cap/busy guards reused; no GoPartTime re-accept — winners get re-delivered content via `reassignTask`). Original ticket is told the post moved; reassigned posts run a fresh clock. A foreign open round is never superseded (defer to the next trigger). No winners → owner tagged in the stuck tickets, posts stay pooled. Boot backfills clocks for posts delivered within 24h.
+- **Consequences**: two `AuditAction` values (`LINK_NUDGE_SENT`, `LINK_ESCALATED`, idempotent migration); no other schema change (clock derives from delivery records). Per-blast hook overrides in the outreach service (default automation hooks untouched; overrides die with their blast). `sendBlastMessages` gains an `excludeWorkerIds` skip.
+- **Status**: Implemented 2026-10-11, NOT deployed.
+
