@@ -264,7 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-10-11**: **Digest embed BUILT, NOT deployed.** Verdict embed (Breakdown/new-sub/name-check fields); Blast/Hold only when a tap could still release; stale release-gate docs corrected.
+- **2026-10-11**: **Digest embed DEPLOYED live at `b91dc91`** (app-only rebuild, no migration; verified healthy boot, live-dist gates, 0 app errors).
 - **2026-10-11**: **Lenient format check + link nudge/escalation DEPLOYED live at `d8760ed`** (app + dashboard rebuild, migration re-run clean; verified healthy boot with nudge worker, served format-check v1.1.0, 0 app errors). Tampermonkey update needed for the format-check script. See Decisions 30–31.
 - **2026-10-11**: **Link nudge + escalation BUILT, NOT deployed.** Extra/title/text verdicts pass + queue the link; only short posts fail (owner tagged). Image-order reminder for multi-image posts. 70 suites / 968 tests green. See Decision 30.
 - **2026-10-11**: **Stranded blast-message fix DEPLOYED live at `a9bf75c`** (with name quarantine; app + dashboard rebuild, quarantine migration re-run clean with 0 unexpected errors; backup `rtm-backup-20261011-deploy.tar.gz`; verified healthy boot, live-dist gates, served Cleared card, 0 app errors; pre-deploy sweep deleted 197 stranded loser messages, probe confirmed 0 visible remains; host bundle/runners removed).
