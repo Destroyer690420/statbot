@@ -89,6 +89,8 @@ export function buildBlocksReport(args: {
   events: ScreenEvent[];
   dryRun: boolean;
   nowMs?: number;
+  /** Manager-cleared subreddits (quarantine verdicts, still content-screened). */
+  allowed?: string[];
 }): string {
   const nowMs = args.nowMs ?? Date.now();
   const lines: string[] = ['Auto-block report'];
@@ -100,6 +102,10 @@ export function buildBlocksReport(args: {
       const what = row.reason || 'auto-content:?';
       lines.push(`• r/${row.subreddit} (${what}) — ${day(row.createdAt)}`);
     }
+  }
+  const allowed = (args.allowed || []).filter((s) => !!s);
+  if (allowed.length > 0) {
+    lines.push(`Cleared: ${allowed.slice(0, 10).map((s) => `r/${s}`).join(', ')}`);
   }
   if (args.dryRun) {
     const cands = args.events.filter((e) => e.dryRun);

@@ -107,6 +107,13 @@ export const GOPARTTIME_SOURCE = 'goparttime';
  * the log detail when a high-confidence hit fired alongside, or match as an
  * exact multi-word phrase (multi-word AMBIGUOUS entries only).
  *
+ * Subreddit NAMES play by deliberately different rules (see
+ * `screenSubredditName`): short identifiers where a related fragment is
+ * strong evidence, matched as SUBSTRINGS over high singles + NAME_ROOTS
+ * (+ exact-only acronyms), with ambiguous singles quarantining instead of
+ * blocking. Owner directive: recall over precision on names (even
+ * `middlesex`-shaped names block); content keeps whole-word precision.
+ *
  * Upkeep: vape brand names turn over fast — revisit this list periodically.
  * The dry-run WOULD_BLOCK logs are the drift detector.
  */
@@ -161,6 +168,25 @@ export const BLOCK_KEYWORDS_VAPE_AMBIGUOUS = [
   // 'dab pen' deliberately excluded: cannabis concentrate device, adjacent but
   // not vape/nicotine — out of scope until it gets its own category.
 ] as const;
+
+/**
+ * Bare roots for SUBREDDIT-NAME screening only (never content). Phrases
+ * cannot occur in subreddit names (no spaces allowed), so without these the
+ * name check could never fire on `sexpositive`-shaped names — no listed term
+ * covers them. Whole-token/substring matching keeps `Essex`/`Middlesex`-style
+ * names matching honestly (owner directive: block them too); content
+ * screening keeps its lists untouched so `sex education`-style post text
+ * never triggers on these.
+ */
+export const BLOCK_KEYWORDS_NAME_ROOTS = ['sex', 'anal', 'masturbat', 'jerkoff'] as const;
+
+/**
+ * Terms that match subreddit names EXACTLY only (full name or whole
+ * underscore-token), never as substrings. Short acronyms collide with
+ * ordinary words (`rta` sits inside `startups`, `portable`, `mortal`), so
+ * substringing them would torch big legit subs.
+ */
+export const BLOCK_KEYWORDS_NAME_EXACT_ONLY = ['rda', 'rta', 'rdta'] as const;
 
 export const CONTENT_SCREEN = {
   // ENFORCE MODE: Tier-1 hits really block (auto-content:*) + instant admin

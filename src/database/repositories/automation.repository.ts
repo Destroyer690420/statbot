@@ -25,6 +25,33 @@ export class AutomationRepository {
     return !!row;
   }
 
+  // ─── Allowed subreddits (manager-reviewed quarantine verdicts) ───
+  // A row here means a human saw the doubtful name and cleared it: future
+  // scans skip name screening for it entirely (content screening still
+  // applies). Dormant while blocked — manual blocks always win, so an allow
+  // row never needs deleting when something is blocked (and resumes if the
+  // block is later removed).
+  async listAllowed() {
+    return (getDb() as any).allowedSubreddit.findMany({ orderBy: { subreddit: 'asc' } });
+  }
+
+  async addAllowed(subreddit: string, reason: string | null, createdBy: string) {
+    return (getDb() as any).allowedSubreddit.upsert({
+      where: { subreddit },
+      create: { subreddit, reason, createdBy },
+      update: { reason },
+    });
+  }
+
+  async removeAllowed(subreddit: string) {
+    return (getDb() as any).allowedSubreddit.delete({ where: { subreddit } }).catch(() => null);
+  }
+
+  async isAllowed(subreddit: string): Promise<boolean> {
+    const row = await (getDb() as any).allowedSubreddit.findUnique({ where: { subreddit } });
+    return !!row;
+  }
+
   /** Newest-first automatic blocks (reason `auto-content:*`) — the DM report feed. */
   async listAutoBlocked(limit = 20) {
     return getDb().blockedSubreddit.findMany({
@@ -95,10 +122,11 @@ export class AutomationRepository {
     status: string; endedAt: Date;
     tasksDetected: number; eligiblePosts: number; blocked: number;
     duplicates: number; commentsSkipped: number;
+    quarantined: number;
     workersContacted: number; workersConfirmed: number;
     postsAccepted: number; failures: number;
   }>) {
-    return getDb().automationCycle.update({ where: { id }, data });
+    return (getDb() as any).automationCycle.update({ where: { id }, data });
   }
 
   async getCycle(id: string) {

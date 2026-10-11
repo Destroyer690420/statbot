@@ -5,7 +5,8 @@ import { AuditAction, DetectedGoPartTimeTask } from '../../types';
 import { AUTOMATION } from '../../config/constants';
 import { getIstDayBoundaries, getIstHourStart } from '../../utils/ist-time';
 import { logger } from '../../utils/logger';
-import { evaluateForBurst, loadSeenSubs } from './validator.service';
+import { evaluateForBurst, loadSeenSubs, loadAllowedSubs } from './validator.service';
+import { handleAutoBlockReport } from './content-block.service';
 import { diffNewTasks, isBurstActive, isMergeAllowed, parsePooledTasks, pickNextTask, serializePooledTasks } from './eligibility';
 import { outreachService, DAILY_POST_CAP } from '../outreach.service';
 
@@ -28,6 +29,8 @@ export interface BurstResult {
   blocked: number;
   duplicates: number;
   commentsSkipped: number;
+  /** Held from the blast for name review (doubtful-name subs). */
+  quarantined: number;
   blast: { id: string; slotsTotal: number } | null;
   sent: number;
   skipped: { channelId: string; reason: string }[];
@@ -70,10 +73,13 @@ interface ValidationOutcome {
   blocked: number;
   duplicates: number;
   commentsSkipped: number;
+  quarantined: number;
 }
 
 /**
- * Validates inputs, logging every decision to the given cycle.
+ * Validates inputs, logging every decision to the given cycle. Exported for
+ * unit tests (the orchestration — pre-blast auto-blocks, quarantine holds —
+ * lives here, not in the pure validators).
  *
  * The blocked-subreddit check is resolved ONCE for the whole batch (the list
  * is ~100 rows, one indexed read) instead of a point lookup per task. The
@@ -81,12 +87,27 @@ interface ValidationOutcome {
  * NORMALIZED subreddit against an exact stored value, which is exactly
  * `Set.has` over the same rows. A failed read is NOT swallowed: it propagates
  * and fails the round, matching the previous per-task behaviour.
+ *
+ * Name-verdict execution (this is the ONLY path that writes from validation):
+ *  - `block` (confident name hit): the name is fully visible pre-blast, so
+ *    the block happens HERE via handleAutoBlockReport (dry-run aware) — no
+ *    worker is ever messaged for the sub. Lands as a BLOCKED log.
+ *  - `quarantine` (doubtful name hit): held from the blast pool, logged
+ *    QUARANTINED, digest-flagged [NAME-CHECK] for one-tap Block (or `allow`
+ *    to clear). Never auto-blocks.
+ * Single-task paths (test-accept/rehearse/cycle) get advisory verdicts only
+ * and never reach this function.
  */
-async function validateInputs(inputs: BurstTaskInput[], cycleId: string): Promise<ValidationOutcome> {
+export async function validateInputs(
+  inputs: BurstTaskInput[],
+  cycleId: string,
+  opts: { dryRun?: boolean } = {},
+): Promise<ValidationOutcome> {
   const eligible: DetectedGoPartTimeTask[] = [];
   let blocked = 0;
   let duplicates = 0;
   let commentsSkipped = 0;
+  let quarantined = 0;
 
   // An empty report (the "nothing listed" tail sweep) validates nothing, so it
   // must not pay for the blocked-list read either.
@@ -94,22 +115,65 @@ async function validateInputs(inputs: BurstTaskInput[], cycleId: string): Promis
     inputs.length === 0
       ? new Set<string>()
       : new Set((await automationRepository.listBlocked()).map((row) => row.subreddit));
-  // Tier-0 seen set, fetched once per report (excludes this cycle's own logs —
-  // the batch being validated must not count as "seen before").
+  // Tier-0 seen + allow sets, fetched once per report (seen excludes this
+  // cycle's own logs — the batch being validated must not count as "seen
+  // before"; allow is timeless).
   const seenSubs = inputs.length === 0 ? new Set<string>() : await loadSeenSubs(cycleId);
+  const allowedSubs = inputs.length === 0 ? new Set<string>() : await loadAllowedSubs().catch(() => new Set<string>());
 
   for (const t of inputs) {
     const detected = toDetected(t);
     // Listed + available means takeable: an accepted task vanishes from the
     // listing, so history never disqualifies a listed task here.
-    const v = evaluateForBurst(detected, blockedSubs, seenSubs);
+    const v = evaluateForBurst(detected, blockedSubs, seenSubs, undefined, allowedSubs);
     if (v.eligible && v.needsContentReview) {
       logger.info('Tier-0 content screen flagged task for Tier-1 scrutiny', {
         cycleId,
         task: detected.subTaskId,
         subreddit: detected.subreddit,
-        signal: v.screenSignal,
+        signal: v.screenSignal ?? null,
+        nameVerdict: v.nameVerdict ?? null,
+        nameMatched: v.nameMatched ?? null,
       });
+    }
+    if (v.eligible && v.nameVerdict === 'block' && v.nameMatched && v.nameSignal) {
+      const outcome = await handleAutoBlockReport(
+        { subreddit: detected.subreddit as string, signal: v.nameSignal, matched: v.nameMatched },
+        { dryRun: opts.dryRun, seenSubs, actorId: 'auto-screen:scan', source: 'burst-scan subreddit-name screen' },
+      );
+      logger.info('Pre-blast name auto-block processed', { cycleId, task: detected.subTaskId, outcome: outcome.outcome });
+      if (outcome.disposition === 'blocked' || outcome.disposition === 'already-blocked') {
+        await automationRepository.logTask({
+          cycleId,
+          externalTaskId: detected.subTaskId,
+          taskType: detected.type,
+          subreddit: detected.subreddit,
+          status: 'BLOCKED',
+        });
+        blocked++;
+        continue;
+      }
+      // Dry-run (or a seen-race both validators already excluded): no write
+      // happened — fall through to the generic ELIGIBLE logging below so the
+      // digest still lists the task. Tier-1 logs the WOULD_BLOCK at accept.
+    }
+    if (v.eligible && v.nameVerdict === 'quarantine') {
+      await automationRepository.logTask({
+        cycleId,
+        externalTaskId: detected.subTaskId,
+        taskType: detected.type,
+        subreddit: detected.subreddit,
+        status: 'QUARANTINED',
+        failureReason: `name:${v.nameMatched || '?'}`,
+      });
+      quarantined++;
+      logger.info('Task quarantined for name review (held from blast)', {
+        cycleId,
+        task: detected.subTaskId,
+        subreddit: detected.subreddit,
+        matched: v.nameMatched,
+      });
+      continue;
     }
     await automationRepository.logTask({
       cycleId,
@@ -123,7 +187,7 @@ async function validateInputs(inputs: BurstTaskInput[], cycleId: string): Promis
     else if (v.reason === 'DUPLICATE') duplicates++;
     else if (v.reason === 'SKIPPED_COMMENT') commentsSkipped++;
   }
-  return { eligible, blocked, duplicates, commentsSkipped };
+  return { eligible, blocked, duplicates, commentsSkipped, quarantined };
 }
 
 function dedupeInputs(tasks: BurstTaskInput[]): BurstTaskInput[] {
@@ -242,7 +306,7 @@ export async function createBurstFlow(
   }
   const candidates: BurstTaskInput[] = [...usableInputs];
 
-  const { eligible, blocked, duplicates, commentsSkipped } = await validateInputs(candidates, cycleId);
+  const { eligible, blocked, duplicates, commentsSkipped, quarantined } = await validateInputs(candidates, cycleId);
 
   await automationRepository.updateCycle(cycleId, {
     tasksDetected: candidates.length,
@@ -250,6 +314,7 @@ export async function createBurstFlow(
     blocked,
     duplicates,
     commentsSkipped: commentsSkipped,
+    quarantined,
   });
   await auditLogService.log(
     AuditAction.AUTOMATION_CYCLE_STARTED,
@@ -271,6 +336,7 @@ export async function createBurstFlow(
       blocked,
       duplicates,
       commentsSkipped,
+      quarantined,
       blast: null,
       sent: 0,
       skipped: [],
@@ -328,6 +394,7 @@ export async function createBurstFlow(
     blocked,
     duplicates,
     commentsSkipped,
+    quarantined,
     blast,
     sent: sent.filter((s) => s.ok).length,
     skipped: skipped.map((s) => ({ channelId: s.channelId, reason: s.reason })),
@@ -357,6 +424,7 @@ async function mergeIntoHourBurst(
     blocked: 0,
     duplicates: 0,
     commentsSkipped: 0,
+    quarantined: 0,
     blast: null,
     sent: 0,
     skipped: [],
@@ -381,7 +449,7 @@ async function mergeIntoHourBurst(
   }
 
   const candidates = dedupeInputs(inputs);
-  const { eligible, blocked, duplicates, commentsSkipped } = await validateInputs(candidates, burst.cycleId);
+  const { eligible, blocked, duplicates, commentsSkipped, quarantined } = await validateInputs(candidates, burst.cycleId);
 
   const held = await liveHeldIds(burst.cycleId);
   const stored = await automationRepository.listBurstsSince(new Date(0)).catch(() => []);
@@ -409,6 +477,9 @@ async function mergeIntoHourBurst(
     const updated = await outreachRepository.bumpBlastSlots(blast.id, added.length).catch(() => null);
     const cycle = await automationRepository.getCycle(burst.cycleId).catch(() => null);
     if (cycle) {
+      // Cast: the local generated client predates the `quarantined` column
+      // (regenerated at Docker build); the column exists in schema + live DB.
+      const priorQuarantined = (cycle as unknown as { quarantined?: number | null }).quarantined ?? 0;
       await automationRepository
         .updateCycle(burst.cycleId, {
           tasksDetected: cycle.tasksDetected + candidates.length,
@@ -416,6 +487,7 @@ async function mergeIntoHourBurst(
           blocked: cycle.blocked + blocked,
           duplicates: cycle.duplicates + duplicates,
           commentsSkipped: cycle.commentsSkipped + commentsSkipped,
+          quarantined: priorQuarantined + quarantined,
         })
         .catch(() => undefined);
     }
@@ -436,6 +508,7 @@ async function mergeIntoHourBurst(
     blocked,
     duplicates,
     commentsSkipped,
+    quarantined,
     blast: live ? { id: live.id, slotsTotal: live.slotsTotal } : { id: blast.id, slotsTotal: blast.slotsTotal },
     sent: 0,
     skipped: [],

@@ -20,6 +20,8 @@ import {
   BLOCK_KEYWORDS_SEXUAL_AMBIGUOUS,
   BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE,
   BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
+  BLOCK_KEYWORDS_NAME_ROOTS,
+  BLOCK_KEYWORDS_NAME_EXACT_ONLY,
 } from '../config/constants';
 import { normalizeSubreddit } from '../services/automation/subreddit';
 
@@ -50,7 +52,7 @@ function defaultLists(): ScreenLists {
 }
 
 /** True for multi-word entries ("vape pod") — matched as exact phrases. */
-function isPhrase(term: string): boolean {
+export function isPhrase(term: string): boolean {
   return /\s/.test((term || '').trim());
 }
 
@@ -167,6 +169,79 @@ export function screenFullContent(
 /** `auto-content:<signal>` — reads differently from a manual block in the admin list. */
 export function autoBlockReason(signal: ContentScreenSignal): string {
   return `${CONTENT_SCREEN.AUTO_BLOCK_REASON_PREFIX}:${signal}`;
+}
+
+export type NameScreenDecision = 'block' | 'quarantine' | 'pass';
+
+export interface NameScreenVerdict {
+  decision: NameScreenDecision;
+  signal: ContentScreenSignal | null;
+  matched: string | null;
+  /** Short explanation for logs / DMs (never the full text). */
+  detail: string;
+}
+
+/**
+ * Subreddit-NAME screen. Deliberately SUBSTRING-based (owner directive:
+ * recall over precision on names — even `middlesex`-shaped names block),
+ * unlike title/content screening which stays whole-word. Takes an already
+ * normalized name (normalizes defensively anyway).
+ *
+ * Order, first hit wins:
+ *  1. HIGH single-word terms (+ NAME_ROOTS like bare `sex`, without which
+ *     `sexpositive`-shaped names are unreachable) as substrings, sexual
+ *     before vape → `block`. Hyphenated/phrase entries are inert here (no
+ *     spaces or hyphens can occur in subreddit names).
+ *  2. Exact-only acronyms (`rda`/`rta`/`rdta`, which sit inside ordinary
+ *     words like `startups`) match full-name or whole-token only → `block`.
+ *  3. AMBIGUOUS single words (`mod`, `sexy`, `smoking`, …) as substrings →
+ *     `quarantine` (held from the blast + digest-flagged, never auto-blocked;
+ *     a human Allows or Blocks once and the verdict sticks).
+ * Anything else → `pass`. Known accepted casualties of the substring rule
+ * (`cockpit`, `dataanalysis`, `asexual`, …) are reversible in one tap via
+ * unblock/allow — say the word to carve any of them out instead.
+ */
+export function screenSubredditName(
+  normalized: string | null | undefined,
+  lists: ScreenLists = defaultLists(),
+): NameScreenVerdict {
+  const name = (normalized || '').trim().toLowerCase();
+  if (!name) return { decision: 'pass', signal: null, matched: null, detail: 'no subreddit' };
+  const singles = (terms: readonly string[]): string[] =>
+    terms.map((t) => (t || '').trim().toLowerCase()).filter((t) => t.length > 0 && !isPhrase(t));
+  // Longest first so the reported match is the most specific one.
+  const byLengthDesc = (terms: string[]): string[] => [...terms].sort((a, b) => b.length - a.length);
+  const sexualTerms = [...singles(lists.sexualHigh), ...BLOCK_KEYWORDS_NAME_ROOTS];
+  const vapeTerms = singles(lists.vapeHigh);
+  for (const term of byLengthDesc(sexualTerms)) {
+    if (name.includes(term)) {
+      return { decision: 'block', signal: 'sex', matched: term, detail: `subreddit name contains "${term}"` };
+    }
+  }
+  for (const term of byLengthDesc(vapeTerms)) {
+    if (BLOCK_KEYWORDS_NAME_EXACT_ONLY.includes(term as never)) continue;
+    if (name.includes(term)) {
+      return { decision: 'block', signal: 'vape', matched: term, detail: `subreddit name contains "${term}"` };
+    }
+  }
+  // Exact-only acronyms: full name or a whole underscore-token, never a
+  // substring (`rta` must not fire on `startups`).
+  const tokens = new Set(name.split('_').filter((t) => t.length > 0));
+  for (const term of BLOCK_KEYWORDS_NAME_EXACT_ONLY) {
+    if (name === term || tokens.has(term)) {
+      return { decision: 'block', signal: 'vape', matched: term, detail: `subreddit name is "${term}"` };
+    }
+  }
+  const ambiguous = [
+    ...singles(lists.sexualAmbiguous),
+    ...singles(lists.vapeAmbiguous),
+  ];
+  for (const term of byLengthDesc(ambiguous)) {
+    if (name.includes(term)) {
+      return { decision: 'quarantine', signal: null, matched: term, detail: `subreddit name contains ambiguous "${term}"` };
+    }
+  }
+  return { decision: 'pass', signal: null, matched: null, detail: 'clean name' };
 }
 
 /**

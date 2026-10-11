@@ -822,3 +822,17 @@ ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_FAILED';
 -- automatic link submissions. Schema-only, idempotent, safe to re-run.
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'GPT_LINK_SUBMITTED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'GPT_LINK_SUBMIT_FAILED';
+
+-- Quarantine (doubtful-name holds): verdict persistence + cycle counter +
+-- audit trail for manager Allow decisions. Schema-only, idempotent.
+CREATE TABLE IF NOT EXISTS "AllowedSubreddit" (
+  "subreddit" TEXT NOT NULL,
+  "reason" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "createdBy" TEXT NOT NULL,
+  CONSTRAINT "AllowedSubreddit_pkey" PRIMARY KEY ("subreddit")
+);
+
+ALTER TABLE "AutomationCycle" ADD COLUMN IF NOT EXISTS "quarantined" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_ALLOWED';

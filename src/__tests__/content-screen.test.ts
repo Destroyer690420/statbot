@@ -9,16 +9,17 @@ import {
   looksNonEnglish,
   screenTitle,
   screenFullContent,
+  screenSubredditName,
   tier0Screen,
   buildSeenSet,
   autoBlockReason,
 } from '../utils/content-screen';
 
 const LISTS = {
-  sexualHigh: ['porn', 'escort', 'sex toy'],
-  sexualAmbiguous: ['sexy', 'adult content'],
+  sexualHigh: ['porn', 'nsfw', 'escort', 'sex toy'],
+  sexualAmbiguous: ['kink', 'sexy', 'breasts', 'adult content'],
   vapeHigh: ['vape', 'e-liquid', 'vape pen'],
-  vapeAmbiguous: ['mod', 'pod', 'coil', 'mech mod'],
+  vapeAmbiguous: ['mod', 'pod', 'cart', 'coil', 'mech mod', 'smoking'],
 };
 
 describe('matchKeyword', () => {
@@ -157,6 +158,60 @@ describe('tier0Screen', () => {
       signal: 'vape',
     });
     expect(tier0Screen({ subreddit: 'fresh', title: 'cute cats' }, new Set(), LISTS)).toBeNull();
+  });
+});
+
+describe('screenSubredditName (substring rules for names)', () => {
+  it('blocks exact high-confidence names', () => {
+    expect(screenSubredditName('masturbation', LISTS)).toMatchObject({ decision: 'block', signal: 'sex' });
+    expect(screenSubredditName('porn', LISTS)).toMatchObject({ decision: 'block' });
+    expect(screenSubredditName('nsfw', LISTS)).toMatchObject({ decision: 'block' });
+  });
+
+  it('blocks high substrings inside compound names', () => {
+    // Bare `sex` is a name-screening root (absent from the content lists).
+    expect(screenSubredditName('sexpositive')).toMatchObject({ decision: 'block', signal: 'sex', matched: 'sex' });
+    expect(screenSubredditName('middlesex')).toMatchObject({ decision: 'block', matched: 'sex' });
+    expect(screenSubredditName('sexed')).toMatchObject({ decision: 'block', matched: 'sex' });
+    expect(screenSubredditName('vapers', LISTS)).toMatchObject({ decision: 'block', signal: 'vape' });
+  });
+
+  it('blocks whole underscore tokens', () => {
+    expect(screenSubredditName('vape_porn', LISTS)).toMatchObject({ decision: 'block' });
+  });
+
+  it('quarantines (never blocks) ambiguous substrings', () => {
+    for (const sub of ['moderators', 'cartoons', 'podcasts', 'smoking', 'kinkshaming', 'coil_winding']) {
+      const hit = screenSubredditName(sub, LISTS);
+      expect(hit.decision).toBe('quarantine');
+      expect(hit.signal).toBeNull();
+    }
+  });
+
+  it('a high root inside an ambiguous word still blocks (sex wins over sexy)', () => {
+    // `sexy_cars` contains bare `sex` → block, not quarantine. Directive-consistent.
+    expect(screenSubredditName('sexy_cars', LISTS)).toMatchObject({ decision: 'block', matched: 'sex' });
+  });
+
+  it('keeps acronyms exact-only (rta must not fire on startups)', () => {
+    const lists = { ...LISTS, vapeHigh: [...LISTS.vapeHigh, 'rta'] };
+    expect(screenSubredditName('startups', lists).decision).toBe('pass');
+    expect(screenSubredditName('rta', lists)).toMatchObject({ decision: 'block', matched: 'rta' });
+    expect(screenSubredditName('rta_guides', lists)).toMatchObject({ decision: 'block', matched: 'rta' });
+  });
+
+  it('hyphenated terms and spaced phrases are inert in names', () => {
+    // 'e-liquid' cannot occur in a subreddit name (no hyphens allowed).
+    expect(screenSubredditName('eliquid', LISTS).decision).toBe('pass');
+    // 'adult content' / 'mech mod' carry spaces — unmatchable, by design.
+    expect(screenSubredditName('adultcontent', LISTS).decision).toBe('pass');
+  });
+
+  it('passes clean and empty names', () => {
+    expect(screenSubredditName('cats', LISTS).decision).toBe('pass');
+    expect(screenSubredditName('peacocks', LISTS).decision).toBe('pass');
+    expect(screenSubredditName(null, LISTS).decision).toBe('pass');
+    expect(screenSubredditName('', LISTS).decision).toBe('pass');
   });
 });
 

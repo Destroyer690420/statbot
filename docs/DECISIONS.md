@@ -220,3 +220,10 @@
 - **Consequences**: no migration, no schema; one deleted export; the only behavior change is automatic rounds now message workers instead of waiting.
 - **Status**: Implemented + deployed 2026-10-10 at `1a0fc66` (app-only rebuild, no migration; verified live).
 
+## Decision 29: Doubtful subreddit names quarantine — held from the blast, decided once by a human
+
+- **Context**: Name screening is deliberately substring-based (recall over precision), so ambiguous fragments (`mod` in `moderators`, `cart` in `cartoons`) match constantly. Auto-blocking them would nuke legit subs; a smarter regex cannot resolve the doubt (`podcasts` segments into real words) — only a judge can.
+- **Decision**: Tri-state names. Confident hits (high singles + bare roots like `sex`, exact-only acronyms) auto-block pre-blast (the name is fully visible there — no worker is ever messaged for the sub). Doubtful hits (ambiguous singles only) QUARANTINE: excluded from blast slots, logged `QUARANTINED`, digest-flagged `[NAME-CHECK]` with the full name + count + Block button; one `allow r/x` DM (or dashboard Cleared section) clears it forever, one Block tap ends it forever. Validators stay side-effect-free (advisory verdicts); only the burst orchestrator writes. Manager-cleared names skip name screening (never content screening); manual blocks always win over cleared rows (which go dormant, resuming if unblocked).
+- **Consequences**: one `AllowedSubreddit` table + `AutomationCycle.quarantined` counter + `AUTOMATION_ALLOWED` audit (idempotent migration); `QUARANTINED` task-log status (TEXT column, no migration); no companion change at all (pool exclusion is server-side; the pre-Confirm blocked re-check already covers mid-hour blocks). Accepted substring casualties (`cockpit`, `dataanalysis`, `asexual`, …) reverse in one tap; say the word to carve any out instead.
+- **Status**: Implemented 2026-10-10, NOT deployed.
+

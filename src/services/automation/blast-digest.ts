@@ -35,6 +35,7 @@ export const UNKNOWN_SUB = 'unknown';
 /** Human tag per validation reason for the DM. */
 function reasonTag(reason: string): string {
   if (reason === 'SKIPPED_COMMENT') return 'comment';
+  if (reason === 'QUARANTINED') return 'NAME-CHECK';
   return reason;
 }
 
@@ -171,11 +172,14 @@ export function formatDigestMessage(digest: BlastDigest): string {
   }
   if (digest.newSubs.length > 0) {
     lines.push(`NEW - never seen before: ${digest.newSubs.map((s) => `r/${s}`).join(', ')}`);
-    lines.push('Hold + review, or block a sub above. Tapping Blast releases the eligible set.');
+    lines.push('The blast opens automatically — block a sub above to keep it out of future rounds.');
   } else if (digest.eligible === 0) {
     lines.push('Nothing eligible - everything scanned is tagged above. No blast needed; Hold to dismiss.');
   } else {
-    lines.push('No new subreddits. Tap Blast to release, Hold to skip this round.');
+    lines.push('No new subreddits. The blast opens automatically.');
+  }
+  if (digest.subs.some((s) => s.reasons.includes('NAME-CHECK'))) {
+    lines.push('NAME-CHECK = held for name review (doubtful match, never auto-blocked): tap Block, or DM `allow r/x` to clear it for future rounds.');
   }
   let text = lines.join('\n');
   if (text.length > 1900) text = `${text.slice(0, 1900)}…`;

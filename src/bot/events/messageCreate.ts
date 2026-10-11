@@ -70,10 +70,12 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 }
 
 /**
- * Bot-DM handler. Two commands, both exact word (any case), managers only:
+ * Bot-DM handler. Three commands, all exact-word (any case), managers only:
  * - `scan`: queues one on-demand watcher scan (same flow as automatic).
  * - `blocks`: replies with the auto-block report (actual auto-blocks from the
- *   DB + dry-run WOULD_BLOCK candidates from the screen event feed).
+ *   DB + cleared subs + dry-run WOULD_BLOCK candidates from the event feed).
+ * - `allow r/sub`: clears a quarantined subreddit name for future scans
+ *   (content screening still applies; manual blocks always win).
  * Everything else — and everyone unauthorized — gets silence.
  */
 async function handleDirectMessage(message: Message): Promise<void> {
@@ -87,15 +89,53 @@ async function handleDirectMessage(message: Message): Promise<void> {
     if (!isAdminOrManager(message.author.id)) return;
     try {
       const rows = await automationRepository.listAutoBlocked(20).catch(() => []);
+      const allowedRows = await automationRepository.listAllowed().catch(() => []);
       const report = buildBlocksReport({
         autoBlocked: rows.map((r) => ({ subreddit: r.subreddit, reason: r.reason, createdAt: r.createdAt })),
         events: listScreenEvents(),
         dryRun: CONTENT_SCREEN.DRY_RUN,
+        allowed: allowedRows.map((r: { subreddit: string }) => r.subreddit),
       });
       await message.reply(report);
       logger.info('Blocks report sent via DM', { userId: message.author.id });
     } catch {
       await message.reply('Could not build the blocks report — try again in a minute.').catch(() => undefined);
+    }
+    return;
+  }
+  const allowMatch = /^allow\s+(\S+)\s*$/.exec(message.content.trim());
+  if (allowMatch) {
+    if (!isAdminOrManager(message.author.id)) return;
+    try {
+      const { normalizeSubreddit } = await import('../../services/automation/subreddit');
+      const normalized = normalizeSubreddit(allowMatch[1]);
+      if (!normalized) {
+        await message.reply('Usage: `allow r/subreddit` — that name was unreadable.');
+        return;
+      }
+      if (await automationRepository.isBlocked(normalized).catch(() => false)) {
+        await message.reply(
+          `r/${normalized} is BLOCKED — blocks win over cleared names. Remove the block first if you meant to clear it.`,
+        );
+        return;
+      }
+      if (await automationRepository.isAllowed(normalized).catch(() => false)) {
+        await message.reply(`r/${normalized} is already cleared.`);
+        return;
+      }
+      await automationRepository.addAllowed(normalized, 'DM allow review', message.author.id);
+      await auditLogService.log(
+        AuditAction.AUTOMATION_ALLOWED,
+        null,
+        message.author.id,
+        `r/${normalized} cleared for future scans (name review)`,
+      );
+      logger.info('Subreddit cleared via DM', { subreddit: normalized, userId: message.author.id });
+      await message.reply(
+        `r/${normalized} cleared — future scans treat its name as reviewed. Content screening still applies.`,
+      );
+    } catch {
+      await message.reply('Could not clear that subreddit — try again in a minute.').catch(() => undefined);
     }
     return;
   }

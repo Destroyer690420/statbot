@@ -181,6 +181,7 @@ export enum AuditAction {
   AUTOMATION_TASK_ACCEPTED = 'AUTOMATION_TASK_ACCEPTED',
   AUTOMATION_TASK_FAILED = 'AUTOMATION_TASK_FAILED',
   AUTOMATION_BLOCKED = 'AUTOMATION_BLOCKED',
+  AUTOMATION_ALLOWED = 'AUTOMATION_ALLOWED',
   AUTOMATION_SESSION_UPDATED = 'AUTOMATION_SESSION_UPDATED',
   AUTOMATION_STOPPED = 'AUTOMATION_STOPPED',
   REDDIT_SESSION_UPDATED = 'REDDIT_SESSION_UPDATED',
@@ -442,7 +443,8 @@ export type AutomationTaskStatus =
   | 'WOULD_ACCEPT'
   | 'ACCEPTED'
   | 'FAILED'
-  | 'NO_SUBREDDIT';
+  | 'NO_SUBREDDIT'
+  | 'QUARANTINED';
 
 export interface DetectedGoPartTimeTask {
   subTaskId: string;
@@ -470,4 +472,13 @@ export interface ValidationResult {
    */
   needsContentReview?: boolean;
   screenSignal?: ContentScreenSignal;
+  /**
+   * Subreddit-NAME verdict (advisory — validators never write). The burst
+   * orchestrator executes `block` (pre-blast auto-block, dry-run aware) and
+   * `quarantine` (held from the blast, digest-flagged); single-task paths
+   * (test-accept/rehearse/cycle) treat both as flag-only and never write.
+   */
+  nameVerdict?: 'block' | 'quarantine' | null;
+  nameMatched?: string | null;
+  nameSignal?: ContentScreenSignal;
 }

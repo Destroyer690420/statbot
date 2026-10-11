@@ -5,7 +5,7 @@ import { automationRepository, outreachRepository, taskRepository } from '../../
 import { sessionService } from '../../services/automation/session.service';
 import { redditSessionService } from '../../services/reddit-session.service';
 import { normalizeSubreddit } from '../../services/automation/subreddit';
-import { validateDetectedTask, loadSeenSubs } from '../../services/automation/validator.service';
+import { validateDetectedTask, loadSeenSubs, loadAllowedSubs } from '../../services/automation/validator.service';
 import { handleAutoBlockReport } from '../../services/automation/content-block.service';
 import { recordScreenEvent } from '../../services/automation/screen-events';
 import { screenTitle } from '../../utils/content-screen';
@@ -361,6 +361,54 @@ export default function createAutomationRoutes(discordClient: Client): Router {
     }
   });
 
+  /**
+   * Allowed subreddits (manager-cleared quarantine verdicts). A row skips
+   * NAME screening for that exact normalized sub in future scans; content
+   * screening and manual blocks are unaffected (blocks always win).
+   */
+  /** GET /api/v1/automation/allowed */
+  router.get('/allowed', async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      res.json({ success: true, data: await automationRepository.listAllowed() });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /** PUT /api/v1/automation/allowed */
+  router.put('/allowed', validateBody(blockedSchema), async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      const normalized = normalizeSubreddit(req.body.subreddit);
+      if (!normalized) {
+        res.status(400).json({ success: false, message: 'Invalid subreddit.' });
+        return;
+      }
+      const userId = (req as unknown as { userId: string }).userId;
+      const row = await automationRepository.addAllowed(normalized, req.body.reason || null, userId);
+      await auditLogService
+        .log(AuditAction.AUTOMATION_ALLOWED, null, userId, `r/${normalized} cleared for future scans (name review)`)
+        .catch(() => undefined);
+      res.json({ success: true, data: row });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /** DELETE /api/v1/automation/allowed/:subreddit */
+  router.delete('/allowed/:subreddit', async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    try {
+      const raw = String(req.params.subreddit);
+      const normalized = normalizeSubreddit(raw) || raw.toLowerCase();
+      await automationRepository.removeAllowed(normalized);
+      res.json({ success: true, data: { removed: normalized } });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
   /** POST /api/v1/automation/session */
   router.post('/session', validateBody(sessionSchema), async (req: Request, res: Response): Promise<void> => {
     if (!requireDashboardAdmin(req, res)) return;
@@ -552,7 +600,10 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         return;
       }
 
-      const v = await validateDetectedTask(detected, { seenSubs: await loadSeenSubs().catch(() => undefined) });
+      const v = await validateDetectedTask(detected, {
+        seenSubs: await loadSeenSubs().catch(() => undefined),
+        allowedSubs: await loadAllowedSubs().catch(() => undefined),
+      });
       await automationRepository.logTask({
         cycleId: contact.cycleId, externalTaskId, taskType: detected.type,
         subreddit: detected.subreddit, status: v.reason, workerId: contact.workerId,
@@ -700,7 +751,10 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         karmaLimit: null,
         earnings: null,
       };
-      const v = await validateDetectedTask(detected, { seenSubs: await loadSeenSubs().catch(() => undefined) });
+      const v = await validateDetectedTask(detected, {
+        seenSubs: await loadSeenSubs().catch(() => undefined),
+        allowedSubs: await loadAllowedSubs().catch(() => undefined),
+      });
 
       const settings = await automationRepository.getSettings();
       const dryRun = settings?.dryRun ?? true;
@@ -899,6 +953,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           blocked: result.blocked,
           duplicates: result.duplicates,
           commentsSkipped: result.commentsSkipped,
+          quarantined: result.quarantined,
           blast: result.blast,
           sent: result.sent,
           skipped: result.skipped,

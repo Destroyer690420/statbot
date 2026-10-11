@@ -74,6 +74,17 @@ describe('buildBlocksReport', () => {
     expect(msg).toContain('none recorded');
   });
 
+  it('lists cleared subs compactly', () => {
+    const msg = buildBlocksReport({ autoBlocked: [], events: [], dryRun: false, allowed: ['moderators', 'cartoons'] });
+    expect(msg).toContain('Cleared: r/moderators, r/cartoons');
+    expect(msg.length).toBeLessThanOrEqual(1900);
+  });
+
+  it('omits the cleared line when nobody is cleared', () => {
+    const msg = buildBlocksReport({ autoBlocked: [], events: [], dryRun: false });
+    expect(msg).not.toContain('Cleared:');
+  });
+
   it('always fits a Discord message', () => {
     const many = Array.from({ length: 30 }, (_, i) => ({
       subreddit: `verylongsubredditname${i}`,

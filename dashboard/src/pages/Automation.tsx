@@ -16,6 +16,7 @@ import {
   getAutomationCycles,
   getAutomationCycle,
   getBlockedSubreddits,
+  getAllowedSubreddits,
   getAutomationCompanion,
   getAutomationClaims,
   updateAutomationSettings,
@@ -23,6 +24,8 @@ import {
   stopAutomation,
   addBlockedSubreddit,
   removeBlockedSubreddit,
+  addAllowedSubreddit,
+  removeAllowedSubreddit,
   saveAutomationSession,
   sendTestContact,
   sendTestAccept,
@@ -36,6 +39,7 @@ function errMsg(e: unknown): string {
 export function Automation() {
   const queryClient = useQueryClient();
   const [subInput, setSubInput] = useState('');
+  const [allowInput, setAllowInput] = useState('');
   const [session, setSession] = useState({ sessionToken: '', csrfToken: '', nextAction: '' });
   const [selectedCycle, setSelectedCycle] = useState<string | null>(null);
   const [testChannel, setTestChannel] = useState('');
@@ -50,6 +54,7 @@ export function Automation() {
   const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 60000 });
   const cyclesQuery = useQuery({ queryKey: ['automation-cycles'], queryFn: getAutomationCycles, refetchInterval: 60000 });
   const blockedQuery = useQuery({ queryKey: ['automation-blocked'], queryFn: getBlockedSubreddits });
+  const allowedQuery = useQuery({ queryKey: ['automation-allowed'], queryFn: getAllowedSubreddits });
   const companionQuery = useQuery({ queryKey: ['automation-companion'], queryFn: getAutomationCompanion, refetchInterval: 60000 });
   const claimsQuery = useQuery({ queryKey: ['automation-claims'], queryFn: getAutomationClaims, refetchInterval: 60000 });
   const detailQuery = useQuery({
@@ -61,6 +66,7 @@ export function Automation() {
   const status = statusQuery.data?.data;
   const cycles: Record<string, unknown>[] = cyclesQuery.data?.data || [];
   const blocked: { subreddit: string; reason: string | null }[] = blockedQuery.data?.data || [];
+  const allowed: { subreddit: string; reason: string | null }[] = allowedQuery.data?.data || [];
   const companion = companionQuery.data?.data;
   const claims: Record<string, unknown>[] = claimsQuery.data?.data || [];
   const detail = detailQuery.data?.data;
@@ -69,6 +75,7 @@ export function Automation() {
     queryClient.invalidateQueries({ queryKey: ['automation-status'] });
     queryClient.invalidateQueries({ queryKey: ['automation-cycles'] });
     queryClient.invalidateQueries({ queryKey: ['automation-blocked'] });
+    queryClient.invalidateQueries({ queryKey: ['automation-allowed'] });
     queryClient.invalidateQueries({ queryKey: ['automation-companion'] });
     queryClient.invalidateQueries({ queryKey: ['automation-claims'] });
   };
@@ -88,6 +95,17 @@ export function Automation() {
   });
   const removeBlockedMutation = useMutation({
     mutationFn: removeBlockedSubreddit,
+    onSuccess: invalidate,
+  });
+  const addAllowedMutation = useMutation({
+    mutationFn: (s: string) => addAllowedSubreddit(s),
+    onSuccess: () => {
+      setAllowInput('');
+      invalidate();
+    },
+  });
+  const removeAllowedMutation = useMutation({
+    mutationFn: removeAllowedSubreddit,
     onSuccess: invalidate,
   });
   const sessionMutation = useMutation({
@@ -203,6 +221,7 @@ export function Automation() {
           ['Workers Confirmed', status?.lastCycle?.workersConfirmed ?? '—'],
           ['Posts Accepted', status?.lastCycle?.postsAccepted ?? '—'],
           ['Blocked Subs', status?.blockedCount ?? blocked.length],
+          ['Quarantined (last cycle)', status?.lastCycle?.quarantined ?? '—'],
         ].map(([label, value]) => (
           <div key={label} className="stat-card">
             <p className="text-sm text-dark-400">{label}</p>
@@ -424,6 +443,51 @@ export function Automation() {
                 <button
                   className="text-danger text-sm hover:underline shrink-0 ml-3"
                   onClick={() => removeBlockedMutation.mutate(b.subreddit)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Allowed subreddits (cleared quarantine verdicts) */}
+      <div className="glass-card p-4 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Ban className="w-4 h-4 text-primary-400" />
+          <h2 className="text-base font-semibold text-text-primary">Cleared Subreddits</h2>
+        </div>
+        <p className="text-sm text-dark-400 -mt-2">Reviewed names skip future name screening (content screening still applies; manual blocks always win).</p>
+        <div className="flex gap-2">
+          <input
+            className="input-field flex-1 font-mono text-sm"
+            placeholder="r/moderators"
+            value={allowInput}
+            onChange={(e) => setAllowInput(e.target.value)}
+          />
+          <button
+            className="btn-secondary text-sm px-4 py-2 shrink-0"
+            disabled={!allowInput.trim() || addAllowedMutation.isPending}
+            onClick={() => addAllowedMutation.mutate(allowInput.trim())}
+          >
+            Add
+          </button>
+        </div>
+        <div className="space-y-2">
+          {allowedQuery.isLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+            </div>
+          ) : allowed.length === 0 ? (
+            <p className="text-sm text-dark-400">None cleared.</p>
+          ) : (
+            allowed.map((b) => (
+              <div key={b.subreddit} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60">
+                <span className="font-mono text-sm text-dark-100">r/{b.subreddit}</span>
+                <button
+                  className="text-danger text-sm hover:underline shrink-0 ml-3"
+                  onClick={() => removeAllowedMutation.mutate(b.subreddit)}
                 >
                   Remove
                 </button>

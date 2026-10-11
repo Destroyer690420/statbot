@@ -63,6 +63,7 @@ enum AuditAction {
   AUTOMATION_TASK_ACCEPTED
   AUTOMATION_TASK_FAILED
   AUTOMATION_BLOCKED
+  AUTOMATION_ALLOWED
   AUTOMATION_SESSION_UPDATED
   AUTOMATION_STOPPED
   REDDIT_SESSION_UPDATED
@@ -426,6 +427,13 @@ model BlockedSubreddit {
   createdBy String
 }
 
+model AllowedSubreddit {
+  subreddit String   @id
+  reason    String?
+  createdAt DateTime @default(now())
+  createdBy String
+}
+
 model AutomationSettings {
   id          String   @id @default("automation")
   enabled     Boolean  @default(false)
@@ -460,6 +468,7 @@ model AutomationCycle {
   workersConfirmed Int       @default(0)
   postsAccepted    Int       @default(0)
   failures         Int       @default(0)
+  quarantined      Int       @default(0)
   dryRun           Boolean   @default(true)
 
   @@index([startedAt])

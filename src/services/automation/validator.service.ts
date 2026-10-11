@@ -1,8 +1,8 @@
 import { automationRepository, taskRepository } from '../../database/repositories';
 import { GOPARTTIME_SOURCE } from '../../config/constants';
 import { normalizeSubreddit } from './subreddit';
-import { buildSeenSet, tier0Screen, ScreenLists } from '../../utils/content-screen';
-import type { DetectedGoPartTimeTask, ValidationResult } from '../../types';
+import { buildSeenSet, tier0Screen, screenSubredditName, ScreenLists } from '../../utils/content-screen';
+import type { ContentScreenSignal, DetectedGoPartTimeTask, ValidationResult } from '../../types';
 
 /**
  * Seen subreddits for Tier-0, EXCLUDING one cycle's own logs.
@@ -28,6 +28,41 @@ export async function loadSeenSubs(excludeCycleId?: string | null): Promise<Set<
 }
 
 /**
+ * Manager-cleared subreddits (quarantine verdicts). Timeless — unlike seen,
+ * no cycle exclusion: an allow row, once written, covers every future scan
+ * until removed. Empty when the table is missing/empty (fail-closed toward
+ * screening, never toward skipping).
+ */
+export async function loadAllowedSubs(): Promise<Set<string>> {
+  const all = await automationRepository.listAllowed().catch(() => []);
+  return buildSeenSet(all.map((r: { subreddit: string }) => r.subreddit));
+}
+
+/**
+ * Advisory name verdict shared by both validators. Returns null when name
+ * screening is inactive (no seen context — old behavior preserved) or the
+ * sub was seen/allowed before (already reviewed by digest or manager).
+ * Validators never write: the burst orchestrator executes `block`
+ * (pre-blast auto-block) and `quarantine` (held from the blast); single-task
+ * paths treat both as flag-only.
+ */
+function nameVerdictFor(
+  normalized: string,
+  seenSubs: ReadonlySet<string> | null | undefined,
+  allowedSubs: ReadonlySet<string> | null | undefined,
+  screenLists?: ScreenLists,
+): { nameVerdict: 'block' | 'quarantine'; nameMatched: string; nameSignal: ContentScreenSignal | null } | null {
+  if (!seenSubs || seenSubs.has(normalized)) return null;
+  if (allowedSubs && allowedSubs.has(normalized)) return null;
+  const nv = screenSubredditName(normalized, screenLists);
+  // Note: quarantine verdicts carry signal null (ambiguous hits belong to no
+  // single category) — the gate must NOT require a signal, or quarantine
+  // silently never fires while block verdicts pass.
+  if (nv.decision === 'pass' || !nv.matched) return null;
+  return { nameVerdict: nv.decision, nameMatched: nv.matched, nameSignal: nv.signal };
+}
+
+/**
  * Validation engine (spec §11-12, §51 rules 1-3):
  *  1. type must be Post (comments ignored entirely)
  *  2. externalTaskId must not already exist — SKIPPED when
@@ -42,7 +77,7 @@ export async function loadSeenSubs(excludeCycleId?: string | null): Promise<Set<
  */
 export async function validateDetectedTask(
   task: DetectedGoPartTimeTask,
-  opts: { skipDuplicate?: boolean; seenSubs?: ReadonlySet<string>; screenLists?: ScreenLists } = {},
+  opts: { skipDuplicate?: boolean; seenSubs?: ReadonlySet<string>; screenLists?: ScreenLists; allowedSubs?: ReadonlySet<string> } = {},
 ): Promise<ValidationResult> {
   if (task.type !== 'post') {
     return { eligible: false, reason: 'SKIPPED_COMMENT', detail: `Task ${task.subTaskId} type=${task.type}` };
@@ -69,8 +104,21 @@ export async function validateDetectedTask(
   // (No logging here: this module stays logger-free so unit tests never pull
   // in env.ts. Callers log flagged tasks.)
   const flag = tier0Screen(task, opts.seenSubs, opts.screenLists);
-  if (flag) {
-    return { eligible: true, reason: 'ELIGIBLE', needsContentReview: true, screenSignal: flag.signal };
+  const named = nameVerdictFor(normalized, opts.seenSubs, opts.allowedSubs, opts.screenLists);
+  if (flag || named) {
+    return {
+      eligible: true,
+      reason: 'ELIGIBLE',
+      ...(flag ? { needsContentReview: true, screenSignal: flag.signal } : {}),
+      ...(named
+        ? {
+            needsContentReview: true,
+            nameVerdict: named.nameVerdict,
+            nameMatched: named.nameMatched,
+            ...(named.nameSignal ? { nameSignal: named.nameSignal } : {}),
+          }
+        : {}),
+    };
   }
 
   return { eligible: true, reason: 'ELIGIBLE' };
@@ -97,6 +145,7 @@ export function evaluateForBurst(
   blockedSubs: ReadonlySet<string>,
   seenSubs?: ReadonlySet<string>,
   screenLists?: ScreenLists,
+  allowedSubs?: ReadonlySet<string>,
 ): ValidationResult {
   if (task.type !== 'post') {
     return { eligible: false, reason: 'SKIPPED_COMMENT', detail: `Task ${task.subTaskId} type=${task.type}` };
@@ -113,8 +162,21 @@ export function evaluateForBurst(
   // Tier-0 mirror of validateDetectedTask: flag-only, never affects `eligible`.
   // (Kept logging-free so this stays pure/sync; the caller logs flagged tasks.)
   const flag = tier0Screen(task, seenSubs, screenLists);
-  if (flag) {
-    return { eligible: true, reason: 'ELIGIBLE', needsContentReview: true, screenSignal: flag.signal };
+  const named = nameVerdictFor(normalized, seenSubs, allowedSubs, screenLists);
+  if (flag || named) {
+    return {
+      eligible: true,
+      reason: 'ELIGIBLE',
+      ...(flag ? { needsContentReview: true, screenSignal: flag.signal } : {}),
+      ...(named
+        ? {
+            needsContentReview: true,
+            nameVerdict: named.nameVerdict,
+            nameMatched: named.nameMatched,
+            ...(named.nameSignal ? { nameSignal: named.nameSignal } : {}),
+          }
+        : {}),
+    };
   }
 
   return { eligible: true, reason: 'ELIGIBLE' };

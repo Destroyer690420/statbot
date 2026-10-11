@@ -239,6 +239,45 @@ describe('blockableSubs', () => {
   });
 });
 
+describe('quarantined subs (NAME-CHECK)', () => {
+  function qlog(id: string, sub: string): DigestTaskLog {
+    return { externalTaskId: id, taskType: 'post', subreddit: sub, status: 'QUARANTINED' };
+  }
+
+  it('tags quarantined groups, never counts them eligible', () => {
+    const d = buildBlastDigest(
+      'c1',
+      [qlog('1', 'moderators'), qlog('2', 'moderators'), log('3', 'cats')],
+      [],
+      [],
+      { scanned: 3, eligible: 1, blocked: 0 },
+    );
+    const mod = d.subs.find((s) => s.sub === 'moderators')!;
+    expect(mod.eligible).toBe(0);
+    expect(mod.reasons).toEqual(['NAME-CHECK']);
+    expect(d.newSubs).toEqual(['cats']);
+    const msg = formatDigestMessage(d);
+    expect(msg).toContain('• r/moderators x2 [NAME-CHECK] (1, 2)');
+    expect(msg).toContain('NAME-CHECK = held for name review');
+    expect(msg).toContain('allow r/x');
+  });
+
+  it('offers block buttons for quarantined subs, never release inputs', () => {
+    const d = buildBlastDigest('c1', [qlog('1', 'moderators')], [], [], {
+      scanned: 1,
+      eligible: 0,
+      blocked: 0,
+    });
+    expect(d.blockableSubs).toEqual(['moderators']);
+    expect(buildReleaseInputs([qlog('1', 'moderators')])).toEqual([]);
+  });
+
+  it('quarantine is not an eligible log status', () => {
+    expect(isEligibleLogStatus('QUARANTINED')).toBe(false);
+    expect(isEligibleLogStatus('ELIGIBLE')).toBe(true);
+  });
+});
+
 describe('restart batch (fresh scan while a batch is live)', () => {
   const CYCLE = 'burst-2026-10-01-12:35-mupioeqv';
 

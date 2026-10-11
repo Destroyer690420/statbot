@@ -197,6 +197,76 @@ describe('Tier-0 flagging agrees and never blocks', () => {
   });
 });
 
+describe('Tier-0 name verdicts agree and never write', () => {
+  // Sample lists with the four-tier shape (production lists live in constants).
+  const LISTS = {
+    sexualHigh: ['porn'],
+    sexualAmbiguous: [],
+    vapeHigh: ['vape'],
+    vapeAmbiguous: ['mod'],
+  };
+  const SEEN = new Set<string>(['oldsub']);
+  const ALLOWED = new Set<string>(['cleared']);
+
+  function named(over: Partial<DetectedGoPartTimeTask> = {}): DetectedGoPartTimeTask {
+    return detected({ subreddit: 'vapeporn', title: 'cute cats', ...over });
+  }
+
+  function opts() {
+    return { skipDuplicate: true as const, seenSubs: SEEN, screenLists: LISTS, allowedSubs: ALLOWED };
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (taskRepository.findBySourceExternal as jest.Mock).mockResolvedValue(null);
+    (automationRepository.isBlocked as jest.Mock).mockResolvedValue(false);
+  });
+
+  it('both flag a confident name identically (advisory — validators never write)', async () => {
+    const task = named();
+    const single = await validateDetectedTask(task, opts());
+    const batched = evaluateForBurst(task, new Set(), SEEN, LISTS, ALLOWED);
+    for (const v of [single, batched]) {
+      expect(v.eligible).toBe(true);
+      expect(v.needsContentReview).toBe(true);
+      expect(v.nameVerdict).toBe('block');
+      expect(v.nameMatched).toBe('porn');
+      expect(v.nameSignal).toBe('sex');
+    }
+    expect(batched.nameVerdict).toBe(single.nameVerdict);
+    expect(batched.nameMatched).toBe(single.nameMatched);
+  });
+
+  it('both quarantine a doubtful name identically, still eligible', async () => {
+    const task = named({ subreddit: 'moderators' });
+    const single = await validateDetectedTask(task, opts());
+    const batched = evaluateForBurst(task, new Set(), SEEN, LISTS, ALLOWED);
+    for (const v of [single, batched]) {
+      expect(v.eligible).toBe(true);
+      expect(v.nameVerdict).toBe('quarantine');
+      expect(v.nameMatched).toBe('mod');
+    }
+  });
+
+  it('an allowed sub skips name screening identically', async () => {
+    const task = named({ subreddit: 'r/Cleared' });
+    const single = await validateDetectedTask(task, opts());
+    const batched = evaluateForBurst(task, new Set(), SEEN, LISTS, ALLOWED);
+    expect(single.nameVerdict).toBeFalsy();
+    expect(batched.nameVerdict).toBeFalsy();
+    expect(single.eligible).toBe(true);
+    expect(batched.eligible).toBe(true);
+  });
+
+  it('a seen sub skips name screening identically', async () => {
+    const task = named({ subreddit: 'OldSub' });
+    const single = await validateDetectedTask(task, opts());
+    const batched = evaluateForBurst(task, new Set(), SEEN, LISTS, ALLOWED);
+    expect(single.nameVerdict).toBeFalsy();
+    expect(batched.nameVerdict).toBeFalsy();
+  });
+});
+
 describe('downstream consumers tolerate more than 20 tasks', () => {
   const logs = Array.from({ length: 40 }, (_, i) => ({
     externalTaskId: String(1000 + i),

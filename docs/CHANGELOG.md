@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-10
+### Built (NOT deployed — needs migration re-run + app/dashboard rebuild)
+- **Name quarantine (Option 1).** Tri-state subreddit names: confident substring hits auto-block pre-blast (no worker messaged), doubtful hits quarantine (held from blast, `[NAME-CHECK]` digest flag, one-tap Block or `allow r/x` DM / dashboard Cleared section to resolve); validators stay side-effect-free, only the burst orchestrator writes. Typecheck clean, 69 suites / 953 tests green. No companion change. Rollback: `DRY_RUN` back to true. See Decision 29, `docs/GOPARTTIME.md` §17.
 ### Deployed (2026-10-10 at `1a0fc66` — app-only rebuild, no migration)
 - **Fully automatic hourly blasts live** (`161.118.164.85`; backup `rtm-backup-20261010-autoblast.tar.gz`; redis/dashboard untouched; host bundle removed). Verified: health healthy (DB+Redis), boot "All systems online!" + submission queue init, live-dist gates (0 `AUTO_PAUSED` refs, pre-blast digest in `dist`), 0 app errors.
 ### Built (NOT deployed — needs app rebuild)

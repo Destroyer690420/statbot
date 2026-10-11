@@ -485,6 +485,21 @@ export async function removeBlockedSubreddit(subreddit: string) {
   return data;
 }
 
+export async function getAllowedSubreddits() {
+  const { data } = await api.get('/automation/allowed');
+  return data;
+}
+
+export async function addAllowedSubreddit(subreddit: string, reason?: string) {
+  const { data } = await api.put('/automation/allowed', { subreddit, reason });
+  return data;
+}
+
+export async function removeAllowedSubreddit(subreddit: string) {
+  const { data } = await api.delete(`/automation/allowed/${encodeURIComponent(subreddit)}`);
+  return data;
+}
+
 export async function saveAutomationSession(body: {
   sessionToken: string;
   csrfToken: string;

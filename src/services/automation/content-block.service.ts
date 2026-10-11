@@ -26,6 +26,8 @@ export interface AutoBlockReport {
 export interface AutoBlockOutcome {
   blocked: boolean;
   subreddit: string | null;
+  /** Machine-readable fate (orchestrators must not parse `outcome` text). */
+  disposition: 'blocked' | 'dry-run' | 'already-blocked' | 'seen-skipped' | 'invalid';
   /** One log line describing what happened (or would have, in dry-run). */
   outcome: string;
   /** Admin DM text, or null when nothing is worth sending. */
@@ -36,7 +38,7 @@ const VALID_SIGNALS: readonly string[] = ['sex', 'vape', 'non-en'];
 
 export async function handleAutoBlockReport(
   report: AutoBlockReport,
-  opts: { dryRun?: boolean; seenSubs?: ReadonlySet<string>; actorId?: string } = {},
+  opts: { dryRun?: boolean; seenSubs?: ReadonlySet<string>; actorId?: string; source?: string } = {},
 ): Promise<AutoBlockOutcome> {
   const dryRun = opts.dryRun ?? CONTENT_SCREEN.DRY_RUN;
   const actorId = opts.actorId || 'companion:auto-screen';
@@ -45,6 +47,7 @@ export async function handleAutoBlockReport(
     return {
       blocked: false,
       subreddit: null,
+      disposition: 'invalid',
       outcome: `auto-block ignored: unreadable subreddit ${JSON.stringify(report.subreddit)}`,
       notice: null,
     };
@@ -53,6 +56,7 @@ export async function handleAutoBlockReport(
     return {
       blocked: false,
       subreddit: normalized,
+      disposition: 'invalid',
       outcome: `auto-block ignored: unknown signal ${JSON.stringify(report.signal)}`,
       notice: null,
     };
@@ -63,6 +67,7 @@ export async function handleAutoBlockReport(
     return {
       blocked: false,
       subreddit: normalized,
+      disposition: 'already-blocked',
       outcome: `r/${normalized} already blocked — auto-block skipped`,
       notice: null,
     };
@@ -73,6 +78,7 @@ export async function handleAutoBlockReport(
     return {
       blocked: false,
       subreddit: normalized,
+      disposition: 'seen-skipped',
       outcome: `r/${normalized} seen in a prior scan — auto-block skipped`,
       notice: null,
     };
@@ -83,12 +89,12 @@ export async function handleAutoBlockReport(
     return {
       blocked: false,
       subreddit: normalized,
+      disposition: 'dry-run',
       outcome: `WOULD_BLOCK r/${normalized} (${reason}${where})`,
       notice: null,
     };
   }
-  await automationRepository.addBlocked(normalized, reason, actorId);
-  try {
+  await automationRepository.addBlocked(normalized, reason, actorId);  try {
     await auditLogService.log(AuditAction.AUTOMATION_BLOCKED, null, actorId, `r/${normalized} auto-blocked (${reason}${where})`);
   } catch {
     // best-effort audit; the block itself is recorded
@@ -96,10 +102,11 @@ export async function handleAutoBlockReport(
   return {
     blocked: true,
     subreddit: normalized,
+    disposition: 'blocked',
     outcome: `auto-blocked r/${normalized} (${reason}${where})`,
     notice:
       `Auto-blocked r/${normalized} (${reason}${where}). ` +
-      `Source: Tier-1 full-content screen during an accept attempt. ` +
+      `Source: ${opts.source || 'Tier-1 full-content screen during an accept attempt'}. ` +
       `If this was a false positive, remove it in the dashboard Automation page → blocked-subreddit editor.`,
   };
 }

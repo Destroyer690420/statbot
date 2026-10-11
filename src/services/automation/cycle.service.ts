@@ -6,7 +6,7 @@ import { env } from '../../config/env';
 import { AUTOMATION } from '../../config/constants';
 import { logger } from '../../utils/logger';
 import { scanTasks, acceptTask } from './poller.service';
-import { validateDetectedTask, loadSeenSubs } from './validator.service';
+import { validateDetectedTask, loadSeenSubs, loadAllowedSubs } from './validator.service';
 import { sessionService } from './session.service';
 import {
   selectCandidates,
@@ -105,10 +105,12 @@ export async function runCycle(discordClient: Client, opts: CycleOpts = {}): Pro
       let blocked = 0;
       let duplicates = 0;
       let comments = 0;
-      // Tier-0 seen set, fetched once per batch (excludes this cycle's logs).
+      // Tier-0 seen + allow sets, fetched once per batch (seen excludes this
+      // cycle's logs; allow is timeless).
       const seenSubs = await loadSeenSubs(cycleId).catch(() => undefined);
+      const allowedSubs = await loadAllowedSubs().catch(() => undefined);
       for (const t of detected) {
-        const v = await validateDetectedTask(t, { seenSubs });
+        const v = await validateDetectedTask(t, { seenSubs, allowedSubs });
         await automationRepository.logTask({
           cycleId,
           externalTaskId: t.subTaskId,

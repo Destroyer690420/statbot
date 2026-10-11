@@ -29,6 +29,7 @@ describe('handleAutoBlockReport (enforce mode)', () => {
       { dryRun: false, seenSubs: new Set() },
     );
     expect(out.blocked).toBe(true);
+    expect(out.disposition).toBe('blocked');
     expect(out.subreddit).toBe('newsub');
     expect(addMock).toHaveBeenCalledTimes(1);
     expect(addMock).toHaveBeenCalledWith('newsub', 'auto-content:vape', 'companion:auto-screen');
@@ -44,6 +45,7 @@ describe('handleAutoBlockReport (enforce mode)', () => {
       { dryRun: false, seenSubs: new Set() },
     );
     expect(out.blocked).toBe(false);
+    expect(out.disposition).toBe('already-blocked');
     expect(out.notice).toBeNull();
     expect(addMock).not.toHaveBeenCalled();
     expect(out.outcome).toContain('already blocked');
@@ -55,6 +57,7 @@ describe('handleAutoBlockReport (enforce mode)', () => {
       { dryRun: false, seenSubs: new Set(['oldsub']) },
     );
     expect(out.blocked).toBe(false);
+    expect(out.disposition).toBe('seen-skipped');
     expect(addMock).not.toHaveBeenCalled();
     expect(out.outcome).toContain('prior scan');
   });
@@ -82,6 +85,7 @@ describe('handleAutoBlockReport (dry-run / shadow mode)', () => {
       { dryRun: true, seenSubs: new Set() },
     );
     expect(out.blocked).toBe(false);
+    expect(out.disposition).toBe('dry-run');
     expect(out.outcome).toContain('WOULD_BLOCK');
     expect(out.outcome).toContain('auto-content:sex');
     expect(addMock).not.toHaveBeenCalled();

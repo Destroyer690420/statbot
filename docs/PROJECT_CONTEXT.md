@@ -264,6 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-10**: **Name quarantine BUILT, NOT deployed.** Tri-state names (confident pre-blast auto-block, doubtful quarantine + `[NAME-CHECK]` digest + `allow`/Cleared resolution); validators side-effect-free, orchestrator-only writes. 69 suites / 953 tests green. No companion change. See Decision 29, `docs/GOPARTTIME.md` §17.
 - **2026-10-10**: **Auto-blast DEPLOYED live at `1a0fc66`** (app-only rebuild, no migration; backup `rtm-backup-20261010-autoblast.tar.gz`; verified healthy boot, pre-blast digest in live `dist`, 0 paused refs, 0 app errors; host bundle removed).
 - **2026-10-10**: **Submit executor v1.1.1 hotfix DEPLOYED live at `4d01bf1`** (dashboard-only rebuild; fixed commented-out `var input` that broke every fill + new hygiene guard test; verified served v1.1.1; host bundle removed). **Tampermonkey update + executor tab reload required to retest.**
 - **2026-10-10**: **Link auto-submit Part 2 DEPLOYED live at `144139e`** (app + dashboard rebuild; migration re-run clean, both audit values live; verified: 3 services Up, health healthy, submission queue init, served submit script v1.1.0, 0 app errors; host bundle removed). **Dedicated executor tab install still required.** See Decision 27, `docs/GOPARTTIME.md` §15.
