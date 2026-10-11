@@ -900,20 +900,22 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         }),
       );
       // On-demand scan reports (DM `scan` / scheduled hourly) are identified
-      // BEFORE the flow runs: they always get their OWN cycle. Merging into a
-      // live hour blast's cycle would make the digest rebuild the previous
-      // batch's list (claimed posts included) instead of this fresh scan.
+      // BEFORE the flow runs. First report wins, atomically: takeRequest
+      // returns the request only for the first caller, which gets its OWN
+      // cycle + its own digest DM. Same-id duplicates (second tab, retries)
+      // get null and take the normal auto path — merging into the hour's
+      // open blast instead of opening a competing one (a competing blast
+      // would supersede-close the first and re-message every ticket).
       // Forged or ancient ids are NOT manual: they keep the normal auto path.
       const rawScanRequestId = typeof req.body.scanRequestId === 'string' ? req.body.scanRequestId : null;
-      const isManualReport = rawScanRequestId !== null && scanRequestService.wasRequested(rawScanRequestId);
+      // The winning report ALWAYS answers with its own digest DM (per-request
+      // idempotency, never the hour gate). Same-id duplicates stay silent.
+      const manualRequest = rawScanRequestId ? scanRequestService.takeRequest(rawScanRequestId) : null;
+      const isManualReport = manualRequest !== null;
       const result = await createBurstFlow(discordClient, tasks, 'burst', {
         forceWindow: req.body.force === true,
         freshCycleOnly: isManualReport,
       });
-      // The first report carrying the request id consumes it and ALWAYS
-      // answers with its own digest DM (per-request idempotency, never the
-      // hour gate). Same-id duplicates stay silent.
-      const manualRequest = rawScanRequestId ? scanRequestService.takeRequest(rawScanRequestId) : null;
       if (manualRequest) {
         void blastApprovalService
           .sendManualDigest(discordClient, result.cycleId, manualRequest.requestId, manualRequest.requestedBy)

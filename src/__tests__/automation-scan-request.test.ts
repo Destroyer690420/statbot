@@ -58,7 +58,7 @@ describe('consumeRequest / isKnownRequest', () => {
   });
 });
 
-describe('wasRequested (manual-report routing)', () => {
+describe('wasRequested (duplicate-report silence)', () => {
   it('is true for live and consumed ids, false for forged ones', () => {
     const req = requestScan('user-1');
     expect(wasRequested(req.requestId)).toBe(true);
@@ -68,6 +68,18 @@ describe('wasRequested (manual-report routing)', () => {
     expect(isConsumedRequest(req.requestId)).toBe(true);
     expect(wasRequested('req-forged-123')).toBe(false);
     expect(isConsumedRequest('req-forged-123')).toBe(false);
+  });
+
+  it('must NOT route freshCycleOnly: consumed ids stay true (2026-10-10 stranded-message incident)', () => {
+    // The /burst route claims the request with takeRequest BEFORE the flow:
+    // the winner gets its own cycle + manual DM, same-id duplicates get null
+    // and merge into the hour blast. Routing on wasRequested instead opened
+    // one competing blast per tab, each supersede-closing the previous
+    // without cleanup (~50 stranded loser messages per blast).
+    const req = requestScan('hourly');
+    expect(takeRequest(req.requestId)?.requestId).toBe(req.requestId);
+    expect(takeRequest(req.requestId)).toBeNull();
+    expect(wasRequested(req.requestId)).toBe(true);
   });
 });
 

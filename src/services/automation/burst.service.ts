@@ -369,7 +369,7 @@ export async function createBurstFlow(
   // The pool is registered BEFORE the first message goes out: replies
   // arrive while sending is still in flight, and each must find an OPEN
   // burst to claim from — otherwise early winners burn slots with no claim.
-  const blast = await outreachService.beginBlast(eligible.length, senderId || 'burst');
+  const blast = await outreachService.beginBlast(discordClient, eligible.length, senderId || 'burst');
   const burst = await automationRepository.createBurst({
     blastId: blast.id,
     cycleId,

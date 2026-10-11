@@ -321,13 +321,17 @@ class OutreachService {
    * Split out so automation can register its burst pool BEFORE the first
    * message goes out — replies arriving mid-send must find a pool to claim
    * from, otherwise early winners burn slots with no claim.
+   *
+   * A superseded blast's loser messages are removed right here (winners keep
+   * theirs — their task is running and that message is their record), so
+   * starting a new round can never strand messages in tickets. Best-effort:
+   * a failed cleanup only logs — the new batch still opens.
    */
   async beginBlast(
+    discordClient: Client,
     slotsTotal: number,
     senderId: string | null,
   ): Promise<{ id: string; slotsTotal: number }> {
-    // A new blast supersedes any still-open one (its un-won messages stay —
-    // those workers already saw them; only the new blast auto-cleans).
     const previous = await outreachRepository.getOpenBlast().catch(() => null);
     if (previous) {
       const filled = await outreachRepository.countReplies(previous.id).catch(() => 0);
@@ -336,6 +340,21 @@ class OutreachService {
         await this.blastHooks.onClosed?.(previous.id);
       } catch (error) {
         logger.warn('Blast closed hook failed', { blastId: previous.id, error });
+      }
+      try {
+        const winners = new Set(await outreachRepository.listReplyChannelIds(previous.id).catch(() => []));
+        const cleaned = await this.deleteBlastMessages(discordClient, previous.id, winners);
+        logger.info('Blast supersede cleanup complete', {
+          supersededBlastId: previous.id,
+          winners: winners.size,
+          deleted: cleaned.deleted,
+          failed: cleaned.failed,
+        });
+      } catch (error) {
+        logger.warn('Blast supersede cleanup failed (new blast still opens)', {
+          blastId: previous.id,
+          error,
+        });
       }
     }
 
@@ -616,7 +635,7 @@ class OutreachService {
     // before its snapshot, so sends that raced in between fill and the
     // stop-the-send check above would otherwise stay forever. Sweep them
     // now (winners keep theirs). Only for actually-filled blasts — a blast
-    // closed by supersede keeps its seen messages by design (beginBlast).
+    // closed by supersede is cleaned by beginBlast instead.
     const finalBlast = await outreachRepository.getBlast(blast.id).catch(() => null);
     if (finalBlast && isBlastFull(finalBlast.slotsFilled, finalBlast.slotsTotal)) {
       const winners = new Set(await outreachRepository.listReplyChannelIds(blast.id).catch(() => []));
@@ -645,7 +664,7 @@ class OutreachService {
     slotsTotal: number,
     senderId: string | null,
   ): Promise<{ blast: { id: string; slotsTotal: number }; sent: SendResult[]; skipped: SkippedTicket[] }> {
-    const blast = await this.beginBlast(slotsTotal, senderId);
+    const blast = await this.beginBlast(discordClient, slotsTotal, senderId);
     const { sent, skipped } = await this.sendBlastMessages(discordClient, blast, senderId);
     return { blast, sent, skipped };
   }
@@ -785,6 +804,33 @@ class OutreachService {
     } catch (error) {
       logger.error('Outreach onWorkerMessage failed', { channelId, userId, error });
     }
+  }
+
+  /**
+   * Housekeeping cleanup for one CLOSED blast: removes its bot message from
+   * every contacted ticket except the winners. Refuses to touch an OPEN
+   * blast (its round may still be collecting replies) or an unknown id, so a
+   * mistimed run can never nuke a live round. Already-gone messages count as
+   * cleaned, never as failures.
+   */
+  async cleanupClosedBlastMessages(
+    discordClient: Client,
+    blastId: string,
+  ): Promise<{ deleted: number; failed: number; skipped: boolean }> {
+    const blast = await outreachRepository.getBlast(blastId).catch(() => null);
+    if (!blast || blast.status === 'OPEN') {
+      if (blast) logger.warn('Stuck-message cleanup refused: blast still open', { blastId });
+      return { deleted: 0, failed: 0, skipped: true };
+    }
+    const winners = new Set(await outreachRepository.listReplyChannelIds(blastId).catch(() => []));
+    const cleaned = await this.deleteBlastMessages(discordClient, blastId, winners);
+    logger.info('Closed-blast message cleanup complete', {
+      blastId,
+      winners: winners.size,
+      deleted: cleaned.deleted,
+      failed: cleaned.failed,
+    });
+    return { ...cleaned, skipped: false };
   }
 
   /**

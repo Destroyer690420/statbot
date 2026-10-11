@@ -282,6 +282,7 @@ Closes the Submit Link loop: the worker's Discord-submitted link is submitted on
 ## 16. Fully automatic hourly blasts (report-first DM, no tap — live 2026-10-10)
 
 Each settled :10 report validates, DMs the digest (awaited — the report provably precedes the first worker message), then opens the blast itself when live + in-window. Manual Blast Now stays as window-gate override + fallback (it skips the pre-blast digest; the manager is looking at the page). On-demand `scan` digests are untouched (own cycle, own per-request DM). See Decision 28.
+- **Supersede rule (built 2026-10-11, NOT deployed):** any new blast deletes the previous blast's loser messages first (winners keep theirs) — starting a round can never strand messages again. Same-scan duplicate reports no longer open competing blasts at all: the first report claims the scan request atomically, the rest merge into the hour blast (slots grow, zero new messages).
 
 ## 17. Quarantine for doubtful subreddit names (NOT deployed)
 

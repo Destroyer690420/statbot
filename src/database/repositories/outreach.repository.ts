@@ -103,6 +103,11 @@ export class OutreachRepository {
     });
   }
 
+  /** All blasts, newest first (housekeeping scans; never the send path). */
+  async listBlasts() {
+    return getDb().outreachBlast.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
   async recordBlastMessage(blastId: string, channelId: string, messageId: string) {
     return getDb().outreachBlastMessage.upsert({
       where: { blastId_channelId: { blastId, channelId } },

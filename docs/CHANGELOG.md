@@ -2,6 +2,9 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-10-11
+### Built (NOT deployed — needs app rebuild, no migration)
+- **Stranded blast-message fix.** New blasts delete the previous blast's loser messages on supersede (winners keep theirs; cleanup failures never block the new blast); same-scan duplicate reports merge into the hour blast instead of opening competing ones (route claims the scan request atomically before the flow). One-off sweep `scripts/cleanup-stuck-blast-messages.ts` for the ~320 messages stranded 2026-10-10. Typecheck clean, 70 suites / 960 tests green. No migration, no companion change. See Decision 28 fix note.
 ## 2026-10-10
 ### Built (NOT deployed — needs migration re-run + app/dashboard rebuild)
 - **Name quarantine (Option 1).** Tri-state subreddit names: confident substring hits auto-block pre-blast (no worker messaged), doubtful hits quarantine (held from blast, `[NAME-CHECK]` digest flag, one-tap Block or `allow r/x` DM / dashboard Cleared section to resolve); validators stay side-effect-free, only the burst orchestrator writes. Typecheck clean, 69 suites / 953 tests green. No companion change. Rollback: `DRY_RUN` back to true. See Decision 29, `docs/GOPARTTIME.md` §17.

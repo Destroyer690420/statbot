@@ -264,6 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-11**: **Stranded blast-message fix BUILT, NOT deployed.** New blasts delete previous losers on supersede (winners keep theirs); same-scan duplicates merge instead of opening competing blasts. 70 suites / 960 tests green. One-off sweep script ready for the ~320 messages stranded 2026-10-10. See Decision 28 fix note.
 - **2026-10-10**: **Name quarantine BUILT, NOT deployed.** Tri-state names (confident pre-blast auto-block, doubtful quarantine + `[NAME-CHECK]` digest + `allow`/Cleared resolution); validators side-effect-free, orchestrator-only writes. 69 suites / 953 tests green. No companion change. See Decision 29, `docs/GOPARTTIME.md` §17.
 - **2026-10-10**: **Auto-blast DEPLOYED live at `1a0fc66`** (app-only rebuild, no migration; backup `rtm-backup-20261010-autoblast.tar.gz`; verified healthy boot, pre-blast digest in live `dist`, 0 paused refs, 0 app errors; host bundle removed).
 - **2026-10-10**: **Submit executor v1.1.1 hotfix DEPLOYED live at `4d01bf1`** (dashboard-only rebuild; fixed commented-out `var input` that broke every fill + new hygiene guard test; verified served v1.1.1; host bundle removed). **Tampermonkey update + executor tab reload required to retest.**
