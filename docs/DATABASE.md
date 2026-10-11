@@ -72,7 +72,7 @@ erDiagram
         string submittedBy "nullable"
         timestamp reviewedAt "nullable"
         string reviewedBy "nullable"
-        string formatCheckStatus "nullable: MATCH|PARA_MISMATCH|TITLE_MISMATCH|TEXT_MISMATCH|FETCH_ERROR|DELETED|SKIPPED|NO_SESSION|SESSION_EXPIRED"
+        string formatCheckStatus "nullable: MATCH|PARA_EXTRA|PARA_SHORT|TITLE_MISMATCH|TEXT_MISMATCH|FETCH_ERROR|DELETED|SKIPPED|NO_SESSION|SESSION_EXPIRED (PARA_MISMATCH retired 2026-10-11: extra passes, short fails)"
         string formatCheckDetail "nullable: JSON {expectedParas,actualParas,titleMatch,error?}"
         timestamp formatCheckedAt "nullable"
         string survivalImageUrl "nullable: /api/v1/uploads/survival/<taskId>/survival-<attempt>.png"

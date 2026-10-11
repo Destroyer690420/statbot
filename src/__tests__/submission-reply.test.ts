@@ -38,19 +38,35 @@ describe('formatSubmissionReply — unchanged paths', () => {
     ).toContain('Reddit session expired (expired)');
   });
 
-  it('mismatch hints unchanged', () => {
+  it('accepted-but-imperfect verdicts queue the link', () => {
     expect(
       formatSubmissionReply({
-        formatCheckStatus: 'PARA_MISMATCH',
-        formatCheckDetail: detail({ expectedParas: 3, actualParas: 1, titleMatch: true }),
+        formatCheckStatus: 'PARA_EXTRA',
+        formatCheckDetail: detail({ expectedParas: 1, actualParas: 3, titleMatch: true }),
       }),
-    ).toContain('blank line between each paragraph');
+    ).toContain('Link queued for GoPartTime');
     expect(
       formatSubmissionReply({
         formatCheckStatus: 'TITLE_MISMATCH',
         formatCheckDetail: detail({ expectedParas: 1, actualParas: 1, titleMatch: false }),
       }),
-    ).toContain('title does not match');
+    ).toContain('link queued for GoPartTime');
+    expect(
+      formatSubmissionReply({
+        formatCheckStatus: 'TEXT_MISMATCH',
+        formatCheckDetail: detail({ expectedParas: 2, actualParas: 2, titleMatch: true }),
+      }),
+    ).toContain('link queued for GoPartTime');
+  });
+
+  it('short posts fail with a repost ask (link never queued)', () => {
+    const msg = formatSubmissionReply({
+      formatCheckStatus: 'PARA_SHORT',
+      formatCheckDetail: detail({ expectedParas: 13, actualParas: 11, titleMatch: true }),
+    });
+    expect(msg).toContain('🔴 Formatting failed (11/13 ¶)');
+    expect(msg).toContain('repost with all 13 paragraphs');
+    expect(msg).not.toContain('queued');
   });
 });
 

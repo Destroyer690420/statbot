@@ -264,6 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-11**: **Lenient format check BUILT, NOT deployed.** Extra/title/text verdicts pass + queue the link; only short posts fail (owner tagged). Image-order reminder for multi-image posts. 70 suites / 968 tests green. See Decision 30.
 - **2026-10-11**: **Stranded blast-message fix DEPLOYED live at `a9bf75c`** (with name quarantine; app + dashboard rebuild, quarantine migration re-run clean with 0 unexpected errors; backup `rtm-backup-20261011-deploy.tar.gz`; verified healthy boot, live-dist gates, served Cleared card, 0 app errors; pre-deploy sweep deleted 197 stranded loser messages, probe confirmed 0 visible remains; host bundle/runners removed).
 - **2026-10-10**: **Name quarantine DEPLOYED live at `a9bf75c`** (with the blast fix above; migration re-run clean).
 - **2026-10-10**: **Auto-blast DEPLOYED live at `1a0fc66`** (app-only rebuild, no migration; backup `rtm-backup-20261010-autoblast.tar.gz`; verified healthy boot, pre-blast digest in live `dist`, 0 paused refs, 0 app errors; host bundle removed).

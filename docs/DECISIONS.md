@@ -228,3 +228,10 @@
 - **Consequences**: one `AllowedSubreddit` table + `AutomationCycle.quarantined` counter + `AUTOMATION_ALLOWED` audit (idempotent migration); `QUARANTINED` task-log status (TEXT column, no migration); no companion change at all (pool exclusion is server-side; the pre-Confirm blocked re-check already covers mid-hour blocks). Accepted substring casualties (`cockpit`, `dataanalysis`, `asexual`, …) reverse in one tap; say the word to carve any out instead.
 - **Status**: Implemented 2026-10-10, DEPLOYED live 2026-10-11 at `a9bf75c` (with the blast fix; migration re-run clean, 0 unexpected errors).
 
+## Decision 30: Lenient format check — only short posts fail, plus an image-order reminder
+
+- **Context**: GoPartTime content arrives collapsed, so workers paste it back with proper blank lines — the strict checker cried "collapsed" (3/1 ¶) on a perfectly formatted post. Managers also re-messaged workers about multi-image order by hand.
+- **Decision**: `PARA_MISMATCH` splits into `PARA_EXTRA` (more paras → pass, link queued) and `PARA_SHORT` (fewer → fail, link never queued, worker asked to repost, owner tagged in the ticket). Title/wording differences pass (link queued); short-count failure wins over a title mismatch. Multi-image posts (2+ images) get a worker-tagged order reminder right after the instruction message at delivery (all three delivery paths, sent once, points link-replies back at the instruction message). The Tampermonkey format-check port moves to v1.1.0 with the same rule (byte-identical mirror).
+- **Consequences**: no migration (`formatCheckStatus` is TEXT; old `PARA_MISMATCH` rows stay historical, Recheck re-evaluates them); resubmits self-heal (latest-wins re-check + re-enqueue). No companion change; Tampermonkey update needed for the format-check script only.
+- **Status**: Implemented 2026-10-11, NOT deployed.
+

@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-11
+### Built (NOT deployed — needs app + dashboard rebuild, no migration)
+- **Lenient format check + image-order reminder.** `PARA_EXTRA`/title/text verdicts pass and queue the GoPartTime link; only `PARA_SHORT` fails (no queue, repost ask, owner tagged). Image-order reminder after the instruction message for 2+ image posts. Format-check userscript v1.1.0 (mirror in sync). Typecheck clean, 70 suites / 968 tests green, dashboard builds. No migration, no companion change. See Decision 30.
 ### Deployed (2026-10-11 at `a9bf75c` — app + dashboard rebuild; quarantine migration re-run clean, 0 unexpected errors)
 - **Stranded blast-message fix + name quarantine live** (`161.118.164.85`; backup `rtm-backup-20261011-deploy.tar.gz`; redis untouched; host bundle/runners removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!", live-dist gates (supersede-cleanup + takeRequest routing + `allow`/allowed present, old "messages stay" comment absent), served Automation chunk carries the Cleared card, dashboard root 200, 0 app errors. One-off sweep before deploy: 197 stranded loser messages deleted, probe confirmed 0 visible remains.
 ### Built (NOT deployed — needs app rebuild, no migration)

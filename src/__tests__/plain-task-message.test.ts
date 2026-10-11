@@ -1,4 +1,4 @@
-import { buildTaskMessagePlan, buildInstructionMessage, MAX_MESSAGE_LENGTH } from '../utils/plain-task-message';
+import { buildImageOrderReminder, buildTaskMessagePlan, buildInstructionMessage, MAX_MESSAGE_LENGTH } from '../utils/plain-task-message';
 import type { TaskMessageFields } from '../utils/plain-task-message';
 
 const POST_FIELDS = {
@@ -170,5 +170,26 @@ describe('buildInstructionMessage', () => {
     const plan = buildTaskMessagePlan({ title: 'Just a title' }, '');
     expect(plan.instruction.title.length).toBeGreaterThan(0);
     expect(plan.instruction.lines.length).toBeGreaterThan(0);
+  });
+});
+
+describe('buildImageOrderReminder', () => {
+  it('returns null for zero or one image', () => {
+    expect(buildImageOrderReminder('w1', 0)).toBeNull();
+    expect(buildImageOrderReminder('w1', 1)).toBeNull();
+  });
+
+  it('tags the worker and names the order for 2+ images', () => {
+    const msg = buildImageOrderReminder('worker-9', 3)!;
+    expect(msg).toContain('<@worker-9>');
+    expect(msg).toContain('correct order');
+    expect(msg).toContain('first image first');
+    expect(msg).toContain('📌 IMPORTANT message above');
+  });
+
+  it('omits the tag when no worker is known', () => {
+    const msg = buildImageOrderReminder(null, 2)!;
+    expect(msg).not.toContain('<@');
+    expect(msg).toContain('correct order');
   });
 });

@@ -36,6 +36,11 @@ function parseParaCounts(detail?: string | null): { expected: number; actual: nu
   }
 }
 
+/** Short-post counts for the manager tag (null when the detail is unreadable). */
+export function shortPostCounts(detail?: string | null): { expected: number; actual: number } | null {
+  return parseParaCounts(detail);
+}
+
 function markedSuffix(task: SubmissionReplyTask): string {
   return task.cancelledReason === 'deleted' ? ' It is marked deleted.' : '';
 }
@@ -79,11 +84,21 @@ export function formatSubmissionReply(task: SubmissionReplyTask): string {
   }
   const counts = parseParaCounts(task.formatCheckDetail);
   const countStr = counts ? ` (${counts.actual}/${counts.expected} ¶)` : '';
+  if (status === 'PARA_EXTRA') {
+    return (
+      `✅ Submission recorded. ✅ Post looks good${countStr} — extra blank lines are correct formatting. ` +
+      `Link queued for GoPartTime.`
+    );
+  }
+  if (status === 'PARA_SHORT') {
+    return (
+      `✅ Submission recorded. 🔴 Formatting failed${countStr} — paragraphs are missing. ` +
+      `Please repost with all${counts ? ` ${counts.expected}` : ''} paragraphs (blank line between each) and reply with the new link.`
+    );
+  }
   const hint =
-    status === 'PARA_MISMATCH'
-      ? ' Paragraphs look collapsed — make sure there is a blank line between each paragraph on Reddit.'
-      : status === 'TITLE_MISMATCH'
-        ? ' The title does not match — copy it exactly.'
-        : ' The text differs — check for missing or altered paragraphs.';
-  return `✅ Submission recorded. 🔴 Formatting mismatch${countStr}.${hint}`;
+    status === 'TITLE_MISMATCH'
+      ? ' The title differs, but that is accepted — link queued for GoPartTime.'
+      : ' The wording differs slightly, but that is accepted — link queued for GoPartTime.';
+  return `✅ Submission recorded. ✅ Accepted${countStr}.${hint}`;
 }

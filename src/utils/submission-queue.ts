@@ -20,17 +20,25 @@ export function submissionJobIdFor(taskId: string): string {
 
 /**
  * Submission gate: only verified links auto-submit.
- *  - POST + MATCH → submit (format check verified the live post).
+ *  - POST + MATCH / PARA_EXTRA / TITLE_MISMATCH / TEXT_MISMATCH → submit.
+ *    Only a SHORT post (dropped paragraphs) fails: collapsed GoPartTime
+ *    content re-pasted with proper blank lines is correct formatting, and
+ *    title/wording differences are accepted (owner directive, 2026-10-11).
  *  - COMMENT (+SKIPPED, by design — comments carry no format check) → submit.
- *  - EVERYTHING else (TITLE/PARA/TEXT_MISMATCH, FETCH_ERROR, DELETED,
- *    NO_SESSION, SESSION_EXPIRED, null) → never submit; manager reviews.
+ *  - EVERYTHING else (PARA_SHORT, FETCH_ERROR, DELETED, NO_SESSION,
+ *    SESSION_EXPIRED, null) → never submit; manager reviews.
  */
 export function shouldAutoSubmit(
   formatCheckStatus: string | null | undefined,
   taskType: TaskType | string,
 ): boolean {
   if (taskType === TaskType.COMMENT) return formatCheckStatus === 'SKIPPED';
-  return formatCheckStatus === 'MATCH';
+  return (
+    formatCheckStatus === 'MATCH' ||
+    formatCheckStatus === 'PARA_EXTRA' ||
+    formatCheckStatus === 'TITLE_MISMATCH' ||
+    formatCheckStatus === 'TEXT_MISMATCH'
+  );
 }
 
 export interface SubmissionDecision {

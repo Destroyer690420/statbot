@@ -1,5 +1,7 @@
 export type FormatCheckStatus =
   | 'MATCH'
+  | 'PARA_EXTRA'
+  | 'PARA_SHORT'
   | 'PARA_MISMATCH'
   | 'TITLE_MISMATCH'
   | 'TEXT_MISMATCH'

@@ -295,6 +295,13 @@ export const REDDIT_PROFILE_MIN_KARMA = 50;
  */
 export const REDDIT_PROFILE_APPROVAL_ADMIN_ID = '1299323714101317715';
 
+/**
+ * The owner (same id as the profile-approval admin and the digest DM
+ * recipient). Personal pings that must reach exactly one human — e.g. the
+ * short-post format failure — tag this id, never the whole staff list.
+ */
+export const OWNER_USER_ID = '1299323714101317715';
+
 /** "read this for more info" channel linked in the rejected-worker messages. */
 export const REDDIT_PROFILE_INFO_CHANNEL_ID = '1545416325776678952';
 

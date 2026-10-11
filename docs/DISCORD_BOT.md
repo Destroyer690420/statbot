@@ -150,7 +150,7 @@ Bot messages and DMs ignored. `outreachService.onWorkerMessage` runs first on ev
    - Trigger: reply to a message whose ID is in a task's `deliveryMessages` (`taskRepository.findByDeliveryMessageId`).
    - Guards: author == `assignedUserId`; task `ACCEPTED|PENDING` AND `assignmentStatus === 'SENT'`.
    - Extracts Reddit URLs (regex + punctuation trim + `isValidRedditUrl`); **exactly one** required, else `❌` + prompt.
-   - On success: `goparttimeService.recordSubmission` (runs the auto format check) → react `✅`, reply varies by verdict (`formatSubmissionReply`): MATCH → "✅ Submission recorded. ✅ Post matches (X/Y ¶, title OK) — ready for review."; PARA/TITLE/TEXT mismatch → "✅ Submission recorded. 🔴 Formatting mismatch (X/Y ¶). …"; FETCH_ERROR/DELETED → recorded + "⚠️ Could not verify formatting yet …"; COMMENT/no-check → "✅ Submission recorded. Waiting for manager review."
+   - On success: `goparttimeService.recordSubmission` (runs the auto format check) → react `✅`, reply varies by verdict (`formatSubmissionReply`): MATCH → "✅ Submission recorded. ✅ Post matches (X/Y ¶, title OK) — ready for review."; PARA/TITLE/TEXT accepted verdicts → link queued for GoPartTime; PARA_SHORT → repost ask + owner tag (link NOT queued)"; FETCH_ERROR/DELETED → recorded + "⚠️ Could not verify formatting yet …"; COMMENT/no-check → "✅ Submission recorded. Waiting for manager review."
    - Errors → `❌` + warning.
 
 2. **`handleInsightUpload`** — insight screenshots:

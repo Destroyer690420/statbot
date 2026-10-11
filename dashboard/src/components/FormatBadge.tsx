@@ -10,9 +10,11 @@ interface Props {
 
 const STYLES: Record<string, string> = {
   MATCH: 'bg-success-muted text-success border-success/30',
+  PARA_EXTRA: 'bg-success-muted text-success border-success/30',
+  PARA_SHORT: 'bg-danger-muted text-danger border-danger/30',
   PARA_MISMATCH: 'bg-danger-muted text-danger border-danger/30',
-  TITLE_MISMATCH: 'bg-warning-muted text-warning border-warning/30',
-  TEXT_MISMATCH: 'bg-warning-muted text-warning border-warning/30',
+  TITLE_MISMATCH: 'bg-success-muted text-success border-success/30',
+  TEXT_MISMATCH: 'bg-success-muted text-success border-success/30',
   FETCH_ERROR: 'bg-warning-muted text-warning border-warning/30',
   DELETED: 'bg-danger-muted text-danger border-danger/30',
   NO_SESSION: 'bg-dark-700/40 text-dark-300 border-dark-600/50',
@@ -37,17 +39,24 @@ export function FormatBadge({ status, detail, taskType, hasUrl, onOpenDiff }: Pr
   if (s === 'MATCH') {
     return <span className={`status-badge border ${STYLES.MATCH} px-2 py-0.5 text-[11px]`}>{counts} Match</span>;
   }
-  if (s === 'PARA_MISMATCH') {
+  if (s === 'PARA_SHORT' || s === 'PARA_MISMATCH') {
     return (
-      <button onClick={onOpenDiff} title="Open side-by-side diff" className={`status-badge border ${STYLES.PARA_MISMATCH} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
-        {counts} Mismatch
+      <button onClick={onOpenDiff} title="Open side-by-side diff" className={`status-badge border ${STYLES.PARA_SHORT} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
+        {counts} {s === 'PARA_SHORT' ? 'Short' : 'Mismatch'}
+      </button>
+    );
+  }
+  if (s === 'PARA_EXTRA') {
+    return (
+      <button onClick={onOpenDiff} title="Open side-by-side diff" className={`status-badge border ${STYLES.PARA_EXTRA} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
+        {counts} Accepted
       </button>
     );
   }
   if (s === 'TITLE_MISMATCH' || s === 'TEXT_MISMATCH') {
     return (
       <button onClick={onOpenDiff} title="Open side-by-side diff" className={`status-badge border ${STYLES.TITLE_MISMATCH} px-2 py-0.5 text-[11px] hover:brightness-125 transition`}>
-        {s === 'TITLE_MISMATCH' ? 'Title' : 'Text'} Mismatch
+        {s === 'TITLE_MISMATCH' ? 'Title' : 'Text'} Accepted
       </button>
     );
   }

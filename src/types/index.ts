@@ -109,7 +109,7 @@ export interface TaskImage {
   kind?: TaskMediaKind;
 }
 
-export type DeliveryMessageKind = 'metadata' | 'content' | 'images' | 'instruction';
+export type DeliveryMessageKind = 'metadata' | 'content' | 'images' | 'instruction' | 'image-order';
 
 export interface DeliveryMessage {
   kind: DeliveryMessageKind;

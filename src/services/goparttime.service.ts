@@ -11,7 +11,7 @@ import { htmlToDiscord } from '../utils/html-to-discord';
 import { prepareImage } from '../utils/image-processor';
 import { prepareVideo, formatBytes } from '../utils/video-processor';
 import { goPartTimePayloadSchema, GoPartTimePayload } from '../utils/goparttime-payload';
-import { buildTaskMessagePlan, InstructionMessage, TaskMessageFields } from '../utils/plain-task-message';
+import { buildImageOrderReminder, buildTaskMessagePlan, InstructionMessage, TaskMessageFields } from '../utils/plain-task-message';
 import { submissionInstructionEmbed } from '../bot/embeds';
 import { GOPARTTIME_SOURCE } from '../config/constants';
 import { buildGoPartTimeTaskId } from '../utils/task-display';
@@ -522,6 +522,15 @@ deliveryMessages: null as any,
         const message = await channel.send(this.buildInstructionPayload(plan.instruction, task.assignedUserId));
         delivery.push({ kind: 'instruction', order: nextOrder++, messageId: message.id, createdAt });
       }
+      // Multi-image order reminder, once ever (tracked like instruction).
+      const imageOrderSent = existing.filter((m) => m.kind === 'image-order').length;
+      if (imageOrderSent === 0) {
+        const reminder = buildImageOrderReminder(task.assignedUserId, images.length);
+        if (reminder) {
+          const message = await channel.send(reminder);
+          delivery.push({ kind: 'image-order', order: nextOrder++, messageId: message.id, createdAt });
+        }
+      }
 
       await taskRepository.updateAssignment(task.id, { assignmentStatus: 'SENT', assignmentError: null });
       await taskRepository.updateDeliveryMessages(task.id, delivery);
@@ -615,6 +624,12 @@ deliveryMessages: null as any,
       delivery.push({ kind: 'instruction', order: order++, messageId: message.id, createdAt });
     }
 
+    const imageOrderReminder = buildImageOrderReminder(workerId, payload.images.length);
+    if (imageOrderReminder) {
+      const message = await channel.send(imageOrderReminder);
+      delivery.push({ kind: 'image-order', order: order++, messageId: message.id, createdAt });
+    }
+
     return delivery;
   }
 
@@ -648,6 +663,12 @@ deliveryMessages: null as any,
     if (plan.instruction) {
       const message = await channel.send(this.buildInstructionPayload(plan.instruction, task.assignedUserId));
       delivery.push({ kind: 'instruction', order: order++, messageId: message.id, createdAt });
+    }
+
+    const reassignedReminder = buildImageOrderReminder(task.assignedUserId, images.length);
+    if (reassignedReminder) {
+      const message = await channel.send(reassignedReminder);
+      delivery.push({ kind: 'image-order', order: order++, messageId: message.id, createdAt });
     }
 
     return delivery;

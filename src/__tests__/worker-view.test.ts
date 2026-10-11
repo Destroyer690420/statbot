@@ -145,7 +145,7 @@ describe('derived worker status', () => {
       now,
     );
     expect(d.key).toBe('under_review');
-    expect(d.hint).toContain("doesn't match");
+    expect(d.hint).toContain('accepted');
   });
 
   it('PENDING shows the first reminder dueAt (never recomputed from createdAt)', () => {
@@ -207,9 +207,10 @@ describe('derived worker status', () => {
 describe('format-check mapping', () => {
   it('maps real content problems to worker-friendly hints', () => {
     expect(mapFormatCheckHint('MATCH')).toContain('matches');
-    expect(mapFormatCheckHint('PARA_MISMATCH')).toContain('blank line');
-    expect(mapFormatCheckHint('TITLE_MISMATCH')).toContain('exactly');
-    expect(mapFormatCheckHint('TEXT_MISMATCH')).toContain('differs');
+    expect(mapFormatCheckHint('PARA_EXTRA')).toContain('accepted');
+    expect(mapFormatCheckHint('PARA_SHORT')).toContain('repost');
+    expect(mapFormatCheckHint('TITLE_MISMATCH')).toContain('accepted');
+    expect(mapFormatCheckHint('TEXT_MISMATCH')).toContain('accepted');
   });
 
   it('hides infrastructure states', () => {

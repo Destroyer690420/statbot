@@ -158,12 +158,16 @@ export function mapFormatCheckHint(status: string | null | undefined): string {
   switch (status) {
     case 'MATCH':
       return 'Post matches \u2705';
+    case 'PARA_EXTRA':
+      return 'Extra blank lines \u2705 accepted';
+    case 'PARA_SHORT':
+      return 'Paragraphs missing \u2014 repost with all paragraphs';
     case 'PARA_MISMATCH':
       return 'Paragraphs look collapsed \u2014 leave a blank line between paragraphs';
     case 'TITLE_MISMATCH':
-      return "Title doesn't match \u2014 copy it exactly";
+      return 'Title differs \u2014 accepted';
     case 'TEXT_MISMATCH':
-      return 'Text differs from the task';
+      return 'Text differs \u2014 accepted';
     default:
       return 'Waiting for manager review';
   }

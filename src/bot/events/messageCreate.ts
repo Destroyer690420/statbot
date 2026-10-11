@@ -6,10 +6,10 @@ import { insightStorageService } from '../../services/insight-storage.service';
 import { outreachService } from '../../services/outreach.service';
 import { handleAutomationReply } from '../../services/automation/worker-manager.service';
 import { isSupportedImage, isValidRedditUrl } from '../../utils/validators';
-import { formatSubmissionReply } from '../../utils/submission-reply';
+import { formatSubmissionReply, shortPostCounts } from '../../utils/submission-reply';
 import { taskRepository, automationRepository } from '../../database/repositories';
 import { buildBlocksReport, listScreenEvents } from '../../services/automation/screen-events';
-import { CONTENT_SCREEN } from '../../config/constants';
+import { CONTENT_SCREEN, OWNER_USER_ID } from '../../config/constants';
 import { TaskStatus, AuditAction } from '../../types';
 import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
 import { auditLogService } from '../../services/audit.service';
@@ -192,6 +192,18 @@ async function handleInstructionReply(message: Message): Promise<boolean> {
     const updated = await goparttimeService.recordSubmission(task.id, urls[0], message.author.id);
     await message.react('✅');
     await message.reply(formatSubmissionReply(updated));
+    // Short post (dropped paragraphs): the link is NOT queued, the worker is
+    // told to repost correctly, and the owner is tagged for review.
+    if (updated.formatCheckStatus === 'PARA_SHORT' && message.channel instanceof TextChannel) {
+      const counts = shortPostCounts(updated.formatCheckDetail);
+      const countStr = counts ? ` (${counts.actual}/${counts.expected} ¶)` : '';
+      await message.channel
+        .send(
+          `<@${OWNER_USER_ID}> ⚠️ Short post${countStr} in this ticket — ` +
+            `paragraphs are missing, so the link was not queued. The worker was asked to repost with all paragraphs.`,
+        )
+        .catch(() => undefined);
+    }
   } catch (error) {
     const messageText = error instanceof Error ? error.message : 'Submission could not be recorded.';
     await message.react('❌');

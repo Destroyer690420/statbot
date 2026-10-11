@@ -20,12 +20,13 @@ import {
 } from '../utils/submission-queue';
 
 describe('shouldAutoSubmit (the gate)', () => {
-  it('posts submit only on MATCH', () => {
-    expect(shouldAutoSubmit('MATCH', TaskType.POST)).toBe(true);
+  it('posts submit on exact, extra-para, title and text verdicts', () => {
+    for (const s of ['MATCH', 'PARA_EXTRA', 'TITLE_MISMATCH', 'TEXT_MISMATCH']) {
+      expect(shouldAutoSubmit(s, TaskType.POST)).toBe(true);
+    }
     for (const s of [
-      'TITLE_MISMATCH',
+      'PARA_SHORT',
       'PARA_MISMATCH',
-      'TEXT_MISMATCH',
       'FETCH_ERROR',
       'DELETED',
       'NO_SESSION',
@@ -67,11 +68,22 @@ describe('decideSubmissionAction', () => {
   it('never enqueues gated-out verdicts (manager review instead)', () => {
     const d = decideSubmissionAction({
       taskType: TaskType.POST,
-      formatCheckStatus: 'TITLE_MISMATCH',
+      formatCheckStatus: 'PARA_SHORT',
       submittedRedditUrl: 'https://www.reddit.com/r/x/comments/1/',
     });
     expect(d.enqueue).toBe(false);
-    expect(d.reason).toContain('TITLE_MISMATCH');
+    expect(d.reason).toContain('PARA_SHORT');
+  });
+
+  it('enqueues accepted-but-imperfect verdicts (extra/title/text)', () => {
+    for (const s of ['PARA_EXTRA', 'TITLE_MISMATCH', 'TEXT_MISMATCH']) {
+      const d = decideSubmissionAction({
+        taskType: TaskType.POST,
+        formatCheckStatus: s,
+        submittedRedditUrl: 'https://www.reddit.com/r/x/comments/1/',
+      });
+      expect(d.enqueue).toBe(true);
+    }
   });
 });
 

@@ -4,13 +4,20 @@
  * Expected text is the bot-delivered `formattedContent` (paragraphs joined
  * with exactly `\n\n` by `htmlToDiscord`). Actual text is the live Reddit
  * `selftext` (raw_json). Comparison is normalized (case / whitespace /
- * markdown insensitive) but paragraph STRUCTURE is strict: a collapsed
- * post (4 paras → 1 block) is always a mismatch.
+ * markdown insensitive).
+ *
+ * Paragraph-count rule (owner directive, 2026-10-11): GoPartTime content
+ * often arrives collapsed, so workers paste it back with MORE paragraphs
+ * than delivered — that is correct Reddit formatting and passes. Only FEWER
+ * paragraphs than delivered fails (content was dropped). Title or wording
+ * differences always pass. Precedence: the short-count failure wins over a
+ * title mismatch (missing content is the real sin).
  */
 
 export type FormatCheckStatus =
   | 'MATCH'
-  | 'PARA_MISMATCH'
+  | 'PARA_EXTRA'
+  | 'PARA_SHORT'
   | 'TITLE_MISMATCH'
   | 'TEXT_MISMATCH'
   | 'FETCH_ERROR'
@@ -89,6 +96,17 @@ export function compareRedditFormat(input: FormatCompareInput): FormatCompareRes
       : normalizeInline(input.expectedTitle) === normalizeInline(input.actualTitle ?? '');
 
   if (!titleMatch) {
+    // Title verdicts other than short-count always pass — but a short post
+    // fails no matter what the title says, so the count check runs first.
+    if (actualParas.length < expectedParas.length) {
+      return {
+        status: 'PARA_SHORT',
+        expectedParas: expectedParas.length,
+        actualParas: actualParas.length,
+        titleMatch,
+        paraMatches: expectedParas.map(() => false),
+      };
+    }
     return {
       status: 'TITLE_MISMATCH',
       expectedParas: expectedParas.length,
@@ -98,13 +116,24 @@ export function compareRedditFormat(input: FormatCompareInput): FormatCompareRes
     };
   }
 
-  if (expectedParas.length !== actualParas.length) {
+  if (actualParas.length < expectedParas.length) {
     return {
-      status: 'PARA_MISMATCH',
+      status: 'PARA_SHORT',
       expectedParas: expectedParas.length,
       actualParas: actualParas.length,
       titleMatch,
       paraMatches: expectedParas.map(() => false),
+    };
+  }
+
+  if (actualParas.length > expectedParas.length) {
+    // Collapsed source re-pasted with proper blank lines: correct formatting.
+    return {
+      status: 'PARA_EXTRA',
+      expectedParas: expectedParas.length,
+      actualParas: actualParas.length,
+      titleMatch,
+      paraMatches: expectedParas.map(() => true),
     };
   }
 

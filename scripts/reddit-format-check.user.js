@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Format Check (Session)
 // @namespace    https://statbot.duckdns.org/
-// @version      1.0.0
+// @version      1.1.0
 // @description  Compares the open Reddit post (fetched with your logged-in session) against the exact text Statbot sent to Discord. Display-only pre-check; the server verdict stays the source of truth.
 // @author       Manager
 // @match        *://reddit.com/*
@@ -42,7 +42,7 @@
  *      (`/api/v1/goparttime/expected/:taskId` — title + formattedContent,
  *      i.e. precisely what was delivered to Discord), fetches the live
  *      post JSON same-origin (your session), compares locally, and shows
- *      MATCH / TITLE_MISMATCH / PARA_MISMATCH / TEXT_MISMATCH with a
+ *      MATCH / TITLE_MISMATCH / PARA_EXTRA / PARA_SHORT / TEXT_MISMATCH with a
  *      per-paragraph diff.
  *
  * Deliberate non-features: the script NEVER writes back to Statbot (no
@@ -52,8 +52,9 @@
  *
  * Comparison logic is a verbatim port of `src/utils/reddit-format.ts`
  * (splitParagraphs / normalizeInline / compareRedditFormat): normalized
- * (case / whitespace / markdown insensitive) but paragraph STRUCTURE is
- * strict — a collapsed post (4 paras -> 1 block) is always a mismatch.
+ * (case / whitespace / markdown insensitive). Paragraph-count rule (v1.1.0):
+ * MORE paragraphs than delivered passes (collapsed source re-pasted
+ * correctly); only FEWER fails. Title/wording differences pass.
  */
 (function () {
   'use strict';
@@ -170,6 +171,17 @@
         : normalizeInline(input.expectedTitle) === normalizeInline(input.actualTitle || '');
 
     if (!titleMatch) {
+      // Short-count failure wins over a title mismatch (missing content is
+      // the real problem); every other title verdict passes.
+      if (actualParas.length < expectedParas.length) {
+        return {
+          status: 'PARA_SHORT',
+          expectedParas: expectedParas.length,
+          actualParas: actualParas.length,
+          titleMatch: titleMatch,
+          paraMatches: expectedParas.map(function () { return false; }),
+        };
+      }
       return {
         status: 'TITLE_MISMATCH',
         expectedParas: expectedParas.length,
@@ -179,13 +191,24 @@
       };
     }
 
-    if (expectedParas.length !== actualParas.length) {
+    if (actualParas.length < expectedParas.length) {
       return {
-        status: 'PARA_MISMATCH',
+        status: 'PARA_SHORT',
         expectedParas: expectedParas.length,
         actualParas: actualParas.length,
         titleMatch: titleMatch,
         paraMatches: expectedParas.map(function () { return false; }),
+      };
+    }
+
+    if (actualParas.length > expectedParas.length) {
+      // Collapsed source re-pasted with proper blank lines: correct.
+      return {
+        status: 'PARA_EXTRA',
+        expectedParas: expectedParas.length,
+        actualParas: actualParas.length,
+        titleMatch: titleMatch,
+        paraMatches: expectedParas.map(function () { return true; }),
       };
     }
 
@@ -495,9 +518,10 @@
   }
 
   function hintFor(status) {
-    if (status === 'PARA_MISMATCH') return ' Paragraphs look collapsed - make sure there is a blank line between each paragraph on Reddit.';
-    if (status === 'TITLE_MISMATCH') return ' The title does not match - copy it exactly.';
-    if (status === 'TEXT_MISMATCH') return ' The text differs - check for missing or altered paragraphs.';
+    if (status === 'PARA_EXTRA') return ' Extra blank lines are correct formatting - accepted.';
+    if (status === 'PARA_SHORT') return ' Paragraphs are missing - repost with all paragraphs.';
+    if (status === 'TITLE_MISMATCH') return ' The title differs, but that is accepted.';
+    if (status === 'TEXT_MISMATCH') return ' The wording differs slightly, but that is accepted.';
     return '';
   }
 
@@ -520,6 +544,8 @@
     var countStr = ' (' + cmp.actualParas + '/' + cmp.expectedParas + ' paras, title ' + (cmp.titleMatch ? 'OK' : 'DIFF') + ')';
     if (cmp.status === 'MATCH') {
       out.appendChild(el('div', { color: '#7ee2a8', fontWeight: '700' }, 'MATCH' + countStr + ' - ready for review.'));
+    } else if (cmp.status === 'PARA_EXTRA' || cmp.status === 'TITLE_MISMATCH' || cmp.status === 'TEXT_MISMATCH') {
+      out.appendChild(el('div', { color: '#7ee2a8', fontWeight: '700' }, cmp.status + countStr + ' - accepted.' + hintFor(cmp.status)));
     } else {
       out.appendChild(el('div', { color: '#ff7b7b', fontWeight: '700' }, cmp.status + countStr + '.' + hintFor(cmp.status)));
     }

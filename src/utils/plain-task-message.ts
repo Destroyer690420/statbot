@@ -109,6 +109,23 @@ export function buildTaskMessagePlan(fields: TaskMessageFields, content: string)
   };
 }
 
+/**
+ * Image-order reminder, sent once right after the instruction message when
+ * the task carries 2+ images. Returns null when there is nothing to remind
+ * about. The worker is tagged; the tail points replies back at the
+ * instruction message so the link lands where `handleInstructionReply`
+ * looks for it.
+ */
+export function buildImageOrderReminder(workerId: string | null | undefined, imageCount: number): string | null {
+  if (imageCount < 2) return null;
+  const tag = workerId ? `<@${workerId}> ` : '';
+  return (
+    `${tag}hey please make sure you post the images in the correct order — ` +
+    `first image first, then second, then third, and so on. ` +
+    `Reply with your post link to the 📌 IMPORTANT message above.`
+  );
+}
+
 export function buildInstructionMessage(fields: TaskMessageFields): InstructionMessage {
   if (fields.postLink || fields.commentLink) {
     return {
