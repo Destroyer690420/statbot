@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-11
+### Deployed (2026-10-11 at `a9bf75c` — app + dashboard rebuild; quarantine migration re-run clean, 0 unexpected errors)
+- **Stranded blast-message fix + name quarantine live** (`161.118.164.85`; backup `rtm-backup-20261011-deploy.tar.gz`; redis untouched; host bundle/runners removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!", live-dist gates (supersede-cleanup + takeRequest routing + `allow`/allowed present, old "messages stay" comment absent), served Automation chunk carries the Cleared card, dashboard root 200, 0 app errors. One-off sweep before deploy: 197 stranded loser messages deleted, probe confirmed 0 visible remains.
 ### Built (NOT deployed — needs app rebuild, no migration)
 - **Stranded blast-message fix.** New blasts delete the previous blast's loser messages on supersede (winners keep theirs; cleanup failures never block the new blast); same-scan duplicate reports merge into the hour blast instead of opening competing ones (route claims the scan request atomically before the flow). One-off sweep `scripts/cleanup-stuck-blast-messages.ts` for the ~320 messages stranded 2026-10-10. Typecheck clean, 70 suites / 960 tests green. No migration, no companion change. See Decision 28 fix note.
 ## 2026-10-10
