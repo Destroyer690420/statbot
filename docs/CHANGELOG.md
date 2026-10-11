@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-11
+### Deployed (2026-10-11 at `d363544` — dashboard-only rebuild, no migration)
+- **Watcher v1.6.4 live** (app/redis untouched; host bundle removed). Verified: served auto script v1.6.4 with the absolute `replace()` return (2 refs), 0 app errors. **Tampermonkey update required on watcher tabs.**
 ### Built (NOT deployed — needs dashboard rebuild only, no migration)
 - **Watcher v1.6.4: deterministic return-to-/tasks.** `history.back()` stranded tabs on Discord / the Chrome home page (relative fallback then resolved off-site); now absolute `location.replace(origin + '/tasks')` with a 3s absolute retry. Mirror in sync, hygiene green.
 ### Deployed (2026-10-11 at `d8760ed` — app + dashboard rebuild; migration re-run clean, 0 unexpected errors)
