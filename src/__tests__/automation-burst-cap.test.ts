@@ -15,7 +15,8 @@
 import { burstSchema } from '../api/routes/automation.schemas';
 import { evaluateForBurst, validateDetectedTask } from '../services/automation/validator.service';
 import { normalizeSubreddit } from '../services/automation/subreddit';
-import { buildBlastDigest, buildDigestButtons, buildReleaseInputs, formatDigestMessage, MAX_BLOCK_BUTTONS } from '../services/automation/blast-digest';
+import { buildBlastDigest, buildDigestButtons, buildReleaseInputs, MAX_BLOCK_BUTTONS } from '../services/automation/blast-digest';
+import { blastDigestEmbed } from '../bot/embeds';
 import { automationRepository, taskRepository } from '../database/repositories';
 import type { DetectedGoPartTimeTask } from '../types';
 
@@ -275,10 +276,11 @@ describe('downstream consumers tolerate more than 20 tasks', () => {
     status: i % 7 === 0 ? 'BLOCKED' : 'ELIGIBLE',
   }));
 
-  it('the DM message is truncated to fit Discord, not the task count', () => {
+  it('the embed breakdown field fits Discord, not the task count', () => {
     const digest = buildBlastDigest('c1', logs, [], [], { scanned: 40, eligible: 34, blocked: 6 });
-    const text = formatDigestMessage(digest);
-    expect(text.length).toBeLessThanOrEqual(1901);
+    const json = blastDigestEmbed(digest).toJSON() as any;
+    const breakdown = (json.fields || []).find((f: any) => f.name === 'Breakdown');
+    expect(breakdown.value.length).toBeLessThanOrEqual(1024);
     expect(digest.scanned).toBe(40);
     expect(digest.eligible).toBe(34);
   });

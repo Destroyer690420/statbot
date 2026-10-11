@@ -5,6 +5,7 @@ import { displayTaskId } from '../../utils/task-display';
 import { WorkerStats, TaskMoneySplit } from '../../utils/member-stats';
 import { InviterStats } from '../../services/member-stats.service';
 import { COLORS } from '../../config/constants';
+import { BlastDigest, reasonSymbol, UNKNOWN_SUB } from '../../services/automation/blast-digest';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -441,4 +442,108 @@ function formatReminderType(type: ReminderType): string {
     case ReminderType.COMMENT_20H: return 'Comment 20H';
     default: return type;
   }
+}
+
+/**
+ * Pre-blast digest DM embed (glanceable hourly report).
+ *
+ * Color/title state the verdict: green when posts are eligible, amber when
+ * something needs a look (new subreddit or NAME-CHECK hold), blue when the
+ * scan produced nothing usable. The banner (hourly vs manual scan context)
+ * becomes the author line; a requester mention moves into the description
+ * (mentions do not parse in author names). The per-sub breakdown is one
+ * monospace field (1024-char capped with an "and N more" tail); new subs
+ * and name-checks get their own fields only when non-empty.
+ */
+const DIGEST_FIELD_LIMIT = 1024;
+
+function truncateList(items: string[], joiner: string, limit: number): string {
+  const full = items.join(joiner);
+  if (full.length <= limit) return full;
+  const kept: string[] = [];
+  for (const item of items) {
+    const next = kept.length === 0 ? item : kept.join(joiner) + joiner + item;
+    if (next.length > limit - 30) break;
+    kept.push(item);
+  }
+  return `${kept.join(joiner)}${joiner}…and ${items.length - kept.length} more`;
+}
+
+function digestBreakdownValue(digest: BlastDigest): string {
+  const names = digest.subs.map((s) => (s.sub === UNKNOWN_SUB ? 'unknown subreddit' : `r/${s.sub}`));
+  const width = Math.min(20, Math.max(...names.map((n) => n.length), 8));
+  const rows = digest.subs.map((s, i) => {
+    const symbol = s.eligible > 0 ? '🟢' : reasonSymbol(s.reasons[0] ?? 'unknown');
+    const words = s.reasons.length > 0 ? s.reasons.join(', ') : 'eligible';
+    return `${symbol} ${names[i].padEnd(width)} ${words}`;
+  });
+  const lines: string[] = [];
+  for (const row of rows) {
+    lines.push(row);
+    // Reserve tail room: the "…and N more" line still has to fit below.
+    const text = '```\n' + lines.join('\n') + '\n```';
+    if (text.length > DIGEST_FIELD_LIMIT - 30) {
+      lines.pop();
+      break;
+    }
+  }
+  const dropped = rows.length - lines.length;
+  if (dropped > 0) lines.push(`…and ${dropped} more`);
+  return '```\n' + lines.join('\n') + '\n```';
+}
+
+export function blastDigestEmbed(digest: BlastDigest, banner: string | null = null): EmbedBuilder {
+  const hasNameCheck = digest.subs.some((s) => s.reasons.includes('NAME-CHECK'));
+  const needsLook = digest.newSubs.length > 0 || hasNameCheck;
+  const color = digest.eligible > 0 ? COLORS.SUCCESS : needsLook ? COLORS.WARNING : COLORS.INFO;
+  const title =
+    digest.eligible > 0
+      ? `🟢 ${digest.eligible} eligible — opening blast`
+      : needsLook
+        ? '⚠️ Needs a look'
+        : '🚫 Nothing to do';
+
+  // The manual banner can carry a requester mention (<@id>), which Discord
+  // does not parse in author names — split it into the description.
+  let author: string | null = null;
+  let mention: string | null = null;
+  if (banner) {
+    const m = /\(requested by (<@\d+>)\)/.exec(banner);
+    if (m) mention = m[1];
+    author = banner.replace(/\s*\(requested by <@\d+>\)\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  }
+
+  const descriptionLines: string[] = [];
+  if (mention) descriptionLines.push(`${mention} requested this scan.`);
+  descriptionLines.push(`${digest.scanned} scanned, ${digest.blocked} blocked`);
+  if (digest.subs.length === 0) descriptionLines.push('No posts listed this drop.');
+
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setColor(color)
+    .setDescription(descriptionLines.join('\n'))
+    .setFooter({ text: digest.cycleId })
+    .setTimestamp();
+  if (author) embed.setAuthor({ name: author.slice(0, 256) });
+
+  if (digest.subs.length > 0) {
+    embed.addFields({ name: 'Breakdown', value: digestBreakdownValue(digest) });
+  }
+  if (digest.newSubs.length > 0) {
+    embed.addFields({
+      name: '🆕 New subreddits',
+      value: truncateList(
+        digest.newSubs.map((s) => `r/${s}`),
+        ', ',
+        DIGEST_FIELD_LIMIT,
+      ),
+    });
+  }
+  if (hasNameCheck) {
+    embed.addFields({
+      name: '🔎 Needs a name check',
+      value: 'Held for name review — never auto-blocked. Tap Block to block it, or DM `allow r/x` to clear it.',
+    });
+  }
+  return embed;
 }

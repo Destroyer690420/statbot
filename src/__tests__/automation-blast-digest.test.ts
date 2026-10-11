@@ -1,19 +1,33 @@
 /**
- * Pre-blast DM digest logic. Pure module — no env or DB needed.
+ * Pre-blast DM digest logic + embed rendering. Pure modules — no env or DB needed.
  */
+import { EmbedBuilder } from 'discord.js';
 import {
   buildBlastDigest,
   buildDigestButtons,
   buildReleaseInputs,
-  formatDigestMessage,
   isEligibleLogStatus,
   MAX_BLOCK_BUTTONS,
   parseBlastButtonId,
+  reasonSymbol,
+  BlastDigest,
   DigestTaskLog,
 } from '../services/automation/blast-digest';
+import { blastDigestEmbed } from '../bot/embeds';
+import { COLORS } from '../config/constants';
 
 function log(id: string, sub: string | null, status = 'ELIGIBLE', type = 'post'): DigestTaskLog {
   return { externalTaskId: id, taskType: type, subreddit: sub, status };
+}
+
+/** Rendered embed JSON for field-level assertions. */
+function embedOf(digest: BlastDigest, banner: string | null = null): any {
+  return (blastDigestEmbed(digest, banner) as EmbedBuilder).toJSON() as any;
+}
+
+function fieldOf(json: any, name: string): string | null {
+  const f = (json.fields || []).find((x: any) => x.name === name);
+  return f ? String(f.value) : null;
 }
 
 describe('isEligibleLogStatus', () => {
@@ -85,7 +99,7 @@ describe('buildBlastDigest', () => {
     expect(d.newSubs).toEqual(['ok']);
   });
 
-  it('labels blocked and comment groups in the message', () => {
+  it('labels blocked and comment groups in the breakdown field', () => {
     const d = buildBlastDigest(
       'c1',
       [
@@ -99,11 +113,18 @@ describe('buildBlastDigest', () => {
       ['cats'],
       { scanned: 5, eligible: 1, blocked: 2 },
     );
-    const msg = formatDigestMessage(d);
-    expect(msg).toContain('• r/cats x1 (1)');
-    expect(msg).toContain('• r/junk x2 [BLOCKED] (2, 3)');
-    expect(msg).toContain('• r/somevid x1 [comment] (4)');
-    expect(msg).toContain('• unknown subreddit x1 [NO_SUBREDDIT] (5)');
+    const breakdown = fieldOf(embedOf(d), 'Breakdown')!;
+    expect(breakdown).toContain('🟢');
+    expect(breakdown).toContain('r/cats');
+    expect(breakdown).toContain('🚫');
+    expect(breakdown).toContain('r/junk');
+    expect(breakdown).toContain('BLOCKED');
+    expect(breakdown).toContain('💬');
+    expect(breakdown).toContain('comment');
+    expect(breakdown).toContain('❔');
+    expect(breakdown).toContain('NO_SUBREDDIT');
+    expect(breakdown).not.toContain('(1)');
+    expect(breakdown).not.toContain('(2, 3)');
     expect(d.newSubs).toEqual([]);
   });
 
@@ -115,10 +136,11 @@ describe('buildBlastDigest', () => {
       [],
       { scanned: 2, eligible: 0, blocked: 2 },
     );
-    const msg = formatDigestMessage(d);
-    expect(msg).toContain('0 eligible');
-    expect(msg).toContain('• r/junk x2 [BLOCKED] (1, 2)');
-    expect(msg).toContain('Nothing eligible');
+    const json = embedOf(d);
+    expect(json.title).toBe('🚫 Nothing to do');
+    expect(json.color).toBe(COLORS.INFO);
+    expect(fieldOf(json, 'Breakdown')).toContain('r/junk');
+    expect(fieldOf(json, '🆕 New subreddits')).toBeNull();
     expect(d.newSubs).toEqual([]);
   });
 
@@ -126,31 +148,87 @@ describe('buildBlastDigest', () => {
     const d = buildBlastDigest('c1', [], [], [], { scanned: 0, eligible: 0, blocked: 0 });
     expect(d.subs).toEqual([]);
     expect(d.newSubs).toEqual([]);
-    const msg = formatDigestMessage(d);
-    expect(msg).toContain('0 eligible (0 scanned, 0 blocked)');
-    expect(msg).toContain('No posts listed this drop.');
-    expect(msg.length).toBeLessThanOrEqual(2000);
+    const json = embedOf(d);
+    expect(json.title).toBe('🚫 Nothing to do');
+    expect(json.description).toContain('0 scanned, 0 blocked');
+    expect(json.description).toContain('No posts listed this drop.');
+    expect(fieldOf(json, 'Breakdown')).toBeNull();
+    expect(json.footer.text).toBe('c1');
     expect(buildDigestButtons(d)).toHaveLength(1);
   });
 });
 
-describe('formatDigestMessage', () => {
-  it('fits in a DM and highlights new subs', () => {
+describe('blastDigestEmbed', () => {
+  it('titles green with counts when eligible', () => {
     const d = buildBlastDigest('c1', [log('1', 'cats'), log('2', 'newsub')], [], ['cats'], {
       scanned: 2,
       eligible: 2,
       blocked: 0,
     });
-    const msg = formatDigestMessage(d);
-    expect(msg.length).toBeLessThanOrEqual(2000);
-    expect(msg).toContain('r/newsub');
-    expect(msg).toContain('NEW');
+    const json = embedOf(d);
+    expect(json.title).toBe('🟢 2 eligible — opening blast');
+    expect(json.color).toBe(COLORS.SUCCESS);
+    expect(json.description).toContain('2 scanned, 0 blocked');
+    expect(fieldOf(json, '🆕 New subreddits')).toContain('r/newsub');
+    expect(json.footer.text).toBe('c1');
+    expect(json.timestamp).toBeTruthy();
   });
 
-  it('truncates very long digests', () => {
+  it('titles amber when a held name needs a look (no eligible posts)', () => {
+    const d = buildBlastDigest(
+      'c1',
+      [{ externalTaskId: '1', taskType: 'post', subreddit: 'moderators', status: 'QUARANTINED' }],
+      [],
+      [],
+      { scanned: 1, eligible: 0, blocked: 0 },
+    );
+    const json = embedOf(d);
+    expect(json.title).toBe('⚠️ Needs a look');
+    expect(json.color).toBe(COLORS.WARNING);
+    expect(fieldOf(json, '🔎 Needs a name check')).toContain('allow r/x');
+  });
+
+  it('puts the banner in the author line and the mention in the description', () => {
+    const d = buildBlastDigest('c1', [log('1', 'cats')], [], [], { scanned: 1, eligible: 1, blocked: 0 });
+    const hourly = embedOf(d, 'Scheduled hourly scan — same rules as the automatic round.');
+    expect(hourly.author.name).toBe('Scheduled hourly scan — same rules as the automatic round.');
+    expect(hourly.description).not.toContain('<@');
+    const manual = embedOf(d, 'Manual scan (requested by <@123>) — same rules as the automatic round.');
+    expect(manual.author.name).toBe('Manual scan — same rules as the automatic round.');
+    expect(manual.description).toContain('<@123> requested this scan.');
+    expect(embedOf(d, null).author).toBeUndefined();
+  });
+
+  it('truncates a long breakdown within the field limit', () => {
     const logs = Array.from({ length: 300 }, (_, i) => log(String(i), `sub${i}`));
     const d = buildBlastDigest('c1', logs, [], [], { scanned: 300, eligible: 300, blocked: 0 });
-    expect(formatDigestMessage(d).length).toBeLessThanOrEqual(2000);
+    const breakdown = fieldOf(embedOf(d), 'Breakdown')!;
+    expect(breakdown.length).toBeLessThanOrEqual(1024);
+    expect(breakdown).toContain('…and ');
+    expect(breakdown).toContain('more');
+  });
+
+  it('omits empty-category fields', () => {
+    const d = buildBlastDigest('c1', [log('1', 'cats')], [], ['cats'], {
+      scanned: 1,
+      eligible: 1,
+      blocked: 0,
+    });
+    const json = embedOf(d);
+    expect(fieldOf(json, 'Breakdown')).toContain('r/cats');
+    expect(fieldOf(json, '🆕 New subreddits')).toBeNull();
+    expect(fieldOf(json, '🔎 Needs a name check')).toBeNull();
+  });
+});
+
+describe('reasonSymbol', () => {
+  it('maps every known tag, neutral for the unknown', () => {
+    expect(reasonSymbol('QUARANTINED')).toBe('🔎');
+    expect(reasonSymbol('SKIPPED_COMMENT')).toBe('💬');
+    expect(reasonSymbol('BLOCKED')).toBe('🚫');
+    expect(reasonSymbol('NO_SUBREDDIT')).toBe('❔');
+    expect(reasonSymbol('ELIGIBLE')).toBe('🟢');
+    expect(reasonSymbol('SOME_FUTURE_STATUS')).toBe('⚪');
   });
 });
 
@@ -204,6 +282,35 @@ describe('buildDigestButtons', () => {
     expect(d.blockableSubs).toEqual([]);
     expect(buildDigestButtons(d)).toHaveLength(1);
   });
+
+  it('hides Blast/Hold on request while Block buttons stay', () => {
+    const d = buildBlastDigest('burst-2026-09-17-02-49-ab12cd', [log('1', 'newsub'), log('2', 'cats')], [], [], {
+      scanned: 2,
+      eligible: 2,
+      blocked: 0,
+    });
+    const rows = buildDigestButtons(d, { hideGoHold: true });
+    expect(rows.flat().map((b) => b.action)).not.toContain('go');
+    expect(rows.flat().map((b) => b.action)).not.toContain('hold');
+    expect(rows.flat().filter((b) => b.action === 'block').map((b) => b.label)).toEqual([
+      'Block r/newsub',
+      'Block r/cats',
+    ]);
+    for (const row of rows) expect(row.length).toBeLessThanOrEqual(5);
+  });
+
+  it('Block buttons render in every case (released, empty, or hidden row 0)', () => {
+    const withBlocks = buildBlastDigest('c1', [log('1', 'cats')], [], [], {
+      scanned: 1,
+      eligible: 1,
+      blocked: 0,
+    });
+    // default (row 0 shown) and suppressed: Block r/cats present in both
+    for (const opts of [undefined, { hideGoHold: true }]) {
+      const labels = buildDigestButtons(withBlocks, opts).flat().map((b) => b.label);
+      expect(labels).toContain('Block r/cats');
+    }
+  });
 });
 
 describe('blockableSubs', () => {
@@ -256,10 +363,15 @@ describe('quarantined subs (NAME-CHECK)', () => {
     expect(mod.eligible).toBe(0);
     expect(mod.reasons).toEqual(['NAME-CHECK']);
     expect(d.newSubs).toEqual(['cats']);
-    const msg = formatDigestMessage(d);
-    expect(msg).toContain('• r/moderators x2 [NAME-CHECK] (1, 2)');
-    expect(msg).toContain('NAME-CHECK = held for name review');
-    expect(msg).toContain('allow r/x');
+    const json = embedOf(d);
+    expect(json.title).toBe('🟢 1 eligible — opening blast');
+    const breakdown = fieldOf(json, 'Breakdown')!;
+    expect(breakdown).toContain('🔎');
+    expect(breakdown).toContain('moderators');
+    expect(breakdown).toContain('NAME-CHECK');
+    expect(breakdown).not.toContain('(1, 2)');
+    expect(fieldOf(json, '🔎 Needs a name check')).toContain('allow r/x');
+    expect(fieldOf(json, '🆕 New subreddits')).toContain('r/cats');
   });
 
   it('offers block buttons for quarantined subs, never release inputs', () => {

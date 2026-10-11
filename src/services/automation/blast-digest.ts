@@ -2,11 +2,12 @@ import type { BurstTaskInput } from './burst.service';
 import { normalizeSubreddit } from './subreddit';
 
 /**
- * Pre-blast DM digest — pure logic for the manager phone-approval flow.
+ * Pre-blast DM digest — pure logic for the manager report flow.
  *
  * After a settled auto-report (no blast opened), the bot DMs the manager a
- * digest of the drop with Blast / Hold / per-subreddit Block buttons. All
- * set comparisons use exact normalized subreddits, mirroring the validator.
+ * digest of the drop as a Discord embed (built by `blastDigestEmbed` in
+ * bot/embeds) with per-subreddit Block buttons. All set comparisons use
+ * exact normalized subreddits, mirroring the validator.
  * Pure module — no env, DB, or Discord needed.
  */
 
@@ -33,10 +34,21 @@ export interface DigestSub {
 export const UNKNOWN_SUB = 'unknown';
 
 /** Human tag per validation reason for the DM. */
-function reasonTag(reason: string): string {
+export function reasonTag(reason: string): string {
   if (reason === 'SKIPPED_COMMENT') return 'comment';
   if (reason === 'QUARANTINED') return 'NAME-CHECK';
   return reason;
+}
+
+/** Compact status symbol per reason tag for the embed breakdown field. */
+export function reasonSymbol(reason: string): string {
+  const tag = reasonTag(reason);
+  if (tag === 'NAME-CHECK') return '🔎';
+  if (tag === 'comment') return '💬';
+  if (tag === 'BLOCKED') return '🚫';
+  if (tag === 'NO_SUBREDDIT' || tag === 'unknown') return '❔';
+  if (tag === 'ELIGIBLE') return '🟢';
+  return '⚪';
 }
 
 export interface BlastDigest {
@@ -135,7 +147,7 @@ export function buildBlastDigest(
   // tagged one) could never be blocked from the DM. Every listed,
   // blockable sub gets one now — eligible first (the releasable ones),
   // then tagged; unknown and already-blocked never do (blocking them is
-  // meaningless). Capped: Discord fits 5 rows, row 0 is Blast + Hold.
+  // meaningless). Capped: Discord fits 5 rows; Block rows follow row 0.
   const blockableSubs = subs
     .filter((s) => s.sub !== UNKNOWN_SUB && !blocked.has(s.sub))
     .sort((a, b) => {
@@ -157,50 +169,28 @@ export function buildBlastDigest(
   };
 }
 
-/** One-line-per-sub breakdown, capped to fit a 2000-char DM. */
-export function formatDigestMessage(digest: BlastDigest): string {
-  const lines: string[] = [
-    `Drop ${digest.cycleId}: ${digest.eligible} eligible (${digest.scanned} scanned, ${digest.blocked} blocked)`,
-  ];
-  if (digest.subs.length === 0) {
-    lines.push('No posts listed this drop.');
-  }
-  for (const s of digest.subs) {
-    const name = s.sub === UNKNOWN_SUB ? 'unknown subreddit' : `r/${s.sub}`;
-    const tags = s.reasons.length > 0 ? ` [${s.reasons.join(', ')}]` : '';
-    lines.push(`• ${name} x${s.count}${tags} (${s.ids.join(', ')})`);
-  }
-  if (digest.newSubs.length > 0) {
-    lines.push(`NEW - never seen before: ${digest.newSubs.map((s) => `r/${s}`).join(', ')}`);
-    lines.push('The blast opens automatically — block a sub above to keep it out of future rounds.');
-  } else if (digest.eligible === 0) {
-    lines.push('Nothing eligible - everything scanned is tagged above. No blast needed; Hold to dismiss.');
-  } else {
-    lines.push('No new subreddits. The blast opens automatically.');
-  }
-  if (digest.subs.some((s) => s.reasons.includes('NAME-CHECK'))) {
-    lines.push('NAME-CHECK = held for name review (doubtful match, never auto-blocked): tap Block, or DM `allow r/x` to clear it for future rounds.');
-  }
-  let text = lines.join('\n');
-  if (text.length > 1900) text = `${text.slice(0, 1900)}…`;
-  return text;
-}
-
-/** Row 0: Blast + Hold. Following rows: Block buttons (capped). */
-export function buildDigestButtons(digest: BlastDigest): ButtonSpec[][] {
+/** Row 0: Blast + Hold (suppressible — see hideGoHold). Following rows: Block buttons (capped). */
+export function buildDigestButtons(digest: BlastDigest, opts: { hideGoHold?: boolean } = {}): ButtonSpec[][] {
   // A live batch changes what Blast means: with one still open, releasing
   // starts a NEW batch (re-check availability, drop the stale messages)
   // rather than merging into the frozen hour pool. The button id carries
   // that intent so the release path never has to guess.
+  //
+  // Row 0 is hidden when a tap could do nothing useful: the round already
+  // released (or opens next), or there is nothing eligible to release.
+  // The caller (buildDigestForCycle) decides via the cycle's burst state;
+  // Block rows are unconditional — they stay a real manual override.
   const restart = digest.restartAvailable === true;
   const goLabel = restart ? 'Restart batch' : 'Blast now';
   const goId = restart ? `blast:go:${digest.cycleId}:restart` : `blast:go:${digest.cycleId}`;
-  const rows: ButtonSpec[][] = [
-    [
-      { action: 'go', label: goLabel, style: 'primary', customId: goId },
-      { action: 'hold', label: 'Hold', style: 'secondary', customId: `blast:hold:${digest.cycleId}` },
-    ],
-  ];
+  const rows: ButtonSpec[][] = opts.hideGoHold
+    ? []
+    : [
+        [
+          { action: 'go', label: goLabel, style: 'primary', customId: goId },
+          { action: 'hold', label: 'Hold', style: 'secondary', customId: `blast:hold:${digest.cycleId}` },
+        ],
+      ];
   const subs = digest.blockableSubs.slice(0, MAX_BLOCK_BUTTONS);
   let row: ButtonSpec[] = [];
   for (const sub of subs) {

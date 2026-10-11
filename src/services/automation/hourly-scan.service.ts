@@ -8,9 +8,10 @@
  * Timing is a self-rescheduling setTimeout chain (no cron dependency):
  * ms-until-next-IST-:10:05, exactly-once per IST hour key, recomputed
  * after every fire and on boot. IST has no DST; the offset is fixed.
- * Gated on the release condition (enabled && !dryRun — see
- * isHourlyScanAllowed): the digest is useful exactly when a Blast tap
- * can release it.
+ * Gated on the live condition (enabled && !dryRun — see
+ * isHourlyScanAllowed): the scan only runs when rounds are live. The
+ * digest it produces is a report, not a gate (the blast opens itself;
+ * Blast/Hold render only when the round hasn't released yet).
  */
 import { automationRepository } from '../../database/repositories';
 import { logger } from '../../utils/logger';

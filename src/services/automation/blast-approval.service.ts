@@ -4,10 +4,12 @@ import {
   ButtonInteraction,
   ButtonStyle,
   Client,
+  EmbedBuilder,
 } from 'discord.js';
 import { automationRepository } from '../../database/repositories';
 import { auditLogService } from '../audit.service';
 import { AuditAction } from '../../types';
+import { blastDigestEmbed } from '../../bot/embeds';
 import { logger } from '../../utils/logger';
 import { getAdminOrManagerIds, isAdminOrManager } from '../../utils/permissions';
 import { getIstHourStart } from '../../utils/ist-time';
@@ -16,9 +18,9 @@ import {
   buildBlastDigest,
   buildDigestButtons,
   buildReleaseInputs,
-  formatDigestMessage,
   isEligibleLogStatus,
   parseBlastButtonId,
+  BlastDigest,
   ButtonSpec,
 } from './blast-digest';
 
@@ -28,10 +30,12 @@ import {
  * The watcher settles each hour's scan into POST /burst; the server
  * validates, DMs the manager that settled set (report-first, awaited before
  * the blast opens), then blasts automatically — no tap, no Remote Desktop.
- * The DM keeps its Blast / Hold / per-subreddit Block buttons: Block still
- * acts on future rounds, and taps on an already-released round answer
- * gracefully instead of double-opening. Claim creation rules (order,
- * one-win, caps, busy, subreddit ground-truth) are untouched.
+ * The DM is an embed with per-subreddit Block buttons (Block still acts on
+ * future rounds); Blast / Hold render only when a tap could still release
+ * the round (unreleased + eligible + no imminent auto-open) — taps on an
+ * already-released round answer gracefully instead of double-opening.
+ * Claim creation rules (order, one-win, caps, busy, subreddit ground-truth)
+ * are untouched.
  */
 
 const APPROVAL_EXPIRY_MS = 90 * 60 * 1000;
@@ -115,15 +119,16 @@ async function deliverDigest(
   discordClient: Client,
   cycleId: string,
   banner: string | null,
+  opts: { willAutoOpen?: boolean } = {},
 ): Promise<{ delivery: DigestDelivery; built: BuiltDigest | null }> {
   const delivery: DigestDelivery = { sentTo: [], failed: [] };
   try {
-    const built = await buildDigestForCycle(cycleId);
+    const built = await buildDigestForCycle(cycleId, opts);
     // NOTE: no emptiness guard here by design — an empty drop still DMs
     // ("nothing listed"); only a missing cycle bails. buildDigestForCycle
     // returns null only when the cycle row itself is gone.
     if (!built) return { delivery, built };
-    const message = banner ? `${banner}\n${built.message}` : built.message;
+    const embed = blastDigestEmbed(built.digest, banner);
     const approvers = [...new Set(getAdminOrManagerIds())];
     if (approvers.length === 0) {
       logger.warn('Blast digest skipped: no admin/manager ids configured', { cycleId });
@@ -132,7 +137,7 @@ async function deliverDigest(
     for (const approverId of approvers) {
       try {
         const user = await discordClient.users.fetch(approverId);
-        await user.send({ content: message, components: built.components });
+        await user.send({ embeds: [embed], components: built.components });
         delivery.sentTo.push(approverId);
         logger.info('Blast digest DM sent', { cycleId, to: approverId, eligible: built.eligible });
       } catch (error) {
@@ -162,15 +167,26 @@ export function digestComponents(specs: ButtonSpec[][]): ActionRowBuilder<Button
 }
 
 export interface BuiltDigest {
-  message: string;
+  digest: BlastDigest;
   components: ActionRowBuilder<ButtonBuilder>[];
   eligible: number;
   /** Total scanned posts (eligible + tagged) — zero means nothing to show. */
   total: number;
 }
 
-/** Rebuilds the digest for a cycle from current DB state (logs + blocked). */
-export async function buildDigestForCycle(cycleId: string): Promise<BuiltDigest | null> {
+/**
+ * Rebuilds the digest for a cycle from current DB state (logs + blocked).
+ *
+ * Row 0 (Blast/Hold) renders only when a tap could still do something: the
+ * cycle has no burst row yet, something is eligible, and the caller is not
+ * about to auto-open the blast itself (the pre-blast report inside
+ * createBurstFlow passes willAutoOpen). Released rounds, empty rounds, and
+ * imminent auto-opens get Block rows only (or no components at all).
+ */
+export async function buildDigestForCycle(
+  cycleId: string,
+  opts: { willAutoOpen?: boolean } = {},
+): Promise<BuiltDigest | null> {
   const cycle = await automationRepository.getCycle(cycleId).catch(() => null);
   if (!cycle) return null;
   const logs = await automationRepository.listCycleLogs(cycleId).catch(() => []);
@@ -182,6 +198,7 @@ export async function buildDigestForCycle(cycleId: string): Promise<BuiltDigest 
   // offers it — with nothing to release, restart is meaningless.
   const openBursts = await automationRepository.listOpenBursts().catch(() => []);
   const eligibleCount = logs.filter((l) => l && isEligibleLogStatus(l.status)).length;
+  const released = (await automationRepository.listBurstsByCycle(cycleId).catch(() => [])).length > 0;
   const digest = buildBlastDigest(
     cycleId,
     logs,
@@ -191,8 +208,12 @@ export async function buildDigestForCycle(cycleId: string): Promise<BuiltDigest 
     { restartAvailable: openBursts.length > 0 && eligibleCount > 0 },
   );
   return {
-    message: formatDigestMessage(digest),
-    components: digestComponents(buildDigestButtons(digest)),
+    digest,
+    components: digestComponents(
+      buildDigestButtons(digest, {
+        hideGoHold: opts.willAutoOpen === true || released || eligibleCount === 0,
+      }),
+    ),
     eligible: digest.eligible,
     total: logs.length,
   };
@@ -210,6 +231,7 @@ export async function maybeSendDigest(
   discordClient: Client,
   cycleId: string,
   scanned: number,
+  opts: { willAutoOpen?: boolean } = {},
 ): Promise<DigestDelivery> {
   const delivery: DigestDelivery = { sentTo: [], failed: [] };
   const hourKey = getIstHourStart().getTime();
@@ -217,7 +239,7 @@ export async function maybeSendDigest(
   if (digestInFlightHour === hourKey) return delivery;
   digestInFlightHour = hourKey;
   try {
-    const { delivery: delivered, built } = await deliverDigest(discordClient, cycleId, null);
+    const { delivery: delivered, built } = await deliverDigest(discordClient, cycleId, null, opts);
     delivery.sentTo = delivered.sentTo;
     delivery.failed = delivered.failed;
     // Only suppress later retries once at least one DM actually went out.
@@ -282,9 +304,20 @@ function dropRelease(cycleId: string): void {
   releasingCycles.delete(cycleId);
 }
 
-async function editReplySafe(interaction: ButtonInteraction, content: string, clearButtons: boolean): Promise<void> {
+async function editReplySafe(
+  interaction: ButtonInteraction,
+  content: string | { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] },
+  clearButtons: boolean,
+): Promise<void> {
   try {
-    await interaction.editReply(clearButtons ? { content, components: [] } : { content });
+    if (typeof content === 'string') {
+      await interaction.editReply(clearButtons ? { content, components: [] } : { content });
+    } else {
+      await interaction.editReply({
+        embeds: content.embeds,
+        components: clearButtons ? [] : content.components,
+      });
+    }
   } catch (error) {
     logger.warn('Blast button reply edit failed', { error });
   }
@@ -369,7 +402,11 @@ export async function handleBlastButton(interaction: ButtonInteraction): Promise
         return true;
       }
       try {
-        await interaction.editReply({ content: `r/${sub} blocked.\n${rebuilt.message}`, components: rebuilt.components });
+        await interaction.editReply({
+          content: `r/${sub} blocked.`,
+          embeds: [blastDigestEmbed(rebuilt.digest, null)],
+          components: rebuilt.components,
+        });
       } catch (error) {
         logger.warn('Blast digest refresh edit failed', { error });
       }

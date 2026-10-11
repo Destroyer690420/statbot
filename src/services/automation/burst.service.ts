@@ -360,7 +360,10 @@ export async function createBurstFlow(
   if (!opts.forceWindow && opts.freshCycleOnly !== true) {
     try {
       const approval = await import('./blast-approval.service');
-      await approval.maybeSendDigest(discordClient, cycleId, candidates.length);
+      // willAutoOpen: this digest immediately precedes the automatic blast
+      // below, so its Blast/Hold row is suppressed (a tap could only race
+      // the imminent auto-open).
+      await approval.maybeSendDigest(discordClient, cycleId, candidates.length, { willAutoOpen: true });
     } catch (error) {
       logger.warn('Pre-blast digest DM failed (blast still opens)', { cycleId, error });
     }

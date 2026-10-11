@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-11
+### Built (NOT deployed — needs app rebuild, no migration)
+- **Glanceable blast digest embed.** Plain-text DM → color/title verdict embed (Breakdown monospace field, new-sub + name-check fields, cycle id in footer); Blast/Hold render only when a tap could still release (released/empty/imminent-auto-open rounds get Block rows only); stale "tap can release it" docs corrected. Typecheck clean, full suite green. No migration, no companion change.
 ### Deployed (2026-10-11 at `d363544` — dashboard-only rebuild, no migration)
 - **Watcher v1.6.4 live** (app/redis untouched; host bundle removed). Verified: served auto script v1.6.4 with the absolute `replace()` return (2 refs), 0 app errors. **Tampermonkey update required on watcher tabs.**
 ### Built (NOT deployed — needs dashboard rebuild only, no migration)
