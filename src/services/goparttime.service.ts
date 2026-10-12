@@ -116,6 +116,8 @@ class GoPartTimeService {
       // Post-link nudge clock starts at delivery (fire-and-forget: the
       // scheduler never breaks assignment).
       void scheduleNudgeForTask(task.id);
+      // Deadline-feedback clock starts at delivery too (fire-and-forget).
+      void this.scheduleFeedbackClock(task.id);
 
       await auditLogService.log(
         AuditAction.TASK_ASSIGNED,
@@ -280,6 +282,15 @@ class GoPartTimeService {
 
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
+
+    // A link arrived — the stalling notice is no longer needed. Drop any
+    // pending feedback job (fire-and-forget, never fails the reply path).
+    try {
+      const { removeFeedbackJobForTask } = await import('./feedback.service');
+      void removeFeedbackJobForTask(task.id).catch(() => undefined);
+    } catch {
+      // ignore — absence of a feedback job is the normal case
+    }
 
     // GoPartTime link auto-submit: enqueue async, never block or fail the
     // Discord reply path. Latest submission wins (replaces any pending job);
@@ -453,6 +464,8 @@ deliveryMessages: null as any,
       await taskRepository.updateDeliveryMessages(task.id, delivery);
       // New worker, fresh 10-min clock.
       void scheduleNudgeForTask(task.id);
+      // New worker, fresh feedback clock.
+      void this.scheduleFeedbackClock(task.id);
 
       await auditLogService.log(
         AuditAction.TASK_ASSIGNED,
@@ -543,6 +556,8 @@ deliveryMessages: null as any,
       await taskRepository.updateDeliveryMessages(task.id, delivery);
       // Retried delivery restarts the nudge clock from the fresh send.
       void scheduleNudgeForTask(task.id);
+      // Retried delivery restarts the feedback clock too.
+      void this.scheduleFeedbackClock(task.id);
       await auditLogService.log(
         AuditAction.ASSIGNMENT_RETRIED,
         task.id,
@@ -562,8 +577,24 @@ deliveryMessages: null as any,
 
   // ─── Internals ─────────────────────────────────────────────
 
-  private async requireGoPartTimeTask(taskId: string): Promise<Task> {
-    const task = await taskService.findById(taskId);
+  /**
+   * (Re)starts the deadline-feedback clock from a fresh delivery (assign,
+   * retry, reassign). Fire-and-forget: scheduling never breaks delivery.
+   */
+  private async scheduleFeedbackClock(taskId: string): Promise<void> {
+    try {
+      const { scheduleFeedbackForTask } = await import('./feedback.service');
+      const fresh = await taskService.findById(taskId).catch(() => null);
+      if (fresh) await scheduleFeedbackForTask(fresh);
+    } catch (error) {
+      logger.warn('Feedback scheduling failed (non-fatal)', {
+        taskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async requireGoPartTimeTask(taskId: string): Promise<Task> {    const task = await taskService.findById(taskId);
     if (!task) throw new Error('Task not found.');
     if (task.source !== GOPARTTIME_SOURCE) {
       throw new Error('This endpoint only applies to external tasks.');

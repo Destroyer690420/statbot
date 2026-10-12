@@ -17,10 +17,11 @@ import {
   decideSubmissionAction,
   maxAttemptsReached,
   pickSubmittableJobs,
-  retryDelayFor,
+  retryDelayForAttempt,
   submissionJobIdFor,
   StoredSubmissionJob,
 } from '../utils/submission-queue';
+import { parseDeadlineToMs } from '../utils/deadline';
 import { taskService } from './task.service';
 import { auditLogService } from './audit.service';
 import { getAdminOrManagerIds } from '../utils/permissions';
@@ -57,7 +58,9 @@ export async function closeSubmissionQueue(): Promise<void> {
 /**
  * Enqueues (or replaces) the submit job for a task. Latest submission wins:
  * any pending job for the task is removed first. Gate failures remove the
- * stale job and enqueue nothing. Never throws — submissions must not break.
+ * stale job and enqueue nothing. With a task-site deadline, the correction
+ * window is cut short so the first attempt still lands before the 5-min
+ * margin (owner directive, 2026-10-12). Never throws.
  */
 export async function enqueueSubmissionJob(task: Task): Promise<{ enqueued: boolean; reason: string }> {
   try {
@@ -65,10 +68,12 @@ export async function enqueueSubmissionJob(task: Task): Promise<{ enqueued: bool
     const jobId = submissionJobIdFor(task.id);
     const old = await q.getJob(jobId).catch(() => null);
     if (old) await old.remove().catch(() => undefined);
+    const deadlineMs = parseDeadlineToMs(task.deadline, task.createdAt);
     const decision = decideSubmissionAction({
       taskType: task.type,
       formatCheckStatus: task.formatCheckStatus,
       submittedRedditUrl: task.submittedRedditUrl,
+      deadlineMs,
     });
     if (!decision.enqueue) {
       logger.info('Submission job skipped (manager review)', { taskId: task.id, reason: decision.reason });
@@ -84,10 +89,11 @@ export async function enqueueSubmissionJob(task: Task): Promise<{ enqueued: bool
         attempt: 1,
         leasedBy: null,
         leasedAt: null,
+        deadlineMs,
       } satisfies SubmissionJobData,
       { delay: decision.delayMs, jobId, removeOnComplete: true },
     );
-    logger.info('Submission job scheduled', { taskId: task.id, delayMs: decision.delayMs });
+    logger.info('Submission job scheduled', { taskId: task.id, delayMs: decision.delayMs, reason: decision.reason });
     return { enqueued: true, reason: decision.reason };
   } catch (error) {
     logger.warn('Submission enqueue failed (non-fatal)', {
@@ -175,7 +181,9 @@ export async function reportSubmissionResult(
   const reason = result.failureReason || 'executor reported failure';
   const attempt = data.attempt ?? 1;
   if (!maxAttemptsReached(attempt)) {
-    const delayMs = retryDelayFor(attempt);
+    // Deadline-pressured retries fire as soon as the executor can take them
+    // instead of waiting out the full backoff past the margin.
+    const delayMs = retryDelayForAttempt(attempt, data.deadlineMs ?? null);
     await job.remove().catch(() => undefined);
     await q
       .add(

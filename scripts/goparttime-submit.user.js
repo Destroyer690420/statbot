@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GoPartTime Link Submitter
 // @namespace    https://goparttime.net/
-// @version      1.1.2
-// @description  Dedicated executor tab for GoPartTime link auto-submit: polls Statbot for verified worker links, finds each task card across /my-tasks/todo pages, fills the Submit Task dialog, and clicks Submit. Never accepts tasks, never consumes accept-claim leases.
+// @version      1.2.0
+// @description  Dedicated executor tab for GoPartTime link auto-submit + deadline feedback: polls Statbot for verified worker links and stalling notices, finds each task card across /my-tasks/todo pages, fills the Submit Task dialog (or the Feedback dialog with "submitting in a bit"), and clicks Submit. Never accepts tasks, never consumes accept-claim leases.
 // @author       Manager
 // @match        *://goparttime.net/*
 // @match        *://www.goparttime.net/*
@@ -18,6 +18,17 @@
 // ==/UserScript==
 
 /**
+ * v1.2.0 - Deadline feedback ("submitting in a bit"). The pending poll now
+ * also returns feedbackJobs (link-less tasks near their task-site deadline);
+ * feedback is processed before submit jobs. Flow per feedback job: lease,
+ * reload the list, find the card, click its exact-text "Feedback" button,
+ * fill textarea[name="reason"] via the React-textarea technique (a
+ * manager-typed notice wins — it is submitted as-is), short human-like
+ * pause, click the dialog's own Submit. Verify: intercepted success:true or
+ * dialog auto-closed (observed: Submit closes it). Report to
+ * /feedback-jobs/:id/result (one server retry, then the manager is tagged).
+ * Submit flow untouched.
+ *
  * v1.1.2 - Fresh list per job: a newly leased job reloads /my-tasks/todo
  * before hunting (newly accepted posts never render without a reload, so a
  * stale DOM could never find them). One reload per job; the saved active job
@@ -71,7 +82,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.1.2';
+  var VERSION = '1.2.0';
   var DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/goparttime',
     apiKey: '',
@@ -86,6 +97,11 @@
   var SUBMIT_DELAY_MAX_MS = 8000;
   var DIALOG_WAIT_MS = 4000;
   var VERIFY_BUDGET_MS = 8000;
+  // Stalling notice written into the Feedback dialog (server-pinned wording).
+  var FEEDBACK_TEXT = 'submitting in a bit';
+  // Feedback needs no link-correction pause, but must not look instant.
+  var FEEDBACK_DELAY_MIN_MS = 1200;
+  var FEEDBACK_DELAY_MAX_MS = 2500;
   // Per-tab lease id (sessionStorage: stable across reloads, unique per tab).
   var TAB_ID_KEY = 'gpt_submit_tab_id';
   // In-flight job across page navigations (?page=N hops).
@@ -377,6 +393,53 @@
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  // Same React-controlled technique for <textarea> (own prototype setter —
+  // the input one does not apply), with direct-assignment fallback.
+  function setReactTextValue(el, value) {
+    try {
+      var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(el, value);
+    } catch (e) {
+      try { el.value = value; } catch (e2) { /* ignore */ }
+    }
+    try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+    try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+  }
+
+  // The card's own "Feedback" action button — exact text only, scoped to the
+  // card, so the dialog's inner "Submit" never matches.
+  function findCardFeedbackButton(card) {
+    try {
+      var btns = Array.from(card.querySelectorAll('button[data-slot="button"]'));
+      for (var i = 0; i < btns.length; i++) {
+        if ((btns[i].textContent || '').trim() === 'Feedback' && !btns[i].disabled) return btns[i];
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  // Open Feedback dialog = the one carrying textarea[name="reason"].
+  function findFeedbackDialog() {
+    try {
+      var dialogs = Array.from(document.querySelectorAll('div[role="dialog"][data-slot="dialog-content"]'));
+      for (var i = 0; i < dialogs.length; i++) {
+        if (dialogs[i].querySelector('textarea[name="reason"]')) return dialogs[i];
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  async function waitForFeedbackDialog() {
+    var waited = 0;
+    while (waited < DIALOG_WAIT_MS) {
+      var dialog = findFeedbackDialog();
+      if (dialog) return dialog;
+      await sleep(100);
+      waited += 100;
+    }
+    return null;
+  }
+
   function findDialogSubmitButton(dialog) {
     try {
       var btns = Array.from(dialog.querySelectorAll('button'));
@@ -646,6 +709,149 @@
     saveActive(null);
   }
 
+  /**
+   * Feedback verify: the intercepted Server-Action response decides when
+   * present ("success":true/false). Otherwise the corroborated terminal
+   * state decides: the Feedback dialog auto-closes on Submit (observed with
+   * a real capture), so dialog-gone means sent. Anything else is transient.
+   */
+  async function observeFeedbackOutcome(clickAt) {
+    var waited = 0;
+    while (waited < VERIFY_BUDGET_MS) {
+      await sleep(250);
+      waited += 250;
+      try {
+        if (lastSubmitResponse && lastSubmitResponse.at >= clickAt) {
+          var text = lastSubmitResponse.text || '';
+          if (/"success":\s*true/.test(text)) return { ok: true, evidence: 'success:true' };
+          var m = /"message":\s*"([^"]+)"/.exec(text);
+          if (/"success":\s*false/.test(text) || lastSubmitResponse.status >= 400) {
+            return { ok: false, evidence: m ? m[1] : ('site rejected feedback (HTTP ' + lastSubmitResponse.status + ')') };
+          }
+        }
+      } catch (e) { /* keep watching */ }
+      try {
+        if (!findFeedbackDialog()) return { ok: true, evidence: 'dialog closed' };
+      } catch (e) { /* keep watching */ }
+    }
+    try {
+      if (!findFeedbackDialog()) return { ok: true, evidence: 'dialog closed' };
+    } catch (e) { /* fall through */ }
+    return { ok: false, evidence: 'no confirmation observed' };
+  }
+
+  function feedbackDelayMs() {
+    return FEEDBACK_DELAY_MIN_MS + Math.floor(Math.random() * (FEEDBACK_DELAY_MAX_MS - FEEDBACK_DELAY_MIN_MS));
+  }
+
+  async function reportFeedbackResult(settings, jobId, ok, failureReason) {
+    try {
+      await request(settings, 'POST', '/feedback-jobs/' + encodeURIComponent(jobId) + '/result', {
+        ok: !!ok,
+        failureReason: failureReason || null,
+      });
+    } catch (e) {
+      console.log('[Submitter] feedback result report failed:', e && e.message);
+    }
+  }
+
+  async function processFeedbackJob(settings, tabId, active) {
+    // Stay on the submissions list; any other page navigates back to it.
+    if (!/^\/my-tasks\/todo\/?$/.test(window.location.pathname)) {
+      console.log('[Submitter] feedback ' + active.jobId + ' waiting for /my-tasks/todo (on ' + window.location.pathname + ')');
+      window.location.href = '/my-tasks/todo';
+      return;
+    }
+
+    var cardsReady = document.querySelectorAll('div[data-slot="card"]').length > 0;
+    for (var i = 0; i < 30 && !cardsReady; i++) {
+      await sleep(150);
+      cardsReady = document.querySelectorAll('div[data-slot="card"]').length > 0;
+    }
+    if (!cardsReady) {
+      await reportFeedbackResult(settings, active.jobId, false, 'Submissions list did not render.');
+      saveActive(null);
+      return;
+    }
+
+    // 1. Find the card, walking ?page=N (bounded).
+    var card = findCardByTaskId(active.externalTaskId);
+    if (!card) {
+      var page = currentTodoPage();
+      var max = maxTodoPages();
+      if (page < max) {
+        console.log('[Submitter] feedback task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + (page + 1));
+        window.location.href = '/my-tasks/todo?page=' + (page + 1);
+        return;
+      }
+      await reportFeedbackResult(settings, active.jobId, false, 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo.');
+      setStatus(false, 'feedback task #' + active.externalTaskId + ' card missing');
+      saveActive(null);
+      return;
+    }
+
+    // 2. Open its Feedback dialog via its own button (exact text).
+    var openBtn = findCardFeedbackButton(card);
+    if (!openBtn) {
+      await reportFeedbackResult(settings, active.jobId, false, 'Task #' + active.externalTaskId + ' has no clickable Feedback button.');
+      setStatus(false, 'feedback task #' + active.externalTaskId + ' not actionable');
+      saveActive(null);
+      return;
+    }
+    try { card.scrollIntoView({ block: 'center' }); } catch (e) {}
+    await sleep(150);
+    openBtn.click();
+    var dialog = await waitForFeedbackDialog();
+    if (!dialog) {
+      await reportFeedbackResult(settings, active.jobId, false, 'Feedback dialog did not open.');
+      saveActive(null);
+      return;
+    }
+
+    // 3. Fill (never clobber a manager-typed notice — theirs wins and is
+    // submitted as-is).
+    var area = dialog.querySelector('textarea[name="reason"]');
+    if (!area) {
+      await reportFeedbackResult(settings, active.jobId, false, 'Feedback dialog has no text field.');
+      saveActive(null);
+      return;
+    }
+    var current = (area.value || '').trim();
+    if (!current) {
+      setReactTextValue(area, FEEDBACK_TEXT);
+      console.log('[Submitter] feedback filled for task #' + active.externalTaskId);
+    } else if (current !== FEEDBACK_TEXT) {
+      console.log('[Submitter] feedback dialog already filled — submitting that (manager notice wins).');
+    }
+
+    // 4. Short human-like pause, then the dialog's own Submit (exact text).
+    await sleep(feedbackDelayMs());
+    dialog = findFeedbackDialog();
+    if (!dialog) {
+      await reportFeedbackResult(settings, active.jobId, false, 'Feedback dialog vanished before Submit.');
+      saveActive(null);
+      return;
+    }
+    var submitBtn = findDialogSubmitButton(dialog);
+    if (!submitBtn) {
+      await reportFeedbackResult(settings, active.jobId, false, 'Submit button not found in feedback dialog.');
+      saveActive(null);
+      return;
+    }
+    lastSubmitResponse = null;
+    var clickAt = Date.now();
+    submitBtn.click();
+    var outcome = await observeFeedbackOutcome(clickAt);
+    await reportFeedbackResult(settings, active.jobId, outcome.ok, outcome.ok ? null : outcome.evidence);
+    setStatus(outcome.ok, 'feedback task #' + active.externalTaskId + (outcome.ok ? ' held' : ' failed: ' + outcome.evidence));
+    saveActive(null);
+  }
+
+  function leasePath(kind, jobId) {
+    var base = kind === 'feedback' ? '/feedback-jobs/' : '/submit-jobs/';
+    return base + encodeURIComponent(jobId) + '/lease';
+  }
+
   async function tick() {
     if (busy) return;
     var settings = getSettings();
@@ -663,22 +869,26 @@
       var active = loadActive();
       if (!active) {
         var res = await request(settings, 'GET', '/submit-jobs/pending');
-        var jobs = (res && res.data && res.data.jobs) || [];
-        if (jobs.length === 0) {
+        var data = (res && res.data) || {};
+        var fbJobs = data.feedbackJobs || [];
+        var jobs = data.jobs || [];
+        // Feedback first: it shields the deadline and is quick; submit jobs
+        // follow. Older servers omit feedbackJobs (treated as none).
+        var next = fbJobs.length > 0 ? { kind: 'feedback', job: fbJobs[0] } : (jobs.length > 0 ? { kind: 'submit', job: jobs[0] } : null);
+        if (!next) {
           setStatus(true, 'idle, no pending jobs');
           return;
         }
-        var next = jobs[0];
         try {
-          await request(settings, 'POST', '/submit-jobs/' + encodeURIComponent(next.jobId) + '/lease', { tabId: tabId });
+          await request(settings, 'POST', leasePath(next.kind, next.job.jobId), { tabId: tabId });
         } catch (e) {
-          // 404 (gone/replaced) or 409 (held by another tab): drop it, next poll.
-          console.log('[Submitter] lease refused for ' + next.jobId + ': ' + (e && e.message));
+          // 404 (gone/replaced/stale) or 409 (held by another tab): next poll.
+          console.log('[Submitter] lease refused for ' + next.job.jobId + ': ' + (e && e.message));
           return;
         }
-        active = { jobId: next.jobId, externalTaskId: next.externalTaskId, url: next.submittedRedditUrl, attempt: next.attempt || 1 };
+        active = { kind: next.kind, jobId: next.job.jobId, externalTaskId: next.job.externalTaskId, url: next.job.submittedRedditUrl || null, attempt: next.job.attempt || 1 };
         saveActive(active);
-        setStatus(true, 'leased task #' + active.externalTaskId);
+        setStatus(true, 'leased ' + next.kind + ' task #' + active.externalTaskId);
         // Fresh list first: newly accepted posts never render without a
         // reload, so a job must never hunt on a stale DOM. After the reload
         // the same active job resumes on the next tick (re-takes its own
@@ -691,17 +901,19 @@
         } catch (e) { /* next tick resumes regardless */ }
         return;
       } else {
+        if (!active.kind) active.kind = 'submit';
         // Re-take our own lease so a slow multi-page hunt never looks stuck.
         try {
-          await request(settings, 'POST', '/submit-jobs/' + encodeURIComponent(active.jobId) + '/lease', { tabId: tabId });
+          await request(settings, 'POST', leasePath(active.kind, active.jobId), { tabId: tabId });
         } catch (e) {
-          // Job gone (replaced by a resubmission): drop it, next poll.
+          // Job gone (replaced by a resubmission, or stale feedback): drop it.
           console.log('[Submitter] active job gone, dropping: ' + active.jobId);
           saveActive(null);
           return;
         }
       }
-      await processActiveJob(settings, tabId, active);
+      if (active.kind === 'feedback') await processFeedbackJob(settings, tabId, active);
+      else await processActiveJob(settings, tabId, active);
     } catch (e) {
       setStatus(false, String((e && e.message) || e).slice(0, 80));
       console.log('[Submitter] tick failed:', e && e.message);

@@ -233,6 +233,25 @@ export class TaskRepository {
   }
 
   /**
+   * Deadline-feedback candidates: delivered GoPartTime tasks of any type
+   * still waiting for their Reddit link. ACCEPTED and PENDING (activation
+   * does not require a link, and the site-side deadline applies either
+   * way). Auto-marked-deleted rows stay eligible — their links still submit
+   * (Decision 33). Deadline parsing + one-shot guards run in JS.
+   */
+  async findFeedbackCandidates() {
+    return getDb().task.findMany({
+      where: {
+        source: 'goparttime',
+        status: { in: ['ACCEPTED' as any, 'PENDING' as any] },
+        assignmentStatus: 'SENT',
+        submittedRedditUrl: null,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
    * Batched projection of the two fields callers need to decorate a row with a
    * task reference. Used by the audit-log enrich, which previously issued one
    * `findById` per log row.

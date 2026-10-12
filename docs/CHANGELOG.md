@@ -3,12 +3,12 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-12
+### Built (NOT deployed — needs migration re-run + app + dashboard rebuild + executor-tab Tampermonkey update)
+- **Deadline protection (submit expedite + "submitting in a bit" feedback).** Links submit no later than deadline − 5min − slack (correction window cut short under pressure; pressured retries fire at once); link-less tasks get one automatic feedback at deadline − 5min via the executor tab (v1.2.0, Feedback button → `textarea[name=reason]` → Submit). Nudge/escalation reassignment unchanged. Typecheck clean, full suite green (76 suites / 1042 tests). See Decision 35, `docs/GOPARTTIME.md` §18, `docs/BROWSER_EXTENSION.md` §5h.
 ### Deployed (2026-10-12 at `c0d97e7` — app-only rebuild, no migration)
 - **Mid-blast shrink + post-less winners lose the message live** (dashboard/redis untouched; backup `rtm-backup-20261012-shrink.tar.gz`; host bundle removed). Verified: healthy boot, live-dist gates (keeper-set, shrink wiring ×3, late-delete), health healthy, 0 app errors. Also shipped the queued submit-gate change (`927bd63`, DELETED auto-submits) which was waiting for an app rebuild.
 ### Built (NOT deployed — needs app rebuild, no migration)
 - **Mid-blast shrink + post-less winners lose the message.** Fill cleanup keeps task holders only; terminal failures/expiries delete late; pooled-post blocks shrink slots with early close. Typecheck clean, full suite green. See Decision 34.
-### Built (NOT deployed — needs app rebuild only, no migration, dashboard untouched)
-- **Removed posts auto-submit.** `shouldAutoSubmit` now passes POST + `DELETED` (any removal state); only `PARA_SHORT` (+ fetch/session/null) still stays manual. Ticket replies unchanged (pay-eligibility wording still holds); auto-mark + survival proof untouched. Typecheck clean, full suite green (74 suites / 1010 tests). See Decision 33, `docs/GOPARTTIME.md` §15.
 ### Deployed (2026-10-12 at `06d8e64` — app + dashboard rebuild, no migration)
 - **Worker-visible brand removal live** (`161.118.164.85`; backup `rtm-backup-20261012-brand.tar.gz`; redis untouched; host bundle removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!" (all 6 queues incl. submission/nudge), live-dist gates (`auto-submission` ×3 + `task site manually` ×1 in `dist/utils/submission-reply.js`, 0 `queued for GoPartTime`; served `TaskDetails` chunk carries "Retry Auto-Submit", 0 old label), root + health 200, 0 app errors. No slash-command redeploy (no command changes). See Decision 32.
 

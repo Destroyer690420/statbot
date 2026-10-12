@@ -264,8 +264,8 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-12**: **Deadline protection BUILT, NOT deployed** (needs migration re-run + app + dashboard rebuild + executor-tab update). Expedited submits + one-shot deadline feedback via executor v1.2.0. See Decision 35.
 - **2026-10-12**: **Mid-blast shrink DEPLOYED live at `c0d97e7`** (app-only rebuild, no migration; verified healthy boot, live-dist gates, 0 app errors; also shipped queued submit-gate `927bd63`).
-- **2026-10-12**: **Removed-post auto-submit BUILT, NOT deployed** (needs app rebuild only, no migration). `DELETED` verdicts now pass the submit gate; only short posts stay manual. 74 suites / 1010 tests green. See Decision 33.
 - **2026-10-12**: **Worker-visible brand removal DEPLOYED live at `06d8e64`** (app + dashboard rebuild, no migration; backup `rtm-backup-20261012-brand.tar.gz`; verified healthy boot, live-dist gates on app + served dashboard chunk, 0 app errors). See Decision 32.
 - **2026-10-11**: **Digest embed DEPLOYED live at `b91dc91`** (app-only rebuild, no migration; verified healthy boot, live-dist gates, 0 app errors).
 - **2026-10-11**: **Lenient format check + link nudge/escalation DEPLOYED live at `d8760ed`** (app + dashboard rebuild, migration re-run clean; verified healthy boot with nudge worker, served format-check v1.1.0, 0 app errors). Tampermonkey update needed for the format-check script. See Decisions 30–31.

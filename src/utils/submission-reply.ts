@@ -119,3 +119,21 @@ export function buildSubmissionFailedMessage(
     `Please submit the link (${task.submittedRedditUrl || 'no link stored'}) on the task site manually.`
   );
 }
+
+/**
+ * Ticket feedback failure notice (the stalling notice could not be sent, so
+ * the task may expire on the task site — a manager must send it by hand).
+ *
+ * Worker-visible: never names the external task site — "task site" only.
+ * Pure (no I/O) so the brand-leak guard can test it without env/DB/Discord.
+ */
+export function buildFeedbackFailedMessage(
+  task: { id: string; externalTaskId?: string | null },
+  reason: string,
+  tags: string,
+): string {
+  return (
+    `${tags} Could not hold task ${task.externalTaskId || task.id} past its deadline automatically (${reason}). ` +
+    `Please open it on the task site and send the stalling note by hand before it expires.`
+  );
+}

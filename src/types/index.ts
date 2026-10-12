@@ -190,6 +190,8 @@ export enum AuditAction {
   AUTO_MARKED_DELETED = 'AUTO_MARKED_DELETED',
   GPT_LINK_SUBMITTED = 'GPT_LINK_SUBMITTED',
   GPT_LINK_SUBMIT_FAILED = 'GPT_LINK_SUBMIT_FAILED',
+  FEEDBACK_SENT = 'FEEDBACK_SENT',
+  FEEDBACK_FAILED = 'FEEDBACK_FAILED',
   LINK_NUDGE_SENT = 'LINK_NUDGE_SENT',
   LINK_ESCALATED = 'LINK_ESCALATED',
 }
@@ -416,6 +418,20 @@ export interface SubmissionJobData {
   externalTaskId: string | null;
   submittedRedditUrl: string;
   submittedAtISO: string | null;
+  attempt: number;
+  leasedBy: string | null;
+  leasedAt: number | null;
+  /** Task-site deadline (UTC ms) at enqueue time — absent on jobs queued
+   *  before deadline protection shipped. Used to expedite retries. */
+  deadlineMs?: number | null;
+}
+
+// ─── Deadline feedback ("submitting in a bit", browser-tab executor) ───
+
+/** One BullMQ job in the feedback-queue (schedule/lease store only). */
+export interface FeedbackJobData {
+  taskId: string;
+  externalTaskId: string | null;
   attempt: number;
   leasedBy: string | null;
   leasedAt: number | null;

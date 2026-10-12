@@ -158,22 +158,24 @@ Source: `scripts/goparttime-mobile.user.js`; served at
 **instead of** (not alongside) the desktop script on the phone — running both
 would double-fire the autofill.
 
-## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.1.2, DEPLOYED 2026-10-10 — tab update still required)
+## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.2.0, NOT deployed — tab update required)
 
 Dedicated tab that finishes the Submit Link loop: polls `GET /submit-jobs/pending`
-every ~5s (own tab id), leases one job, walks `/my-tasks/todo?page=N` (bounded 10)
-for the card by Task ID, then submits fast-path-first: direct Server Action POST
-(verified against a real capture — `Accept: text/x-component`, `Content-Type:
-text/plain;charset=UTF-8`, `Next-Action` scraped like the accept flow, body
-`[{"sub_task_id":id,"reddit_url":url}]`, 2 tries × 3s, definitive verdicts only),
-dialog flow as fallback (exact-text Submit Task → `input[name="redditUrl"]` via
-`setReactInputValue`, never clobbers, 3–8s human wait → dialog Submit click).
-Verify is authoritative: intercepted `success:true/false` decides, else
-dialog-closed + the card's Submit Task button gone (both manually corroborated).
-In-flight job survives `?page=` hops via sessionStorage; status pill bottom-left
-(Send owns bottom-right). Shares storage keys (`gpt_api_url`, `gpt_api_key`) so no
-new configuration. Runs ALONE on its tab — never the watcher tab (it never touches
-`/tasks`, claims, or accept buttons).
+every ~5s (own tab id; the response now also carries `feedbackJobs`, which older
+tabs ignore), leases one job — feedback jobs first (deadline shields), then submit
+jobs — walks `/my-tasks/todo?page=N` (bounded 10) for the card by Task ID, then:
+- submit jobs: unchanged (fast-path Server Action, dialog fallback, authoritative
+verify, `setReactInputValue`, 3–8s human wait).
+- feedback jobs (new in v1.2.0): clicks the card's exact-text "Feedback" button,
+fills `textarea[name="reason"]` via the React-textarea technique (`HTMLTextAreaElement`
+setter + `input`/`change` events — the input setter does not apply to textareas; a
+manager-typed notice wins and is submitted as-is), short 1.2–2.5s pause, clicks the
+dialog's own Submit. Verify: intercepted `success:true`, else dialog auto-closed
+(manually corroborated — Submit closes it). Reports to
+`POST /feedback-jobs/:id/result`. In-flight job (either kind) survives `?page=` hops
+via sessionStorage; status pill bottom-left (Send owns bottom-right). Shares storage
+keys (`gpt_api_url`, `gpt_api_key`) so no new configuration. Runs ALONE on its tab —
+never the watcher tab (it never touches `/tasks`, claims, or accept buttons).
 Source: `scripts/goparttime-submit.user.js`; served at
 `https://statbot.duckdns.org/goparttime-submit.user.js` after the dashboard rebuild.
 

@@ -19,6 +19,11 @@ import {
   pendingSubmissionJobs,
   reportSubmissionResult,
 } from '../../services/submission.service';
+import {
+  leaseFeedbackJob,
+  pendingFeedbackJobs,
+  reportFeedbackResult,
+} from '../../services/feedback.service';
 
 /**
  * Endpoints used by the GoPartTime browser extension. Authenticated with the
@@ -278,10 +283,13 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
    * id, polls every few seconds). Jobs carry the verified worker link; the
    * tab leases one, submits it in-page on goparttime.net, and reports back.
    * This tab never touches /tasks and never consumes an accept-claim lease.
+   * The response also carries due feedback jobs ("submitting in a bit" for
+   * link-less tasks near their deadline) so the tab keeps a single poll
+   * loop — older executor versions ignore the extra field.
    */
   router.get('/submit-jobs/pending', async (_req: Request, res: Response): Promise<void> => {
     try {
-      const jobs = await pendingSubmissionJobs();
+      const [jobs, feedbackJobs] = await Promise.all([pendingSubmissionJobs(), pendingFeedbackJobs()]);
       res.json({
         success: true,
         data: {
@@ -290,6 +298,12 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
             taskId: j.taskId,
             externalTaskId: j.externalTaskId,
             submittedRedditUrl: j.submittedRedditUrl,
+            attempt: j.attempt,
+          })),
+          feedbackJobs: feedbackJobs.map((j) => ({
+            jobId: j.jobId,
+            taskId: j.taskId,
+            externalTaskId: j.externalTaskId,
             attempt: j.attempt,
           })),
         },
@@ -352,6 +366,63 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
         res.json({ success: true, data: outcome });
       } catch (error) {
         logger.error('POST /goparttime/submit-jobs/:id/result failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
+
+  /**
+   * POST /api/v1/goparttime/feedback-jobs/:id/lease
+   * Per-tab lease on a feedback job (same 409/404 semantics as submit-job
+   * leases). Leasing re-validates: a task that gained a link, went terminal,
+   * or already got its notice refuses the lease and the stale job is gone.
+   */
+  router.post(
+    '/feedback-jobs/:id/lease',
+    validateBody(z.object({ tabId: z.string().min(1).max(64) })),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const outcome = await leaseFeedbackJob(String(req.params.id), req.body.tabId);
+        if (!outcome.leased) {
+          const code = outcome.reason.startsWith('stale:') || outcome.reason === 'job not found (done, replaced, or expired)' ? 404 : 409;
+          res.status(code).json({ success: false, message: outcome.reason });
+          return;
+        }
+        res.json({ success: true, data: { leased: true, jobId: String(req.params.id) } });
+      } catch (error) {
+        logger.error('POST /goparttime/feedback-jobs/:id/lease failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
+
+  /**
+   * POST /api/v1/goparttime/feedback-jobs/:id/result
+   * Executor verdict. Success removes the job + audits FEEDBACK_SENT (the
+   * one-shot guard). One retry after a transient failure; give-up removes
+   * the job, audits FEEDBACK_FAILED, and tags the manager in the ticket so
+   * the notice goes out by hand before expiry.
+   */
+  router.post(
+    '/feedback-jobs/:id/result',
+    validateBody(z.object({
+      ok: z.boolean(),
+      failureReason: z.string().max(500).optional().nullable(),
+    })),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const outcome = await reportFeedbackResult(
+          String(req.params.id),
+          { ok: req.body.ok, failureReason: req.body.failureReason ?? null },
+          discordClient,
+        );
+        if (!outcome.recorded) {
+          res.status(404).json({ success: false, message: 'Job not found (done, replaced, or expired).', stale: true });
+          return;
+        }
+        res.json({ success: true, data: outcome });
+      } catch (error) {
+        logger.error('POST /goparttime/feedback-jobs/:id/result failed', { error });
         res.status(500).json({ success: false, message: 'Internal server error.' });
       }
     },

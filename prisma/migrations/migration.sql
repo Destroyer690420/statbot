@@ -823,6 +823,12 @@ ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SURVIVAL_PROOF_FAILED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'GPT_LINK_SUBMITTED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'GPT_LINK_SUBMIT_FAILED';
 
+-- Deadline feedback ("submitting in a bit", browser-tab executor): audit
+-- trail for automatic stalling notices. Schema-only, idempotent, safe to
+-- re-run.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'FEEDBACK_SENT';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'FEEDBACK_FAILED';
+
 -- Quarantine (doubtful-name holds): verdict persistence + cycle counter +
 -- audit trail for manager Allow decisions. Schema-only, idempotent.
 CREATE TABLE IF NOT EXISTS "AllowedSubreddit" (

@@ -12,6 +12,7 @@ import {
   SUBMISSION_RETRY_DELAYS_MS,
 } from '../config/constants';
 import { TaskType } from '../types';
+import { isDeadlinePressured, retryDelayWithDeadline, submitDelayWithDeadline } from './deadline';
 
 /** Stable job id per task — a resubmission replaces the pending job. */
 export function submissionJobIdFor(taskId: string): string {
@@ -54,11 +55,15 @@ export interface SubmissionDecision {
 /**
  * Decides what a (re)submission means for the queue. Latest submission wins:
  * callers remove any pending job for the task first, then enqueue when told.
+ * With a deadline, the correction-window delay is cut short so the first
+ * attempt still lands before the margin (owner directive, 2026-10-12).
  */
 export function decideSubmissionAction(args: {
   taskType: TaskType | string;
   formatCheckStatus: string | null | undefined;
   submittedRedditUrl: string | null | undefined;
+  deadlineMs?: number | null;
+  nowMs?: number;
 }): SubmissionDecision {
   if (!args.submittedRedditUrl || !args.submittedRedditUrl.trim()) {
     return { enqueue: false, reason: 'no submitted URL', delayMs: 0 };
@@ -70,12 +75,30 @@ export function decideSubmissionAction(args: {
       delayMs: 0,
     };
   }
+  const nowMs = args.nowMs ?? Date.now();
+  const delayMs = submitDelayWithDeadline(args.deadlineMs ?? null, nowMs);
+  if (isDeadlinePressured(args.deadlineMs ?? null, nowMs)) {
+    return { enqueue: true, reason: 'verified link (deadline-pressured)', delayMs };
+  }
   return { enqueue: true, reason: 'verified link', delayMs: SUBMISSION_INITIAL_DELAY_MS };
 }
 
 /** Delay before retry attempt N (1-based initial attempt). attempt=1 → first retry. */
 export function retryDelayFor(failedAttempt: number): number {
   return SUBMISSION_RETRY_DELAYS_MS[failedAttempt - 1] ?? SUBMISSION_RETRY_DELAYS_MS[0];
+}
+
+/**
+ * Retry delay under deadline pressure: the normal backoff applies, except a
+ * retry that would land past the margin fires as soon as the executor can
+ * take it. Without a deadline this is exactly retryDelayFor.
+ */
+export function retryDelayForAttempt(
+  failedAttempt: number,
+  deadlineMs?: number | null,
+  nowMs: number = Date.now(),
+): number {
+  return retryDelayWithDeadline(retryDelayFor(failedAttempt), deadlineMs ?? null, nowMs);
 }
 
 export function maxAttemptsReached(attempt: number): boolean {

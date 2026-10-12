@@ -18,7 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { buildSubmissionFailedMessage, formatSubmissionReply } from '../utils/submission-reply';
+import { buildFeedbackFailedMessage, buildSubmissionFailedMessage, formatSubmissionReply } from '../utils/submission-reply';
 import { buildNudgeMessage } from '../utils/link-nudge';
 import { buildImageOrderReminder, buildTaskMessagePlan } from '../utils/plain-task-message';
 
@@ -55,6 +55,12 @@ describe('worker-visible surfaces never name the external task site', () => {
       'timeout',
       '<@111>',
     );
+    expect(msg).not.toMatch(BRAND);
+    expect(msg).toContain('task site');
+  });
+
+  it('ticket feedback failure notice carries no brand', () => {
+    const msg = buildFeedbackFailedMessage({ id: 'TSK-1', externalTaskId: '123' }, 'dialog missing', '<@111>');
     expect(msg).not.toMatch(BRAND);
     expect(msg).toContain('task site');
   });

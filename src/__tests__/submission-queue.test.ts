@@ -14,6 +14,7 @@ import {
   maxAttemptsReached,
   pickSubmittableJobs,
   retryDelayFor,
+  retryDelayForAttempt,
   shouldAutoSubmit,
   submissionJobIdFor,
   StoredSubmissionJob,
@@ -83,6 +84,43 @@ describe('decideSubmissionAction', () => {
       });
       expect(d.enqueue).toBe(true);
     }
+  });
+
+  it('cuts the correction window short under deadline pressure', () => {
+    const now = Date.now();
+    const url = 'https://www.reddit.com/r/x/comments/1/';
+    // No deadline → full 60s window.
+    expect(
+      decideSubmissionAction({ taskType: TaskType.POST, formatCheckStatus: 'MATCH', submittedRedditUrl: url, nowMs: now }).delayMs,
+    ).toBe(SUBMISSION_INITIAL_DELAY_MS);
+    // Deadline 6.5 min out → first attempt due at ~30s (margin + slack).
+    const pressured = decideSubmissionAction({
+      taskType: TaskType.POST,
+      formatCheckStatus: 'MATCH',
+      submittedRedditUrl: url,
+      deadlineMs: now + 6.5 * 60 * 1000,
+      nowMs: now,
+    });
+    expect(pressured.enqueue).toBe(true);
+    expect(pressured.delayMs).toBe(30 * 1000);
+    expect(pressured.reason).toContain('deadline-pressured');
+    // Margin already passed → due immediately.
+    const late = decideSubmissionAction({
+      taskType: TaskType.POST,
+      formatCheckStatus: 'MATCH',
+      submittedRedditUrl: url,
+      deadlineMs: now - 1000,
+      nowMs: now,
+    });
+    expect(late.enqueue).toBe(true);
+    expect(late.delayMs).toBe(0);
+  });
+
+  it('retryDelayForAttempt keeps backoff except past the margin', () => {
+    const now = Date.now();
+    expect(retryDelayForAttempt(1, null, now)).toBe(retryDelayFor(1));
+    expect(retryDelayForAttempt(2, now + 60 * 60 * 1000, now)).toBe(retryDelayFor(2));
+    expect(retryDelayForAttempt(1, now - 1000, now)).toBe(0);
   });
 
   it('enqueues DELETED verdicts (removed posts still submit; only SHORT stays manual)', () => {

@@ -81,6 +81,43 @@ export const SUBMISSION_MAX_ATTEMPTS = 3;
 /** Executor lease: a job held longer than this without a verdict is
  *  reclaimable (stuck-tab reclaim, mirrors the accept-claim lease). */
 export const SUBMISSION_LEASE_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * Deadline protection (owner directive, 2026-10-12): every task link must be
+ * submitted no later than this margin before the task-site deadline, and a
+ * link-less task gets one "submitting in a bit" feedback at the margin so
+ * the task does not expire. Deadlines arrive as site-local display text
+ * ("Today 4:50 PM", "Oct 11 1:50 PM" — Asia/Kolkata, see utils/deadline.ts).
+ */
+export const DEADLINE_SUBMIT_MARGIN_MS = 5 * 60 * 1000;
+/** Execution slack so the first submit attempt lands before the margin:
+ * executor poll (~5s) + list reload + card hunt + submit + verify. */
+export const SUBMIT_DEADLINE_SLACK_MS = 60 * 1000;
+/** Feedback is quicker (one dialog, no hunt across submit retries), so its
+ *  slack is smaller — the notice lands just ahead of the margin. */
+export const FEEDBACK_DEADLINE_SLACK_MS = 30 * 1000;
+
+/**
+ * BullMQ queue for deadline feedback ("submitting in a bit") — same
+ * schedule/lease-store shape as the submission-queue, no server worker.
+ * The executor tab polls it alongside submit jobs and clicks the task
+ * card's Feedback button in-page. One shot per task (server guards via the
+ * FEEDBACK_SENT audit; the job id is stable so re-schedules never double).
+ */
+export const FEEDBACK_QUEUE_NAME = 'feedback-queue';
+/** Feedback text written into the site dialog (matches the established
+ *  wording already present on real tasks). */
+export const FEEDBACK_TEXT = 'submitting in a bit';
+/** One retry after a transient failure, then give up (the +15min
+ *  escalation reassigns the post anyway). */
+export const FEEDBACK_RETRY_DELAY_MS = 2 * 60 * 1000;
+/** Maximum feedback attempts (initial + one retry). */
+export const FEEDBACK_MAX_ATTEMPTS = 2;
+/** Executor lease, same stuck-tab reclaim as submit jobs. */
+export const FEEDBACK_LEASE_TIMEOUT_MS = 5 * 60 * 1000;
+/** Deadlines older than this never get a notice — the site-side task is long
+ *  gone (late accepts carry already-past deadlines; only recent ones hold). */
+export const FEEDBACK_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 /**
  * Delay from Reddit URL submission to the survival screenshot.
  * Proof that a post survived >10 minutes: capture at 11 minutes.

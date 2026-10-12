@@ -135,7 +135,16 @@ async function main(): Promise<void> {
       logger.error('Submission queue failed to start', { error });
     }
 
-    // 4d. Post-link nudge queue + worker (10-min reminder, 15-min
+    // 4d. Deadline feedback queue ("submitting in a bit" for link-less tasks
+    // near their deadline — same executor tab, same no-server-worker shape).
+    try {
+      const { initializeFeedbackQueue } = await import('./services/feedback.service');
+      initializeFeedbackQueue();
+    } catch (error) {
+      logger.error('Feedback queue failed to start', { error });
+    }
+
+    // 4e. Post-link nudge queue + worker (10-min reminder, 15-min
     // escalation re-blast for link-less delivered posts).
     try {
       const { initializeNudgeQueue } = await import('./services/nudge.service');
@@ -160,6 +169,12 @@ async function main(): Promise<void> {
       await rehydrateNudgeJobs(NUDGE_BACKFILL_MAX_AGE_MS);
     } catch (error) {
       logger.error('Nudge re-hydration failed', { error });
+    }
+    try {
+      const { rehydrateFeedbackJobs } = await import('./services/feedback.service');
+      await rehydrateFeedbackJobs();
+    } catch (error) {
+      logger.error('Feedback re-hydration failed', { error });
     }
 
     // 6. Start REST API server
@@ -315,6 +330,12 @@ async function main(): Promise<void> {
     } catch (error) {
       logger.error('Periodic survival re-hydration failed', { error });
     }
+    try {
+      const { rehydrateFeedbackJobs } = await import('./services/feedback.service');
+      await rehydrateFeedbackJobs();
+    } catch (error) {
+      logger.error('Periodic feedback re-hydration failed', { error });
+    }
   }, REHYDRATE_INTERVAL_MS);
 
   logger.info('Reminder reconciliation scheduled (every 30 minutes)');
@@ -353,6 +374,7 @@ async function main(): Promise<void> {
       const { closeWorker } = await import('./scheduler/worker');
       const { closeSurvivalQueue } = await import('./services/survival.service');
       const { closeSubmissionQueue } = await import('./services/submission.service');
+      const { closeFeedbackQueue } = await import('./services/feedback.service');
       const { closeSurvivalWorker } = await import('./scheduler/survival-worker');
       const { stopAutomationScheduler } = await import('./services/automation/scheduler');
       const { closePoller } = await import('./services/automation/poller.service');
@@ -362,6 +384,7 @@ async function main(): Promise<void> {
       await closeSurvivalWorker().catch(() => undefined);
       await closeSurvivalQueue().catch(() => undefined);
       await closeSubmissionQueue().catch(() => undefined);
+      await closeFeedbackQueue().catch(() => undefined);
       await closeWorker();
       await closeQueue();
 
