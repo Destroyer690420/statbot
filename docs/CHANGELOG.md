@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-12
+### Deployed (2026-10-12 at `c0d97e7` — app-only rebuild, no migration)
+- **Mid-blast shrink + post-less winners lose the message live** (dashboard/redis untouched; backup `rtm-backup-20261012-shrink.tar.gz`; host bundle removed). Verified: healthy boot, live-dist gates (keeper-set, shrink wiring ×3, late-delete), health healthy, 0 app errors. Also shipped the queued submit-gate change (`927bd63`, DELETED auto-submits) which was waiting for an app rebuild.
 ### Built (NOT deployed — needs app rebuild, no migration)
 - **Mid-blast shrink + post-less winners lose the message.** Fill cleanup keeps task holders only; terminal failures/expiries delete late; pooled-post blocks shrink slots with early close. Typecheck clean, full suite green. See Decision 34.
 ### Built (NOT deployed — needs app rebuild only, no migration, dashboard untouched)
