@@ -264,7 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-10-12**: **Deferred accept retry BUILT, NOT deployed** (needs app + dashboard rebuild + watcher-tab update). Failed accepts park and run last (v1.6.5). Verified live rate-limit incident first. See Decision 37.
+- **2026-10-12**: **Deferred accept retry DEPLOYED live at `7c3a19d`** (app + dashboard rebuild, no migration; backup `rtm-backup-20261012-retry.tar.gz`; verified healthy boot, live-dist gates, served v1.6.5, 0 app errors). **Watcher-tab Tampermonkey update to v1.6.5 required.** See Decision 37.
 - **2026-10-12**: **Async delivery DEPLOYED live at `21f3fa9`** (app-only rebuild, no migration; backup `rtm-backup-20261012-delivery.tar.gz`; verified healthy boot with delivery worker, live-dist gates, 0 app errors). See Decision 36.
 - **2026-10-12**: **Deadline protection DEPLOYED live at `4e72387`** (migration re-run clean + app + dashboard rebuild; backup `rtm-backup-20261012-deadline.tar.gz`; verified healthy boot with feedback queue + 1 rehydrated job, live-dist gates, served v1.2.0 script, 0 app errors). **Executor-tab Tampermonkey update to v1.2.0 required for feedback.** See Decision 35.
 - **2026-10-12**: **Mid-blast shrink DEPLOYED live at `c0d97e7`** (app-only rebuild, no migration; verified healthy boot, live-dist gates, 0 app errors; also shipped queued submit-gate `927bd63`).
