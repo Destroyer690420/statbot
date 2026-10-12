@@ -47,19 +47,34 @@ export function isLeaseFree(
  * any tab may take. Input order does not matter. The owner re-entry path
  * keeps oldest-first, so a tab that parked a claim finishes it before taking
  * newer work (reply-order pairing preserved).
+ *
+ * `deferIds` (a tab's parked retry list) inverts that preference for the
+ * listed claims only: other actionable work is handed first, and a deferred
+ * claim comes back only when nothing else is leasable — the retry runs last
+ * and never jumps the queue of fresh claims. Lease rules still apply in both
+ * phases (a deferred claim held by a live foreign tab stays invisible).
  */
 export function pickLeaseCandidate(
   claims: LeaseCandidate[],
   nowMs: number,
   leaseTimeoutMs: number,
   tabId?: string | null,
+  deferIds?: readonly string[] | null,
 ): LeaseCandidate | null {
-  let best: LeaseCandidate | null = null;
-  for (const claim of claims) {
-    if (!claim || claim.status !== 'PENDING') continue;
-    if (claim.expiresAt.getTime() <= nowMs) continue;
-    if (!isLeaseFree(claim, nowMs, leaseTimeoutMs, tabId)) continue;
-    if (!best || claim.createdAt.getTime() < best.createdAt.getTime()) best = claim;
-  }
-  return best;
+  const deferredSet = deferIds && deferIds.length > 0 ? new Set(deferIds) : null;
+  const pick = (onlyDeferred: boolean): LeaseCandidate | null => {
+    let best: LeaseCandidate | null = null;
+    for (const claim of claims) {
+      if (!claim || claim.status !== 'PENDING') continue;
+      if (claim.expiresAt.getTime() <= nowMs) continue;
+      if (!isLeaseFree(claim, nowMs, leaseTimeoutMs, tabId)) continue;
+      if (deferredSet) {
+        const listed = deferredSet.has(claim.id);
+        if (listed !== onlyDeferred) continue;
+      }
+      if (!best || claim.createdAt.getTime() < best.createdAt.getTime()) best = claim;
+    }
+    return best;
+  };
+  return pick(false) ?? pick(true);
 }

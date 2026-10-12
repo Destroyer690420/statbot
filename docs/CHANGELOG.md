@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-12
+### Built (NOT deployed — needs app + dashboard rebuild, no migration, watcher-tab Tampermonkey update)
+- **Deferred accept retry (watcher v1.6.5).** Rate-limited/failed accepts park instead of verdicting; server holds parked ids back while other work exists and hands them back only when the tab would idle — retry (2s + reload + one full accept) runs last, final verdict keeps move-on-then-delete. Safety aborts + missing cards verdict at once. Typecheck clean, full suite green (78 suites / 1056 tests). See Decision 37.
 ### Deployed (2026-10-12 at `21f3fa9` — app-only rebuild, no migration, dashboard untouched, no tab update)
 - **Async delivery pipeline live** (`161.118.164.85`; backup `rtm-backup-20261012-delivery.tar.gz`; redis untouched; host bundle removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!" (delivery queue + worker init, re-hydration 0 stuck), live-dist gates (delivery service/worker + `deliverPendingTask` wiring in live `dist`), 0 app errors. See Decision 36.
 ### Deployed (2026-10-12 at `4e72387` — migration re-run + app + dashboard rebuild)

@@ -284,15 +284,21 @@ export class AutomationRepository {
    * `tabId` reaches the picker so a tab can re-lease its OWN parked claim
    * (the reload / return-to-/tasks retry paths) instead of waiting out the
    * whole lease timeout; every other tab still needs the stale-lease reclaim.
+   *
+   * `deferIds` (a tab's parked retry list) only reorders: other actionable
+   * work is handed first and a deferred claim comes back only when nothing
+   * else is leasable, so a retry runs last and never jumps fresh claims.
    */
-  async leaseNextClaim(tabId: string, leaseTimeoutMs: number = AUTOMATION.CLAIM_LEASE_TIMEOUT_MS) {
+  async leaseNextClaim(tabId: string, leaseTimeoutMs: number = AUTOMATION.CLAIM_LEASE_TIMEOUT_MS, deferIds: string[] = []) {
     const now = new Date();
     const candidates = await getDb().automationClaim.findMany({
       where: { status: 'PENDING', expiresAt: { gt: now } },
       orderBy: { createdAt: 'asc' },
-      take: 10,
+      // Deferred retries must stay inside the candidate window even in a big
+      // backlog — they are usually the oldest rows anyway.
+      take: deferIds.length > 0 ? 50 : 10,
     });
-    const pick = pickLeaseCandidate(candidates, now.getTime(), leaseTimeoutMs, tabId);
+    const pick = pickLeaseCandidate(candidates, now.getTime(), leaseTimeoutMs, tabId, deferIds);
     if (!pick) return null;
     const leasedAt = new Date();
     const claimed = await getDb().automationClaim.updateMany({

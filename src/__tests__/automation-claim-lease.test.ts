@@ -133,3 +133,41 @@ describe('pickLeaseCandidate', () => {
     expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a')).toBeNull();
   });
 });
+
+describe('pickLeaseCandidate — deferred retries run last', () => {
+  it('hands other actionable work before a deferred claim', () => {
+    const pool = [
+      claim({ id: 'deferred-old', createdAt: new Date(NOW - 90000) }),
+      claim({ id: 'fresh', createdAt: new Date(NOW - 10000) }),
+    ];
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a', ['deferred-old'])?.id).toBe('fresh');
+  });
+
+  it('hands the deferred claim back when nothing else is leasable', () => {
+    const pool = [
+      claim({ id: 'deferred', leasedBy: 'tab-a', leasedAt: new Date(NOW - 2000), createdAt: new Date(NOW - 90000) }),
+    ];
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a', ['deferred'])?.id).toBe('deferred');
+  });
+
+  it('returns the oldest deferred claim when several wait', () => {
+    const pool = [
+      claim({ id: 'd-new', leasedBy: 'tab-a', leasedAt: new Date(NOW - 2000), createdAt: new Date(NOW - 30000) }),
+      claim({ id: 'd-old', leasedBy: 'tab-a', leasedAt: new Date(NOW - 2000), createdAt: new Date(NOW - 90000) }),
+    ];
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a', ['d-new', 'd-old'])?.id).toBe('d-old');
+  });
+
+  it('still hides a deferred claim held by a live foreign tab', () => {
+    const pool = [
+      claim({ id: 'theirs', leasedBy: 'tab-b', leasedAt: new Date(NOW - 1000) }),
+    ];
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a', ['theirs'])).toBeNull();
+  });
+
+  it('ignores the defer list when empty or absent (old behavior intact)', () => {
+    const pool = [claim({ id: 'x' })];
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a', [])?.id).toBe('x');
+    expect(pickLeaseCandidate(pool, NOW, LEASE_MS, 'tab-a')?.id).toBe('x');
+  });
+});

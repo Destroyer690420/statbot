@@ -276,3 +276,10 @@
 - **Consequences**: tab cycle drops the delivery wait (~10–20s per claim → post #3 at ~15–30s on 2 tabs; first post still bound by the first worker reply). `pushed=true` now means accepted-for-delivery; delivery failures surface as FAILED + dashboard Retry (as all delivery throws already did). Image order pinned by `delivery-order.test.ts`.
 - **Status**: Implemented 2026-10-12, DEPLOYED live 2026-10-12 at `21f3fa9` (app-only rebuild, no migration, dashboard untouched, no tab update; backup `rtm-backup-20261012-delivery.tar.gz`; 3 services Up, health healthy, live-dist gates green, 0 app errors).
 
+## Decision 37: Deferred retry — failed accepts park and run last
+
+- **Context**: Two parallel acceptor tabs trip the site's accept rate limit ("The operation is too frequent, please try again later" — verified live 2026-10-12: 3 accepts in ~15s account-wide, third failed in ~1s, post lost, winner message deleted). Failed claims never re-queue, so a rate-limited post was simply gone.
+- **Decision**: Tab-side parked retry (watcher v1.6.5): a claim failing once at/after the accept step on a verified-good task parks (per-tab session list) instead of verdicting; the claim poll takes a `defer` list and the pure picker hands other work first, returning a parked claim only when nothing else is actionable — retry runs last, never between fresh accepts. Retry = 2s pause, reload, one full accept; single final verdict keeps move-on-then-delete exactly as today. Safety aborts and missing cards verdict at once. Dead-tab fallback preserved (3-min stale lease lets the other tab take it as a normal accept). No migration, no accept-flow change, happy path untouched.
+- **Consequences**: dashboard rebuild to serve v1.6.5 + Tampermonkey update on both watcher tabs (old tabs ignore the `defer` param and behave as today). Pinned by extended `automation-claim-lease.test.ts` (defer phases) + `userscript-hygiene.test.ts`.
+- **Status**: Implemented 2026-10-12, NOT deployed (needs dashboard rebuild + watcher-tab Tampermonkey update; app rebuild included for the route/repo change — no migration).
+

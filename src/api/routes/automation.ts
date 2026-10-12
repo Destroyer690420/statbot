@@ -991,8 +991,17 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       // tab id keep the legacy oldest-first pickup.
       const rawTabId = typeof req.query.tabId === 'string' ? req.query.tabId.trim() : '';
       const tabId = rawTabId.length > 0 && rawTabId.length <= 64 ? rawTabId : null;
+      // Parked retries: a tab lists claim ids it failed once and parked, so
+      // other actionable work is handed first and the retry comes back only
+      // when nothing else is leasable (retry runs last). Absent on old tabs.
+      const rawDefer = typeof req.query.defer === 'string' ? req.query.defer : '';
+      const deferIds = rawDefer
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && s.length <= 64)
+        .slice(0, 20);
       const claim = tabId
-        ? await automationRepository.leaseNextClaim(tabId)
+        ? await automationRepository.leaseNextClaim(tabId, AUTOMATION.CLAIM_LEASE_TIMEOUT_MS, deferIds)
         : await automationRepository.pendingClaim();
       // Scan telemetry (watcher v1.4.6+): last monitor outcome per tab, so
       // "empty listing" vs "stalled/off-page scan" is distinguishable from

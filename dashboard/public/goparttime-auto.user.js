@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.6.4
+// @version      1.6.5
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,18 @@
 // ==/UserScript==
 
 /**
+   * v1.6.5 - Deferred retry: a claim that fails once AT/AFTER the accept
+   * step (rate-limit "too frequent", timeouts, drawer flakiness) with a
+   * verified-good task parks instead of verdicting. The server holds parked
+   * ids back (new `defer` poll param) while other work exists and hands one
+   * back only when nothing else is actionable - the retry runs last by
+   * construction, never between fresh accepts. Retry = 2s pause, reload,
+   * one full accept; its verdict is final (move-on/delete as today), so the
+   * winner message is never deleted before the retry. Safety aborts
+   * (subreddit mismatch, auto-block) and missing cards verdict at once -
+   * retrying those is pointless or unsafe. Otherwise identical to v1.6.4
+   * below. (Also fixes v1.6.4's stale in-code VERSION const.)
+   *
    * v1.6.4 - Deterministic return-to-/tasks: history.back() stranded tabs
    * on whatever came before (Discord, the Chrome home page) and the relative
    * fallback then resolved off-site. Now location.replace() with an absolute
@@ -287,7 +299,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.6.3';
+  const VERSION = '1.6.5';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -481,6 +493,80 @@
   }
 
   const CLAIM_PENDING_FLAG = 'claim_pending';
+
+  // v1.6.5 deferred retry: per-tab parked claim ids (survive reloads in the
+  // same tab, die with it). A parked claim verdicts nothing - the server
+  // holds it back while other work exists and hands it back only when the
+  // tab would otherwise idle, so the single retry runs last. RETRY_KEY holds
+  // the one claim id currently being retried (a tab retries at most one).
+  const DEFER_KEY = 'claim_defer';
+  const RETRY_KEY = 'claim_retry';
+  const RETRY_WAIT_MS = 2000;
+  const DEFER_CAP = 20;
+  const DEFER_TTL_MS = 30 * 60 * 1000;
+
+  function loadDeferred() {
+    try {
+      var raw = sessGet(DEFER_KEY);
+      if (!raw) return [];
+      var list = JSON.parse(raw);
+      if (!Array.isArray(list)) return [];
+      var now = Date.now();
+      var fresh = [];
+      for (var i = 0; i < list.length; i++) {
+        var e = list[i];
+        if (e && typeof e.id === 'string' && e.id && typeof e.at === 'number' && now - e.at < DEFER_TTL_MS) fresh.push(e);
+      }
+      return fresh;
+    } catch (e) { return []; }
+  }
+
+  function saveDeferred(list) {
+    try {
+      if (!list || list.length === 0) sessSet(DEFER_KEY, '');
+      else sessSet(DEFER_KEY, JSON.stringify(list.slice(-DEFER_CAP)));
+    } catch (e) { /* ignore */ }
+  }
+
+  function deferClaim(claimId) {
+    try {
+      var list = [];
+      var cur = loadDeferred();
+      for (var i = 0; i < cur.length; i++) if (cur[i].id !== claimId) list.push(cur[i]);
+      list.push({ id: claimId, at: Date.now() });
+      saveDeferred(list);
+    } catch (e) { /* ignore */ }
+  }
+
+  function undeferClaim(claimId) {
+    try {
+      var list = [];
+      var cur = loadDeferred();
+      for (var i = 0; i < cur.length; i++) if (cur[i].id !== claimId) list.push(cur[i]);
+      saveDeferred(list);
+    } catch (e) { /* ignore */ }
+  }
+
+  function isDeferredClaim(claimId) {
+    try {
+      var list = loadDeferred();
+      for (var i = 0; i < list.length; i++) if (list[i].id === claimId) return true;
+    } catch (e) { /* ignore */ }
+    return false;
+  }
+
+  function hasDeferredClaims() {
+    try { return loadDeferred().length > 0; } catch (e) { return false; }
+  }
+
+  function deferredIdsParam() {
+    try {
+      var ids = [];
+      var list = loadDeferred();
+      for (var i = 0; i < list.length; i++) ids.push(list[i].id);
+      return ids.join(',');
+    } catch (e) { return ''; }
+  }
 
   function getSettings() {
     return {
@@ -1688,10 +1774,11 @@
 
   function shouldFastPoll() {
     // Fast while the local drop window is live OR the server says a burst
-    // is open OR a manual /scan is waiting (pickup + report in seconds).
+    // is open OR a manual /scan is waiting (pickup + report in seconds) OR
+    // a parked retry waits (it must fire promptly once work runs out).
     // Never throws - a check failure only costs speed.
     try {
-      return isBurstWindow() || lastBurstOpen || !!pendingManualScan;
+      return isBurstWindow() || lastBurstOpen || !!pendingManualScan || hasDeferredClaims();
     } catch (e) { return false; }
   }
 
@@ -1745,7 +1832,8 @@
       const res = await request(settings, 'GET', '/claims/pending', null,
         'companionId=' + encodeURIComponent(getCompanionId()) + '&version=' + encodeURIComponent(VERSION) + '&tabId=' + encodeURIComponent(getTabId()) +
         '&page=' + encodeURIComponent(lastScan.page) + '&scan=' + lastScan.scanned + '&elig=' + lastScan.eligible +
-        '&post=' + lastPost.at + '&postOk=' + lastPost.ok + '&unreadable=' + unreadableScans,
+        '&post=' + lastPost.at + '&postOk=' + lastPost.ok + '&unreadable=' + unreadableScans +
+        '&defer=' + encodeURIComponent(deferredIdsParam()),
         CLAIM_API_TIMEOUT_MS);
       setStatus(true, 'poll ok');
       const dd = (res && res.data) || {};
@@ -1766,6 +1854,21 @@
       if (!claim) {
         sessSet(CLAIM_PENDING_FLAG, '');
         return false;
+      }
+      // v1.6.5 deferred-retry handoff: the server hands a parked claim back
+      // only when nothing else is actionable, so receiving one means every
+      // other post is taken care of - pause, reload for a fresh page, run it
+      // once more. The retry flag (set below, survives the reload) makes the
+      // next run final: its verdict is reported win or lose, never re-parked.
+      if (claim.id && isDeferredClaim(claim.id) && sessGet(RETRY_KEY) !== claim.id) {
+        undeferClaim(claim.id);
+        console.log('[Auto Watcher] retrying parked claim #' + claim.externalTaskId + ' last');
+        setStatus(true, 'retrying parked #' + claim.externalTaskId + ' last');
+        await sleep(RETRY_WAIT_MS);
+        sessSet(RETRY_KEY, claim.id);
+        sessSet(CLAIM_PENDING_FLAG, '1');
+        window.location.reload();
+        return true;
       }
       // Phase-1: mark work pending so a navigation reboot skips the settle
       // pause and polls immediately. Cleared on the next empty poll.
@@ -1817,6 +1920,12 @@
 
   async function reportClaim(settings, claim, ok, failureReason, pushed, autoBlock) {
     try {
+      if (claim && claim.id) {
+        if (sessGet(RETRY_KEY) === claim.id) sessSet(RETRY_KEY, '');
+        undeferClaim(claim.id);
+      }
+    } catch (e) { /* never break the verdict */ }
+    try {
       var body = {
         ok: !!ok,
         failureReason: failureReason || null,
@@ -1833,6 +1942,24 @@
     } catch (e) {
       console.log('[Auto Watcher] claim report failed:', e && e.message);
     }
+  }
+
+  // v1.6.5 accept-step failure router: a failure AT/AFTER the accept
+  // attempt on a verified-good task parks the claim for one last-try retry
+  // instead of verdicting now (rate-limit "too frequent", timeouts, drawer
+  // flakiness all qualify). Pre-accept exits (missing card, bad extract,
+  // safety aborts) and already-retried claims verdict at once - parking
+  // those is pointless (gone task) or unsafe (deliberate stop).
+  async function failClaim(settings, claim, reason) {
+    try {
+      if (claim && claim._retryEligible && claim.id && sessGet(RETRY_KEY) !== claim.id && !isDeferredClaim(claim.id)) {
+        deferClaim(claim.id);
+        setStatus(false, 'claim #' + claim.externalTaskId + ' parked (' + String(reason).slice(0, 60) + ') - retrying last');
+        console.log('[Auto Watcher] claim ' + claim.id + ' failed once, parked for a last-try retry: ' + reason);
+        return;
+      }
+    } catch (e) { /* fall through to the verdict */ }
+    await reportClaim(settings, claim, false, reason);
   }
 
   // --- DOM helpers for Task Detail Drawer ---
@@ -2365,6 +2492,9 @@
 
     // 4. Accept: fast Server Action POST first, drawer Confirm as fallback.
     // The detail is already extracted above, so a fast accept needs no drawer.
+    // From here on the task is verified good: any failure parks for one
+    // last-try retry (v1.6.5) instead of verdicting immediately.
+    claim._retryEligible = true;
     let accepted = false;
     let acceptError = null;
     try {
@@ -2386,7 +2516,7 @@
 
       if (!confirmBtn) {
         closeOpenDrawer();
-        await reportClaim(settings, claim, false, 'Confirm acceptance button not found in drawer.');
+        await failClaim(settings, claim, 'Confirm acceptance button not found in drawer.');
         return;
       }
 
@@ -2424,7 +2554,7 @@
     if (!accepted) {
       closeOpenDrawer();
       const failReason = acceptError || 'GoPartTime acceptance timed out or drawer did not close.';
-      await reportClaim(settings, claim, false, failReason);
+      await failClaim(settings, claim, failReason);
       setStatus(false, 'accept #' + subTaskId + ' failed: ' + failReason);
       returnToTasks();
       return;
