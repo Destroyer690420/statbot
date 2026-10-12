@@ -264,7 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
-- **2026-10-12**: **Async delivery BUILT, NOT deployed** (needs app rebuild only). Persist-first assign + background worker; tabs stop waiting out sends. See Decision 36.
+- **2026-10-12**: **Async delivery DEPLOYED live at `21f3fa9`** (app-only rebuild, no migration; backup `rtm-backup-20261012-delivery.tar.gz`; verified healthy boot with delivery worker, live-dist gates, 0 app errors). See Decision 36.
 - **2026-10-12**: **Deadline protection DEPLOYED live at `4e72387`** (migration re-run clean + app + dashboard rebuild; backup `rtm-backup-20261012-deadline.tar.gz`; verified healthy boot with feedback queue + 1 rehydrated job, live-dist gates, served v1.2.0 script, 0 app errors). **Executor-tab Tampermonkey update to v1.2.0 required for feedback.** See Decision 35.
 - **2026-10-12**: **Mid-blast shrink DEPLOYED live at `c0d97e7`** (app-only rebuild, no migration; verified healthy boot, live-dist gates, 0 app errors; also shipped queued submit-gate `927bd63`).
 - **2026-10-12**: **Worker-visible brand removal DEPLOYED live at `06d8e64`** (app + dashboard rebuild, no migration; backup `rtm-backup-20261012-brand.tar.gz`; verified healthy boot, live-dist gates on app + served dashboard chunk, 0 app errors). See Decision 32.
