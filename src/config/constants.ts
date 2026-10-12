@@ -118,6 +118,20 @@ export const FEEDBACK_LEASE_TIMEOUT_MS = 5 * 60 * 1000;
 /** Deadlines older than this never get a notice — the site-side task is long
  *  gone (late accepts carry already-past deadlines; only recent ones hold). */
 export const FEEDBACK_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Server-side delivery pipeline (owner directive, 2026-10-12): POST /assign
+ * persists the task and returns at once; a BullMQ worker delivers the ticket
+ * messages in the background so acceptor tabs move to the next claim without
+ * waiting out image downloads + sequential Discord sends. No browser work —
+ * delivery is server→Discord only.
+ */
+export const DELIVERY_QUEUE_NAME = 'delivery-queue';
+/** Parallel ticket deliveries (independent channels; discord.js backs off on 429). */
+export const DELIVERY_JOB_CONCURRENCY = 3;
+/** A PENDING-delivery row older than this with no live delivery is stuck
+ *  (healthy deliveries finish in seconds) — the sweep re-enqueues it. */
+export const DELIVERY_STUCK_AFTER_MS = 5 * 60 * 1000;
 /**
  * Delay from Reddit URL submission to the survival screenshot.
  * Proof that a post survived >10 minutes: capture at 11 minutes.

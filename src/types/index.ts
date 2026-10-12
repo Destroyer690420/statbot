@@ -426,6 +426,13 @@ export interface SubmissionJobData {
   deadlineMs?: number | null;
 }
 
+// ─── Server-side delivery pipeline (background ticket delivery) ───
+
+/** One BullMQ job in the delivery-queue (persist first, deliver async). */
+export interface DeliveryJobData {
+  taskId: string;
+}
+
 // ─── Deadline feedback ("submitting in a bit", browser-tab executor) ───
 
 /** One BullMQ job in the feedback-queue (schedule/lease store only). */

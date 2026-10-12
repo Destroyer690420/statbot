@@ -135,6 +135,17 @@ async function main(): Promise<void> {
       logger.error('Submission queue failed to start', { error });
     }
 
+    // 4c-ii. Ticket delivery queue + worker (persist-first assign: acceptor
+    // tabs move to the next claim while deliveries finish in the background).
+    try {
+      const { initializeDeliveryQueue } = await import('./services/delivery.service');
+      const { initializeDeliveryWorker } = await import('./scheduler/delivery-worker');
+      initializeDeliveryQueue();
+      initializeDeliveryWorker(discordClient);
+    } catch (error) {
+      logger.error('Delivery worker failed to start', { error });
+    }
+
     // 4d. Deadline feedback queue ("submitting in a bit" for link-less tasks
     // near their deadline — same executor tab, same no-server-worker shape).
     try {
@@ -175,6 +186,14 @@ async function main(): Promise<void> {
       await rehydrateFeedbackJobs();
     } catch (error) {
       logger.error('Feedback re-hydration failed', { error });
+    }
+    try {
+      // Boot: every PENDING-delivery row is stuck (nothing delivers during
+      // boot), so re-enqueue unconditionally.
+      const { rehydrateDeliveryJobs } = await import('./services/delivery.service');
+      await rehydrateDeliveryJobs(0);
+    } catch (error) {
+      logger.error('Delivery re-hydration failed', { error });
     }
 
     // 6. Start REST API server
@@ -336,6 +355,14 @@ async function main(): Promise<void> {
     } catch (error) {
       logger.error('Periodic feedback re-hydration failed', { error });
     }
+    try {
+      // Stuck deliveries only (live synchronous deliveries are seconds old).
+      const { rehydrateDeliveryJobs } = await import('./services/delivery.service');
+      const { DELIVERY_STUCK_AFTER_MS } = await import('./config/constants');
+      await rehydrateDeliveryJobs(DELIVERY_STUCK_AFTER_MS);
+    } catch (error) {
+      logger.error('Periodic delivery re-hydration failed', { error });
+    }
   }, REHYDRATE_INTERVAL_MS);
 
   logger.info('Reminder reconciliation scheduled (every 30 minutes)');
@@ -375,6 +402,8 @@ async function main(): Promise<void> {
       const { closeSurvivalQueue } = await import('./services/survival.service');
       const { closeSubmissionQueue } = await import('./services/submission.service');
       const { closeFeedbackQueue } = await import('./services/feedback.service');
+      const { closeDeliveryQueue } = await import('./services/delivery.service');
+      const { closeDeliveryWorker } = await import('./scheduler/delivery-worker');
       const { closeSurvivalWorker } = await import('./scheduler/survival-worker');
       const { stopAutomationScheduler } = await import('./services/automation/scheduler');
       const { closePoller } = await import('./services/automation/poller.service');
@@ -385,6 +414,8 @@ async function main(): Promise<void> {
       await closeSurvivalQueue().catch(() => undefined);
       await closeSubmissionQueue().catch(() => undefined);
       await closeFeedbackQueue().catch(() => undefined);
+      await closeDeliveryWorker().catch(() => undefined);
+      await closeDeliveryQueue().catch(() => undefined);
       await closeWorker();
       await closeQueue();
 

@@ -19,7 +19,11 @@ import { Task, TaskType, TaskStatus, DeliveryMessage, AuditAction } from '../typ
 import { getAllAdminIds } from '../utils/permissions';
 import { transition } from './state-machine';
 import { scheduleNudgeForTask } from './nudge.service';
+import { isDeliverySuperseded } from '../utils/delivery-queue';
 import { logger } from '../utils/logger';
+
+/** Thrown when a delivery run must yield to a newer flow (reassign). */
+class DeliverySuperseded extends Error {}
 
 export interface AssignmentResult {
   task: Task;
@@ -109,24 +113,17 @@ class GoPartTimeService {
     const task = toTask(taskRow);
     logger.info('GoPartTime task created', { taskId: task.id, externalTaskId });
 
+    // Pipeline delivery: persist first, return at once, deliver in the
+    // background (delivery-queue worker) so acceptor tabs move to the next
+    // claim without waiting out downloads + sequential Discord sends.
     try {
-      const delivery = await this.deliverToChannel(channel, parsed, formattedContent, member.id);
-      await taskRepository.updateAssignment(task.id, { assignmentStatus: 'SENT' });
-      await taskRepository.updateDeliveryMessages(task.id, delivery);
-      // Post-link nudge clock starts at delivery (fire-and-forget: the
-      // scheduler never breaks assignment).
-      void scheduleNudgeForTask(task.id);
-      // Deadline-feedback clock starts at delivery too (fire-and-forget).
-      void this.scheduleFeedbackClock(task.id);
-
-      await auditLogService.log(
-        AuditAction.TASK_ASSIGNED,
-        task.id,
-        null,
-        `Assigned from external source (task ${externalTaskId}) to <@${member.id}>`,
-      );
-      return { task: { ...task, assignmentStatus: 'SENT', deliveryMessages: delivery }, created: true };
+      const { enqueueDelivery } = await import('./delivery.service');
+      await enqueueDelivery(task.id);
     } catch (error) {
+      // Queue unavailable: mark FAILED so the dashboard Retry path (which
+      // delivers synchronously) can recover immediately — the same outcome
+      // as an old synchronous delivery failure. The stuck-delivery sweep
+      // would also pick the row up once Redis is back.
       const message = error instanceof Error ? error.message : String(error);
       await taskRepository.updateAssignment(task.id, { assignmentStatus: 'FAILED', assignmentError: message });
       await auditLogService.log(
@@ -143,6 +140,141 @@ class GoPartTimeService {
         error: message,
       };
     }
+    return { task: { ...task, assignmentStatus: 'PENDING', deliveryMessages: [] }, created: true };
+  }
+
+  /**
+   * Background delivery for one task (delivery-queue worker). Runs the exact
+   * same send sequence as the old synchronous path (metadata → content →
+   * images in stored order → instruction → image-order reminder), then flips
+   * PENDING→SENT, audits, and starts the nudge + feedback clocks.
+   *
+   * Stand-down rules (never touch a row a newer flow owns): the run proceeds
+   * only while the ticket, worker, and PENDING state match the enqueue, and
+   * the final SENT flip is compare-and-set. A superseded run deletes only
+   * the messages it sent itself and leaves the row alone. A genuine send
+   * failure marks FAILED exactly like the old path (dashboard Retry
+   * recovers). Never throws into the worker — every outcome is returned.
+   */
+  async deliverPendingTask(taskId: string, discordClient: Client): Promise<{ delivered: boolean; reason: string }> {
+    const task = await taskService.findById(taskId).catch(() => null);
+    if (!task) return { delivered: false, reason: 'task gone' };
+    if (task.assignmentStatus !== 'PENDING') return { delivered: false, reason: `assignment ${task.assignmentStatus}` };
+    if (
+      task.status === TaskStatus.COMPLETED ||
+      task.status === TaskStatus.ARCHIVED ||
+      task.status === TaskStatus.CANCELLED
+    ) {
+      return { delivered: false, reason: `task ${task.status}` };
+    }
+    const bound = {
+      channelId: task.channelId,
+      assignedUserId: task.assignedUserId,
+      assignmentStatus: task.assignmentStatus,
+      status: task.status,
+    };
+
+    const channel = await this.resolveChannel(discordClient, task.channelId);
+    if (!(channel instanceof TextChannel)) {
+      return this.failDelivery(task, 'Ticket channel not found. Make sure the ticket exists and the bot can see it.');
+    }
+
+    // Crash-redelivery: a previous run may have left partial sends behind
+    // (it saved records progressively). They belong to this task, so remove
+    // them before a fresh full delivery — never duplicate.
+    await this.deleteDeliveredMessages(task, discordClient);
+
+    const shouldContinue = async (): Promise<boolean> => {
+      const fresh = await taskService.findById(taskId).catch(() => null);
+      if (!fresh) return false;
+      return !isDeliverySuperseded(bound, {
+        channelId: fresh.channelId,
+        assignedUserId: fresh.assignedUserId,
+        assignmentStatus: fresh.assignmentStatus,
+        status: fresh.status,
+      });
+    };
+
+    let sentThisRun: DeliveryMessage[] = [];
+    const onSent = async (records: DeliveryMessage[]): Promise<void> => {
+      sentThisRun = records.slice();
+      await taskRepository.updateDeliveryMessages(taskId, records).catch(() => undefined);
+    };
+
+    try {
+      if (!(await shouldContinue())) {
+        return this.standDownDelivery(task, channel, sentThisRun, 'superseded before start');
+      }
+      const fresh = await taskService.findById(taskId);
+      if (!fresh) return this.standDownDelivery(task, channel, sentThisRun, 'task gone mid-flight');
+      const delivery = await this.deliverTaskToChannel(channel, fresh, { onSent, shouldContinue });
+
+      const flipped = await taskRepository
+        .compareAndSetAssignmentSent(task.id, bound.channelId, bound.assignedUserId, delivery)
+        .catch(() => 0);
+      if (flipped === 0) {
+        return this.standDownDelivery(task, channel, sentThisRun, 'row moved during delivery');
+      }
+
+      // Post-link nudge clock starts at delivery (fire-and-forget).
+      void scheduleNudgeForTask(task.id);
+      // Deadline-feedback clock starts at delivery too (fire-and-forget).
+      void this.scheduleFeedbackClock(task.id);
+
+      await auditLogService.log(
+        AuditAction.TASK_ASSIGNED,
+        task.id,
+        null,
+        `Assigned from external source (task ${task.externalTaskId || task.id}) to <@${task.assignedUserId}>`,
+      );
+      return { delivered: true, reason: 'sent' };
+    } catch (error) {
+      if (error instanceof DeliverySuperseded) {
+        return this.standDownDelivery(task, channel, sentThisRun, error.message);
+      }
+      // Genuine send failure — but only ours to record: if the row moved on
+      // (reassigned mid-flight), leave it to the newer flow.
+      if (await shouldContinue()) {
+        const message = error instanceof Error ? error.message : String(error);
+        return this.failDelivery(task, message);
+      }
+      return this.standDownDelivery(task, channel, sentThisRun, 'row moved during failure');
+    }
+  }
+
+  /**
+   * Superseded run: delete only this run's partial sends (best-effort),
+   * leave the row to the newer flow, audit the handoff.
+   */
+  private async standDownDelivery(
+    task: Task,
+    channel: TextChannel,
+    sentThisRun: DeliveryMessage[],
+    reason: string,
+  ): Promise<{ delivered: boolean; reason: string }> {
+    for (const item of sentThisRun) {
+      try {
+        const message = await channel.messages.fetch(item.messageId).catch(() => null);
+        if (message) await message.delete().catch(() => undefined);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    await auditLogService
+      .log(AuditAction.TASK_ASSIGNED, task.id, null, `Delivery stood down (${reason}) — a newer flow owns the task.`)
+      .catch(() => undefined);
+    logger.info('Delivery stood down', { taskId: task.id, reason });
+    return { delivered: false, reason };
+  }
+
+  /** Genuine delivery failure: FAILED + error, exactly like the old path. */
+  private async failDelivery(task: Task, message: string): Promise<{ delivered: boolean; reason: string }> {
+    await taskRepository.updateAssignment(task.id, { assignmentStatus: 'FAILED', assignmentError: message });
+    await auditLogService
+      .log(AuditAction.TASK_ASSIGNED, task.id, null, `Assignment failed (external task ${task.externalTaskId || task.id}): ${message}`)
+      .catch(() => undefined);
+    logger.error('GoPartTime delivery failed', { taskId: task.id, error: message });
+    return { delivered: false, reason: message };
   }
 
   /**
@@ -440,6 +572,17 @@ class GoPartTimeService {
 
     await this.deleteDeliveredMessages(task, discordClient);
 
+    // Take over any queued background delivery first: an in-flight worker
+    // run trips on the ticket/worker change below and stands down (its own
+    // partials are cleaned by its abort path), while a still-queued job is
+    // removed here so it never runs against the new ticket.
+    try {
+      const { removeDeliveryJob } = await import('./delivery.service');
+      await removeDeliveryJob(task.id);
+    } catch {
+      // best-effort — the checkpoints below still protect the row
+    }
+
     const now = new Date();
     await getDb().task.update({
       where: { id: task.id },
@@ -630,85 +773,70 @@ deliveryMessages: null as any,
   }
 
   /**
-   * Sends the plain task messages (label/value messages, content chunks) and
-   * images; returns the delivery records with real message IDs, in order.
+   * Full delivery of the task content to a channel from stored task data
+   * (background worker + reassignment). Always sends labels, values,
+   * content, images in stored order, then the instruction + image-order
+   * reminder — the image order workers see is exactly the task's order.
+   *
+   * The optional hooks let the background worker checkpoint (stand down when
+   * a newer flow owns the task) and persist records progressively (so a
+   * crash-redelivery can clean up partial sends instead of duplicating).
+   * With no hooks the behavior is byte-identical to the old synchronous
+   * path.
    */
-  private async deliverToChannel(
+  private async deliverTaskToChannel(
     channel: TextChannel,
-    payload: GoPartTimePayload,
-    formattedContent: string,
-    workerId: string,
+    task: Task,
+    hooks?: {
+      onSent?: (records: DeliveryMessage[]) => Promise<void>;
+      shouldContinue?: () => Promise<boolean>;
+    },
   ): Promise<DeliveryMessage[]> {
     const delivery: DeliveryMessage[] = [];
     const createdAt = new Date().toISOString();
     let order = 1;
 
-    const plan = buildTaskMessagePlan(this.messageFields(payload), formattedContent);
-    for (const item of plan.metadata) {
-      const message = await channel.send(item);
-      delivery.push({ kind: 'metadata', order: order++, messageId: message.id, createdAt });
-    }
-
-    for (const chunk of plan.content) {
-      const message = await channel.send(chunk);
-      delivery.push({ kind: 'content', order: order++, messageId: message.id, createdAt });
-    }
-
-    for (const image of payload.images) {
-      const message = await this.sendMedia(channel, image);
-      delivery.push({ kind: 'images', order: order++, messageId: message.id, createdAt });
-    }
-
-    if (plan.instruction) {
-      const message = await channel.send(this.buildInstructionPayload(plan.instruction, workerId));
-      delivery.push({ kind: 'instruction', order: order++, messageId: message.id, createdAt });
-    }
-
-    const imageOrderReminder = buildImageOrderReminder(workerId, payload.images.length);
-    if (imageOrderReminder) {
-      const message = await channel.send(imageOrderReminder);
-      delivery.push({ kind: 'image-order', order: order++, messageId: message.id, createdAt });
-    }
-
-    return delivery;
-  }
-
-  /**
-   * Full re-delivery of the task content to a channel from stored task data
-   * (used by reassignment). Always sends labels, values, content, images in
-   * order.
-   */
-  private async deliverTaskToChannel(channel: TextChannel, task: Task): Promise<DeliveryMessage[]> {
-    const delivery: DeliveryMessage[] = [];
-    const createdAt = new Date().toISOString();
-    let order = 1;
+    const guard = async (): Promise<void> => {
+      if (hooks?.shouldContinue && !(await hooks.shouldContinue())) {
+        throw new DeliverySuperseded('row moved during delivery');
+      }
+    };
+    const record = async (entry: DeliveryMessage): Promise<void> => {
+      delivery.push(entry);
+      await hooks?.onSent?.(delivery);
+    };
 
     const plan = buildTaskMessagePlan(this.messageFields(task), task.formattedContent || '');
     for (const item of plan.metadata) {
+      await guard();
       const message = await channel.send(item);
-      delivery.push({ kind: 'metadata', order: order++, messageId: message.id, createdAt });
+      await record({ kind: 'metadata', order: order++, messageId: message.id, createdAt });
     }
 
     for (const chunk of plan.content) {
+      await guard();
       const message = await channel.send(chunk);
-      delivery.push({ kind: 'content', order: order++, messageId: message.id, createdAt });
+      await record({ kind: 'content', order: order++, messageId: message.id, createdAt });
     }
 
     const images = (task.taskImages || []).slice().sort((a, b) => a.order - b.order);
     for (const image of images) {
+      await guard();
       const message = await this.sendMedia(channel, image);
-      delivery.push({ kind: 'images', order: order++, messageId: message.id, createdAt });
+      await record({ kind: 'images', order: order++, messageId: message.id, createdAt });
     }
 
     if (plan.instruction) {
+      await guard();
       const message = await channel.send(this.buildInstructionPayload(plan.instruction, task.assignedUserId));
-      delivery.push({ kind: 'instruction', order: order++, messageId: message.id, createdAt });
+      await record({ kind: 'instruction', order: order++, messageId: message.id, createdAt });
     }
 
     const reassignedReminder = buildImageOrderReminder(task.assignedUserId, images.length);
     if (reassignedReminder) {
+      await guard();
       const message = await channel.send(reassignedReminder);
-      delivery.push({ kind: 'image-order', order: order++, messageId: message.id, createdAt });
+      await record({ kind: 'image-order', order: order++, messageId: message.id, createdAt });
     }
 
     return delivery;

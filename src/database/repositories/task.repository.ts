@@ -310,6 +310,44 @@ export class TaskRepository {
     });
   }
 
+  /**
+   * Delivery-worker commit: flips PENDING→SENT only when the ticket, worker,
+   * and PENDING state are exactly what the run started with. A newer flow
+   * (reassign) changing any of them makes the write match zero rows, so a
+   * stale run can never clobber it. Returns the matched row count.
+   */
+  async compareAndSetAssignmentSent(
+    taskId: string,
+    channelId: string,
+    assignedUserId: string,
+    deliveryMessages: any[],
+  ): Promise<number> {
+    const res = await getDb().task.updateMany({
+      where: { id: taskId, assignmentStatus: 'PENDING', channelId, assignedUserId },
+      data: { assignmentStatus: 'SENT', assignmentError: null, deliveryMessages: deliveryMessages as any, updatedAt: new Date() },
+    });
+    return res.count;
+  }
+
+  /**
+   * Stuck-delivery rows: delivery never finished (PENDING) on still-active
+   * pipeline tasks updated before `olderThan`. Boot passes ~now (every such
+   * row is stuck — nothing delivers during boot); the sweep passes
+   * now − DELIVERY_STUCK_AFTER_MS so live synchronous deliveries are left
+   * alone.
+   */
+  async findStuckDeliveries(olderThan: Date) {
+    return getDb().task.findMany({
+      where: {
+        source: 'goparttime',
+        status: 'ACCEPTED' as any,
+        assignmentStatus: 'PENDING',
+        updatedAt: { lt: olderThan },
+      },
+      orderBy: { updatedAt: 'asc' },
+    });
+  }
+
   async updateDeliveryMessages(taskId: string, deliveryMessages: any[]) {
     return getDb().task.update({
       where: { id: taskId },

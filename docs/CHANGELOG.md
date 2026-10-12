@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-12
+### Built (NOT deployed — needs app rebuild only, no migration, dashboard untouched, no tab update)
+- **Async delivery pipeline.** Persist-first assign + background delivery worker (concurrency 3); acceptor tabs stop waiting out ticket sends. Image order guaranteed + pinned by test. Typecheck clean, full suite green (78 suites / 1051 tests). See Decision 36, `docs/GOPARTTIME.md` §19.
 ### Deployed (2026-10-12 at `4e72387` — migration re-run + app + dashboard rebuild)
 - **Deadline protection live** (`161.118.164.85`; backup `rtm-backup-20261012-deadline.tar.gz`; redis untouched; host bundle removed). Verified: migration re-run 0 unexpected errors (`FEEDBACK_SENT`/`FEEDBACK_FAILED` in PG enum), 3 services Up, health healthy (DB+Redis), boot "All systems online!" (feedback queue init + re-hydration scheduled 1 live job), live-dist gates (feedback service + deadline util + feedback-jobs routes + `deadlineMs` in live `dist`, served submit script v1.2.0 with textarea flow), root + userscript 200, 0 app errors. **Executor-tab Tampermonkey update to v1.2.0 required for feedback** (expedited submits work with the old tab). See Decision 35.
 ### Built (NOT deployed — needs migration re-run + app + dashboard rebuild + executor-tab Tampermonkey update)

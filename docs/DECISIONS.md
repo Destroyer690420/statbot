@@ -269,3 +269,10 @@
 - **Consequences**: new `FEEDBACK_SENT`/`FEEDBACK_FAILED` audit enum values (idempotent migration); `feedbackJobs` folded into the existing pending poll (old tabs ignore it); executor tab needs the v1.2.0 Tampermonkey update for feedback (expedited submits work with the old tab). Pinned by `deadline.test.ts` + `feedback-queue.test.ts` + extended `submission-queue.test.ts` + brand-leak case for the new ticket message.
 - **Status**: Implemented 2026-10-12, DEPLOYED live 2026-10-12 at `4e72387` (migration re-run clean + app + dashboard rebuild; backup `rtm-backup-20261012-deadline.tar.gz`; 3 services Up, health healthy, live-dist gates green, served v1.2.0 script, 0 app errors; executor-tab Tampermonkey update still required for feedback).
 
+## Decision 36: Async delivery — acceptor tabs never wait out ticket sends
+
+- **Context**: Each tab ran accept → await full server delivery → verdict serially. The delivery wait (image downloads + sequential Discord sends, 5–30s per image post) is what pushed post #3 to 80–90s on 2 tabs. Delivery is server→Discord only — no browser work — so the tab's wait is pure idle.
+- **Decision**: Persist-first assign (route → 201, same shape) + `delivery-queue` background worker (concurrency 3) running the identical send sequence, `PENDING→SENT` via compare-and-set, records saved progressively. No userscript change (tabs await `/assign` as before), no pacing/waits touched, no migration. Reassign takes over queued jobs and delivers synchronously as before; retry untouched and synchronous; crash/restart recovery via boot + 30-min rehydration of stuck `PENDING` rows; superseded runs stand down deleting only their own partials.
+- **Consequences**: tab cycle drops the delivery wait (~10–20s per claim → post #3 at ~15–30s on 2 tabs; first post still bound by the first worker reply). `pushed=true` now means accepted-for-delivery; delivery failures surface as FAILED + dashboard Retry (as all delivery throws already did). Image order pinned by `delivery-order.test.ts`.
+- **Status**: Implemented 2026-10-12, NOT deployed (needs app rebuild only, no migration, dashboard untouched, no tab update).
+
