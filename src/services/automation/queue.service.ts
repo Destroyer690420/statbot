@@ -20,7 +20,7 @@ export function isSightingFresh(lastSeenAt: Date, nowMs: number = Date.now(), tt
  * other time. Sightings are still recorded by the watcher (first-seen
  * tracks feed the burst freshness gate); this tick just doesn't consume them.
  */
-export async function processSightingQueue(_discordClient: Client): Promise<string | null> {
+export async function processSightingQueue(discordClient: Client): Promise<string | null> {
   const settings = await automationRepository.getSettings().catch(() => null);
   if (!settings?.enabled) return null;
 
@@ -46,6 +46,16 @@ export async function processSightingQueue(_discordClient: Client): Promise<stri
         AuditAction.AUTOMATION_TASK_FAILED, null, null,
         `Claim ${claim.id} (task ${claim.externalTaskId}) expired without companion verdict`,
       );
+      // No post from this round: remove the winner's availability message.
+      try {
+        const bursts = await automationRepository.listBurstsByCycle(claim.cycleId).catch(() => []);
+        if (bursts.length > 0 && claim.channelId) {
+          const { outreachService } = await import('../outreach.service');
+          await outreachService.deleteBlastMessage(discordClient, bursts[0].blastId, claim.channelId);
+        }
+      } catch {
+        // best-effort
+      }
     }
   } catch (error) {
     logger.warn('Claim sweep failed', { error });
@@ -61,14 +71,13 @@ export async function processSightingQueue(_discordClient: Client): Promise<stri
   // Companion-cycle claims have no burst row and are never touched here.
   try {
     const pending = await automationRepository.listPendingClaims();
-    const byCycle = new Map<string, { id: string; externalTaskId: string }[]>();
+    const byCycle = new Map<string, { id: string; externalTaskId: string; channelId: string }[]>();
     for (const claim of pending) {
       const list = byCycle.get(claim.cycleId) || [];
-      list.push({ id: claim.id, externalTaskId: claim.externalTaskId });
+      list.push({ id: claim.id, externalTaskId: claim.externalTaskId, channelId: claim.channelId });
       byCycle.set(claim.cycleId, list);
     }
-    for (const [cycleId, claims] of byCycle) {
-      const bursts = await automationRepository.listBurstsByCycle(cycleId).catch(() => []);
+    for (const [cycleId, claims] of byCycle) {      const bursts = await automationRepository.listBurstsByCycle(cycleId).catch(() => []);
       if (bursts.length === 0) continue;
       if (bursts.some((b) => b.status === 'OPEN')) continue;
       let winnersStanding = false;
@@ -83,6 +92,15 @@ export async function processSightingQueue(_discordClient: Client): Promise<stri
       for (const claim of claims) {
         await automationRepository.resolveClaim(claim.id, 'EXPIRED', 'Burst closed before the companion processed it');
         logger.info('Orphaned burst claim expired', { claimId: claim.id, task: claim.externalTaskId });
+        // The round died without serving them: remove the availability message.
+        try {
+          if (claim.channelId) {
+            const { outreachService } = await import('../outreach.service');
+            await outreachService.deleteBlastMessage(discordClient, bursts[0].blastId, claim.channelId);
+          }
+        } catch {
+          // best-effort
+        }
       }
     }
   } catch (error) {

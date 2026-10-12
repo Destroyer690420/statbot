@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-12
+### Built (NOT deployed — needs app rebuild, no migration)
+- **Mid-blast shrink + post-less winners lose the message.** Fill cleanup keeps task holders only; terminal failures/expiries delete late; pooled-post blocks shrink slots with early close. Typecheck clean, full suite green. See Decision 34.
 ### Built (NOT deployed — needs app rebuild only, no migration, dashboard untouched)
 - **Removed posts auto-submit.** `shouldAutoSubmit` now passes POST + `DELETED` (any removal state); only `PARA_SHORT` (+ fetch/session/null) still stays manual. Ticket replies unchanged (pay-eligibility wording still holds); auto-mark + survival proof untouched. Typecheck clean, full suite green (74 suites / 1010 tests). See Decision 33, `docs/GOPARTTIME.md` §15.
 ### Deployed (2026-10-12 at `06d8e64` — app + dashboard rebuild, no migration)

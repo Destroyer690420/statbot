@@ -937,7 +937,10 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         req.body.force !== true &&
         result.merged === true &&
         result.blast !== null &&
-        !blastApprovalService.digestSentForHour(getIstHourStart().getTime())
+        !blastApprovalService.digestSentForHour(getIstHourStart().getTime()) &&
+        // Same-scan duplicates stay fully silent: the winning report's
+        // manual digest already covered this content (fixes the double-DM).
+        !(rawScanRequestId && scanRequestService.wasRequested(rawScanRequestId))
       ) {
         void blastApprovalService
           .maybeSendDigest(discordClient, result.cycleId, result.scanned)
@@ -1162,6 +1165,14 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           workerId: claim.workerId,
           failureReason: req.body.failureReason || 'Companion reported failure after expiry',
         });
+        // No post from this round: remove the winner's availability message.
+        try {
+          const bursts = await automationRepository.listBurstsByCycle(claim.cycleId).catch(() => []);
+          const round = bursts.find((b) => b.status === 'OPEN') ?? bursts[0];
+          if (round) await outreachService.deleteBlastMessage(discordClient, round.blastId, claim.channelId);
+        } catch {
+          // best-effort
+        }
         res.status(410).json({ success: false, message: 'Claim expired.' });
         return;
       }
@@ -1222,6 +1233,9 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         // Tier-1 server half: the browser aborted on a full-content hit and
         // asks for an auto-block. Never breaks the verdict — the failure is
         // already recorded above; the move-on retry below still runs.
+        // A fresh block also shrinks any open round holding pooled posts
+        // from that sub (slots drop, excess winners' messages go).
+        let blockedSub: string | null = null;
         if (req.body.autoBlock) {
           try {
             const seen = await loadSeenSubs(claim.cycleId).catch(() => undefined);
@@ -1239,6 +1253,12 @@ export default function createAutomationRoutes(discordClient: Client): Router {
               task: claim.externalTaskId,
               outcome: outcome.outcome,
             });
+            if (
+              outcome.subreddit &&
+              (outcome.disposition === 'blocked' || outcome.disposition === 'already-blocked')
+            ) {
+              blockedSub = outcome.subreddit;
+            }
             if (outcome.notice && outcome.subreddit) {
               await blastApprovalService
                 .sendAutoBlockNotice(discordClient, outcome.notice, {
@@ -1295,6 +1315,20 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           }
         } catch {
           // best-effort; the failure itself is already recorded above
+        }
+        if (blockedSub) {
+          await outreachService.shrinkBlastsForBlockedSub(discordClient, blockedSub).catch(() => undefined);
+        }
+        if (!retried) {
+          // Winner gets no post from this round: remove their availability
+          // message so the ticket doesn't promise what never arrives.
+          try {
+            const bursts = await automationRepository.listBurstsByCycle(claim.cycleId).catch(() => []);
+            const round = bursts.find((b) => b.status === 'OPEN') ?? bursts[0];
+            if (round) await outreachService.deleteBlastMessage(discordClient, round.blastId, claim.channelId);
+          } catch {
+            // best-effort; the verdict response is already decided
+          }
         }
         res.json({ success: true, data: { recorded: true, retried: retried !== null, ...(retried || {}) } });
       }

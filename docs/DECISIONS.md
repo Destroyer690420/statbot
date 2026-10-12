@@ -255,3 +255,10 @@
 - **Consequences**: ticket `DELETED` replies unchanged (they are about pay eligibility, still true). Pinned by `submission-queue.test.ts` (gate + enqueue cases).
 - **Status**: Implemented 2026-10-12, NOT deployed (needs app rebuild only, no migration — dashboard untouched).
 
+## Decision 34: Winners who never get the post lose the availability message
+
+- **Context**: Blast slots never shrank: pooled posts blocked mid-blast left 7 slots for 5 posts, and every replier kept the availability message — including replies that never paired (pool exhausted) and claims that failed/expired. Winner messages were deleted only for non-repliers.
+- **Decision**: (1) Fill/close/sweep cleanup keeps task holders only (live PENDING/CLAIMED claims; manual blasts keep all repliers — no claims exist there; any read failure fails closed toward keeping). (2) Terminal claim failures with no move-on recovery and expiries delete that winner's message late (verdict endpoint FAILED/EXPIRED branches, both expiry sweeps). (3) A mid-blast block of pooled posts shrinks the slots (digest Block tap + Tier-1 autoBlock) and closes early when replies already cover the new total, with holder-only cleanup. Late-submitting links still win the race (submitted check before reassign); held tasks resolve through verdicts, never the shrink.
+- **Consequences**: no migration (audit reuse), no dashboard change, no companion change. Restart/supersede cleanups keep replier semantics (deliberate — restart abandons claims by design). Late-link race and busy/capped skips at pairing behave as before, only the message follows the post now.
+- **Status**: Implemented 2026-10-12, NOT deployed (needs app rebuild only).
+

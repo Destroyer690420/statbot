@@ -103,6 +103,14 @@ export class OutreachRepository {
     });
   }
 
+  /** Sets an open blast's slots (mid-blast shrink when pooled posts die). */
+  async setBlastSlotsTotal(id: string, total: number) {
+    return getDb().outreachBlast.update({
+      where: { id },
+      data: { slotsTotal: Math.max(0, total) },
+    });
+  }
+
   /** All blasts, newest first (housekeeping scans; never the send path). */
   async listBlasts() {
     return getDb().outreachBlast.findMany({ orderBy: { createdAt: 'desc' } });

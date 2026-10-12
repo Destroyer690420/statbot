@@ -10,6 +10,7 @@ import { automationRepository } from '../../database/repositories';
 import { auditLogService } from '../audit.service';
 import { AuditAction } from '../../types';
 import { blastDigestEmbed } from '../../bot/embeds';
+import { outreachService } from '../outreach.service';
 import { logger } from '../../utils/logger';
 import { getAdminOrManagerIds, isAdminOrManager } from '../../utils/permissions';
 import { getIstHourStart } from '../../utils/ist-time';
@@ -396,6 +397,9 @@ export async function handleBlastButton(interaction: ButtonInteraction): Promise
       await auditLogService
         .log(AuditAction.AUTOMATION_BLOCKED, null, interaction.user.id, `r/${sub} blocked from pre-blast DM review`)
         .catch(() => undefined);
+      // Mid-blast shrink: pooled posts from this sub just died — drop the
+      // slots and delete excess winners' messages (best-effort, never throws).
+      await outreachService.shrinkBlastsForBlockedSub(interaction.client as Client, sub);
       const rebuilt = await buildDigestForCycle(parsed.cycleId);
       if (!rebuilt) {
         await editReplySafe(interaction, `r/${sub} blocked. The round is gone — nothing to do.`, true);

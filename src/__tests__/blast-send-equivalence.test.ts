@@ -18,6 +18,13 @@ jest.mock('../services/audit.service', () => ({
 }));
 
 jest.mock('../database/repositories', () => ({
+  automationRepository: {
+    getBurstByBlast: jest.fn(),
+    listCycleClaims: jest.fn(),
+    listOpenBursts: jest.fn(),
+    listCycleLogs: jest.fn(),
+    listBurstsByCycle: jest.fn(),
+  },
   outreachRepository: {
     findAll: jest.fn(),
     findByChannelId: jest.fn(),
@@ -34,6 +41,7 @@ jest.mock('../database/repositories', () => ({
     recordReply: jest.fn(),
     countReplies: jest.fn(),
     closeBlast: jest.fn(),
+    setBlastSlotsTotal: jest.fn(),
   },
   taskRepository: {
     countGoPartTimePostsByWorkerInRange: jest.fn(),
@@ -52,6 +60,7 @@ type OutreachService = typeof import('../services/outreach.service')['outreachSe
 
 let outreachRepository: any;
 let taskRepository: any;
+let automationRepository: any;
 let service: OutreachService;
 
 /**
@@ -93,9 +102,13 @@ beforeEach(async () => {
   const repos = await import('../database/repositories');
   outreachRepository = repos.outreachRepository;
   taskRepository = repos.taskRepository;
+  automationRepository = (repos as any).automationRepository;
   service = (await import('../services/outreach.service')).outreachService;
 
   jest.clearAllMocks();
+  (automationRepository.getBurstByBlast as jest.Mock).mockResolvedValue(null);
+  (automationRepository.listCycleClaims as jest.Mock).mockResolvedValue([]);
+  (outreachRepository.setBlastSlotsTotal as jest.Mock).mockResolvedValue({});
   (outreachRepository.getMessage as jest.Mock).mockResolvedValue({ message: 'hello {user}' });
   (outreachRepository.resetCycle as jest.Mock).mockResolvedValue(undefined);
   (outreachRepository.recordBlastMessage as jest.Mock).mockResolvedValue(undefined);
@@ -717,6 +730,205 @@ describe('per-blast hook overrides (escalation routing)', () => {
     await service.onWorkerMessage('c1', 'w9', replyClient());
 
     expect(defaultReply).toHaveBeenCalledWith('blast-e1', 'c1', 'w9', expect.anything());
+  });
+});
+
+describe('fill cleanup keeps task holders, not mere repliers', () => {
+  const BLAST3 = { id: 'blast-3', slotsTotal: 3, status: 'OPEN' };
+
+  function replyHarness() {
+    (outreachRepository.findByChannelId as jest.Mock).mockImplementation(async (id: string) => ({
+      channelId: id,
+      selected: true,
+      messageSentAt: new Date(),
+      availableAt: new Date(),
+    }));
+    (outreachRepository.getOpenBlast as jest.Mock).mockResolvedValue(BLAST3);
+    (outreachRepository.hasWorkerReplied as jest.Mock).mockResolvedValue(false);
+    (outreachRepository.recordReply as jest.Mock).mockResolvedValue({ row: {}, duplicate: false });
+    (outreachRepository.closeBlast as jest.Mock).mockResolvedValue({});
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([
+      { blastId: 'blast-3', channelId: 'c1', messageId: 'm1' },
+      { blastId: 'blast-3', channelId: 'c2', messageId: 'm2' },
+      { blastId: 'blast-3', channelId: 'c3', messageId: 'm3' },
+    ]);
+    (taskRepository.findAwaitingSubmissionInChannel as jest.Mock).mockResolvedValue(null);
+    let n = 0;
+    (outreachRepository.countReplies as jest.Mock).mockImplementation(async () => ++n);
+    (outreachRepository.listReplyChannelIds as jest.Mock).mockResolvedValue(['c1', 'c2', 'c3']);
+    const channels = new Map<string, TextChannel>([
+      ['c1', makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w1', user: { bot: false } }] })],
+      ['c2', makeChannel({ id: 'c2', name: 't2', members: [{ id: 'w2', user: { bot: false } }] })],
+      ['c3', makeChannel({ id: 'c3', name: 't3', members: [{ id: 'w3', user: { bot: false } }] })],
+    ]);
+    const client = makeClient(channels);
+    return { client, channels };
+  }
+
+  async function fillWithThreeReplies(client: any) {
+    await service.onWorkerMessage('c1', 'w1', client);
+    await service.onWorkerMessage('c2', 'w2', client);
+    await service.onWorkerMessage('c3', 'w3', client);
+  }
+
+  it('deletes repliers with failed or missing claims, keeps the holder', async () => {
+    const { client, channels } = replyHarness();
+    (automationRepository.getBurstByBlast as jest.Mock).mockResolvedValue({
+      id: 'burst1',
+      cycleId: 'cy1',
+      blastId: 'blast-3',
+    });
+    (automationRepository.listCycleClaims as jest.Mock).mockResolvedValue([
+      { channelId: 'c1', status: 'PENDING', externalTaskId: '1' },
+      { channelId: 'c2', status: 'FAILED', externalTaskId: '2' },
+    ]);
+    await fillWithThreeReplies(client);
+    expect(outreachRepository.closeBlast).toHaveBeenCalledWith('blast-3', 3);
+    expect(channels.get('c1')!.messages.delete).not.toHaveBeenCalled();
+    expect(channels.get('c2')!.messages.delete).toHaveBeenCalledWith('m2');
+    expect(channels.get('c3')!.messages.delete).toHaveBeenCalledWith('m3');
+  });
+
+  it('keeps every replier when there is no burst (manual blast, old behavior)', async () => {
+    const { client, channels } = replyHarness();
+    await fillWithThreeReplies(client);
+    for (const id of ['c1', 'c2', 'c3']) {
+      expect(channels.get(id)!.messages.delete).not.toHaveBeenCalled();
+    }
+  });
+
+  it('fails closed toward keeping when the burst read blows up', async () => {
+    const { client, channels } = replyHarness();
+    (automationRepository.getBurstByBlast as jest.Mock).mockRejectedValue(new Error('db down'));
+    await fillWithThreeReplies(client);
+    for (const id of ['c1', 'c2', 'c3']) {
+      expect(channels.get(id)!.messages.delete).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('deleteBlastMessage (late cleanup for post-less winners)', () => {
+  function clientFor(ids: string[]) {
+    const channels = new Map<string, TextChannel>(
+      ids.map((id) => [id, makeChannel({ id, name: id, members: [] })]),
+    );
+    return { client: makeClient(channels), channels };
+  }
+
+  it('deletes exactly that ticket\'s recorded message', async () => {
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([
+      { blastId: 'b9', channelId: 'c1', messageId: 'm1' },
+      { blastId: 'b9', channelId: 'c2', messageId: 'm2' },
+    ]);
+    const { client, channels } = clientFor(['c1', 'c2']);
+    await service.deleteBlastMessage(client, 'b9', 'c1');
+    expect(channels.get('c1')!.messages.delete).toHaveBeenCalledWith('m1');
+    expect(channels.get('c2')!.messages.delete).not.toHaveBeenCalled();
+  });
+
+  it('is a silent no-op without a recorded row or a live channel', async () => {
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([]);
+    const { client } = clientFor(['c1']);
+    await expect(service.deleteBlastMessage(client, 'b9', 'c1')).resolves.toBeUndefined();
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([
+      { blastId: 'b9', channelId: 'gone', messageId: 'm9' },
+    ]);
+    await expect(service.deleteBlastMessage(client, 'b9', 'gone')).resolves.toBeUndefined();
+  });
+});
+
+describe('shrinkBlastForBlockedTasks', () => {
+  function blastRow(slotsTotal: number, status = 'OPEN') {
+    return { id: 'b1', status, slotsTotal, slotsFilled: 0 };
+  }
+
+  beforeEach(() => {
+    (outreachRepository.listReplyChannelIds as jest.Mock).mockResolvedValue(['c1']);
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([
+      { blastId: 'b1', channelId: 'c2', messageId: 'm2' },
+    ]);
+  });
+
+  function clientFor(ids: string[]) {
+    return makeClient(
+      new Map(ids.map((id) => [id, makeChannel({ id, name: id, members: [] })])),
+    );
+  }
+
+  it('shrinks slots and closes with holder cleanup when already covered', async () => {
+    (outreachRepository.getBlast as jest.Mock).mockResolvedValue(blastRow(3));
+    (outreachRepository.countReplies as jest.Mock).mockResolvedValue(3);
+    const out = await service.shrinkBlastForBlockedTasks(clientFor(['c2']), 'b1', 2, 'test');
+    expect(out).toMatchObject({ newTotal: 1, closed: true });
+    expect(outreachRepository.setBlastSlotsTotal).toHaveBeenCalledWith('b1', 1);
+    expect(outreachRepository.closeBlast).toHaveBeenCalledWith('b1', 3);
+  });
+
+  it('shrinks without closing while replies are short', async () => {
+    (outreachRepository.getBlast as jest.Mock).mockResolvedValue(blastRow(7));
+    (outreachRepository.countReplies as jest.Mock).mockResolvedValue(3);
+    const out = await service.shrinkBlastForBlockedTasks(clientFor([]), 'b1', 2, 'test');
+    expect(out).toMatchObject({ newTotal: 5, closed: false });
+    expect(outreachRepository.setBlastSlotsTotal).toHaveBeenCalledWith('b1', 5);
+    expect(outreachRepository.closeBlast).not.toHaveBeenCalled();
+  });
+
+  it('skips closed blasts and empty shrinks', async () => {
+    (outreachRepository.getBlast as jest.Mock).mockResolvedValue(blastRow(3, 'CLOSED'));
+    expect(await service.shrinkBlastForBlockedTasks(clientFor([]), 'b1', 2, 'test')).toMatchObject({
+      closed: false,
+    });
+    (outreachRepository.getBlast as jest.Mock).mockResolvedValue(blastRow(3));
+    expect(await service.shrinkBlastForBlockedTasks(clientFor([]), 'b1', 0, 'test')).toMatchObject({
+      closed: false,
+    });
+    expect(outreachRepository.setBlastSlotsTotal).not.toHaveBeenCalled();
+  });
+});
+
+describe('shrinkBlastsForBlockedSub', () => {
+  function openBurst() {
+    (automationRepository.listOpenBursts as jest.Mock).mockResolvedValue([
+      { id: 'burst1', cycleId: 'cy1', blastId: 'b1', taskIds: ['1', '2', '3'] },
+    ]);
+    (automationRepository.listCycleClaims as jest.Mock).mockResolvedValue([
+      { externalTaskId: '1', status: 'CLAIMED', channelId: 'c1' },
+    ]);
+    (automationRepository.listCycleLogs as jest.Mock).mockResolvedValue([
+      { externalTaskId: '1', status: 'ELIGIBLE', subreddit: 'Junk' },
+      { externalTaskId: '2', status: 'ELIGIBLE', subreddit: 'junk' },
+      { externalTaskId: '3', status: 'ELIGIBLE', subreddit: 'other' },
+    ]);
+    (outreachRepository.getBlast as jest.Mock).mockResolvedValue({ id: 'b1', status: 'OPEN', slotsTotal: 3 });
+    (outreachRepository.countReplies as jest.Mock).mockResolvedValue(0);
+  }
+
+  it('shrinks only unheld pooled tasks from the blocked sub', async () => {
+    openBurst();
+    const out = await service.shrinkBlastsForBlockedSub(makeClient(new Map()), 'r/junk');
+    // task 1 held (CLAIMED), task 2 dead, task 3 different sub
+    expect(out).toMatchObject({ shrunk: 1, closed: 0 });
+    expect(outreachRepository.setBlastSlotsTotal).toHaveBeenCalledWith('b1', 2);
+  });
+
+  it('does nothing when every pooled task is held', async () => {
+    openBurst();
+    (automationRepository.listCycleClaims as jest.Mock).mockResolvedValue([
+      { externalTaskId: '1', status: 'CLAIMED', channelId: 'c1' },
+      { externalTaskId: '2', status: 'PENDING', channelId: 'c2' },
+      { externalTaskId: '3', status: 'PENDING', channelId: 'c3' },
+    ]);
+    const out = await service.shrinkBlastsForBlockedSub(makeClient(new Map()), 'junk');
+    expect(out).toMatchObject({ shrunk: 0, closed: 0 });
+    expect(outreachRepository.setBlastSlotsTotal).not.toHaveBeenCalled();
+  });
+
+  it('ignores unreadable subs', async () => {
+    openBurst();
+    expect(await service.shrinkBlastsForBlockedSub(makeClient(new Map()), '!!!')).toMatchObject({
+      shrunk: 0,
+      closed: 0,
+    });
   });
 });
 

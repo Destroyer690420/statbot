@@ -264,6 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-12**: **Mid-blast shrink BUILT, NOT deployed.** Holders-only cleanup, late-delete on dead claims, slot shrink on pooled-post blocks. See Decision 34.
 - **2026-10-12**: **Removed-post auto-submit BUILT, NOT deployed** (needs app rebuild only, no migration). `DELETED` verdicts now pass the submit gate; only short posts stay manual. 74 suites / 1010 tests green. See Decision 33.
 - **2026-10-12**: **Worker-visible brand removal DEPLOYED live at `06d8e64`** (app + dashboard rebuild, no migration; backup `rtm-backup-20261012-brand.tar.gz`; verified healthy boot, live-dist gates on app + served dashboard chunk, 0 app errors). See Decision 32.
 - **2026-10-11**: **Digest embed DEPLOYED live at `b91dc91`** (app-only rebuild, no migration; verified healthy boot, live-dist gates, 0 app errors).

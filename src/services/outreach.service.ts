@@ -675,12 +675,12 @@ class OutreachService {
     // Post-send sweep: the fill-cleanup only deleted messages recorded
     // before its snapshot, so sends that raced in between fill and the
     // stop-the-send check above would otherwise stay forever. Sweep them
-    // now (winners keep theirs). Only for actually-filled blasts — a blast
+    // now (task holders keep theirs). Only for actually-filled blasts — a blast
     // closed by supersede is cleaned by beginBlast instead.
     const finalBlast = await outreachRepository.getBlast(blast.id).catch(() => null);
     if (finalBlast && isBlastFull(finalBlast.slotsFilled, finalBlast.slotsTotal)) {
-      const winners = new Set(await outreachRepository.listReplyChannelIds(blast.id).catch(() => []));
-      const swept = await this.deleteBlastMessages(discordClient, blast.id, winners);
+      const keepers = await this.resolveKeeperChannelIds(blast.id);
+      const swept = await this.deleteBlastMessages(discordClient, blast.id, keepers);
       if (swept.deleted > 0 || swept.failed > 0) {
         logger.info('Blast post-send sweep complete', {
           blastId: blast.id,
@@ -827,23 +827,10 @@ class OutreachService {
 
       if (!isBlastFull(filled, blast.slotsTotal)) return;
 
-      // Slots full: close the blast and remove our message everywhere else.
-      await outreachRepository.closeBlast(blast.id, filled);
-      try {
-        await this.hooksFor(blast.id).onClosed?.(blast.id);
-      } catch (error) {
-        logger.warn('Blast closed hook failed', { blastId: blast.id, error });
-      } finally {
-        this.clearBlastHooksFor(blast.id);
-      }
-      const winners = new Set(await outreachRepository.listReplyChannelIds(blast.id));
-      const cleaned = await this.deleteBlastMessages(discordClient, blast.id, winners);
-      await auditLogService.log(
-        AuditAction.OUTREACH_MESSAGE_SENT,
-        null,
-        null,
-        `Outreach blast ${blast.id} closed (${filled}/${blast.slotsTotal} slots); message removed from ${cleaned.deleted} other ticket(s)${cleaned.failed ? `, ${cleaned.failed} removal(s) failed` : ''}`,
-      );
+      // Slots full: close the blast and remove our message everywhere
+      // except task holders' tickets — a reply without a post (pool
+      // exhausted, failed/expired claim) holds nothing and its message goes.
+      await this.closeBlastWithCleanup(discordClient, blast.id, filled, blast.slotsTotal);
     } catch (error) {
       logger.error('Outreach onWorkerMessage failed', { channelId, userId, error });
     }
@@ -874,6 +861,177 @@ class OutreachService {
       failed: cleaned.failed,
     });
     return { ...cleaned, skipped: false };
+  }
+
+  /**
+   * Keeper set for blast-message cleanup: channels that actually hold a
+   * post, not merely everyone who replied. For automation bursts that's
+   * channels with a live (PENDING/CLAIMED) claim — a reply whose claim
+   * failed, expired, or never paired (pool exhausted) holds nothing and
+   * its message goes. Manual blasts have no claims: every replier keeps
+   * (old behavior). Fail-closed toward keeping: any read failure keeps
+   * all repliers rather than risk deleting a holder's record.
+   */
+  private async resolveKeeperChannelIds(blastId: string): Promise<Set<string>> {
+    const fallback = async () =>
+      new Set(await outreachRepository.listReplyChannelIds(blastId).catch(() => []));
+    try {
+      const burst = await automationRepository.getBurstByBlast(blastId).catch(() => null);
+      if (!burst) return fallback();
+      const claims = await automationRepository.listCycleClaims(burst.cycleId).catch(() => []);
+      return new Set(
+        claims
+          .filter((c) => c && (c.status === 'PENDING' || c.status === 'CLAIMED') && c.channelId)
+          .map((c) => c.channelId as string),
+      );
+    } catch {
+      return fallback();
+    }
+  }
+
+  /**
+   * Fill-close with cleanup: closes the blast, fires the close hook, then
+   * removes the message from every ticket except task holders'. Shared by
+   * the fill path and the mid-blast shrink path (same outcome, same audit).
+   */
+  async closeBlastWithCleanup(
+    discordClient: Client,
+    blastId: string,
+    filled: number,
+    slotsTotal: number,
+  ): Promise<{ deleted: number; failed: number }> {
+    await outreachRepository.closeBlast(blastId, filled);
+    try {
+      await this.hooksFor(blastId).onClosed?.(blastId);
+    } catch (error) {
+      logger.warn('Blast closed hook failed', { blastId, error });
+    } finally {
+      this.clearBlastHooksFor(blastId);
+    }
+    const keepers = await this.resolveKeeperChannelIds(blastId);
+    const cleaned = await this.deleteBlastMessages(discordClient, blastId, keepers);
+    await auditLogService.log(
+      AuditAction.OUTREACH_MESSAGE_SENT,
+      null,
+      null,
+      `Outreach blast ${blastId} closed (${filled}/${slotsTotal} slots); message removed from ${cleaned.deleted} other ticket(s)${cleaned.failed ? `, ${cleaned.failed} removal(s) failed` : ''}`,
+    );
+    return cleaned;
+  }
+
+  /**
+   * Best-effort delete of one ticket's blast message (late cleanup for a
+   * winner who never got the post: failed/exhausted claim, expiry).
+   * Already-gone messages are the desired end state. Never throws.
+   */
+  async deleteBlastMessage(discordClient: Client, blastId: string, channelId: string): Promise<void> {
+    try {
+      const messages = await outreachRepository.listBlastMessages(blastId).catch(() => []);
+      const row = messages.find((m) => m && m.channelId === channelId);
+      if (!row) return;
+      const channel = await discordClient.channels.fetch(channelId).catch(() => null);
+      if (!channel || !(channel instanceof TextChannel)) return;
+      await channel.messages.delete(row.messageId).catch(() => undefined);
+      logger.info('Blast message removed for post-less winner', { blastId, channelId });
+    } catch {
+      // never break the caller for a cleanup
+    }
+  }
+
+  /**
+   * Mid-blast shrink for one blast: pooled posts died (blocked), so the
+   * blast needs fewer winners. Decrements slots; when replies already
+   * cover the new total the blast closes now with holder-only cleanup
+   * (winners without a post lose the message immediately instead of at
+   * fill). Never throws.
+   */
+  async shrinkBlastForBlockedTasks(
+    discordClient: Client,
+    blastId: string,
+    deadCount: number,
+    reason: string,
+  ): Promise<{ newTotal: number; closed: boolean }> {
+    try {
+      const blast = await outreachRepository.getBlast(blastId).catch(() => null);
+      if (!blast || blast.status !== 'OPEN' || deadCount <= 0) {
+        return { newTotal: blast?.slotsTotal ?? 0, closed: false };
+      }
+      const newTotal = Math.max(0, blast.slotsTotal - deadCount);
+      await outreachRepository.setBlastSlotsTotal(blastId, newTotal).catch(() => undefined);
+      logger.info('Blast slots shrunk for blocked pool tasks', {
+        blastId,
+        from: blast.slotsTotal,
+        to: newTotal,
+        reason,
+      });
+      const replies = await outreachRepository.countReplies(blastId).catch(() => 0);
+      if (replies < newTotal) return { newTotal, closed: false };
+      await auditLogService
+        .log(
+          AuditAction.OUTREACH_MESSAGE_SENT,
+          null,
+          null,
+          `Outreach blast ${blastId} shrunk (${blast.slotsTotal}→${newTotal} slots): ${reason}`,
+        )
+        .catch(() => undefined);
+      await this.closeBlastWithCleanup(discordClient, blastId, replies, newTotal);
+      return { newTotal, closed: true };
+    } catch (error) {
+      logger.warn('Blast shrink failed (non-fatal)', { blastId, error });
+      return { newTotal: 0, closed: false };
+    }
+  }
+
+  /**
+   * Shrinks every OPEN burst-blast whose pool still holds unclaimed tasks
+   * from a newly-blocked subreddit. Held tasks resolve through the claim
+   * verdict path (auto-block + move-on + late-delete); only unheld dead
+   * pool tasks shrink the slots. Best-effort, never throws.
+   */
+  async shrinkBlastsForBlockedSub(
+    discordClient: Client,
+    subreddit: string,
+  ): Promise<{ shrunk: number; closed: number }> {
+    const out = { shrunk: 0, closed: 0 };
+    try {
+      const { normalizeSubreddit } = await import('./automation/subreddit');
+      const normalized = normalizeSubreddit(subreddit);
+      if (!normalized) return out;
+      const openBursts = await automationRepository.listOpenBursts().catch(() => []);
+      for (const burst of openBursts) {
+        try {
+          const blast = await outreachRepository.getBlast(burst.blastId).catch(() => null);
+          if (!blast || blast.status !== 'OPEN') continue;
+          const claims = await automationRepository.listCycleClaims(burst.cycleId).catch(() => []);
+          const taken = new Set(
+            claims.filter((c) => c && c.status !== 'EXPIRED').map((c) => c.externalTaskId),
+          );
+          const logs = await automationRepository.listCycleLogs(burst.cycleId).catch(() => []);
+          const dead = new Set<string>();
+          for (const l of logs) {
+            if (!l || l.status !== 'ELIGIBLE') continue;
+            if (normalizeSubreddit(l.subreddit) !== normalized) continue;
+            if (!burst.taskIds.includes(l.externalTaskId)) continue;
+            if (taken.has(l.externalTaskId)) continue;
+            dead.add(l.externalTaskId);
+          }
+          if (dead.size === 0) continue;
+          const r = await this.shrinkBlastForBlockedTasks(
+            discordClient,
+            blast.id,
+            dead.size,
+            `${dead.size} pooled post(s) from newly-blocked r/${normalized}`,
+          );
+          out.shrunk++;
+          if (r.closed) out.closed++;
+        } catch (error) {
+          logger.warn('Blast shrink failed for burst (continuing)', { burstId: burst.id, error });
+        }
+      }
+    } catch (error) {
+      logger.warn('Blast shrink sweep failed (non-fatal)', { subreddit, error });
+    }
+    return out;
   }
 
   /**
