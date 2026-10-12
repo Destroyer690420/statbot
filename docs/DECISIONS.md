@@ -248,3 +248,10 @@
 - **Consequences**: `worker-brand-leak.test.ts` pins the rule (all submission verdicts, the failure notice, nudge/instruction/image-order wording, plus a display-brand scan of the worker portal + task-detail UI files, allowing only the lowercase `'goparttime'` data constant). Any new worker-facing string with the brand fails the suite.
 - **Status**: Implemented 2026-10-12, DEPLOYED live 2026-10-12 at `06d8e64` (app + dashboard rebuild, no migration; backup `rtm-backup-20261012-brand.tar.gz`; 3 services Up, health healthy, live-dist gates green, 0 app errors).
 
+## Decision 33: Removed posts still auto-submit — only short posts stay manual
+
+- **Context**: The submit gate held back two cases: deleted posts and short (dropped-paragraph) posts. The owner wants every removed post's link submitted anyway — a gone post's link still counts on the task site — while short posts keep failing (the worker must repost with all paragraphs).
+- **Decision**: `shouldAutoSubmit` passes POST + `DELETED` (any removal state: user-deleted, mod-removed, filter-removed, other). Still blocked: `PARA_SHORT`, `FETCH_ERROR`, `NO_SESSION`/`SESSION_EXPIRED`, null. Comments unchanged (`SKIPPED` only — the check skips them, so `DELETED` never occurs there). No other path changes: the auto-mark (`cancelledReason='deleted'`, reminder cancel) and the survival proof run as before, and `cancelTaskJobs` never touched submit jobs, so a marked task's queued link still submits. Dashboard "Retry Auto-Submit" re-gates through the same function, so deleted tasks are re-queueable from there too.
+- **Consequences**: ticket `DELETED` replies unchanged (they are about pay eligibility, still true). Pinned by `submission-queue.test.ts` (gate + enqueue cases).
+- **Status**: Implemented 2026-10-12, NOT deployed (needs app rebuild only, no migration — dashboard untouched).
+

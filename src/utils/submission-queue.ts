@@ -24,8 +24,11 @@ export function submissionJobIdFor(taskId: string): string {
  *    Only a SHORT post (dropped paragraphs) fails: collapsed GoPartTime
  *    content re-pasted with proper blank lines is correct formatting, and
  *    title/wording differences are accepted (owner directive, 2026-10-11).
+ *  - POST + DELETED (removed by Reddit/mods/filters, deleted by the user, or
+ *    any other removal state) → submit anyway (owner directive, 2026-10-12:
+ *    a gone post's link still counts on the task site).
  *  - COMMENT (+SKIPPED, by design — comments carry no format check) → submit.
- *  - EVERYTHING else (PARA_SHORT, FETCH_ERROR, DELETED, NO_SESSION,
+ *  - EVERYTHING else (PARA_SHORT, FETCH_ERROR, NO_SESSION,
  *    SESSION_EXPIRED, null) → never submit; manager reviews.
  */
 export function shouldAutoSubmit(
@@ -37,7 +40,8 @@ export function shouldAutoSubmit(
     formatCheckStatus === 'MATCH' ||
     formatCheckStatus === 'PARA_EXTRA' ||
     formatCheckStatus === 'TITLE_MISMATCH' ||
-    formatCheckStatus === 'TEXT_MISMATCH'
+    formatCheckStatus === 'TEXT_MISMATCH' ||
+    formatCheckStatus === 'DELETED'
   );
 }
 

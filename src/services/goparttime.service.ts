@@ -283,7 +283,8 @@ class GoPartTimeService {
 
     // GoPartTime link auto-submit: enqueue async, never block or fail the
     // Discord reply path. Latest submission wins (replaces any pending job);
-    // the gate (MATCH/SKIPPED only) decides inside the enqueue.
+    // the gate (verified + DELETED pass, SHORT/fetch/session states stay
+    // manual) decides inside the enqueue.
     try {
       const { enqueueSubmissionJob } = await import('./submission.service');
       void enqueueSubmissionJob(updated).catch((error) =>
