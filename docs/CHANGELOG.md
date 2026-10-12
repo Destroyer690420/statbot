@@ -3,6 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-12
+### Deployed (2026-10-12 at `4e72387` — migration re-run + app + dashboard rebuild)
+- **Deadline protection live** (`161.118.164.85`; backup `rtm-backup-20261012-deadline.tar.gz`; redis untouched; host bundle removed). Verified: migration re-run 0 unexpected errors (`FEEDBACK_SENT`/`FEEDBACK_FAILED` in PG enum), 3 services Up, health healthy (DB+Redis), boot "All systems online!" (feedback queue init + re-hydration scheduled 1 live job), live-dist gates (feedback service + deadline util + feedback-jobs routes + `deadlineMs` in live `dist`, served submit script v1.2.0 with textarea flow), root + userscript 200, 0 app errors. **Executor-tab Tampermonkey update to v1.2.0 required for feedback** (expedited submits work with the old tab). See Decision 35.
 ### Built (NOT deployed — needs migration re-run + app + dashboard rebuild + executor-tab Tampermonkey update)
 - **Deadline protection (submit expedite + "submitting in a bit" feedback).** Links submit no later than deadline − 5min − slack (correction window cut short under pressure; pressured retries fire at once); link-less tasks get one automatic feedback at deadline − 5min via the executor tab (v1.2.0, Feedback button → `textarea[name=reason]` → Submit). Nudge/escalation reassignment unchanged. Typecheck clean, full suite green (76 suites / 1042 tests). See Decision 35, `docs/GOPARTTIME.md` §18, `docs/BROWSER_EXTENSION.md` §5h.
 ### Deployed (2026-10-12 at `c0d97e7` — app-only rebuild, no migration)
