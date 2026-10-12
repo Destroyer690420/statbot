@@ -87,7 +87,7 @@ export function formatSubmissionReply(task: SubmissionReplyTask): string {
   if (status === 'PARA_EXTRA') {
     return (
       `✅ Submission recorded. ✅ Post looks good${countStr} — extra blank lines are correct formatting. ` +
-      `Link queued for GoPartTime.`
+      `Link queued for auto-submission.`
     );
   }
   if (status === 'PARA_SHORT') {
@@ -98,7 +98,24 @@ export function formatSubmissionReply(task: SubmissionReplyTask): string {
   }
   const hint =
     status === 'TITLE_MISMATCH'
-      ? ' The title differs, but that is accepted — link queued for GoPartTime.'
-      : ' The wording differs slightly, but that is accepted — link queued for GoPartTime.';
+      ? ' The title differs, but that is accepted — link queued for auto-submission.'
+      : ' The wording differs slightly, but that is accepted — link queued for auto-submission.';
   return `✅ Submission recorded. ✅ Accepted${countStr}.${hint}`;
+}
+
+/**
+ * Ticket auto-submit failure notice (manager tags + human fallback).
+ *
+ * Worker-visible: never names the external task site — "task site" only.
+ * Pure (no I/O) so the brand-leak guard can test it without env/DB/Discord.
+ */
+export function buildSubmissionFailedMessage(
+  task: { id: string; externalTaskId?: string | null; submittedRedditUrl?: string | null },
+  reason: string,
+  tags: string,
+): string {
+  return (
+    `${tags} Link auto-submit failed for task ${task.externalTaskId || task.id} after 3 attempts (${reason}). ` +
+    `Please submit the link (${task.submittedRedditUrl || 'no link stored'}) on the task site manually.`
+  );
 }

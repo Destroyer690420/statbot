@@ -24,6 +24,7 @@ import {
 import { taskService } from './task.service';
 import { auditLogService } from './audit.service';
 import { getAdminOrManagerIds } from '../utils/permissions';
+import { buildSubmissionFailedMessage } from '../utils/submission-reply';
 import { logger } from '../utils/logger';
 
 let queue: Queue<SubmissionJobData> | null = null;
@@ -198,7 +199,8 @@ export async function reportSubmissionResult(
   return { recorded: true, gaveUp: true };
 }
 
-/** Tags the manager in the task's ticket so a failed job gets human review. */
+/** Tags the manager in the task's ticket so a failed job gets human review.
+ * Worker-visible: never names the external task site. */
 export async function notifyTicketSubmissionFailed(
   discordClient: Client,
   taskId: string,
@@ -211,10 +213,7 @@ export async function notifyTicketSubmissionFailed(
   const tags = getAdminOrManagerIds()
     .map((id) => `<@${id}>`)
     .join(' ');
-  await channel.send(
-    `${tags} GoPartTime auto-submit failed for task ${task.externalTaskId || task.id} after 3 attempts (${reason}). ` +
-      `Please submit the link (${task.submittedRedditUrl || 'no link stored'}) on GoPartTime manually.`,
-  );
+  await channel.send(buildSubmissionFailedMessage(task, reason, tags));
 }
 
 /**

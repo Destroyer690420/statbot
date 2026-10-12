@@ -236,9 +236,15 @@
 - **Status**: Implemented 2026-10-11, DEPLOYED live 2026-10-11 at `d8760ed` (with link nudge; app + dashboard rebuild, no migration).
 
 ## Decision 31: Post-link nudge (10-min warning) + escalation re-blast (15-min reassign)
-
 - **Context**: Blast winners went silent after the post landed in their ticket — no link, no chase, the post died quietly. The instruction message already says "within 10 minutes" but nothing enforced it.
 - **Decision**: Every delivered GoPartTime POST (blast-won or not, ACCEPTED only) runs a 10-min clock from delivery (`nudge-queue` BullMQ, stable job id, latest-wins on re-delivery, fire-time state checks so stale jobs self-cancel). +10 min with no link → tagged reminder + 5-min reassignment warning. +15 min with no link → one combined escalation re-blast for everything overdue (first-N repliers each take one post, most overdue first; slackers excluded from that round; daily-cap/busy guards reused; no GoPartTime re-accept — winners get re-delivered content via `reassignTask`). Original ticket is told the post moved; reassigned posts run a fresh clock. A foreign open round is never superseded (defer to the next trigger). No winners → owner tagged in the stuck tickets, posts stay pooled. Boot backfills clocks for posts delivered within 24h.
 - **Consequences**: two `AuditAction` values (`LINK_NUDGE_SENT`, `LINK_ESCALATED`, idempotent migration); no other schema change (clock derives from delivery records). Per-blast hook overrides in the outreach service (default automation hooks untouched; overrides die with their blast). `sendBlastMessages` gains an `excludeWorkerIds` skip.
 - **Status**: Implemented 2026-10-11, DEPLOYED live 2026-10-11 at `d8760ed` (with lenient format check; app + dashboard rebuild, migration re-run clean).
+
+## Decision 32: The external task-site brand never appears in worker-visible surfaces
+
+- **Context**: Ticket replies named the source site ("Link queued for GoPartTime", "GoPartTime auto-submit failed … submit … on GoPartTime manually") and the dashboard had a "Retry GoPartTime Submit" button — workers must never see the site's name.
+- **Decision**: Worker-visible wording is brand-free: submission replies say "link queued for auto-submission", the ticket failure notice says "Link auto-submit failed … submit the link … on the task site manually" (pure `buildSubmissionFailedMessage` in `utils/submission-reply.ts`, shared by `services/submission.service.ts`), the dashboard button says "Retry Auto-Submit". Nudge/instruction/image-order wording was already clean (verified). Internal identifiers (`source='goparttime'`, `/api/v1/goparttime/*`, `GOPARTTIME_*` env, file names), manager-only Automation tooling (session cookie names literally contain the brand), and audit/log lines keep the name — managers operate that integration, workers never see those surfaces.
+- **Consequences**: `worker-brand-leak.test.ts` pins the rule (all submission verdicts, the failure notice, nudge/instruction/image-order wording, plus a display-brand scan of the worker portal + task-detail UI files, allowing only the lowercase `'goparttime'` data constant). Any new worker-facing string with the brand fails the suite.
+- **Status**: Implemented 2026-10-12, NOT deployed (needs app + dashboard rebuild, no migration).
 

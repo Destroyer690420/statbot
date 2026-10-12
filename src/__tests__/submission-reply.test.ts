@@ -44,19 +44,19 @@ describe('formatSubmissionReply — unchanged paths', () => {
         formatCheckStatus: 'PARA_EXTRA',
         formatCheckDetail: detail({ expectedParas: 1, actualParas: 3, titleMatch: true }),
       }),
-    ).toContain('Link queued for GoPartTime');
+    ).toContain('Link queued for auto-submission');
     expect(
       formatSubmissionReply({
         formatCheckStatus: 'TITLE_MISMATCH',
         formatCheckDetail: detail({ expectedParas: 1, actualParas: 1, titleMatch: false }),
       }),
-    ).toContain('link queued for GoPartTime');
+    ).toContain('link queued for auto-submission');
     expect(
       formatSubmissionReply({
         formatCheckStatus: 'TEXT_MISMATCH',
         formatCheckDetail: detail({ expectedParas: 2, actualParas: 2, titleMatch: true }),
       }),
-    ).toContain('link queued for GoPartTime');
+    ).toContain('link queued for auto-submission');
   });
 
   it('short posts fail with a repost ask (link never queued)', () => {
