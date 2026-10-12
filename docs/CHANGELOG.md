@@ -3,8 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-12
-### Built (NOT deployed — needs app + dashboard rebuild, no migration)
-- **Worker-visible brand removal.** Ticket submission replies no longer name the external task site ("Link queued for GoPartTime" → "Link queued for auto-submission" for PARA_EXTRA/TITLE_MISMATCH/TEXT_MISMATCH); the ticket auto-submit failure notice no longer names it either ("GoPartTime auto-submit failed … on GoPartTime manually" → "Link auto-submit failed … on the task site manually", via pure `buildSubmissionFailedMessage` in `utils/submission-reply.ts` shared by `services/submission.service.ts`); dashboard "Retry GoPartTime Submit" → "Retry Auto-Submit". Nudge/instruction/image-order wording verified already clean; worker portal pages verified clean. New `worker-brand-leak.test.ts` guard pins the rule. Typecheck clean, dashboard build clean, full suite green (74 suites / 1009 tests). See Decision 32. Internal identifiers, manager-only Automation tooling, and audit/log lines intentionally keep the name (managers operate the integration; workers never see those surfaces).
+### Deployed (2026-10-12 at `06d8e64` — app + dashboard rebuild, no migration)
+- **Worker-visible brand removal live** (`161.118.164.85`; backup `rtm-backup-20261012-brand.tar.gz`; redis untouched; host bundle removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!" (all 6 queues incl. submission/nudge), live-dist gates (`auto-submission` ×3 + `task site manually` ×1 in `dist/utils/submission-reply.js`, 0 `queued for GoPartTime`; served `TaskDetails` chunk carries "Retry Auto-Submit", 0 old label), root + health 200, 0 app errors. No slash-command redeploy (no command changes). See Decision 32.
 
 ## 2026-10-11
 ### Deployed (2026-10-11 at `b91dc91` — app-only rebuild, no migration)
