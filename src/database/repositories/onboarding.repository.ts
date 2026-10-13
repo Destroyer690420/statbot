@@ -18,6 +18,19 @@ export class OnboardingRepository {
   }
 
   /**
+   * Every onboarding row with a stored profile username, oldest first.
+   * Read path for the eligible-but-unadded backfill sweep
+   * (`scripts/dm-eligible-unadded.ts`) — no writes, no enrollment filter:
+   * LOW_KARMA rows that aged into eligibility count too.
+   */
+  async findAllWithUsernames() {
+    return getDb().ticketOnboarding.findMany({
+      where: { profileUsername: { not: null } },
+      orderBy: { profileCheckedAt: 'asc' },
+    });
+  }
+
+  /**
    * Records the welcome AND enrolls the ticket in the Reddit profile check.
    *
    * Deliberately one method, not two. They are always true together (a ticket
