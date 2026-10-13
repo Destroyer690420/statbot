@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-10-13
+### Built (NOT deployed — needs app rebuild, no migration)
+- **Short verified message + approver DM for outreach.** Two message-wording/destination fixes in the ticket-onboarding flow, no karma/verdict/persistence change: (1) PASSED ticket message is now one short string from `formatVerifiedMessage` (`✅ verified (N karma) — you're in.` + 3-channel quick-read pointer + `Reply "done"`) instead of verified line + long `TICKET_GUIDE_MESSAGE` paragraph — channel ids live once in `TICKET_GUIDE_CHANNEL_IDS`, which both messages derive from. (2) `notifyApproverInTicket` → `notifyApproverOfPass`: the outreach notice moved out of the ticket into a DM to `REDDIT_PROFILE_APPROVAL_ADMIN_ID` via the `deliverDigest` `user.send({ content, components })` pattern, naming the ticket with a `ticket: <#channelId>` jump link (no approver self-mention); the button's `editReply` now touches only the DM, so the ticket transcript carries nothing about outreach. DM failure logs like the existing approver-DM path with no ticket fallback. `mayAddToOutreach` unchanged (defense in depth); `outreach-selection.service.ts` untouched — DM-sourced clicks pinned by 4 new button tests. Full suite 78/1060 green, typecheck + build clean.
+
 ## 2026-10-12
 ### Deployed (2026-10-12 at `7c3a19d` — app + dashboard rebuild, no migration)
 - **Deferred accept retry (watcher v1.6.5) live** (`161.118.164.85`; backup `rtm-backup-20261012-retry.tar.gz`; redis untouched; host bundle removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!", live-dist gates (lease picker + `deferIds` in live `dist`, served auto script v1.6.5 with defer logic), 0 app errors. **Tampermonkey update to v1.6.5 required on both watcher tabs** (old tabs ignore `defer` and behave as today). See Decision 37.

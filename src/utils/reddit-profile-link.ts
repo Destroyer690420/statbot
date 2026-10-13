@@ -1,7 +1,7 @@
 import {
-  REDDIT_PROFILE_APPROVAL_ADMIN_ID,
   REDDIT_PROFILE_INFO_CHANNEL_ID,
   REDDIT_PROFILE_MIN_KARMA,
+  TICKET_GUIDE_CHANNEL_IDS,
   TICKET_REDDIT_PROFILE_REASK_MESSAGE,
 } from '../config/constants';
 
@@ -158,9 +158,21 @@ export function formatReaskMessage(workerId: string): string {
   return TICKET_REDDIT_PROFILE_REASK_MESSAGE.replace('{user}', `<@${workerId}>`);
 }
 
-/** Sent in-ticket when the account is not suspended and clears the bar. */
+/**
+ * Sent in-ticket when the account is not suspended and clears the bar.
+ *
+ * This is the ticket's whole pass message: the verified line and the
+ * three-channel reading pointer in one short string. The channel mentions
+ * come from `TICKET_GUIDE_CHANNEL_IDS` — the same list `TICKET_GUIDE_MESSAGE`
+ * is built from — so the ids are never written twice.
+ */
 export function formatVerifiedMessage(karma: number): string {
-  return `✅ your reddit account has been verified (${karma} karma). you are all set — please read the channels below to get started.`;
+  const [first, second, third] = TICKET_GUIDE_CHANNEL_IDS;
+  return (
+    `✅ verified (${karma} karma) — you're in.\n\n` +
+    `Quick read before we start: <#${first}> · <#${second}> · <#${third}> (~10 min).\n` +
+    `Reply "done" once you've read them and we'll get going.`
+  );
 }
 
 /**
@@ -195,23 +207,27 @@ export function formatBannedDmMessage(): string {
 }
 
 /**
- * Posted IN the ticket when a worker passes, tagging the approver.
+ * DM'd to the approver when a worker passes, carrying the button that
+ * selects the ticket for the daily outreach.
  *
- * This replaced a DM to the approver. The ticket is where the approver already
- * has to act — adding the ticket to the Daily Outreach list is a decision about
- * that ticket — so the notice belongs beside the verdict rather than in a
- * private inbox that has to be mentally matched back to a channel.
+ * This used to be posted in the ticket; it moved back to a DM so the worker
+ * never sees the outreach discussion at all. Because the reader is no longer
+ * looking at the ticket, the notice names it with a channel-jump link —
+ * one click takes the approver straight to the right ticket, no manual
+ * matching. Shaped like the `ticket:` line in `formatUnverifiableDm`.
  *
- * Deliberately omits the ticket name: the reader is looking at the ticket, so
- * naming it back to them is noise.
+ * No approver mention: the DM itself is the ping, and a self-mention in
+ * one's own inbox is noise.
  */
 export function formatTicketApprovalNotice(args: {
+  channelId: string;
   workerId: string;
   username: string;
   karma: number;
 }): string {
   return (
-    `<@${REDDIT_PROFILE_APPROVAL_ADMIN_ID}> new reddit profile passed ✅\n` +
+    `new reddit profile passed ✅\n` +
+    `ticket: <#${args.channelId}>\n` +
     `worker: <@${args.workerId}>\n` +
     `profile: u/${args.username}\n` +
     `karma: ${args.karma} (>= ${REDDIT_PROFILE_MIN_KARMA})\n\n` +

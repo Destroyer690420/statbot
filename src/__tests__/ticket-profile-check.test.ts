@@ -37,7 +37,11 @@ jest.mock('../utils/permissions', () => ({
 }));
 
 import { handleTicketProfileFlow } from '../services/ticket-profile-check.service';
-import { REDDIT_PROFILE_APPROVAL_ADMIN_ID, REDDIT_PROFILE_MAX_REASKS } from '../config/constants';
+import {
+  REDDIT_PROFILE_APPROVAL_ADMIN_ID,
+  REDDIT_PROFILE_MAX_REASKS,
+  TICKET_GUIDE_CHANNEL_IDS,
+} from '../config/constants';
 
 const WORKER = '111';
 
@@ -283,7 +287,7 @@ describe('replies that are not a profile link', () => {
 });
 
 describe('passing the check', () => {
-  it('sends the guide, stamps it, and notifies the approver in the ticket', async () => {
+  it('sends one short verified+guide message, stamps it, and keeps outreach out of the ticket', async () => {
     await handleTicketProfileFlow({
       client,
       channel: makeChannel(),
@@ -291,26 +295,51 @@ describe('passing the check', () => {
       content: 'https://www.reddit.com/user/some_worker',
     });
 
+    // Exactly one ticket message: the short verified+guide line. The mock
+    // profile totals 30 + 40 = 70 karma.
+    expect(payloads).toHaveLength(1);
     const ticketText = sent.join('\n');
-    // The guide is the reward for passing. It references the three onboarding
-    // channels by id, so that is what identifies it here.
-    expect(ticketText).toContain('<#1520466000477163550>');
-    expect(ticketText).toContain('verified');
+    expect(ticketText).toContain('70');
+    for (const id of TICKET_GUIDE_CHANNEL_IDS) {
+      expect(ticketText).toContain(`<#${id}>`);
+    }
+    // The long guide prose is gone from the ticket.
+    expect(ticketText.toLowerCase()).not.toContain('to understand everything');
+    expect(ticketText.toLowerCase()).not.toContain('barely take 10 mins to read it all');
+
     expect(mockMarkGuideSent).toHaveBeenCalledWith('chan-1');
     expect(mockMarkProfileChecked).toHaveBeenCalledWith(
       'chan-1',
       { status: 'PASSED', username: 'some_worker', linkKarma: 30, commentKarma: 40 },
     );
 
-    // The approver is pinged where the action happens, and the ticket is named
-    // by the channel itself rather than repeated as text.
-    expect(ticketText).toContain(`<@${REDDIT_PROFILE_APPROVAL_ADMIN_ID}>`);
-    expect(ticketText).toContain('u/some_worker');
+    // The worker must never see the outreach discussion: no approver mention,
+    // no profile/karma report, no button payload in the ticket channel.
+    expect(ticketText).not.toContain(`<@${REDDIT_PROFILE_APPROVAL_ADMIN_ID}>`);
+    expect(ticketText).not.toContain('u/some_worker');
+    expect(ticketText.toLowerCase()).not.toContain('daily outreach');
+    expect(ticketText).not.toContain('outreach_add:');
   });
 
-  it('no longer DMs the approver on a pass', async () => {
-    // The DM required mentally matching a channel id back to a ticket. The
-    // notice now lands in the ticket itself.
+  it('DMs the approver on a pass with a channel-jump link to the ticket', async () => {
+    const channel = makeChannel({ id: '1234567890123456789' });
+
+    await handleTicketProfileFlow({
+      client,
+      channel,
+      authorId: WORKER,
+      content: 'https://www.reddit.com/user/some_worker',
+    });
+
+    const dm = dmSent.find((d) => d.id === REDDIT_PROFILE_APPROVAL_ADMIN_ID);
+    expect(dm).toBeDefined();
+    // One click takes the approver to the right ticket — no manual matching.
+    expect(dm!.content).toContain('<#1234567890123456789>');
+    expect(dm!.content).toContain(`<@${WORKER}>`);
+    expect(dm!.content).toContain('u/some_worker');
+  });
+
+  it('puts the add-to-outreach button on the approver DM, not in the ticket', async () => {
     await handleTicketProfileFlow({
       client,
       channel: makeChannel(),
@@ -318,54 +347,31 @@ describe('passing the check', () => {
       content: 'https://www.reddit.com/user/some_worker',
     });
 
-    expect(dmSent.some((d) => d.id === REDDIT_PROFILE_APPROVAL_ADMIN_ID)).toBe(false);
-  });
-
-  it('puts the add-to-outreach button on the approver notice', async () => {
-    await handleTicketProfileFlow({
-      client,
-      channel: makeChannel(),
-      authorId: WORKER,
-      content: 'https://www.reddit.com/user/some_worker',
-    });
-
-    // The button is the point of the change: the approver can select the ticket
+    // The button is the point of the DM: the approver can select the ticket
     // without leaving Discord or opening the dashboard.
-    const notice = payloads.find((p) => typeof p !== 'string' && p.content.includes('passed'));
-    expect(notice).toBeDefined();
-    const json = JSON.stringify((notice as { components?: unknown }).components);
-    expect(json).toContain(`outreach_add:${'chan-1'}`);
+    const dm = dmSent.find((d) => d.id === REDDIT_PROFILE_APPROVAL_ADMIN_ID);
+    expect(dm).toBeDefined();
+    expect(dm!.content).toContain(`outreach_add:${'chan-1'}`);
+    // No button payload ever went to the ticket channel.
+    for (const p of payloads) {
+      expect(typeof p === 'string' ? p : JSON.stringify(p)).not.toContain('outreach_add:');
+    }
   });
 
-  it('sends the guide and the approver notice as two separate messages', async () => {
-    // Combined into one message the button would sit inside the worker-facing
-    // guide, which is addressed to the worker, not to the approver.
-    await handleTicketProfileFlow({
-      client,
-      channel: makeChannel(),
-      authorId: WORKER,
-      content: 'https://www.reddit.com/user/some_worker',
+  it('still stamps PASSED when the approver DM fails to send', async () => {
+    // A closed approver inbox must not roll the ticket back out of PASSED —
+    // and must not fall back to posting in the ticket, which would leak the
+    // outreach discussion to the worker.
+    fetchUser.mockImplementation(async (id: string) => {
+      if (id === REDDIT_PROFILE_APPROVAL_ADMIN_ID) throw new Error('Cannot send messages to this user');
+      return {
+        send: jest.fn(async (payload: unknown) => {
+          dmSent.push({ id, content: typeof payload === 'string' ? payload : JSON.stringify(payload) });
+        }),
+      };
     });
 
-    const guide = payloads.find((p) => typeof p === 'string' && p.includes('<#1520466000477163550>'));
-    const notice = payloads.find((p) => typeof p !== 'string' && p.content.includes('passed'));
-    expect(guide).toBeDefined();
-    expect(notice).toBeDefined();
-    expect(guide).not.toBe(notice);
-  });
-
-  it('still stamps PASSED when the approver notice fails to send', async () => {
-    // The verdict is the durable fact. A notice that could not be delivered
-    // must not roll the ticket back out of PASSED.
-    const channel = makeChannel({
-      send: jest.fn(async (payload: string | { content: string; components?: unknown }) => {
-        if (typeof payload !== 'string' && payload.content.includes('passed')) {
-          throw new Error('discord down');
-        }
-        return undefined;
-      }),
-    });
-
+    const channel = makeChannel();
     await handleTicketProfileFlow({
       client,
       channel,
@@ -377,6 +383,9 @@ describe('passing the check', () => {
       'chan-1',
       { status: 'PASSED', username: 'some_worker', linkKarma: 30, commentKarma: 40 },
     );
+    const ticketText = sent.join('\n');
+    expect(ticketText.toLowerCase()).not.toContain('daily outreach');
+    expect(ticketText).not.toContain('outreach_add:');
   });
 
   it('does not DMs the worker on a pass, so nothing in the ticket looks like a test', async () => {
@@ -537,8 +546,18 @@ describe('resilience', () => {
     expect(sent.join('\n')).toContain('banned');
   });
 
-  it('persists the verdict even when the approver DM fails', async () => {
-    approverSend.mockRejectedValueOnce(new Error('approver has DMs closed'));
+  it('persists the verdict even when the approver cannot even be fetched', async () => {
+    // The fetch itself can fail (deleted user, Discord outage) before any
+    // send is attempted. The verdict is already the durable fact, so the
+    // flow still resolves and the ticket stays PASSED.
+    fetchUser.mockImplementation(async (id: string) => {
+      if (id === REDDIT_PROFILE_APPROVAL_ADMIN_ID) throw new Error('Unknown User');
+      return {
+        send: jest.fn(async (payload: unknown) => {
+          dmSent.push({ id, content: typeof payload === 'string' ? payload : JSON.stringify(payload) });
+        }),
+      };
+    });
 
     await handleTicketProfileFlow({
       client,

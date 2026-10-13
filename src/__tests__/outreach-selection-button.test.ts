@@ -258,6 +258,55 @@ describe('re-clicking an already-selected ticket', () => {
   });
 });
 
+describe('DM context (the approver notice now lives in a DM)', () => {
+  it('adds the ticket when the button is clicked in a DM', async () => {
+    // The pass notice moved out of the ticket into the approver's DM. The
+    // ticket still travels in the button id, so the write is unchanged —
+    // this pins that a DM-sourced click (guildId null) works.
+    const interaction = makeInteraction({ userId: APPROVER, guildId: null });
+
+    await handleOutreachAddButton(interaction as never);
+
+    expect(mockUpsertSelection).toHaveBeenCalledWith([{ channelId: CHANNEL, selected: true }]);
+    expect(interaction.deferUpdate).toHaveBeenCalled();
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('daily outreach') }),
+    );
+  });
+
+  it('answers a refused DM click without ephemeral (guild-only flag)', async () => {
+    const interaction = makeInteraction({ userId: '111', guildId: null });
+
+    await handleOutreachAddButton(interaction as never);
+
+    expect(mockUpsertSelection).not.toHaveBeenCalled();
+    expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({ ephemeral: false }));
+  });
+
+  it('reports already-added from a DM re-click and disables the button', async () => {
+    mockFindOutreachRow.mockResolvedValue({ channelId: CHANNEL, selected: true });
+
+    const interaction = makeInteraction({ userId: APPROVER, guildId: null });
+
+    await handleOutreachAddButton(interaction as never);
+
+    expect(mockUpsertSelection).not.toHaveBeenCalled();
+    const edit = (interaction.editReply as jest.Mock).mock.calls[0][0];
+    expect(edit.content).toContain('already');
+    expect(JSON.stringify(edit.components)).toContain('"disabled":true');
+  });
+
+  it('keeps the button retryable from a DM after a failed write', async () => {
+    mockUpsertSelection.mockRejectedValue(new Error('db down'));
+
+    const interaction = makeInteraction({ userId: APPROVER, guildId: null });
+
+    await expect(handleOutreachAddButton(interaction as never)).resolves.toBe(true);
+
+    const edit = (interaction.editReply as jest.Mock).mock.calls[0][0];
+    expect(edit.content).toMatch(/could not|try again/i);
+  });
+});
 describe('malformed ids and failures', () => {
   it('claims the id but writes nothing when it cannot be parsed', async () => {
     const interaction = makeInteraction({ userId: APPROVER, customId: `${OUTREACH_ADD_BUTTON_PREFIX}` });

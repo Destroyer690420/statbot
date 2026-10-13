@@ -79,7 +79,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE
 - **Routes** `src/api/routes/outreach.ts` (factory `createOutreachRoutes(discordClient)`; all `requireDashboardAdmin` — middleware extracted to `src/api/middleware/auth.ts`, shared with discord routes):
   - `GET /api/v1/outreach` → `{ istDate, message, tickets[], blast }`
   - `PUT /api/v1/outreach/selection` `{ selections: [{channelId, selected}] }` (max 500)
-  - **Not an API route:** the same `selected` write is also reachable from Discord via the `add to daily outreach` button on a passed profile check. It calls `outreachRepository.upsertSelection` directly (`src/services/outreach-selection.service.ts`), not this endpoint — see `docs/DISCORD_BOT.md` §5.1. Approver/admin only, idempotent.
+  - **Not an API route:** the same `selected` write is also reachable from Discord via the `add to daily outreach` button on the approver DM for a passed profile check. It calls `outreachRepository.upsertSelection` directly (`src/services/outreach-selection.service.ts`), not this endpoint — see `docs/DISCORD_BOT.md` §5.1. Approver/admin only, idempotent.
   - `POST /api/v1/outreach/send` `{ slots: 1..500 }` → `{ blast, sent[], skipped[] }`
   - `GET/PUT /api/v1/outreach/settings` `{ message }`
 - **Bot hook** `src/bot/events/messageCreate.ts`: `outreachService.onWorkerMessage` runs first (now with `message.client` for deletions); managers/bots excluded via `getAllAdminIds()`; failures swallowed (logging only).

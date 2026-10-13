@@ -7,7 +7,6 @@ import {
   PROFILE_CHECK_UNVERIFIABLE,
   REDDIT_PROFILE_APPROVAL_ADMIN_ID,
   REDDIT_PROFILE_MAX_REASKS,
-  TICKET_GUIDE_MESSAGE,
 } from '../config/constants';
 import { describeLookupFailure, lookupRedditProfile } from './reddit-profile-check.service';
 import {
@@ -37,7 +36,7 @@ import { getAllAdminIds } from '../utils/permissions';
  *   reply, no link  -> re-ask (capped, so small talk cannot loop forever)
  *   reply, a link   -> Reddit lookup
  *                        suspended          -> DM the worker, mark BANNED
- *                        karma >= 50        -> guide + verified line, DM admin, PASSED
+ *                        karma >= 50        -> short verified+guide line in the ticket, DM admin, PASSED
  *                        karma <  50        -> "raise your karma" line, LOW_KARMA
  *                        could not check    -> retryable nudge, UNVERIFIABLE
  *
@@ -47,35 +46,48 @@ import { getAllAdminIds } from '../utils/permissions';
  */
 
 /**
- * Tell the approver that a worker passed, IN the ticket, with the button that
- * selects it for the daily outreach. Best effort, never throws.
+ * DM the approver that a worker passed, with the button that selects the
+ * ticket for the daily outreach. Best effort, never throws.
  *
- * This is deliberately not a DM. The approver's action is about this specific
- * ticket, so the request belongs in the ticket: a DM forces the reader to
- * match a channel id back to a channel by hand, and the add-to-outreach step
- * then has to happen in the dashboard anyway.
+ * This is deliberately a DM, not a ticket message: the worker must never see
+ * the outreach discussion — neither the "passed / add this ticket" notice nor
+ * the button's "added to the daily outreach list" confirmation edit, which
+ * edits this DM's own message and therefore can never touch the ticket.
+ * The notice names the ticket with a `<#channelId>` jump link (see
+ * `formatTicketApprovalNotice`) so the approver reaches the right ticket in
+ * one click with no manual matching.
  *
- * Sent as its own message, after the worker-facing guide, so the button does
- * not sit inside a message addressed to the worker.
+ * Delivery mirrors `deliverDigest` in `blast-approval.service.ts`: an admin
+ * user fetched by id, then `user.send({ content, components })`. A button
+ * works identically in a DM, and the click handler edits the interaction's
+ * own message — the approver's DM — never the ticket.
+ *
+ * A closed DM inbox is logged exactly like the `notifyApprover` path below
+ * and never falls back to the ticket: posting there would reintroduce the
+ * very leak this DM exists to close.
  *
  * The verdict is already persisted before this runs, so a failure here costs
  * only the notification — the ticket stays PASSED.
  */
-async function notifyApproverInTicket(
-  channel: TextChannel,
+async function notifyApproverOfPass(
+  client: Client,
   channelId: string,
   workerId: string,
   username: string,
   karma: number,
 ): Promise<void> {
   try {
-    await channel.send({
-      content: formatTicketApprovalNotice({ workerId, username, karma }),
+    const admin = await client.users.fetch(REDDIT_PROFILE_APPROVAL_ADMIN_ID);
+    await admin.send({
+      content: formatTicketApprovalNotice({ channelId, workerId, username, karma }),
       components: buildOutreachAddButton(channelId),
     });
+    logger.info('Reddit profile check: approver notified', { channelId, username, verdict: 'PASSED' });
   } catch (error) {
-    logger.warn('Reddit profile check: approver notice failed', {
+    logger.warn('Reddit profile check: could not DM approver', {
       channelId,
+      username,
+      verdict: 'PASSED',
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -86,8 +98,9 @@ async function notifyApproverInTicket(
  * down the ticket flow, and the verdict is already persisted, so the worst case
  * is that the approver does not hear about this one ticket.
  *
- * Used only for failures that are OURS (no vaulted session / expired session).
- * A worker passing no longer DMs — that notice is in-ticket.
+ * Used for failures that are OURS (no vaulted session / expired session) and,
+ * via `notifyApproverOfPass`, for passes (outreach selection). Both stay out
+ * of the ticket so the worker never sees them.
  */
 async function notifyApprover(client: Client, content: string, context: Record<string, unknown>): Promise<void> {
   try {
@@ -199,10 +212,11 @@ async function runCheck(
     const commentKarma = result.profile.commentKarma;
 
     if (status === PROFILE_CHECK_PASSED) {
-      // Guide first, stamp second: if the send fails the stamp is not written
-      // and the guide is retried on the next message rather than lost.
+      // Short verified+guide line first, stamp second: if the send fails the
+      // stamp is not written and the message is retried on the next message
+      // rather than lost.
       try {
-        await channel.send(`${formatVerifiedMessage(karma)}\n\n${TICKET_GUIDE_MESSAGE}`);
+        await channel.send(formatVerifiedMessage(karma));
         await onboardingRepository.markGuideSent(channelId);
       } catch (error) {
         logger.warn('Reddit profile check: guide send failed', {
@@ -211,7 +225,7 @@ async function runCheck(
         });
       }
       await persist(channelId, PROFILE_CHECK_PASSED, username, linkKarma, commentKarma);
-      await notifyApproverInTicket(channel, channelId, workerId, username, karma);
+      await notifyApproverOfPass(client, channelId, workerId, username, karma);
       logger.info('Reddit profile check: worker passed', { channelId, username, workerId, karma });
       return;
     }

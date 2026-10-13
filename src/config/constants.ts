@@ -399,9 +399,21 @@ export const PROFILE_CHECK_BANNED = 'BANNED';
 export const PROFILE_CHECK_LOW_KARMA = 'LOW_KARMA';
 export const PROFILE_CHECK_UNVERIFIABLE = 'UNVERIFIABLE';
 
+/**
+ * The three onboarding channels the passing worker is asked to read. Single
+ * source of truth: both `TICKET_GUIDE_MESSAGE` and the short verified message
+ * (`formatVerifiedMessage`) derive their mentions from this list, so the ids
+ * are written exactly once.
+ */
+export const TICKET_GUIDE_CHANNEL_IDS = [
+  '1520466000477163550',
+  '1520481331773968384',
+  '1520620297399828571',
+] as const;
+
 /** Onboarding guide sent once per new ticket, only after the worker passes the profile check */
 export const TICKET_GUIDE_MESSAGE =
-  'To understand everything i would advise you to read <#1520466000477163550>, <#1520481331773968384>, <#1520620297399828571>. it will barely take 10 mins to read it all but you will understand everything after reading these. and once you are done you can ask me your doubts and after that we can get started, so lemme know once you are done reading we will start after that. ok?';
+  `To understand everything i would advise you to read ${TICKET_GUIDE_CHANNEL_IDS.map((id) => `<#${id}>`).join(', ')}. it will barely take 10 mins to read it all but you will understand everything after reading these. and once you are done you can ask me your doubts and after that we can get started, so lemme know once you are done reading we will start after that. ok?`;
 
 /** Member join welcome sent in #invites when someone joins the guild */
 export const INVITES_CHANNEL_ID = '1520616800063328437';

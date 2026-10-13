@@ -11,7 +11,12 @@ import {
   isTerminalProfileStatus,
   totalKarma,
 } from '../utils/reddit-profile-link';
-import { REDDIT_PROFILE_APPROVAL_ADMIN_ID, REDDIT_PROFILE_INFO_CHANNEL_ID, REDDIT_PROFILE_MIN_KARMA } from '../config/constants';
+import {
+  REDDIT_PROFILE_APPROVAL_ADMIN_ID,
+  REDDIT_PROFILE_INFO_CHANNEL_ID,
+  REDDIT_PROFILE_MIN_KARMA,
+  TICKET_GUIDE_CHANNEL_IDS,
+} from '../config/constants';
 
 describe('extractProfileUsername', () => {
   it('reads a canonical profile URL', () => {
@@ -136,8 +141,21 @@ describe('messages', () => {
     expect(formatReaskMessage('123')).toContain('<@123>');
   });
 
-  it('states the karma in the verified line', () => {
-    expect(formatVerifiedMessage(120)).toContain('120');
+  it('states the karma in the short verified line, with all three guide channels', () => {
+    const msg = formatVerifiedMessage(120);
+    expect(msg).toContain('120');
+    for (const id of TICKET_GUIDE_CHANNEL_IDS) {
+      expect(msg).toContain(`<#${id}>`);
+    }
+  });
+
+  it('keeps the verified line short — none of the old long guide prose', () => {
+    // Regression: the pass message used to concatenate the verified line with
+    // the full TICKET_GUIDE_MESSAGE paragraph. It is now one short message.
+    const msg = formatVerifiedMessage(120).toLowerCase();
+    expect(msg).not.toContain('to understand everything');
+    expect(msg).not.toContain('barely take 10 mins to read it all');
+    expect(msg).toContain('reply "done"');
   });
 
   it('tells a low-karma worker their karma, the recommendation, and that hiring is still open', () => {
@@ -182,25 +200,42 @@ describe('messages', () => {
     expect(formatLowKarmaMessage(3)).not.toMatch(/<@\d+>/);
   });
 
-  it('asks the approver in-ticket with a usable worker mention and the profile', () => {
-    const notice = formatTicketApprovalNotice({ workerId: '555', username: 'some_worker', karma: 300 });
+  it('DMs the approver with a usable worker mention and the profile', () => {
+    const notice = formatTicketApprovalNotice({
+      channelId: '1234567890123456789',
+      workerId: '555',
+      username: 'some_worker',
+      karma: 300,
+    });
     expect(notice).toContain('<@555>');
     expect(notice).toContain('u/some_worker');
     expect(notice).toContain('300');
     expect(notice.toLowerCase()).toContain('daily outreach');
   });
 
-  it('tags the approver itself, since this is posted in the ticket they must act in', () => {
-    // The whole point of the change: the approver used to be DMed. Now the
-    // notice lands in the ticket, so the mention has to move with it.
-    expect(formatTicketApprovalNotice({ workerId: '555', username: 'w', karma: 300 })).toContain(
-      `<@${REDDIT_PROFILE_APPROVAL_ADMIN_ID}>`,
-    );
+  it('does not tag the approver in their own DM — the DM itself is the ping', () => {
+    // The self-mention only made sense when the notice was posted in the
+    // ticket. In the approver's own inbox it is noise.
+    const notice = formatTicketApprovalNotice({
+      channelId: '1234567890123456789',
+      workerId: '555',
+      username: 'w',
+      karma: 300,
+    });
+    expect(notice).not.toContain(`<@${REDDIT_PROFILE_APPROVAL_ADMIN_ID}>`);
+    // The worker mention stays — the approver needs to know who passed.
+    expect(notice).toContain('<@555>');
   });
 
-  it('does not repeat the ticket name, which the reader is already looking at', () => {
-    const notice = formatTicketApprovalNotice({ workerId: '555', username: 'w', karma: 300 });
-    expect(notice).not.toContain('ticket:');
+  it('names the ticket with a channel-jump link, since the reader is no longer looking at it', () => {
+    const notice = formatTicketApprovalNotice({
+      channelId: '1234567890123456789',
+      workerId: '555',
+      username: 'w',
+      karma: 300,
+    });
+    expect(notice).toContain('<#1234567890123456789>');
+    expect(notice).toContain('ticket:');
   });
 
   it('surfaces the reason in the retryable in-ticket nudge', () => {
