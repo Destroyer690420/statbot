@@ -3,8 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-14
-### Built (NOT deployed — needs app rebuild, no migration)
-- **Daily 7am IST outreach ban scan + 14-day age gate.** New `src/services/outreach-ban-scan.service.ts` (`runOutreachBanScan` + `start/stopOutreachBanScanScheduler`, wired in `src/index.ts`) + pure `outreach-ban-scan-plan.ts` (07:00:05 IST, `setTimeout` chain, exactly-once per IST day key): selected outreach tickets re-checked via vaulted `lookupRedditProfile` (suspension-only; `not_found`/session/rate/error never remove); suspended → `selected=false` + `BANNED` stamp + worker DM (14d + 50 karma re-entry, closed-DM ticket fallback) + owner ticket tag + reused `OUTREACH_MESSAGE_SENT` audit + admin summary DM; missing username → tagged in-ticket ask. `BANNED` no longer terminal (only `PASSED` is) so re-shared links re-check; live profiles gate 50 karma AND 14d age (`evaluateProfileEligibility`, missing `created_utc` passes) with distinct too-young `LOW_KARMA` message. New `onboardingRepository.findManyByChannelIds` (one bulk read). Full suite 81/1097 green, typecheck + build clean. See Decision 38.
+### Deployed (2026-10-14 at `79420af` — app-only rebuild, no migration)
+- **Daily 7am IST outreach ban scan + 14-day age gate live** (`161.118.164.85`; backup `rtm-backup-20261014-banscan.tar.gz`; dashboard/redis untouched; host bundle removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!" + `Outreach ban scan scheduled {key 2026-9-14}` (next fire tomorrow 07:00 IST), live-dist gates (ban-scan service + plan + `runOutreachBanScan` + `evaluateProfileEligibility` in live `dist`), root + userscript 200, 0 app errors. Ships stacked on `a733ad7` (short verified message, previously un-deployed — now live too). Full suite 81/1097 green, typecheck + build clean. See Decision 38.
 
 ## 2026-10-13
 ### Built (NOT deployed — needs app rebuild, no migration)

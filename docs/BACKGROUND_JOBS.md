@@ -1,6 +1,6 @@
 # BACKGROUND_JOBS.md — Queues, Timers & Scheduled Work
 
-> Verified against `src/index.ts`, `src/scheduler/**`, `src/services/survival*` on 2026-10-08. **There is no cron in this project.** Everything is BullMQ delayed jobs, in-process `setInterval`, or self-rescheduling `setTimeout` chains. Daily 7am ban scan added 2026-10-14 (BUILT, NOT deployed).
+> Verified against `src/index.ts`, `src/scheduler/**`, `src/services/survival*` on 2026-10-08. **There is no cron in this project.** Everything is BullMQ delayed jobs, in-process `setInterval`, or self-rescheduling `setTimeout` chains. Daily 7am ban scan DEPLOYED live 2026-10-14 at `79420af`.
 
 ---
 
