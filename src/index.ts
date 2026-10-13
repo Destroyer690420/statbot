@@ -218,6 +218,16 @@ async function main(): Promise<void> {
       logger.error('Hourly scan trigger failed to start', { error });
     }
 
+    // 7c. Daily outreach ban scan (07:00:05 IST — re-checks every selected
+    // outreach ticket's stored Reddit profile for suspension; banned tickets
+    // are deselected with a worker DM + owner ticket tag + admin summary DM).
+    try {
+      const { startOutreachBanScanScheduler } = await import('./services/outreach-ban-scan.service');
+      startOutreachBanScanScheduler(discordClient);
+    } catch (error) {
+      logger.error('Outreach ban scan scheduler failed to start', { error });
+    }
+
     // 8. Burst reply hooks: blast wins convert to accept claims (lazy accept).
     // Manual blasts have no burst row — the hook resolves to null for them.
     try {
@@ -409,6 +419,18 @@ async function main(): Promise<void> {
       const { closePoller } = await import('./services/automation/poller.service');
 
       stopAutomationScheduler();
+      try {
+        const { stopHourlyScanTrigger } = await import('./services/automation/hourly-scan.service');
+        stopHourlyScanTrigger();
+      } catch {
+        // ignore — trigger is best-effort
+      }
+      try {
+        const { stopOutreachBanScanScheduler } = await import('./services/outreach-ban-scan.service');
+        stopOutreachBanScanScheduler();
+      } catch {
+        // ignore — trigger is best-effort
+      }
       await closePoller().catch(() => undefined);
       await closeSurvivalWorker().catch(() => undefined);
       await closeSurvivalQueue().catch(() => undefined);

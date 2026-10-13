@@ -162,17 +162,21 @@ describe('tickets that must not be touched', () => {
     expect(mockLookup).not.toHaveBeenCalled();
   });
 
-  it('stays quiet once a worker is known to be banned', async () => {
+  it('re-checks a banned worker who shares a new link (BANNED is not terminal)', async () => {
+    // The daily 7am scan removes banned workers from outreach and tells them
+    // to share a new link — that link must run the lookup instead of hitting
+    // a quiet terminal state.
     mockFindByChannelId.mockResolvedValue({ profileCheckStatus: 'BANNED', profileReaskCount: 0 });
 
-    expect(
-      await handleTicketProfileFlow({
-        client,
-        channel: makeChannel(),
-        authorId: WORKER,
-        content: 'https://www.reddit.com/user/some_worker',
-      }),
-    ).toBe(false);
+    const handled = await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: 'https://www.reddit.com/user/some_worker',
+    });
+
+    expect(handled).toBe(true);
+    expect(mockLookup).toHaveBeenCalledWith('some_worker');
   });
 
   it('ignores a message from someone who is not the ticket worker', async () => {

@@ -1,5 +1,6 @@
 import {
   REDDIT_PROFILE_INFO_CHANNEL_ID,
+  REDDIT_PROFILE_MIN_AGE_DAYS,
   REDDIT_PROFILE_MIN_KARMA,
   TICKET_GUIDE_CHANNEL_IDS,
   TICKET_REDDIT_PROFILE_REASK_MESSAGE,
@@ -35,7 +36,7 @@ export type ProfileCheckStatus =
   | 'UNVERIFIABLE';
 
 /** Terminal verdicts: nothing further happens in this ticket automatically. */
-const TERMINAL_STATUSES: ReadonlySet<ProfileCheckStatus> = new Set<ProfileCheckStatus>(['PASSED', 'BANNED']);
+const TERMINAL_STATUSES: ReadonlySet<ProfileCheckStatus> = new Set<ProfileCheckStatus>(['PASSED']);
 
 const KNOWN_STATUSES: ReadonlySet<string> = new Set<ProfileCheckStatus>([
   'PENDING',
@@ -150,6 +151,65 @@ export function evaluateKarma(profile: RedditProfileSummary, minKarma = REDDIT_P
   return { status: passes ? 'PASSED' : 'LOW_KARMA', karma, passes };
 }
 
+/** Whole days between a Reddit `created_utc` (seconds) and now. Null when unknown. */
+export function getAccountAgeDays(
+  createdUtc: number | null | undefined,
+  nowMs: number = Date.now(),
+): number | null {
+  if (typeof createdUtc !== 'number' || !Number.isFinite(createdUtc) || createdUtc <= 0) return null;
+  const ageMs = nowMs - createdUtc * 1000;
+  if (!Number.isFinite(ageMs) || ageMs < 0) return null;
+  return Math.floor(ageMs / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * True when the account clears the minimum-age rule. A missing `created_utc`
+ * never blocks: old rows and unexpected payloads fall back to the karma rule
+ * alone rather than locking a worker out over a field Reddit did not send.
+ */
+export function isAccountOldEnough(
+  createdUtc: number | null | undefined,
+  nowMs: number = Date.now(),
+  minAgeDays: number = REDDIT_PROFILE_MIN_AGE_DAYS,
+): boolean {
+  const ageDays = getAccountAgeDays(createdUtc, nowMs);
+  if (ageDays === null) return true;
+  return ageDays >= minAgeDays;
+}
+
+export type ProfileEligibilityReason = 'ok' | 'low_karma' | 'too_young' | 'too_young_and_low_karma';
+
+export interface ProfileEligibility {
+  passes: boolean;
+  karma: number;
+  ageDays: number | null;
+  reason: ProfileEligibilityReason;
+}
+
+/**
+ * Combined gate for a live (non-suspended) profile: karma AND age. Single
+ * place both rules are applied so onboarding and the daily ban scan cannot
+ * drift. `too_young_and_low_karma` is reported distinctly so the message can
+ * name both bars instead of sending the worker off to fix one and failing
+ * the other on the next share.
+ */
+export function evaluateProfileEligibility(
+  profile: RedditProfileSummary,
+  nowMs: number = Date.now(),
+  minKarma: number = REDDIT_PROFILE_MIN_KARMA,
+  minAgeDays: number = REDDIT_PROFILE_MIN_AGE_DAYS,
+): ProfileEligibility {
+  const karma = totalKarma(profile);
+  const ageDays = getAccountAgeDays(profile.createdUtc ?? null, nowMs);
+  const karmaOk = karma >= minKarma;
+  const ageOk = ageDays === null ? true : ageDays >= minAgeDays;
+  let reason: ProfileEligibilityReason = 'ok';
+  if (!karmaOk && !ageOk) reason = 'too_young_and_low_karma';
+  else if (!karmaOk) reason = 'low_karma';
+  else if (!ageOk) reason = 'too_young';
+  return { passes: karmaOk && ageOk, karma, ageDays, reason };
+}
+
 function infoChannelMention(): string {
   return `<#${REDDIT_PROFILE_INFO_CHANNEL_ID}>`;
 }
@@ -199,11 +259,97 @@ export function formatLowKarmaMessage(karma: number, minKarma = REDDIT_PROFILE_M
 }
 
 /** DM'd to the worker when Reddit reports the account as suspended. */
-export function formatBannedDmMessage(): string {
+export function formatBannedDmMessage(
+  minAgeDays: number = REDDIT_PROFILE_MIN_AGE_DAYS,
+  minKarma: number = REDDIT_PROFILE_MIN_KARMA,
+): string {
   return (
     'your reddit account is banned. you can create a new account and start hiring for us — ' +
+    `your new account must be at least ${minAgeDays} days old and have ${minKarma}+ karma. ` +
+    'once you have it, please share the new reddit profile link in your ticket so we can verify it. ' +
     `you will get ₹100 per successful hire. please read ${infoChannelMention()} for more info.`
   );
+}
+
+/**
+ * In-ticket line when a live account is too young. Kept distinct from the
+ * low-karma line so the worker knows which bar they missed: a 200-karma
+ * 3-day-old account needs patience, not more karma. Non-blocking like the
+ * karma line — the ticket stays actionable and a re-shared link re-checks.
+ */
+export function formatTooYoungMessage(
+  karma: number,
+  ageDays: number | null,
+  minAgeDays: number = REDDIT_PROFILE_MIN_AGE_DAYS,
+  minKarma: number = REDDIT_PROFILE_MIN_KARMA,
+): string {
+  const agePart = ageDays === null ? 'your account looks too new' : `your account is only ${ageDays} day(s) old`;
+  return (
+    `${agePart}. we need an account at least ${minAgeDays} days old with at least ${minKarma} karma ` +
+    `(you have ${karma} karma right now). you can keep this account and grow it, or start with an older one — ` +
+    `just share the profile link again once it qualifies. please read ${infoChannelMention()} for more info.`
+  );
+}
+
+/**
+ * Worker DM sent by the daily 7am outreach ban scan when a stored profile is
+ * found suspended. Names the old profile (so a worker with several accounts
+ * knows which one died), states the replacement bars, and points back at the
+ * ticket — the re-shared link is what re-opens the check.
+ */
+export function formatBanRemovalDmMessage(
+  username: string,
+  minAgeDays: number = REDDIT_PROFILE_MIN_AGE_DAYS,
+  minKarma: number = REDDIT_PROFILE_MIN_KARMA,
+): string {
+  return (
+    `your reddit account u/${username} is banned, so you have been removed from the daily outreach list. ` +
+    `you can keep working — just share the new reddit profile link you want to work with in your ticket. ` +
+    `the new account must be at least ${minAgeDays} days old and have ${minKarma}+ karma. ` +
+    `please read ${infoChannelMention()} for more info.`
+  );
+}
+
+/**
+ * In-ticket line posted by the daily ban scan alongside the removal. Tags the
+ * owner (the scan's reviewer) — never the worker, who already got a DM — and
+ * names the dead profile so the ticket transcript explains why outreach
+ * stopped. The worker's fallback (closed DMs) is handled by repeating the DM
+ * text in the ticket instead; this line is always posted.
+ */
+export function formatBanRemovalTicketMessage(ownerId: string, username: string): string {
+  return (
+    `<@${ownerId}> ⚠️ u/${username} is banned — removed this ticket from the daily outreach list. ` +
+    `the worker was DM'd to share a new profile link (14+ days old, 50+ karma) for re-verification.`
+  );
+}
+
+/** In-ticket ask for outreach tickets with no stored profile username. */
+export function formatMissingProfileAskMessage(workerId: string): string {
+  return TICKET_REDDIT_PROFILE_REASK_MESSAGE.replace('{user}', `<@${workerId}>`);
+}
+
+/** Admin DM summary after each daily ban scan run. */
+export function formatBanScanSummary(args: {
+  dayKey: string;
+  selectedTotal: number;
+  checked: number;
+  bannedCount: number;
+  missingAsked: number;
+  skipped: number;
+  sessionIssue: boolean;
+}): string {
+  const lines = [
+    `daily reddit ban scan — ${args.dayKey}`,
+    `outreach tickets: ${args.selectedTotal} | checked: ${args.checked} | banned + removed: ${args.bannedCount} | missing-link asked: ${args.missingAsked} | skipped: ${args.skipped}`,
+  ];
+  if (args.bannedCount === 0 && args.missingAsked === 0 && !args.sessionIssue) {
+    lines.push('nothing to do — all stored profiles are live.');
+  }
+  if (args.sessionIssue) {
+    lines.push('⚠️ the reddit checker session failed (no session / expired / rate-limited) — no one was removed for those tickets; please check the vault.');
+  }
+  return lines.join('\n');
 }
 
 /**

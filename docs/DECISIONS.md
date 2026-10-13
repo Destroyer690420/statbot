@@ -283,3 +283,10 @@
 - **Consequences**: dashboard rebuild to serve v1.6.5 + Tampermonkey update on both watcher tabs (old tabs ignore the `defer` param and behave as today). Pinned by extended `automation-claim-lease.test.ts` (defer phases) + `userscript-hygiene.test.ts`.
 - **Status**: Implemented 2026-10-12, DEPLOYED live 2026-10-12 at `7c3a19d` (app + dashboard rebuild, no migration; backup `rtm-backup-20261012-retry.tar.gz`; 3 services Up, health healthy, live-dist gates green, served v1.6.5, 0 app errors; watcher-tab Tampermonkey update still required).
 
+## Decision 38: Daily 7am suspension scan over the outreach list, age-gated re-entry
+
+- **Context**: Workers go banned mid-employment and stay selected in the daily outreach, burning blast slots; tickets with no stored profile have nothing to check; replacement accounts must be usable (old + karma'd), not fresh throwaways.
+- **Decision**: (1) One 07:00:05 IST sweep (`outreach-ban-scan.service`, pure `outreach-ban-scan-plan`, `setTimeout` chain, exactly-once per IST day key — no cron, no queue, no migration): every `selected` outreach ticket's stored `profileUsername` runs the existing vaulted `lookupRedditProfile`; `suspended` alone removes (`selected=false`, `BANNED` stamp, worker DM + owner ticket tag + admin summary DM, `OUTREACH_MESSAGE_SENT` audit reuse); `not_found`/session/rate/error never remove; missing username gets an in-ticket tagged ask. (2) `BANNED` is no longer terminal (only `PASSED` is) so the re-shared link re-checks. (3) Live profiles gate karma (50) AND age (14d from `created_utc`, missing = pass) in one `evaluateProfileEligibility`; too-young persists actionable `LOW_KARMA` with its own message.
+- **Consequences**: no schema/env change; per-ticket best-effort (never throws); session outage removes nobody and flags the admin DM. Pinned by `outreach-ban-scan-plan` + `outreach-ban-scan-age` + `outreach-ban-scan` suites.
+- **Status**: Implemented 2026-10-14, BUILT NOT deployed (app rebuild only; 81/1097 green, typecheck + build clean).
+

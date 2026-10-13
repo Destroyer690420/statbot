@@ -356,6 +356,25 @@ export const TICKET_REDDIT_PROFILE_REASK_MESSAGE =
 export const REDDIT_PROFILE_MIN_KARMA = 50;
 
 /**
+ * Minimum Reddit account age (in days) a worker's profile must have to pass.
+ * A replacement account after a ban must be at least this old AND clear the
+ * karma bar. `created_utc` comes from the same `about.json` payload as the
+ * karma counts, so no extra fetch is needed. A missing `created_utc` (old
+ * rows, unexpected payload) never blocks — the karma rule alone decides.
+ */
+export const REDDIT_PROFILE_MIN_AGE_DAYS = 14;
+
+/**
+ * Daily outreach ban scan: every selected outreach ticket's stored Reddit
+ * profile is re-checked once a day at this IST wall-clock time. Suspension
+ * only — low karma / young accounts are never removed by the scan.
+ * IST has no DST; the offset is fixed (see `src/utils/ist-time.ts`).
+ */
+export const OUTREACH_BAN_SCAN_HOUR_IST = 7;
+export const OUTREACH_BAN_SCAN_MIN_IST = 0;
+export const OUTREACH_BAN_SCAN_SEC_IST = 5;
+
+/**
  * The one admin asked to add passing tickets to the daily outreach. A single
  * id rather than the whole staff list: this is a personal approval request,
  * and pinging every admin/manager would notify people who cannot action it.

@@ -7,6 +7,17 @@ export class OnboardingRepository {
   }
 
   /**
+   * Bulk read for the daily 7am ban scan: one query for every selected
+   * outreach ticket instead of one round-trip per ticket.
+   */
+  async findManyByChannelIds(channelIds: string[]) {
+    if (channelIds.length === 0) return [];
+    return getDb().ticketOnboarding.findMany({
+      where: { channelId: { in: channelIds } },
+    });
+  }
+
+  /**
    * Records the welcome AND enrolls the ticket in the Reddit profile check.
    *
    * Deliberately one method, not two. They are always true together (a ticket

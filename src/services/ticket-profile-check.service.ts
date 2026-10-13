@@ -11,12 +11,13 @@ import {
 import { describeLookupFailure, lookupRedditProfile } from './reddit-profile-check.service';
 import {
   asProfileCheckStatus,
-  evaluateKarma,
+  evaluateProfileEligibility,
   extractProfileUsername,
   formatBannedDmMessage,
   formatLowKarmaMessage,
   formatReaskMessage,
   formatTicketApprovalNotice,
+  formatTooYoungMessage,
   formatUnverifiableDm,
   formatUnverifiableMessage,
   formatVerifiedMessage,
@@ -36,13 +37,17 @@ import { getAllAdminIds } from '../utils/permissions';
  *   reply, no link  -> re-ask (capped, so small talk cannot loop forever)
  *   reply, a link   -> Reddit lookup
  *                        suspended          -> DM the worker, mark BANNED
- *                        karma >= 50        -> short verified+guide line in the ticket, DM admin, PASSED
+ *                        karma >= 50 + age >= 14d -> short verified+guide line in the ticket, DM admin, PASSED
  *                        karma <  50        -> "raise your karma" line, LOW_KARMA
+ *                        age < 14d          -> "account too new" line, LOW_KARMA
  *                        could not check    -> retryable nudge, UNVERIFIABLE
  *
- * Non-PASSED states stay actionable on purpose: a worker who raises their
- * karma and re-sends the link gets re-checked instead of being stuck at
- * LOW_KARMA forever. Only PASSED and BANNED are terminal.
+ * Only PASSED is terminal. BANNED stays actionable on purpose: a banned
+ * worker who shares a NEW link is re-checked (the daily 7am outreach scan
+ * relies on this — it removes the ticket from outreach and the re-shared
+ * link must run the lookup again instead of hitting a quiet terminal state).
+ * LOW_KARMA covers both bars (karma and age); the message names which one
+ * missed so the worker fixes the right thing.
  */
 
 /**
@@ -207,11 +212,12 @@ async function runCheck(
   }
 
   if (result.kind === 'ok') {
-    const { status, karma } = evaluateKarma(result.profile);
+    const eligibility = evaluateProfileEligibility(result.profile);
     const linkKarma = result.profile.linkKarma;
     const commentKarma = result.profile.commentKarma;
 
-    if (status === PROFILE_CHECK_PASSED) {
+    if (eligibility.passes) {
+      const karma = eligibility.karma;
       // Short verified+guide line first, stamp second: if the send fails the
       // stamp is not written and the message is retried on the next message
       // rather than lost.
@@ -230,16 +236,27 @@ async function runCheck(
       return;
     }
 
-    // Live account, under the bar.
+    // Live account, under one or both bars. LOW_KARMA is the persisted
+    // status for both (non-terminal, so a re-shared link re-checks); the
+    // message names which bar missed.
     await persist(channelId, PROFILE_CHECK_LOW_KARMA, username, linkKarma, commentKarma);
-    const lowKarmaText = formatLowKarmaMessage(karma);
-    await channel.send(lowKarmaText).catch((error) =>
+    const underText =
+      eligibility.reason === 'too_young' || eligibility.reason === 'too_young_and_low_karma'
+        ? formatTooYoungMessage(eligibility.karma, eligibility.ageDays)
+        : formatLowKarmaMessage(eligibility.karma);
+    await channel.send(underText).catch((error) =>
       logger.warn('Reddit profile check: low-karma message failed', {
         channelId,
         error: error instanceof Error ? error.message : String(error),
       }),
     );
-    logger.info('Reddit profile check: worker under karma bar', { channelId, username, workerId, karma });
+    logger.info('Reddit profile check: worker under bar', {
+      channelId,
+      username,
+      workerId,
+      karma: eligibility.karma,
+      reason: eligibility.reason,
+    });
     return;
   }
 

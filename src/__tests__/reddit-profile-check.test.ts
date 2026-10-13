@@ -117,9 +117,9 @@ describe('totalKarma / evaluateKarma', () => {
 });
 
 describe('status narrowing', () => {
-  it('treats PASSED and BANNED as terminal', () => {
+  it('treats only PASSED as terminal — BANNED stays actionable so a new link re-checks', () => {
     expect(isTerminalProfileStatus('PASSED')).toBe(true);
-    expect(isTerminalProfileStatus('BANNED')).toBe(true);
+    expect(isTerminalProfileStatus('BANNED')).toBe(false);
   });
 
   it('leaves the retryable states actionable so a worker can fix their karma', () => {

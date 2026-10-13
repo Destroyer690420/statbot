@@ -1,6 +1,6 @@
 # BACKGROUND_JOBS.md — Queues, Timers & Scheduled Work
 
-> Verified against `src/index.ts`, `src/scheduler/**`, `src/services/survival*` on 2026-10-08. **There is no cron in this project.** Everything is BullMQ delayed jobs or in-process `setInterval`.
+> Verified against `src/index.ts`, `src/scheduler/**`, `src/services/survival*` on 2026-10-08. **There is no cron in this project.** Everything is BullMQ delayed jobs, in-process `setInterval`, or self-rescheduling `setTimeout` chains. Daily 7am ban scan added 2026-10-14 (BUILT, NOT deployed).
 
 ---
 
@@ -47,6 +47,7 @@ Timer starts at `recordSubmission` (`submittedAt`, latest URL wins — old job c
 | Survival proof cleanup | 60 min | immediately (interval) | `survivalStorageService.cleanup()` — delete files >15d old, prune empty dirs | logged |
 | Reminder re-hydration | 30 min | immediately (interval; also at boot step 5) | `rehydrateReminders()` — recreate missing primary/retry jobs from DB | logged |
 | Survival re-hydration | 30 min (same tick) | immediately (interval; also at boot) | `rehydrateSurvivalJobs()` — recreate missing `survival-{taskId}` jobs for POST tasks with NULL/PENDING proof submitted <24h ago (older windows are left without proof, not backfilled) | logged |
+| Outreach ban scan | once daily at 07:00:05 IST (`setTimeout` chain, exactly-once per IST day key) | next 07:00:05 IST after boot (late grace 5 min) | `runOutreachBanScan()` — re-check every selected outreach ticket's stored Reddit profile for suspension; banned → deselect + worker DM + owner ticket tag + admin summary DM; missing username → in-ticket ask | logged; never throws; stopped on shutdown |
 
 ## 4. Re-Hydration Details (`rehydrateReminders`)
 
@@ -66,5 +67,6 @@ Counts logged; this is the crash-recovery mechanism.
 
 - No cron entries, no `node-cron`, no `setInterval`-based payout automation.
 - No queue-based work other than reminders + survival screenshots.
+- Daily/hourly triggers are `setTimeout` chains, not cron (hourly scan + 7am ban scan).
 - No scheduled Discord purge/cleanup of delivery messages (deleted only on task deletion/reassign best-effort).
 - No health-check consumer (the `/health` endpoint exists but nothing polls it).

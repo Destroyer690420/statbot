@@ -77,13 +77,14 @@ ticket created  -> welcome ("share your reddit profile link") + enroll PENDING
 reply, no link  -> re-ask (capped at REDDIT_PROFILE_MAX_REASKS = 3)
 reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
                      suspended        -> DM the worker "make a new account", BANNED
-                     karma >= 50      -> short verified+guide line in the ticket,
+                     karma >= 50 + age >= 14d -> short verified+guide line in the ticket,
                                          DM approver + add-to-outreach button, PASSED
                      karma <  50      -> "raise your karma" line, LOW_KARMA
+                     age < 14d        -> "account too new" line, LOW_KARMA
                      could not check  -> retryable nudge, UNVERIFIABLE
 ```
 
-**Verdicts** live in `TicketOnboarding.profileCheckStatus` (plain TEXT, no DB enum — same convention as `Task.formatCheckStatus`). `PASSED` and `BANNED` are **terminal**; `PENDING`, `LOW_KARMA` and `UNVERIFIABLE` stay actionable so a worker who fixes their karma and re-sends the link is re-checked instead of being stuck.
+**Verdicts** live in `TicketOnboarding.profileCheckStatus` (plain TEXT, no DB enum — same convention as `Task.formatCheckStatus`). Only `PASSED` is **terminal**; `BANNED`, `PENDING`, `LOW_KARMA` and `UNVERIFIABLE` stay actionable so a banned worker who shares a NEW link is re-checked (the daily 7am outreach scan depends on this) and a worker who fixes karma/age and re-sends the link is re-checked instead of being stuck.
 
 **NULL means "not enrolled" and the flow does not touch the ticket.** This is the safety mechanism for the ~250 tickets that predate the feature: they have no `profileCheckStatus`, so they are never re-asked. An unrecognised status string is also treated as not enrolled (fails safe). A ticket whose welcome never landed never enrolls, so it is not silently asked for a link later.
 
@@ -92,9 +93,9 @@ reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
 **The two rejection messages are deliberately different remedies, and neither is a dead end.**
 
 - **LOW_KARMA** is **not a rejection** — hiring below the bar is allowed. The message must therefore never imply the worker is blocked: it states their karma, frames 50 as a *recommendation*, and spells out the alternative that they can start hiring right now with the karma they have. It must also never say "you need at least N to start" (false — they can hire below it) or "then you can start hiring" (framing karma as a prerequisite), and must never suggest creating a new account.
-- **BANNED** is the only case that tells someone to make a new account, because there the account genuinely is unusable.
+- **BANNED** is the only case that tells someone to make a new account, because there the account genuinely is unusable. The message states the replacement bars (14+ days old, 50+ karma) and asks for the new link in the ticket.
 
-**Karma rule**: `link_karma + comment_karma >= REDDIT_PROFILE_MIN_KARMA` (50). Award karma is excluded deliberately — it is not what subreddit AutoModerator karma filters count, so including it would let an account pass a gate its posts would still fail. Applied in exactly one place, `evaluateKarma`.
+**Karma + age rule**: `link_karma + comment_karma >= REDDIT_PROFILE_MIN_KARMA` (50) AND account age (`created_utc`) >= `REDDIT_PROFILE_MIN_AGE_DAYS` (14d). Award karma is excluded deliberately — it is not what subreddit AutoModerator karma filters count, so including it would let an account pass a gate its posts would still fail. Applied in exactly one place, `evaluateProfileEligibility` (the old `evaluateKarma` stays for the karma-only unit pin). A missing `created_utc` never blocks — karma alone decides. Too-young accounts persist `LOW_KARMA` (actionable) with a distinct "account too new" line.
 
 **What counts as a profile link** (`extractProfileUsername`, pure + unit-tested): a Reddit profile URL on any host, with or without a scheme, `/user/` or `/u/`, with query/fragment/trailing punctuation — or a bare `u/name`. A **post permalink, a subreddit URL, plain chat, and a bare word are all rejected** so they trigger a re-ask. A message naming **two different** profiles is treated as ambiguous and re-asked rather than guessed at, because checking the wrong account hands a real verdict to the wrong person.
 
