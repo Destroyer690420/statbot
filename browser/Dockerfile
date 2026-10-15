@@ -28,11 +28,15 @@ RUN apk add --no-cache \
 # Build fails loudly here (not silently browser-without-TM) if the download
 # or unpack breaks, so a bad fetch can never ship a TM-less image as "fine".
 ARG TM_CRX_URL="https://clients2.google.com/service/update2/crx?response=redirect&prodversion=120.0&acceptformat=crx2,crx3&x=id%3Ddhdgffkkebhmkfjojejmpbldmpobfkfo%26uc"
+# NOTE: unzip exits 1 on .crx files ("extra bytes at beginning") even when it
+# extracts everything perfectly — so its exit code is ignored and the content
+# tests below are the real gate. A genuinely broken download fails those.
 RUN curl -fsSL --retry 3 --max-time 120 "$TM_CRX_URL" -o /tmp/tm.crx \
   && mkdir -p /opt/tm \
-  && unzip -o -q /tmp/tm.crx -d /opt/tm \
+  && (unzip -o -q /tmp/tm.crx -d /opt/tm || true) \
   && rm -f /tmp/tm.crx \
   && test -f /opt/tm/manifest.json \
+  && test -f /opt/tm/background.js \
   && test -d /opt/tm/_locales \
   && grep -rqi tampermonkey /opt/tm/_locales/en/messages.json
 
