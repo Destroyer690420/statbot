@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.6.1
+// @version      1.6.2
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+ * v1.6.2 — Submit View is now silent on success: the screenshot attaches to
+ * the dialog and the preview opens with no alert popup (same rule as v1.6.1
+ * Submit Link below). The alert only appears when something needs attention —
+ * no insight data, no screenshot uploaded, dialog won't open, or a real
+ * error — so the manager is interrupted only when action is needed.
  * v1.6.1 — Submit Link autofill is now silent on success: the link is pasted
  * with no alert popup. The alert only appears when there is no link to fill
  * yet (or on a real error), so the manager is interrupted only when action
@@ -516,10 +521,9 @@
         return;
       }
       attachImageToDialog(dialog, blob, fileName);
-      alert(
-        '✅ Screenshot attached for step ' + step + ' (' + data.reminderType + ').\n' +
-        'Read the view count from the preview (left), enter it in the dialog, click Submit, and verify success in GoPartTime.',
-      );
+      // Silent on success (v1.6.2): the dialog is open with the screenshot
+      // attached and the preview panel shows the count to enter — no popup.
+      // Every failure above and below still alerts, so quiet means done.
     } catch (err) {
       alert('⚠️ ' + (err && err.message ? err.message : 'Submit View failed.'));
     } finally {
