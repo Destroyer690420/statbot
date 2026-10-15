@@ -4,12 +4,11 @@ import {
   Bot,
   Play,
   Square,
-  FlaskConical,
   KeyRound,
   Ban,
-  Send,
   Loader2,
   RefreshCw,
+  Search,
 } from 'lucide-react';
 import {
   getAutomationStatus,
@@ -19,7 +18,6 @@ import {
   getAllowedSubreddits,
   getAutomationCompanion,
   getAutomationClaims,
-  updateAutomationSettings,
   startAutomationCycle,
   stopAutomation,
   addBlockedSubreddit,
@@ -27,29 +25,15 @@ import {
   addAllowedSubreddit,
   removeAllowedSubreddit,
   saveAutomationSession,
-  sendTestContact,
-  sendTestAccept,
-  sendRehearse,
 } from '../api/client';
-
-function errMsg(e: unknown): string {
-  return (e as { response?: { data?: { message?: string } } }).response?.data?.message || (e as Error).message || 'error';
-}
 
 export function Automation() {
   const queryClient = useQueryClient();
   const [subInput, setSubInput] = useState('');
+  const [blockedSearch, setBlockedSearch] = useState('');
   const [allowInput, setAllowInput] = useState('');
   const [session, setSession] = useState({ sessionToken: '', csrfToken: '', nextAction: '' });
   const [selectedCycle, setSelectedCycle] = useState<string | null>(null);
-  const [testChannel, setTestChannel] = useState('');
-  const [testTaskId, setTestTaskId] = useState('');
-  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
-  const [rehearseTask, setRehearseTask] = useState('');
-  const [rehearseChannel, setRehearseChannel] = useState('');
-  const [rehearseSub, setRehearseSub] = useState('');
-  const [rehearseLive, setRehearseLive] = useState(false);
-  const [rehearseResult, setRehearseResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   const statusQuery = useQuery({ queryKey: ['automation-status'], queryFn: getAutomationStatus, refetchInterval: 60000 });
   const cyclesQuery = useQuery({ queryKey: ['automation-cycles'], queryFn: getAutomationCycles, refetchInterval: 60000 });
@@ -80,10 +64,6 @@ export function Automation() {
     queryClient.invalidateQueries({ queryKey: ['automation-claims'] });
   };
 
-  const settingsMutation = useMutation({
-    mutationFn: updateAutomationSettings,
-    onSuccess: invalidate,
-  });
   const startMutation = useMutation({ mutationFn: () => startAutomationCycle(true), onSuccess: invalidate });
   const stopMutation = useMutation({ mutationFn: stopAutomation, onSuccess: invalidate });
   const addBlockedMutation = useMutation({
@@ -115,51 +95,12 @@ export function Automation() {
       invalidate();
     },
   });
-  const testContactMutation = useMutation({
-    mutationFn: () => sendTestContact(testChannel.trim(), undefined),
-    onSuccess: (r) => {
-      setTestResult({ ok: true, text: `Contact sent: ${r.data?.worker?.name || '?'} in #${r.data?.channel?.name || '?'} (5-min window)` });
-      invalidate();
-    },
-    onError: (e: unknown) => setTestResult({ ok: false, text: `Contact failed: ${errMsg(e)}` }),
-  });
-  const testAcceptMutation = useMutation({
-    mutationFn: (accept: boolean) => sendTestAccept(testTaskId.trim(), testChannel.trim(), accept),
-    onSuccess: (r) => {
-      setTestResult({
-        ok: true,
-        text: r.data?.wouldAccept
-          ? `WOULD ACCEPT #${testTaskId} (${r.data?.reason || ''})`
-          : `ACCEPTED #${testTaskId} — push it to the ticket with the Send Task button next.`,
-      });
-      invalidate();
-    },
-    onError: (e: unknown) => setTestResult({ ok: false, text: `Accept failed: ${errMsg(e)}` }),
-  });
-  const rehearseMutation = useMutation({
-    mutationFn: () =>
-      sendRehearse({
-        externalTaskId: rehearseTask.trim(),
-        channelId: rehearseChannel.trim(),
-        subreddit: rehearseSub.trim() || null,
-        live: rehearseLive,
-      }),
-    onSuccess: (r) => {
-      const d = r.data || {};
-      setRehearseResult({
-        ok: true,
-        text: d.claimQueued
-          ? `Claim queued for #${rehearseTask.trim()} — the browser picks it up within ~30s, accepts, and pushes to the ticket.`
-          : d.wouldAccept
-            ? `Checks pass for #${rehearseTask.trim()} (${d.reason || 'ready'}) — tick Live + dry-run OFF to fire for real.`
-            : `Not ready: ${d.reason || 'validation failed'}`,
-      });
-      invalidate();
-    },
-    onError: (e: unknown) => setRehearseResult({ ok: false, text: `Rehearse failed: ${errMsg(e)}` }),
-  });
 
   const live = !!status?.enabled && !status?.dryRun;
+
+  const blockedFiltered = blockedSearch.trim()
+    ? blocked.filter((b) => b.subreddit.toLowerCase().includes(blockedSearch.trim().toLowerCase()))
+    : blocked;
 
   return (
     <div className="space-y-6">
@@ -214,6 +155,67 @@ export function Automation() {
         </div>
       </div>
 
+      {/* Blocked subreddits — top for quick adds + search */}
+      <div className="glass-card p-4 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Ban className="w-4 h-4 text-primary-400" />
+          <h2 className="text-base font-semibold text-text-primary">Blocked Subreddits</h2>
+        </div>
+        <p className="text-sm text-dark-400 -mt-2">Exact match only — blocking aiagents never blocks aiagents2.</p>
+        <div className="flex gap-2">
+          <input
+            className="input-field flex-1 font-mono text-sm"
+            placeholder="r/aiagents"
+            value={subInput}
+            onChange={(e) => setSubInput(e.target.value)}
+          />
+          <button
+            className="btn-secondary text-sm px-4 py-2 shrink-0"
+            disabled={!subInput.trim() || addBlockedMutation.isPending}
+            onClick={() => addBlockedMutation.mutate(subInput.trim())}
+          >
+            Add
+          </button>
+        </div>
+        <div className="relative">
+          <Search className="w-4 h-4 text-dark-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            className="input-field w-full text-sm pl-9"
+            placeholder={`Search ${blocked.length} blocked…`}
+            value={blockedSearch}
+            onChange={(e) => setBlockedSearch(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          {blockedQuery.isLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+            </div>
+          ) : blocked.length === 0 ? (
+            <p className="text-sm text-dark-400">None blocked.</p>
+          ) : blockedFiltered.length === 0 ? (
+            <p className="text-sm text-dark-400">No blocked subs match “{blockedSearch.trim()}”.</p>
+          ) : (
+            <>
+              {blockedSearch.trim() && (
+                <p className="text-xs text-dark-500">{blockedFiltered.length} of {blocked.length} shown</p>
+              )}
+              {blockedFiltered.map((b) => (
+                <div key={b.subreddit} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60">
+                  <span className="font-mono text-sm text-dark-100">r/{b.subreddit}</span>
+                  <button
+                    className="text-danger text-sm hover:underline shrink-0 ml-3"
+                    onClick={() => removeBlockedMutation.mutate(b.subreddit)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {[
@@ -253,203 +255,6 @@ export function Automation() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Switches */}
-      <div className="glass-card p-4 sm:p-6 space-y-3">
-        <h2 className="text-base font-semibold text-text-primary">Switches</h2>
-        {status ? (
-          <div className="flex flex-col gap-3 text-sm">
-            {([
-              ['enabled', 'Enabled', 'Master switch — queue tick and manual runs'],
-              ['dryRun', 'Dry-run', 'Validate + log only, never blast or accept'],
-              ['pollEnabled', 'Server polling', 'Dormant — the browser watcher does all scanning'],
-            ] as const).map(([key, label, hint]) => (
-              <label key={key} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60 cursor-pointer">
-                <span className="min-w-0">
-                  <span className="block text-dark-100">{label}</span>
-                  <span className="block text-xs text-dark-500 mt-0.5">{hint}</span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={!!status[key]}
-                  onChange={(e) => settingsMutation.mutate({ enabled: status.enabled, dryRun: status.dryRun, pollEnabled: status.pollEnabled, [key]: e.target.checked })}
-                  className="accent-primary-500 w-4 h-4 shrink-0 ml-3"
-                />
-              </label>
-            ))}
-          </div>
-        ) : (
-          <div className="flex justify-center py-6">
-            <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
-          </div>
-        )}
-        <p className="text-xs text-dark-500">
-          Real acceptance additionally requires GOPARTTIME_AUTO_ACCEPT=true on the server.
-        </p>
-      </div>
-
-      {/* Manual test */}
-      <div className="glass-card p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <FlaskConical className="w-4 h-4 text-primary-400" />
-          <h2 className="text-base font-semibold text-text-primary">Manual Single-Task Test</h2>
-        </div>
-        <div className="grid md:grid-cols-2 gap-2">
-          <input
-            className="input-field font-mono text-sm"
-            placeholder="Ticket channel ID"
-            value={testChannel}
-            onChange={(e) => setTestChannel(e.target.value)}
-          />
-          <input
-            className="input-field font-mono text-sm"
-            placeholder="GoPartTime task ID"
-            value={testTaskId}
-            onChange={(e) => setTestTaskId(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col md:flex-row gap-2">
-          <button
-            className="btn-secondary flex items-center justify-center gap-1.5 text-sm py-2 px-4"
-            disabled={!testChannel.trim() || testContactMutation.isPending}
-            onClick={() => testContactMutation.mutate()}
-          >
-            {testContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            1. Send availability message
-          </button>
-          <button
-            className="btn-secondary flex items-center justify-center gap-1.5 text-sm py-2 px-4"
-            disabled={!testChannel.trim() || !testTaskId.trim() || testAcceptMutation.isPending}
-            onClick={() => testAcceptMutation.mutate(false)}
-          >
-            2. Dry-run accept check
-          </button>
-          <button
-            className="btn-danger flex items-center justify-center gap-1.5 text-sm py-2 px-4"
-            disabled={!testChannel.trim() || !testTaskId.trim() || testAcceptMutation.isPending}
-            onClick={() => {
-              if (!window.confirm(`Really ACCEPT task #${testTaskId.trim()} on GoPartTime? This claims it for real.`)) return;
-              testAcceptMutation.mutate(true);
-            }}
-          >
-            3. Real accept
-          </button>
-        </div>
-        {testResult && (
-          <p className={`text-sm ${testResult.ok ? 'text-success' : 'text-danger'}`}>
-            {testResult.ok ? '' : ''}{testResult.text}
-          </p>
-        )}
-        <p className="text-xs text-dark-500">
-          Step 3 needs a CONFIRMED reply within 5 min, dry-run OFF, and server GOPARTTIME_AUTO_ACCEPT=true.
-        </p>
-      </div>
-
-      {/* Rehearse (burst claim path) */}
-      <div className="glass-card p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <FlaskConical className="w-4 h-4 text-primary-400" />
-          <h2 className="text-base font-semibold text-text-primary">Rehearse One Task</h2>
-        </div>
-        <p className="text-sm text-dark-400 -mt-2">
-          Queues a real companion claim (drawer accept + ticket push). Without Live it only runs the pre-flight checks.
-        </p>
-        <div className="grid md:grid-cols-3 gap-2">
-          <input
-            className="input-field font-mono text-sm"
-            placeholder="GoPartTime task ID"
-            value={rehearseTask}
-            onChange={(e) => setRehearseTask(e.target.value)}
-          />
-          <input
-            className="input-field font-mono text-sm"
-            placeholder="Ticket channel ID"
-            value={rehearseChannel}
-            onChange={(e) => setRehearseChannel(e.target.value)}
-          />
-          <input
-            className="input-field font-mono text-sm"
-            placeholder="Subreddit (optional)"
-            value={rehearseSub}
-            onChange={(e) => setRehearseSub(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col md:flex-row gap-2 md:items-center">
-          <label className="flex items-center gap-2 px-4 py-2 rounded-xl bg-dark-900/60 border border-dark-700/60 cursor-pointer text-sm text-dark-100">
-            <input
-              type="checkbox"
-              checked={rehearseLive}
-              onChange={(e) => setRehearseLive(e.target.checked)}
-              className="accent-red-500 w-4 h-4"
-            />
-            Live — really accept on GoPartTime
-          </label>
-          <button
-            className={rehearseLive ? 'btn-danger flex items-center justify-center gap-1.5 text-sm py-2 px-4' : 'btn-secondary flex items-center justify-center gap-1.5 text-sm py-2 px-4'}
-            disabled={!rehearseTask.trim() || !rehearseChannel.trim() || rehearseMutation.isPending}
-            onClick={() => {
-              if (rehearseLive && !window.confirm(`Really ACCEPT task #${rehearseTask.trim()} on GoPartTime and push it to ticket ${rehearseChannel.trim()}?`)) return;
-              rehearseMutation.mutate();
-            }}
-          >
-            {rehearseMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {rehearseLive ? 'Fire live claim' : 'Dry-check only'}
-          </button>
-        </div>
-        {rehearseResult && (
-          <p className={`text-sm ${rehearseResult.ok ? 'text-success' : 'text-danger'}`}>
-            {rehearseResult.ok ? '' : ''}{rehearseResult.text}
-          </p>
-        )}
-        <p className="text-xs text-dark-500">
-          Live needs dry-run OFF plus server GOPARTTIME_AUTO_ACCEPT=true, and the watcher tab open on /tasks.
-        </p>
-      </div>
-
-      {/* Blocked subreddits */}
-      <div className="glass-card p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <Ban className="w-4 h-4 text-primary-400" />
-          <h2 className="text-base font-semibold text-text-primary">Blocked Subreddits</h2>
-        </div>
-        <p className="text-sm text-dark-400 -mt-2">Exact match only — blocking aiagents never blocks aiagents2.</p>
-        <div className="flex gap-2">
-          <input
-            className="input-field flex-1 font-mono text-sm"
-            placeholder="r/aiagents"
-            value={subInput}
-            onChange={(e) => setSubInput(e.target.value)}
-          />
-          <button
-            className="btn-secondary text-sm px-4 py-2 shrink-0"
-            disabled={!subInput.trim() || addBlockedMutation.isPending}
-            onClick={() => addBlockedMutation.mutate(subInput.trim())}
-          >
-            Add
-          </button>
-        </div>
-        <div className="space-y-2">
-          {blockedQuery.isLoading ? (
-            <div className="flex justify-center py-6">
-              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
-            </div>
-          ) : blocked.length === 0 ? (
-            <p className="text-sm text-dark-400">None blocked.</p>
-          ) : (
-            blocked.map((b) => (
-              <div key={b.subreddit} className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60">
-                <span className="font-mono text-sm text-dark-100">r/{b.subreddit}</span>
-                <button
-                  className="text-danger text-sm hover:underline shrink-0 ml-3"
-                  onClick={() => removeBlockedMutation.mutate(b.subreddit)}
-                >
-                  Remove
-                </button>
-              </div>
-            ))
-          )}
-        </div>
       </div>
 
       {/* Allowed subreddits (cleared quarantine verdicts) */}
