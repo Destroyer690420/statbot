@@ -264,6 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-15**: **Automation page cleanup DEPLOYED live at `ff3a32c`** (dashboard-only rebuild; served chunk verified). Switches/Manual/Rehearse cards removed; Blocked Subreddits on top with search.
 - **2026-10-15**: **Crypto ban DEPLOYED live at `1595292`** (app + dashboard rebuild, no migration; backup `rtm-backup-20261016-crypto.tar.gz`; verified healthy boot, live-dist crypto gates, served watcher v1.6.7, 0 app errors). 9 crypto terms ban in title/content/names (`auto-content:crypto`). **Watcher-tab Tampermonkey update to v1.6.7 required.** Full suite 81/1112 green.
 - **2026-10-15**: **Ban-scan asks removed DEPLOYED live at `41dc539`** (app-only rebuild; old ask code absent from live `dist`; clean boot). The 7am scan never asks for profile links again — ID-less tickets skip silently. This morning's 34 ask messages deleted via REST (0 failed; 7 same-text daytime-flow messages kept).
 - **2026-10-15**: **Accepted auto-refresh DEPLOYED live at `e50d2c9`** (dashboard-only rebuild; served chunk verified with `refetchInterval:3e4`; app/redis untouched). Accepted queue re-fetches every 30s — new watcher accepts appear without manual reload.
