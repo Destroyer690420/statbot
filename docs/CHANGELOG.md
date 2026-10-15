@@ -3,8 +3,9 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-15
-### Built (NOT deployed — needs app rebuild, no migration)
-- **Legacy-guide block fix (ticket-0457).** A worker's shared link was silently ignored: ~280 pre-existing tickets carry `guideSentAt` from the Sep-2026 auto-guide era with no verdict ever recorded, and `handleTicketProfileFlow` treated any `guideSentAt` as "pass reward already given" — returning before the lookup with zero log lines, so nothing was stored and the 7am scan re-asked the next morning. `guideSentAt` no longer gates (only `PASSED` settles, via the terminal check); regression test pins a `PENDING` + legacy-`guideSentAt` ticket re-checking. Full suite 81/1098 green, typecheck clean. Affected workers must resend their link once — old messages are never re-read.
+### Deployed (2026-10-15 at `122d476` — app-only rebuild, no migration)
+- **Legacy-guide block fix live** (`161.118.164.85`; backup `rtm-backup-20261015-guidefix.tar.gz`; dashboard/redis untouched; host bundle removed). Verified: 3 services Up, health healthy (DB+Redis), boot "All systems online!" + ban-scan rescheduled, old-guard prose absent from live `dist`, 0 app errors. `guideSentAt` no longer gates the profile flow (only `PASSED` settles); ~280 legacy tickets unblocked, regression-tested; full suite 81/1098 green. Affected workers resend their link once.
+- **Eligible-unadded backfill: 3 approver DMs sent** (same DM + add-button as a fresh pass; read-only on verdicts). `planet-bee626` (70 karma), `martha___jonas` (59 karma), `akshat12122` (51 karma) — each freshly re-checked (50+ karma, 14+ days) and missing from outreach. 43 already added, rest ineligible/unverifiable; 0 banned; first attempt throttled mid-run (`rate_limited` tail), retry clean. Audit `OUTREACH_MESSAGE_SENT` (`userId='eligible-backfill'`).
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 

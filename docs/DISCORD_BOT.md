@@ -84,7 +84,7 @@ reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
                      could not check  -> retryable nudge, UNVERIFIABLE
 ```
 
-**Verdicts** live in `TicketOnboarding.profileCheckStatus` (plain TEXT, no DB enum — same convention as `Task.formatCheckStatus`). Only `PASSED` is **terminal**; `BANNED`, `PENDING`, `LOW_KARMA` and `UNVERIFIABLE` stay actionable so a banned worker who shares a NEW link is re-checked (the daily 7am outreach scan depends on this) and a worker who fixes karma/age and re-sends the link is re-checked instead of being stuck.
+**Verdicts** live in `TicketOnboarding.profileCheckStatus` (plain TEXT, no DB enum — same convention as `Task.formatCheckStatus`). Only `PASSED` is **terminal**; `BANNED`, `PENDING`, `LOW_KARMA` and `UNVERIFIABLE` stay actionable so a banned worker who shares a NEW link is re-checked (the daily 7am outreach scan depends on this) and a worker who fixes karma/age and re-sends the link is re-checked instead of being stuck. `guideSentAt` never gates the flow: ~280 pre-existing tickets carry one from the Sep-2026 auto-guide with no verdict ever recorded, and gating on it silently dropped their links (ticket-0457, fixed 2026-10-15).
 
 **NULL means "not enrolled" and the flow does not touch the ticket.** This is the safety mechanism for the ~250 tickets that predate the feature: they have no `profileCheckStatus`, so they are never re-asked. An unrecognised status string is also treated as not enrolled (fails safe). A ticket whose welcome never landed never enrolls, so it is not silently asked for a link later.
 
