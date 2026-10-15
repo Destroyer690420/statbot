@@ -162,6 +162,33 @@ describe('tickets that must not be touched', () => {
     expect(mockLookup).not.toHaveBeenCalled();
   });
 
+  it('re-checks a legacy ticket whose guide predates the profile check', async () => {
+    // Regression (ticket-0457, 2026-10-14): ~280 pre-existing tickets carry a
+    // guideSentAt from the old auto-guide era with no verdict ever recorded.
+    // Gating on guideSentAt silently dropped their links — the worker's reply
+    // produced zero log lines, nothing was stored, and the 7am scan re-asked
+    // the next morning. Only PASSED settles a ticket.
+    mockFindByChannelId.mockResolvedValue({
+      profileCheckStatus: 'PENDING',
+      profileReaskCount: 0,
+      guideSentAt: new Date('2026-09-28T14:47:36.404Z'),
+    });
+
+    const handled = await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: 'https://www.reddit.com/user/some_worker',
+    });
+
+    expect(handled).toBe(true);
+    expect(mockLookup).toHaveBeenCalledWith('some_worker');
+    expect(mockMarkProfileChecked).toHaveBeenCalledWith(
+      'chan-1',
+      expect.objectContaining({ status: 'PASSED', username: 'some_worker' }),
+    );
+  });
+
   it('re-checks a banned worker who shares a new link (BANNED is not terminal)', async () => {
     // The daily 7am scan removes banned workers from outreach and tells them
     // to share a new link — that link must run the lookup instead of hitting

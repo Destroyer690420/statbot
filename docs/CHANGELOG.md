@@ -2,6 +2,12 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-10-15
+### Built (NOT deployed — needs app rebuild, no migration)
+- **Legacy-guide block fix (ticket-0457).** A worker's shared link was silently ignored: ~280 pre-existing tickets carry `guideSentAt` from the Sep-2026 auto-guide era with no verdict ever recorded, and `handleTicketProfileFlow` treated any `guideSentAt` as "pass reward already given" — returning before the lookup with zero log lines, so nothing was stored and the 7am scan re-asked the next morning. `guideSentAt` no longer gates (only `PASSED` settles, via the terminal check); regression test pins a `PENDING` + legacy-`guideSentAt` ticket re-checking. Full suite 81/1098 green, typecheck clean. Affected workers must resend their link once — old messages are never re-read.
+
+> Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
+
 ## 2026-10-14
 ### Ran (one-off operator data changes, no code change)
 - **Enrolled the 349 unenrolled missing-ID tickets → `PENDING`** (one `UPDATE`, no messages sent): pre-existing tickets never entered the profile check (NULL status), so their workers' replies were ignored and links went unstored. Now any profile link sent in those tickets runs the normal lookup (suspension/50-karma/14-day gate) and is stored in `TicketOnboarding.profileUsername` with a verdict. First proof within a minute: `significant_tough_18` replied to the bulk ask and went `PASSED`. Note: workers who sent links *before* enrollment must resend — old messages are never re-read.

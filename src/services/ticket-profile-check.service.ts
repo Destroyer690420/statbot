@@ -313,8 +313,13 @@ export async function handleTicketProfileFlow(args: {
   if (!status) return false;
   // Already settled: nothing more to say in this ticket.
   if (isTerminalProfileStatus(status)) return false;
-  // The guide is the pass reward; if it already went out there is nothing to do.
-  if (onboarding.guideSentAt) return false;
+  // NOTE: guideSentAt deliberately does NOT gate here. It used to ("the guide
+  // is the pass reward"), but ~280 pre-existing tickets carry a guideSentAt
+  // from the 2026-09-28 auto-guide era without ever going through a profile
+  // check — gating on it silently dropped every link those workers shared
+  // (ticket-0457, 2026-10-14: link replied, zero log lines, username never
+  // stored, 7am scan re-asked the next morning). PASSED already exits via the
+  // terminal check above, which is the only settled state that matters.
 
   // Only the ticket's own worker drives the flow, resolved the same way the
   // welcome and the old guide handler resolved them: exactly one non-bot,
