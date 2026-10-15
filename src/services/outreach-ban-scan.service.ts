@@ -11,7 +11,6 @@ import {
   formatBanRemovalDmMessage,
   formatBanRemovalTicketMessage,
   formatBanScanSummary,
-  formatMissingProfileAskMessage,
 } from '../utils/reddit-profile-link';
 import { getIstDayBoundaries } from '../utils/ist-time';
 import { getAllAdminIds } from '../utils/permissions';
@@ -33,8 +32,11 @@ import { planNextBanScan } from './outreach-ban-scan-plan';
  *   stored username + anything else             -> skip, never remove.
  *     `not_found` is deliberately NOT a removal: shadowbans look identical
  *     to typos, and a false removal would drop a healthy worker.
- *   no stored username                          -> ask in the ticket, tagging
- *     the worker, so the next scan has something to check.
+ *   no stored username                          -> skip silently. The scan never
+ *     asks for profile links (owner directive 2026-10-16): a ticket with
+ *     nothing stored has nothing to check, and re-asking every morning was
+ *     pure noise. If the worker shares a link on their own, the ticket
+ *     profile flow stores + verifies it and the next scan picks it up.
  *
  * Suspension-only by owner directive. Karma/age are enforced on (re-)share
  * by the ticket profile check, never by this scan.
@@ -174,21 +176,10 @@ export async function runOutreachBanScan(client: Client, opts: { dayKey?: string
       username = typeof username === 'string' && username.trim() ? username.trim().toLowerCase() : null;
 
       if (!username) {
-        if (!workerId) {
-          result.skipped.push({ channelId, reason: 'no_worker' });
-          continue;
-        }
-        try {
-          await channel.send(formatMissingProfileAskMessage(workerId));
-          result.missingAsked.push({ channelId, workerId });
-          logger.info('Ban scan: asked for missing profile link', { channelId, workerId });
-        } catch (error) {
-          result.skipped.push({ channelId, reason: 'ask_failed' });
-          logger.warn('Ban scan: missing-link ask failed', {
-            channelId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+        // Owner directive 2026-10-16: NEVER ask for profile links. A ticket
+        // with no stored username has nothing to check — skip it silently and
+        // move on. (The old code sent an in-ticket ask here every morning.)
+        result.skipped.push({ channelId, reason: 'no_username' });
         continue;
       }
 

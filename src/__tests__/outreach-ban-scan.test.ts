@@ -169,7 +169,7 @@ describe('runOutreachBanScan', () => {
     expect(ticketText).toContain(`<@${OWNER_USER_ID}>`);
   });
 
-  it('asks in-ticket (tagging the worker) when no profile username is stored', async () => {
+  it('never asks for a profile link — missing usernames skip silently', async () => {
     mockOutreachFindAll.mockResolvedValue([{ channelId: 'chan-1', selected: true }]);
     mockOnboardingFindMany.mockResolvedValue([{ channelId: 'chan-1', profileUsername: null }]);
     mockOnboardingFindSingle.mockResolvedValue({ channelId: 'chan-1', profileUsername: null });
@@ -178,13 +178,14 @@ describe('runOutreachBanScan', () => {
 
     const result = await runOutreachBanScan(client, { dayKey: '2026-9-13' });
 
-    expect(result.missingAsked).toHaveLength(1);
+    // Owner directive 2026-10-16: no asks, ever. Nothing stored = nothing to
+    // check = silent skip. The ticket gets zero messages.
+    expect(result.missingAsked).toHaveLength(0);
     expect(result.banned).toHaveLength(0);
+    expect(result.skipped).toEqual([{ channelId: 'chan-1', reason: 'no_username' }]);
     expect(mockUpsertSelection).not.toHaveBeenCalled();
     expect(mockLookup).not.toHaveBeenCalled();
-    const ticketText = sent.map((p) => (typeof p === 'string' ? p : JSON.stringify(p))).join('\n');
-    expect(ticketText).toContain(`<@${WORKER}>`);
-    expect(ticketText.toLowerCase()).toContain('reddit profile link');
+    expect(sent).toHaveLength(0);
   });
 
   it('leaves live accounts alone', async () => {
