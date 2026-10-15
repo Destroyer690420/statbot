@@ -18,6 +18,10 @@ export function AcceptedTasks() {
   const { data: tasksData, isLoading, refetch } = useQuery({
     queryKey: ['tasks', 'ACCEPTED'],
     queryFn: () => getTasks({ status: 'ACCEPTED' }),
+    // Live queue: watcher tabs accept into ACCEPTED at any moment — poll so
+    // new arrivals appear without a manual reload (same pattern as Automation
+    // + DailyOutreach; global refetchOnWindowFocus is off in App.tsx).
+    refetchInterval: 30_000,
   });
 
   const ticketsQuery = useQuery({
