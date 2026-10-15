@@ -1,5 +1,5 @@
 /**
- * Two-tier automatic content screen for new subreddits (language / sex / vape).
+ * Two-tier automatic content screen for new subreddits (language / sex / vape / dojo).
  *
  * Pure module — no env, no DB, no DOM. Safe for unit tests (see TESTING.md §1:
  * nothing here imports `src/config/env.ts`).
@@ -20,12 +20,13 @@ import {
   BLOCK_KEYWORDS_SEXUAL_AMBIGUOUS,
   BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE,
   BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
+  BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE,
   BLOCK_KEYWORDS_NAME_ROOTS,
   BLOCK_KEYWORDS_NAME_EXACT_ONLY,
 } from '../config/constants';
 import { normalizeSubreddit } from '../services/automation/subreddit';
 
-export type ContentScreenSignal = 'sex' | 'vape' | 'non-en';
+export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'non-en';
 
 export interface ContentScreenHit {
   signal: ContentScreenSignal;
@@ -40,6 +41,8 @@ export interface ScreenLists {
   sexualAmbiguous: readonly string[];
   vapeHigh: readonly string[];
   vapeAmbiguous: readonly string[];
+  /** Owner Dojo terms (optional in test fixtures — defaults to the prod list). */
+  dojoHigh?: readonly string[];
 }
 
 function defaultLists(): ScreenLists {
@@ -48,6 +51,7 @@ function defaultLists(): ScreenLists {
     sexualAmbiguous: BLOCK_KEYWORDS_SEXUAL_AMBIGUOUS,
     vapeHigh: BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE,
     vapeAmbiguous: BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
+    dojoHigh: BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE,
   };
 }
 
@@ -107,7 +111,7 @@ export function looksNonEnglish(text: string): boolean {
 
 /**
  * Core screen over one text blob. Order is fixed and deterministic:
- *  1. HIGH_CONFIDENCE terms (sex, then vape) — standalone triggers.
+ *  1. HIGH_CONFIDENCE terms (sex, then vape, then dojo) — standalone triggers.
  *     Co-occurring ambiguous singles are folded into the detail as
  *     tuning signal ("also: pod, mod") but never affect the verdict.
  *  2. AMBIGUOUS multi-word phrases as exact-phrase triggers ("mech mod",
@@ -118,6 +122,7 @@ export function looksNonEnglish(text: string): boolean {
 export function screenText(text: string, lists: ScreenLists = defaultLists()): ContentScreenHit | null {
   const clean = (text || '').trim();
   if (!clean) return null;
+  const dojoTerms = lists.dojoHigh ?? BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE;
   // Ambiguous singles from EITHER list only ever enrich the detail of a hit
   // fired by a high-confidence term — never trigger on their own.
   const secondary = () =>
@@ -135,6 +140,10 @@ export function screenText(text: string, lists: ScreenLists = defaultLists()): C
   const vapeHigh = matchKeyword(clean, lists.vapeHigh);
   if (vapeHigh) {
     return { signal: 'vape', matched: vapeHigh, detail: withAlso(`keyword "${vapeHigh}"`) };
+  }
+  const dojoHigh = matchKeyword(clean, dojoTerms);
+  if (dojoHigh) {
+    return { signal: 'dojo', matched: dojoHigh, detail: withAlso(`keyword "${dojoHigh}"`) };
   }
   const sexPhrase = matchKeyword(clean, lists.sexualAmbiguous.filter(isPhrase));
   if (sexPhrase) return { signal: 'sex', matched: sexPhrase, detail: `ambiguous phrase "${sexPhrase}"` };
@@ -213,6 +222,7 @@ export function screenSubredditName(
   const byLengthDesc = (terms: string[]): string[] => [...terms].sort((a, b) => b.length - a.length);
   const sexualTerms = [...singles(lists.sexualHigh), ...BLOCK_KEYWORDS_NAME_ROOTS];
   const vapeTerms = singles(lists.vapeHigh);
+  const dojoTerms = singles(lists.dojoHigh ?? BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE);
   for (const term of byLengthDesc(sexualTerms)) {
     if (name.includes(term)) {
       return { decision: 'block', signal: 'sex', matched: term, detail: `subreddit name contains "${term}"` };
@@ -222,6 +232,11 @@ export function screenSubredditName(
     if (BLOCK_KEYWORDS_NAME_EXACT_ONLY.includes(term as never)) continue;
     if (name.includes(term)) {
       return { decision: 'block', signal: 'vape', matched: term, detail: `subreddit name contains "${term}"` };
+    }
+  }
+  for (const term of byLengthDesc(dojoTerms)) {
+    if (name.includes(term)) {
+      return { decision: 'block', signal: 'dojo', matched: term, detail: `subreddit name contains "${term}"` };
     }
   }
   // Exact-only acronyms: full name or a whole underscore-token, never a

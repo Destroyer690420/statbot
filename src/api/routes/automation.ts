@@ -101,7 +101,7 @@ export const claimResultSchema = z.object({
   // never calls the dashboard-authed block endpoints itself).
   autoBlock: z.object({
     subreddit: z.string().max(80),
-    signal: z.enum(['sex', 'vape', 'non-en']),
+    signal: z.enum(['sex', 'vape', 'dojo', 'non-en']),
     matched: z.string().max(120).optional().nullable(),
     snippet: z.string().max(300).optional().nullable(),
   }).optional().nullable(),
@@ -110,7 +110,7 @@ export const claimResultSchema = z.object({
   // bot-DM `blocks` report. Old watchers omit it entirely.
   screenReport: z.object({
     subreddit: z.string().max(80).optional().nullable(),
-    signal: z.enum(['sex', 'vape', 'non-en']).optional().nullable(),
+    signal: z.enum(['sex', 'vape', 'dojo', 'non-en']).optional().nullable(),
     matched: z.string().max(120).optional().nullable(),
     dryRun: z.boolean().optional().nullable(),
   }).optional().nullable(),
@@ -143,7 +143,7 @@ export function logClaimTimings(
 
 type ScreenReportBody = {
   subreddit?: string | null;
-  signal?: 'sex' | 'vape' | 'non-en' | null;
+  signal?: 'sex' | 'vape' | 'dojo' | 'non-en' | null;
   matched?: string | null;
   dryRun?: boolean | null;
 } | null | undefined;

@@ -154,7 +154,7 @@ export const SURVIVAL_TTL_MS = 15 * 24 * 60 * 60 * 1000;
 export const GOPARTTIME_SOURCE = 'goparttime';
 
 /**
- * Tier-0/Tier-1 automatic content screen for new subreddits (language / sex / vape).
+ * Tier-0/Tier-1 automatic content screen for new subreddits (language / sex / vape / dojo).
  *
  * Shadow mode: DRY_RUN=true logs WOULD_BLOCK + signal + triggering text without
  * calling addBlocked or aborting any accept. Tune the lists against real traffic,
@@ -234,6 +234,17 @@ export const BLOCK_KEYWORDS_VAPE_AMBIGUOUS = [
   'smoking', // covers tobacco cigarettes and cannabis too, not vape-specific
   // 'dab pen' deliberately excluded: cannabis concentrate device, adjacent but
   // not vape/nicotine — out of scope until it gets its own category.
+] as const;
+
+/**
+ * Owner-supplied high-confidence terms for the Dojo category (added
+ * 2026-10-15): any whole-word `dojo` hit in title/content auto-blocks the
+ * post's subreddit (`auto-content:dojo`), exactly like sex/vape high terms.
+ * Single term for now — add variants here (and mirror them into the
+ * userscript `CONTENT_SCREEN_DOJO_HIGH`) if new spellings appear.
+ */
+export const BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE = [
+  'dojo',
 ] as const;
 
 /**

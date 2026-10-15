@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.6.5
+// @version      1.6.6
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+   * v1.6.6 - Dojo screen: whole-word `dojo` in title/content auto-blocks the
+   * post's subreddit (signal `dojo`, same abort + server-owned block path as
+   * sex/vape), and subreddit names containing `dojo` block pre-blast.
+   * Otherwise identical to v1.6.5 below.
+   *
    * v1.6.5 - Deferred retry: a claim that fails once AT/AFTER the accept
    * step (rate-limit "too frequent", timeouts, drawer flakiness) with a
    * verified-good task parks instead of verdicting. The server holds parked
@@ -299,7 +304,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.6.5';
+  const VERSION = '1.6.6';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -940,7 +945,7 @@
   // cannot import the Node file, so when the server lists change, paste them
   // here verbatim — same terms, same thresholds. Matching contract: whole
   // word / literal phrase, case-insensitive, longest listed term wins; HIGH
-  // terms trigger alone; AMBIGUOUS singles never trigger alone (secondary
+  // terms (sex, vape, dojo) trigger alone; AMBIGUOUS singles never trigger alone (secondary
   // detail only); AMBIGUOUS phrases trigger as exact phrases.)
   var CONTENT_SCREEN_DRY_RUN = false; // mirrors CONTENT_SCREEN.DRY_RUN (enforce: hits really block)
   var CONTENT_SCREEN_SEX_HIGH = [ // mirrors BLOCK_KEYWORDS_SEXUAL_HIGH_CONFIDENCE
@@ -977,6 +982,9 @@
   // mirrors BLOCK_KEYWORDS_VAPE_AMBIGUOUS ('dab pen' excluded: cannabis device,
   // out of scope until it gets its own category).
   var CONTENT_SCREEN_VAPE_AMBIGUOUS = ['mod', 'pod', 'cart', 'coil', 'mech mod', 'smoking'];
+  var CONTENT_SCREEN_DOJO_HIGH = [ // mirrors BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE
+    'dojo'
+  ];
   var CONTENT_SCREEN_COMMON_WORDS = [ // mirrors CONTENT_SCREEN.COMMON_ENGLISH_WORDS
     'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for',
     'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at', 'this', 'but', 'his',
@@ -1039,7 +1047,7 @@
     return false;
   }
 
-  // Core screen — mirrors screenText: high-confidence first (sex, vape),
+  // Core screen — mirrors screenText: high-confidence first (sex, vape, dojo),
   // then ambiguous exact phrases, then the non-English signal. Ambiguous
   // singles from either list only enrich the detail of a high hit.
   function screenTextFor(text) {
@@ -1062,6 +1070,8 @@
     if (sexHigh) return { signal: 'sex', matched: sexHigh, detail: withAlso('keyword "' + sexHigh + '"') };
     var vapeHigh = screenMatchKeyword(clean, CONTENT_SCREEN_VAPE_HIGH);
     if (vapeHigh) return { signal: 'vape', matched: vapeHigh, detail: withAlso('keyword "' + vapeHigh + '"') };
+    var dojoHigh = screenMatchKeyword(clean, CONTENT_SCREEN_DOJO_HIGH);
+    if (dojoHigh) return { signal: 'dojo', matched: dojoHigh, detail: withAlso('keyword "' + dojoHigh + '"') };
     var sexPhrase = screenMatchKeyword(clean, CONTENT_SCREEN_SEX_AMBIGUOUS.filter(function (t) { return screenIsPhrase(t); }));
     if (sexPhrase) return { signal: 'sex', matched: sexPhrase, detail: 'ambiguous phrase "' + sexPhrase + '"' };
     var vapePhrase = screenMatchKeyword(clean, CONTENT_SCREEN_VAPE_AMBIGUOUS.filter(function (t) { return screenIsPhrase(t); }));

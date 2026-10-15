@@ -98,6 +98,24 @@ describe('screenTitle / screenFullContent', () => {
     });
   });
 
+  it('flags whole-word dojo in title or content (case-insensitive)', () => {
+    expect(screenTitle('Join my Dojo today', LISTS)).toMatchObject({ signal: 'dojo', matched: 'dojo' });
+    expect(screenTitle('WELCOME TO THE DOJO', LISTS)).toMatchObject({ signal: 'dojo' });
+    expect(screenFullContent('clean title', 'visit our dojo this weekend', LISTS)).toMatchObject({
+      signal: 'dojo',
+      matched: 'dojo',
+    });
+  });
+
+  it('does not stem dojo ("dojos" alone never matches)', () => {
+    expect(screenTitle('best dojos in town', LISTS)).toBeNull();
+  });
+
+  it('checks sex before vape before dojo', () => {
+    expect(screenTitle('porn dojo review', LISTS)).toMatchObject({ signal: 'sex' });
+    expect(screenTitle('vape dojo review', LISTS)).toMatchObject({ signal: 'vape' });
+  });
+
   it('ambiguous singles never trigger alone', () => {
     for (const title of [
       'sexy car photoshoot',
@@ -176,6 +194,15 @@ describe('screenSubredditName (substring rules for names)', () => {
     expect(screenSubredditName('vapers', LISTS)).toMatchObject({ decision: 'block', signal: 'vape' });
   });
 
+  it('blocks dojo substrings in compound names', () => {
+    expect(screenSubredditName('dojo_fans', LISTS)).toMatchObject({
+      decision: 'block',
+      signal: 'dojo',
+      matched: 'dojo',
+    });
+    expect(screenSubredditName('mydojo', LISTS)).toMatchObject({ decision: 'block', signal: 'dojo' });
+  });
+
   it('blocks whole underscore tokens', () => {
     expect(screenSubredditName('vape_porn', LISTS)).toMatchObject({ decision: 'block' });
   });
@@ -225,6 +252,7 @@ describe('buildSeenSet / autoBlockReason', () => {
   it('marks automatic reasons distinctly from manual blocks', () => {
     expect(autoBlockReason('sex')).toBe('auto-content:sex');
     expect(autoBlockReason('vape')).toBe('auto-content:vape');
+    expect(autoBlockReason('dojo')).toBe('auto-content:dojo');
     expect(autoBlockReason('non-en')).toBe('auto-content:non-en');
   });
 });

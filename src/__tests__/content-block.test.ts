@@ -38,6 +38,18 @@ describe('handleAutoBlockReport (enforce mode)', () => {
     expect(out.notice).toContain('dashboard');
   });
 
+  it('blocks a dojo hit with the dojo reason', async () => {
+    const out = await handleAutoBlockReport(
+      { subreddit: 'r/DojoFans', signal: 'dojo', matched: 'dojo' },
+      { dryRun: false, seenSubs: new Set() },
+    );
+    expect(out.blocked).toBe(true);
+    expect(out.disposition).toBe('blocked');
+    expect(out.subreddit).toBe('dojofans');
+    expect(addMock).toHaveBeenCalledWith('dojofans', 'auto-content:dojo', 'companion:auto-screen');
+    expect(out.notice).toContain('r/dojofans');
+  });
+
   it('skips when already blocked (two-tab race: loser stays quiet)', async () => {
     blockedMock.mockResolvedValue(true);
     const out = await handleAutoBlockReport(
