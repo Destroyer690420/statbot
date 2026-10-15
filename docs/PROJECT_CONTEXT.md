@@ -264,6 +264,7 @@ tasks created on a given IST day (COMPLETED/ARCHIVED/CANCELLED-deleted)
 
 ## 13. Recent Changes
 
+- **2026-10-15**: **Ban-scan asks removed DEPLOYED live at `41dc539`** (app-only rebuild; old ask code absent from live `dist`; clean boot). The 7am scan never asks for profile links again — ID-less tickets skip silently. This morning's 34 ask messages deleted via REST (0 failed; 7 same-text daytime-flow messages kept).
 - **2026-10-15**: **Accepted auto-refresh DEPLOYED live at `e50d2c9`** (dashboard-only rebuild; served chunk verified with `refetchInterval:3e4`; app/redis untouched). Accepted queue re-fetches every 30s — new watcher accepts appear without manual reload.
 - **2026-10-15**: **Submit View silent-success DEPLOYED live at `18cce6f`** (dashboard-only rebuild; served send script v1.6.2 verified; app/redis untouched). No popup when the insight attaches — alerts only on missing insight/screenshot, dialog failure, or errors. **Tampermonkey update to send-script v1.6.2 required.**
 - **2026-10-15**: **Place/uni auto-block DEPLOYED live at `5e0cb81`** (app-only rebuild, no migration; backup `rtm-backup-20261015-placeban.tar.gz`; verified healthy boot, live-dist gates, 0 app errors). US city/state + university sub names auto-block pre-blast (`place`/`uni` signals; `mobilegaming`/`mobilegames`/`toyotatacoma` exempt); all 12 known subs blocked (inserted `chattanooga`, `memphis`, `syracuseu`). In-flight tasks untouched. Full suite 81/1109 green. See Decision 39.
