@@ -111,9 +111,20 @@ describe('screenTitle / screenFullContent', () => {
     expect(screenTitle('best dojos in town', LISTS)).toBeNull();
   });
 
-  it('checks sex before vape before dojo', () => {
+  it('checks sex before vape before dojo before crypto', () => {
     expect(screenTitle('porn dojo review', LISTS)).toMatchObject({ signal: 'sex' });
     expect(screenTitle('vape dojo review', LISTS)).toMatchObject({ signal: 'vape' });
+    expect(screenTitle('dojo bitcoin review', LISTS)).toMatchObject({ signal: 'dojo' });
+  });
+
+  it('flags whole-word crypto terms in title or content (case-insensitive)', () => {
+    expect(screenTitle('Best Bitcoin wallet 2026', LISTS)).toMatchObject({ signal: 'crypto', matched: 'bitcoin' });
+    expect(screenTitle('CRYPTO signals group', LISTS)).toMatchObject({ signal: 'crypto' });
+    expect(screenFullContent('clean title', 'start investing with $10 today', LISTS)).toMatchObject({
+      signal: 'crypto',
+      matched: 'investing',
+    });
+    expect(screenTitle('new ethereum defi nft drop', LISTS)).toMatchObject({ signal: 'crypto' });
   });
 
   it('ambiguous singles never trigger alone', () => {
@@ -192,6 +203,16 @@ describe('screenSubredditName (substring rules for names)', () => {
     expect(screenSubredditName('middlesex')).toMatchObject({ decision: 'block', matched: 'sex' });
     expect(screenSubredditName('sexed')).toMatchObject({ decision: 'block', matched: 'sex' });
     expect(screenSubredditName('vapers', LISTS)).toMatchObject({ decision: 'block', signal: 'vape' });
+  });
+
+  it('blocks crypto substrings in compound names', () => {
+    expect(screenSubredditName('bitcoin', LISTS)).toMatchObject({
+      decision: 'block',
+      signal: 'crypto',
+      matched: 'bitcoin',
+    });
+    expect(screenSubredditName('cryptocurrency', LISTS)).toMatchObject({ decision: 'block', signal: 'crypto' });
+    expect(screenSubredditName('ethereum', LISTS)).toMatchObject({ decision: 'block', signal: 'crypto' });
   });
 
   it('blocks dojo substrings in compound names', () => {
@@ -308,6 +329,7 @@ describe('buildSeenSet / autoBlockReason', () => {
     expect(autoBlockReason('dojo')).toBe('auto-content:dojo');
     expect(autoBlockReason('place')).toBe('auto-content:place');
     expect(autoBlockReason('uni')).toBe('auto-content:uni');
+    expect(autoBlockReason('crypto')).toBe('auto-content:crypto');
     expect(autoBlockReason('non-en')).toBe('auto-content:non-en');
   });
 });

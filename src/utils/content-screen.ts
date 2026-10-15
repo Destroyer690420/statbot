@@ -1,5 +1,5 @@
 /**
- * Two-tier automatic content screen for new subreddits (language / sex / vape / dojo).
+ * Two-tier automatic content screen for new subreddits (language / sex / vape / dojo / crypto).
  *
  * Pure module — no env, no DB, no DOM. Safe for unit tests (see TESTING.md §1:
  * nothing here imports `src/config/env.ts`).
@@ -21,6 +21,7 @@ import {
   BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE,
   BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
   BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE,
+  BLOCK_KEYWORDS_CRYPTO_HIGH_CONFIDENCE,
   BLOCK_KEYWORDS_PLACE_SUBSTRING,
   BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
   BLOCK_KEYWORDS_UNI_SUBSTRING,
@@ -31,7 +32,7 @@ import {
 } from '../config/constants';
 import { normalizeSubreddit } from '../services/automation/subreddit';
 
-export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'place' | 'uni' | 'non-en';
+export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'crypto' | 'place' | 'uni' | 'non-en';
 
 export interface ContentScreenHit {
   signal: ContentScreenSignal;
@@ -48,6 +49,8 @@ export interface ScreenLists {
   vapeAmbiguous: readonly string[];
   /** Owner Dojo terms (optional in test fixtures — defaults to the prod list). */
   dojoHigh?: readonly string[];
+  /** Owner crypto terms (optional in test fixtures — defaults to prod). */
+  cryptoHigh?: readonly string[];
   /** US place-name terms, NAME screening only (optional — defaults to prod). */
   placeSubstring?: readonly string[];
   placeExactOnly?: readonly string[];
@@ -63,6 +66,7 @@ function defaultLists(): ScreenLists {
     vapeHigh: BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE,
     vapeAmbiguous: BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
     dojoHigh: BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE,
+    cryptoHigh: BLOCK_KEYWORDS_CRYPTO_HIGH_CONFIDENCE,
     placeSubstring: BLOCK_KEYWORDS_PLACE_SUBSTRING,
     placeExactOnly: BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
     uniSubstring: BLOCK_KEYWORDS_UNI_SUBSTRING,
@@ -126,7 +130,8 @@ export function looksNonEnglish(text: string): boolean {
 
 /**
  * Core screen over one text blob. Order is fixed and deterministic:
- *  1. HIGH_CONFIDENCE terms (sex, then vape, then dojo) — standalone triggers.
+ *  1. HIGH_CONFIDENCE terms (sex, then vape, then dojo, then crypto) —
+ *     standalone triggers.
  *     Co-occurring ambiguous singles are folded into the detail as
  *     tuning signal ("also: pod, mod") but never affect the verdict.
  *  2. AMBIGUOUS multi-word phrases as exact-phrase triggers ("mech mod",
@@ -159,6 +164,10 @@ export function screenText(text: string, lists: ScreenLists = defaultLists()): C
   const dojoHigh = matchKeyword(clean, dojoTerms);
   if (dojoHigh) {
     return { signal: 'dojo', matched: dojoHigh, detail: withAlso(`keyword "${dojoHigh}"`) };
+  }
+  const cryptoHigh = matchKeyword(clean, lists.cryptoHigh ?? BLOCK_KEYWORDS_CRYPTO_HIGH_CONFIDENCE);
+  if (cryptoHigh) {
+    return { signal: 'crypto', matched: cryptoHigh, detail: withAlso(`keyword "${cryptoHigh}"`) };
   }
   const sexPhrase = matchKeyword(clean, lists.sexualAmbiguous.filter(isPhrase));
   if (sexPhrase) return { signal: 'sex', matched: sexPhrase, detail: `ambiguous phrase "${sexPhrase}"` };
@@ -217,8 +226,8 @@ export interface NameScreenVerdict {
  *     to contain place words; underscores ignored (`mobile_gaming` is exempt).
  *  2. HIGH single-word terms (+ NAME_ROOTS like bare `sex`, without which
  *     `sexpositive`-shaped names are unreachable) as substrings, sexual
- *     before vape before dojo → `block`. Hyphenated/phrase entries are inert here (no
- *     spaces or hyphens can occur in subreddit names).
+ *     before vape before dojo before crypto → `block`. Hyphenated/phrase
+ *     entries are inert here (no spaces or hyphens can occur in subreddit names).
  *  3. US place-name substrings (`texas` catches `texasraves`) → `block`
  *     (signal `place`), then university substrings (`university`, `college`)
  *     → `block` (signal `uni`).
@@ -265,6 +274,12 @@ export function screenSubredditName(
   for (const term of byLengthDesc(dojoTerms)) {
     if (name.includes(term)) {
       return { decision: 'block', signal: 'dojo', matched: term, detail: `subreddit name contains "${term}"` };
+    }
+  }
+  const cryptoTerms = singles(lists.cryptoHigh ?? BLOCK_KEYWORDS_CRYPTO_HIGH_CONFIDENCE);
+  for (const term of byLengthDesc(cryptoTerms)) {
+    if (name.includes(term)) {
+      return { decision: 'block', signal: 'crypto', matched: term, detail: `subreddit name contains "${term}"` };
     }
   }
   const placeTerms = singles(lists.placeSubstring ?? BLOCK_KEYWORDS_PLACE_SUBSTRING);

@@ -60,6 +60,16 @@ describe('handleAutoBlockReport (enforce mode)', () => {
     expect(addMock).toHaveBeenCalledWith('dallas', 'auto-content:place', 'companion:auto-screen');
   });
 
+  it('blocks a crypto hit with the crypto reason', async () => {
+    const out = await handleAutoBlockReport(
+      { subreddit: 'r/Bitcoin', signal: 'crypto', matched: 'bitcoin' },
+      { dryRun: false, seenSubs: new Set() },
+    );
+    expect(out.blocked).toBe(true);
+    expect(out.disposition).toBe('blocked');
+    expect(addMock).toHaveBeenCalledWith('bitcoin', 'auto-content:crypto', 'companion:auto-screen');
+  });
+
   it('skips when already blocked (two-tab race: loser stays quiet)', async () => {
     blockedMock.mockResolvedValue(true);
     const out = await handleAutoBlockReport(

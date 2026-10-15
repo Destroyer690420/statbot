@@ -154,7 +154,7 @@ export const SURVIVAL_TTL_MS = 15 * 24 * 60 * 60 * 1000;
 export const GOPARTTIME_SOURCE = 'goparttime';
 
 /**
- * Tier-0/Tier-1 automatic content screen for new subreddits (language / sex / vape / dojo).
+ * Tier-0/Tier-1 automatic content screen for new subreddits (language / sex / vape / dojo / crypto).
  *
  * Shadow mode: DRY_RUN=true logs WOULD_BLOCK + signal + triggering text without
  * calling addBlocked or aborting any accept. Tune the lists against real traffic,
@@ -245,6 +245,20 @@ export const BLOCK_KEYWORDS_VAPE_AMBIGUOUS = [
  */
 export const BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE = [
   'dojo',
+] as const;
+
+/**
+ * Owner-supplied high-confidence terms for the crypto category (added
+ * 2026-10-16): any whole-word hit in title/content auto-blocks the post's
+ * subreddit (`auto-content:crypto`), and subreddit names containing a term
+ * block pre-blast (signal `crypto`) — `cryptocurrency` and `ethereum` catch
+ * `r/cryptocurrency`-shaped names as substrings, exactly like the place rule.
+ * Content matching stays whole-word (`matchKeyword`), so `btc`/`nft`/`defi`
+ * never fire inside longer words; name matching is deliberately substring.
+ */
+export const BLOCK_KEYWORDS_CRYPTO_HIGH_CONFIDENCE = [
+  'investing', 'crypto', 'bitcoin',
+  'cryptocurrency', 'ethereum', 'btc', 'defi', 'nft', 'web3',
 ] as const;
 
 /**
