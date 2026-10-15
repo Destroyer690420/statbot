@@ -33,7 +33,8 @@ RUN curl -fsSL --retry 3 --max-time 120 "$TM_CRX_URL" -o /tmp/tm.crx \
   && unzip -o -q /tmp/tm.crx -d /opt/tm \
   && rm -f /tmp/tm.crx \
   && test -f /opt/tm/manifest.json \
-  && grep -q '"name": *"Tampermonkey"' /opt/tm/manifest.json
+  && test -d /opt/tm/_locales \
+  && grep -rqi tampermonkey /opt/tm/_locales/en/messages.json
 
 # Wherever the Alpine novnc package drops vnc.html, expose it at /opt/novnc
 # for websockify --web. Fails the build if the package layout ever changes.
