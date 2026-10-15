@@ -50,6 +50,16 @@ describe('handleAutoBlockReport (enforce mode)', () => {
     expect(out.notice).toContain('r/dojofans');
   });
 
+  it('blocks a place hit with the place reason (pre-blast name screen)', async () => {
+    const out = await handleAutoBlockReport(
+      { subreddit: 'r/Dallas', signal: 'place', matched: 'dallas' },
+      { dryRun: false, seenSubs: new Set() },
+    );
+    expect(out.blocked).toBe(true);
+    expect(out.disposition).toBe('blocked');
+    expect(addMock).toHaveBeenCalledWith('dallas', 'auto-content:place', 'companion:auto-screen');
+  });
+
   it('skips when already blocked (two-tab race: loser stays quiet)', async () => {
     blockedMock.mockResolvedValue(true);
     const out = await handleAutoBlockReport(

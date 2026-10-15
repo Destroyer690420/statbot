@@ -21,12 +21,17 @@ import {
   BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE,
   BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
   BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE,
+  BLOCK_KEYWORDS_PLACE_SUBSTRING,
+  BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
+  BLOCK_KEYWORDS_UNI_SUBSTRING,
+  BLOCK_KEYWORDS_UNI_EXACT_ONLY,
+  BLOCK_KEYWORDS_PLACE_EXEMPT,
   BLOCK_KEYWORDS_NAME_ROOTS,
   BLOCK_KEYWORDS_NAME_EXACT_ONLY,
 } from '../config/constants';
 import { normalizeSubreddit } from '../services/automation/subreddit';
 
-export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'non-en';
+export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'place' | 'uni' | 'non-en';
 
 export interface ContentScreenHit {
   signal: ContentScreenSignal;
@@ -43,6 +48,12 @@ export interface ScreenLists {
   vapeAmbiguous: readonly string[];
   /** Owner Dojo terms (optional in test fixtures — defaults to the prod list). */
   dojoHigh?: readonly string[];
+  /** US place-name terms, NAME screening only (optional — defaults to prod). */
+  placeSubstring?: readonly string[];
+  placeExactOnly?: readonly string[];
+  /** University terms, NAME screening only (optional — defaults to prod). */
+  uniSubstring?: readonly string[];
+  uniExactOnly?: readonly string[];
 }
 
 function defaultLists(): ScreenLists {
@@ -52,6 +63,10 @@ function defaultLists(): ScreenLists {
     vapeHigh: BLOCK_KEYWORDS_VAPE_HIGH_CONFIDENCE,
     vapeAmbiguous: BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
     dojoHigh: BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE,
+    placeSubstring: BLOCK_KEYWORDS_PLACE_SUBSTRING,
+    placeExactOnly: BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
+    uniSubstring: BLOCK_KEYWORDS_UNI_SUBSTRING,
+    uniExactOnly: BLOCK_KEYWORDS_UNI_EXACT_ONLY,
   };
 }
 
@@ -197,13 +212,21 @@ export interface NameScreenVerdict {
  * normalized name (normalizes defensively anyway).
  *
  * Order, first hit wins:
- *  1. HIGH single-word terms (+ NAME_ROOTS like bare `sex`, without which
+ *  1. PLACE_EXEMPT full names (`mobilegaming`, `toyotatacoma`) → `pass`
+ *     immediately, before everything. Lucrative phone/truck subs that happen
+ *     to contain place words; underscores ignored (`mobile_gaming` is exempt).
+ *  2. HIGH single-word terms (+ NAME_ROOTS like bare `sex`, without which
  *     `sexpositive`-shaped names are unreachable) as substrings, sexual
- *     before vape → `block`. Hyphenated/phrase entries are inert here (no
+ *     before vape before dojo → `block`. Hyphenated/phrase entries are inert here (no
  *     spaces or hyphens can occur in subreddit names).
- *  2. Exact-only acronyms (`rda`/`rta`/`rdta`, which sit inside ordinary
- *     words like `startups`) match full-name or whole-token only → `block`.
- *  3. AMBIGUOUS single words (`mod`, `sexy`, `smoking`, …) as substrings →
+ *  3. US place-name substrings (`texas` catches `texasraves`) → `block`
+ *     (signal `place`), then university substrings (`university`, `college`)
+ *     → `block` (signal `uni`).
+ *  4. Exact-only terms — place words that sit inside ordinary words
+ *     (`austin` in `austinevans`, `jackson` in `michaeljackson`, `mobile` in
+ *     `mobilelegends`, `maine` in `mainecoon`) and school acronyms (`usc`
+ *     sits inside `music`): full name or whole underscore-token only.
+ *  5. AMBIGUOUS single words (`mod`, `sexy`, `smoking`, …) as substrings →
  *     `quarantine` (held from the blast + digest-flagged, never auto-blocked;
  *     a human Allows or Blocks once and the verdict sticks).
  * Anything else → `pass`. Known accepted casualties of the substring rule
@@ -216,6 +239,11 @@ export function screenSubredditName(
 ): NameScreenVerdict {
   const name = (normalized || '').trim().toLowerCase();
   if (!name) return { decision: 'pass', signal: null, matched: null, detail: 'no subreddit' };
+  // Lucrative phone/truck subs that happen to contain place words — exempt
+  // before everything (underscores ignored, so `mobile_gaming` stays clean).
+  if ((BLOCK_KEYWORDS_PLACE_EXEMPT as readonly string[]).includes(name.replace(/_/g, ''))) {
+    return { decision: 'pass', signal: null, matched: null, detail: 'place-exempt name' };
+  }
   const singles = (terms: readonly string[]): string[] =>
     terms.map((t) => (t || '').trim().toLowerCase()).filter((t) => t.length > 0 && !isPhrase(t));
   // Longest first so the reported match is the most specific one.
@@ -239,14 +267,43 @@ export function screenSubredditName(
       return { decision: 'block', signal: 'dojo', matched: term, detail: `subreddit name contains "${term}"` };
     }
   }
-  // Exact-only acronyms: full name or a whole underscore-token, never a
-  // substring (`rta` must not fire on `startups`).
-  const tokens = new Set(name.split('_').filter((t) => t.length > 0));
-  for (const term of BLOCK_KEYWORDS_NAME_EXACT_ONLY) {
-    if (name === term || tokens.has(term)) {
-      return { decision: 'block', signal: 'vape', matched: term, detail: `subreddit name is "${term}"` };
+  const placeTerms = singles(lists.placeSubstring ?? BLOCK_KEYWORDS_PLACE_SUBSTRING);
+  for (const term of byLengthDesc(placeTerms)) {
+    if (name.includes(term)) {
+      return { decision: 'block', signal: 'place', matched: term, detail: `subreddit name contains "${term}"` };
     }
   }
+  const uniTerms = singles(lists.uniSubstring ?? BLOCK_KEYWORDS_UNI_SUBSTRING);
+  for (const term of byLengthDesc(uniTerms)) {
+    if (name.includes(term)) {
+      return { decision: 'block', signal: 'uni', matched: term, detail: `subreddit name contains "${term}"` };
+    }
+  }
+  // Exact-only place words + school acronyms: full name or a whole
+  // underscore-token, never a substring (`jackson` must not fire on
+  // `michaeljackson`, `usc` must not fire on `music`).
+  const tokens = new Set(name.split('_').filter((t) => t.length > 0));
+  const exactOnly = (terms: readonly string[], signal: ContentScreenSignal): NameScreenVerdict | null => {
+    for (const raw of terms) {
+      const term = (raw || '').trim().toLowerCase();
+      if (!term) continue;
+      if (name === term || tokens.has(term)) {
+        return { decision: 'block', signal, matched: term, detail: `subreddit name is "${term}"` };
+      }
+    }
+    return null;
+  };
+  const placeExactHit = exactOnly(
+    lists.placeExactOnly ?? BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
+    'place',
+  );
+  if (placeExactHit) return placeExactHit;
+  const uniExactHit = exactOnly(lists.uniExactOnly ?? BLOCK_KEYWORDS_UNI_EXACT_ONLY, 'uni');
+  if (uniExactHit) return uniExactHit;
+  // Exact-only vape acronyms: full name or a whole underscore-token, never a
+  // substring (`rta` must not fire on `startups`).
+  const vapeExactHit = exactOnly(BLOCK_KEYWORDS_NAME_EXACT_ONLY, 'vape');
+  if (vapeExactHit) return vapeExactHit;
   const ambiguous = [
     ...singles(lists.sexualAmbiguous),
     ...singles(lists.vapeAmbiguous),

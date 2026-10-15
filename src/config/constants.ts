@@ -248,6 +248,91 @@ export const BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE = [
 ] as const;
 
 /**
+ * US place-name + university terms for SUBREDDIT-NAME screening only (added
+ * 2026-10-15, owner directive: city/state-named subs get posts removed by
+ * Reddit filters and get worker accounts banned).
+ *
+ * NEVER content: post text mentioning "dallas" must never block — these lists
+ * are only consulted by `screenSubredditName`, never by `screenText`. The
+ * companion carries no copy (name screening is server-side only), so unlike
+ * the sex/vape/dojo lists there is nothing to mirror into the userscript.
+ *
+ * Three shapes (mirrors the vape exact-only precedent):
+ * - PLACE_SUBSTRING: long/unambiguous place names — fire anywhere in the name
+ *   (`texasraves` catches `texas`). `maine` is deliberately NOT here:
+ *   `mainecoon` (cat breed) would false-block.
+ * - PLACE_EXACT_ONLY: short or ambiguous place words — full name or whole
+ *   underscore-token only (`austin` must not fire on `austinevans` the
+ *   YouTuber, `jackson` must not fire on `michaeljackson`, `mobile` must not
+ *   fire on `mobilelegends`, `mesa` must not fire on `mesaboogie`,
+ *   `columbia` must not fire on `columbiarecords`, `paris` must not fire on
+ *   `parishilton`, `reno` must not fire on `reno911`, `phoenix` must not fire
+ *   on `phoenixwright`, `aurora` must not fire on `auroraborealis`).
+ * - UNI_SUBSTRING (`university`, `college`) + UNI_EXACT_ONLY (unambiguous
+ *   school acronyms/names too short or oddly shaped for substrings —
+ *   `usc` is exact-only because it sits inside `music`).
+ * - PLACE_EXEMPT: full names (underscores ignored) that NEVER block — the
+ *   lucrative phone/truck subs that happen to contain place words. Checked
+ *   before everything, including exact-only (`mobile_gaming` stays clean).
+ */
+export const BLOCK_KEYWORDS_PLACE_SUBSTRING = [
+  // States (spaceless lowercase; `maine` excluded — see above).
+  'alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado',
+  'connecticut', 'delaware', 'florida', 'georgia', 'hawaii', 'idaho',
+  'illinois', 'indiana', 'iowa', 'kansas', 'kentucky', 'louisiana',
+  'maryland', 'massachusetts', 'michigan', 'minnesota', 'mississippi',
+  'missouri', 'montana', 'nebraska', 'nevada', 'newhampshire', 'newjersey',
+  'newmexico', 'newyork', 'northcarolina', 'northdakota', 'ohio', 'oklahoma',
+  'oregon', 'pennsylvania', 'rhodeisland', 'southcarolina', 'southdakota',
+  'tennessee', 'texas', 'utah', 'vermont', 'virginia', 'washington',
+  'westvirginia', 'wisconsin', 'wyoming', 'districtofcolumbia',
+  'washingtondc', 'puertorico',
+  // Cities (spaceless lowercase).
+  'losangeles', 'chicago', 'houston', 'dallas', 'sanantonio', 'sandiego',
+  'jacksonville', 'fortworth', 'columbus', 'charlotte', 'sanfrancisco',
+  'indianapolis', 'seattle', 'denver', 'oklahomacity', 'nashville', 'elpaso',
+  'lasvegas', 'memphis', 'portland', 'detroit', 'louisville', 'milwaukee',
+  'baltimore', 'albuquerque', 'atlanta', 'kansascity', 'miami', 'cleveland',
+  'fresno', 'tulsa', 'omaha', 'honolulu', 'arlington', 'tampa', 'richmond',
+  'boise', 'wichita', 'atlanticcity', 'neworleans', 'orlando', 'cincinnati',
+  'buffalo', 'pittsburgh', 'stlouis', 'minneapolis', 'stpaul', 'santafe',
+  'tucson', 'scottsdale', 'tempe', 'plano', 'irving', 'lubbock', 'garland',
+  'amarillo', 'grandprairie', 'frisco', 'mckinney', 'knoxville', 'chattanooga',
+  'birmingham', 'montgomery', 'huntsville', 'savannah', 'augusta', 'charleston',
+  'greenville', 'raleigh', 'durham', 'greensboro', 'virginiabeach', 'norfolk',
+  'alexandria', 'annapolis', 'harrisburg', 'allentown', 'newark', 'jerseycity',
+  'hartford', 'newhaven', 'providence', 'worcester', 'springfield', 'albany',
+  'rochester', 'syracuse', 'toledo', 'akron', 'dayton', 'grandrapids',
+  'fortwayne', 'evansville', 'peoria', 'madison', 'greenbay', 'duluth',
+  'cedarrapids', 'lakewood', 'fortcollins', 'cheyenne', 'billings', 'missoula',
+  'fargo', 'siouxfalls', 'vancouver', 'eugene', 'anchorage', 'fairbanks',
+  'burlington', 'manchester', 'portsmouth', 'bangor', 'tallahassee',
+  'stpetersburg', 'fortlauderdale', 'westpalmbeach', 'keywest', 'pensacola',
+  'sarasota', 'naples', 'daytona', 'daytonabeach', 'marietta', 'sanjose',
+  'sacramento', 'oakland', 'bakersfield', 'anaheim', 'riverside', 'stockton',
+  'huntingtonbeach', 'richardson', 'mesquite', 'york', 'montpelier', 'pierre',
+  'dover', 'helena', 'carsoncity', 'concord', 'trenton', 'salem', 'katy',
+  'thewoodlands', 'norman', 'lincoln', 'desmoines', 'littlerock', 'batonrouge',
+] as const;
+
+export const BLOCK_KEYWORDS_PLACE_EXACT_ONLY = [
+  'mobile', 'phoenix', 'aurora', 'reno', 'mesa', 'paris', 'austin', 'jackson',
+  'columbia', 'maine',
+] as const;
+
+export const BLOCK_KEYWORDS_UNI_SUBSTRING = [
+  'university', 'college',
+] as const;
+
+export const BLOCK_KEYWORDS_UNI_EXACT_ONLY = [
+  'syracuseu', 'bostonu', 'ucla', 'nyu', 'usc', 'caltech', 'pennstate', 'byu',
+] as const;
+
+export const BLOCK_KEYWORDS_PLACE_EXEMPT = [
+  'mobilegaming', 'mobilegames', 'toyotatacoma',
+] as const;
+
+/**
  * Bare roots for SUBREDDIT-NAME screening only (never content). Phrases
  * cannot occur in subreddit names (no spaces allowed), so without these the
  * name check could never fire on `sexpositive`-shaped names — no listed term

@@ -227,6 +227,59 @@ describe('screenSubredditName (substring rules for names)', () => {
     expect(screenSubredditName('rta_guides', lists)).toMatchObject({ decision: 'block', matched: 'rta' });
   });
 
+  it('blocks US place-name substrings (signal place)', () => {
+    expect(screenSubredditName('dallas', LISTS)).toMatchObject({
+      decision: 'block',
+      signal: 'place',
+      matched: 'dallas',
+    });
+    expect(screenSubredditName('texasraves', LISTS)).toMatchObject({
+      decision: 'block',
+      signal: 'place',
+      matched: 'texas',
+    });
+    expect(screenSubredditName('sanantonio', LISTS)).toMatchObject({ decision: 'block', signal: 'place' });
+  });
+
+  it('keeps short/ambiguous place words exact-only', () => {
+    expect(screenSubredditName('austin', LISTS)).toMatchObject({ decision: 'block', signal: 'place' });
+    expect(screenSubredditName('austin_texas', LISTS)).toMatchObject({ decision: 'block', signal: 'place' });
+    // Substrings of ordinary words never fire.
+    for (const sub of ['austinpowers', 'michaeljackson', 'mobilelegends', 'mainecoon', 'columbiarecords', 'parishilton', 'reno911', 'phoenixwright', 'mesaboogie']) {
+      expect(screenSubredditName(sub, LISTS).decision).toBe('pass');
+    }
+    expect(screenSubredditName('maine', LISTS)).toMatchObject({ decision: 'block', signal: 'place' });
+  });
+
+  it('never blocks the exempt phone/truck names', () => {
+    for (const sub of ['mobilegaming', 'mobilegames', 'toyotatacoma', 'mobile_gaming']) {
+      expect(screenSubredditName(sub, LISTS).decision).toBe('pass');
+    }
+  });
+
+  it('blocks university/college names (signal uni)', () => {
+    expect(screenSubredditName('universityoftexas', LISTS)).toMatchObject({
+      // `texas` (place) wins over `university` (uni) — either way it blocks.
+      decision: 'block',
+    });
+    expect(screenSubredditName('mycollege', LISTS)).toMatchObject({
+      decision: 'block',
+      signal: 'uni',
+    });
+    expect(screenSubredditName('syracuseu', LISTS)).toMatchObject({ decision: 'block' });
+    expect(screenSubredditName('ucla', LISTS)).toMatchObject({ decision: 'block', signal: 'uni' });
+    // `usc` sits inside `music` — exact-only keeps music clean.
+    expect(screenSubredditName('usc', LISTS)).toMatchObject({ decision: 'block', signal: 'uni' });
+    expect(screenSubredditName('usc_trojans', LISTS)).toMatchObject({ decision: 'block', signal: 'uni' });
+    expect(screenSubredditName('music', LISTS).decision).toBe('pass');
+  });
+
+  it('place/uni terms never fire on title/content (name screening only)', () => {
+    expect(screenTitle('dallas cowboys news today', LISTS)).toBeNull();
+    expect(screenTitle('my university ranking list', LISTS)).toBeNull();
+    expect(screenFullContent('austin trip', 'texas bbq and live music', LISTS)).toBeNull();
+  });
+
   it('hyphenated terms and spaced phrases are inert in names', () => {
     // 'e-liquid' cannot occur in a subreddit name (no hyphens allowed).
     expect(screenSubredditName('eliquid', LISTS).decision).toBe('pass');
@@ -253,6 +306,8 @@ describe('buildSeenSet / autoBlockReason', () => {
     expect(autoBlockReason('sex')).toBe('auto-content:sex');
     expect(autoBlockReason('vape')).toBe('auto-content:vape');
     expect(autoBlockReason('dojo')).toBe('auto-content:dojo');
+    expect(autoBlockReason('place')).toBe('auto-content:place');
+    expect(autoBlockReason('uni')).toBe('auto-content:uni');
     expect(autoBlockReason('non-en')).toBe('auto-content:non-en');
   });
 });
