@@ -70,6 +70,17 @@ describe('handleAutoBlockReport (enforce mode)', () => {
     expect(addMock).toHaveBeenCalledWith('bitcoin', 'auto-content:crypto', 'companion:auto-screen');
   });
 
+  it('blocks an nsfw (over18) hit with the nsfw reason', async () => {
+    const out = await handleAutoBlockReport(
+      { subreddit: 'r/SomeNsfwFlow', signal: 'nsfw' },
+      { dryRun: false, seenSubs: new Set() },
+    );
+    expect(out.blocked).toBe(true);
+    expect(out.disposition).toBe('blocked');
+    expect(addMock).toHaveBeenCalledWith('somensfwflow', 'auto-content:nsfw', 'companion:auto-screen');
+    expect(out.notice).toContain('r/somensfwflow');
+  });
+
   it('skips when already blocked (two-tab race: loser stays quiet)', async () => {
     blockedMock.mockResolvedValue(true);
     const out = await handleAutoBlockReport(

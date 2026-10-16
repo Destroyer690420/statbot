@@ -454,7 +454,7 @@ export interface NudgeJobData {
 
 // ─── Automation (GoPartTime auto-accept) ───────────────────────
 
-export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'crypto' | 'place' | 'uni' | 'non-en';
+export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'crypto' | 'place' | 'uni' | 'non-en' | 'nsfw';
 
 export type AutomationCycleStatus = 'RUNNING' | 'DONE' | 'STOPPED';
 

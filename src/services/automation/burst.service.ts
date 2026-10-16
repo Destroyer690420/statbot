@@ -7,6 +7,8 @@ import { getIstDayBoundaries, getIstHourStart } from '../../utils/ist-time';
 import { logger } from '../../utils/logger';
 import { evaluateForBurst, loadSeenSubs, loadAllowedSubs } from './validator.service';
 import { handleAutoBlockReport } from './content-block.service';
+import { checkAndAutoBlockNsfw } from './subreddit-nsfw.service';
+import { normalizeSubreddit } from './subreddit';
 import { diffNewTasks, isBurstActive, isMergeAllowed, parsePooledTasks, pickNextTask, serializePooledTasks } from './eligibility';
 import { outreachService, DAILY_POST_CAP } from '../outreach.service';
 
@@ -126,6 +128,19 @@ export async function validateInputs(
     // Listed + available means takeable: an accepted task vanishes from the
     // listing, so history never disqualifies a listed task here.
     const v = evaluateForBurst(detected, blockedSubs, seenSubs, undefined, allowedSubs);
+    // NSFW screen (server-side over18): a subreddit's own flag is knowable
+    // the moment its name is — at scan time, before any accept. Same gate
+    // `tier0Screen` uses (unseen + unblocked) plus post-only, fired
+    // fire-and-forget and NEVER awaited: the burst hot path pays zero
+    // latency. The permanent cache makes this once per subreddit per
+    // process; near-simultaneous repeats share one in-flight fetch. The
+    // accepted race (~100–400ms before the block lands — see
+    // subreddit-nsfw.service.ts) is deliberately left open here: closing it
+    // needs a browser-side inline gate, a separate follow-up.
+    const nsfwCandidate = detected.type === 'post' ? normalizeSubreddit(detected.subreddit) : null;
+    if (nsfwCandidate && !blockedSubs.has(nsfwCandidate) && !seenSubs.has(nsfwCandidate)) {
+      void checkAndAutoBlockNsfw(nsfwCandidate, seenSubs);
+    }
     if (v.eligible && v.needsContentReview) {
       logger.info('Tier-0 content screen flagged task for Tier-1 scrutiny', {
         cycleId,

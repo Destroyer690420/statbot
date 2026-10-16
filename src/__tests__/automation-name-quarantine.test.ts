@@ -35,6 +35,14 @@ jest.mock('../database/repositories', () => ({
 jest.mock('../services/audit.service', () => ({
   auditLogService: { log: jest.fn() },
 }));
+// The burst loop fires the server-side over18 screen fire-and-forget for
+// newly-seen subs. Mock it here so these orchestration tests stay hermetic
+// (no Reddit network) and deterministic (no background addBlocked races).
+jest.mock('../services/automation/subreddit-nsfw.service', () => ({
+  fetchSubredditOver18: jest.fn(),
+  checkAndAutoBlockNsfw: jest.fn(),
+  clearSubredditNsfwCache: jest.fn(),
+}));
 
 const repo = automationRepository as unknown as Record<string, jest.Mock>;
 

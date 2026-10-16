@@ -2,6 +2,10 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-10-16
+### Built (NOT deployed — needs app rebuild, no migration)
+- **Server-side NSFW over18 auto-block.** New `nsfw` signal (`auto-content:nsfw`) from Reddit's own subreddit-level `over18` flag (`/r/<sub>/about.json`, anonymous `www` → `old` fetch, strict-boolean read, fail-open null; permanent per-process cache + shared in-flight fetches; post-level `over_18` never conflated). Burst `validateInputs` fires `checkAndAutoBlockNsfw` fire-and-forget for unseen + unblocked post subs (zero hot-path latency; validators untouched/pure); strict `true` reuses Tier-1 `handleAutoBlockReport` (block + audit, actor `system:nsfw-screen`, `CONTENT_SCREEN.DRY_RUN` shadow mode). Accepted race stated plainly: the first post from a brand-new NSFW sub can slip through the ~100–400ms fetch window (same as sex/vape); everything after is blocked-list covered. No companion/userscript change, no `scripts/` change. Full suite 82/1134 green, typecheck + build clean. See Decision 40.
+
 ## 2026-10-15
 ### Deployed (2026-10-15 at `ff3a32c` — dashboard-only rebuild, no migration, app untouched)
 - **Automation page cleanup live** (`161.118.164.85`; backup `rtm-backup-20261016-automationpage.tar.gz`; app/redis untouched; host bundle removed). Removed Switches, Manual Single-Task Test, and Rehearse One Task cards (backend endpoints untouched); Blocked Subreddits moved to the top with a case-insensitive search box (`N of M shown` + no-match line). Verified in the served `Automation-*` chunk (Blocked first with search, all three cards absent). Local `dashboard build` (tsc + vite) clean.

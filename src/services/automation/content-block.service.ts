@@ -34,7 +34,7 @@ export interface AutoBlockOutcome {
   notice: string | null;
 }
 
-const VALID_SIGNALS: readonly string[] = ['sex', 'vape', 'dojo', 'crypto', 'place', 'uni', 'non-en'];
+const VALID_SIGNALS: readonly string[] = ['sex', 'vape', 'dojo', 'crypto', 'place', 'uni', 'non-en', 'nsfw'];
 
 export async function handleAutoBlockReport(
   report: AutoBlockReport,

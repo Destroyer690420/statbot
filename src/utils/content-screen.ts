@@ -32,7 +32,7 @@ import {
 } from '../config/constants';
 import { normalizeSubreddit } from '../services/automation/subreddit';
 
-export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'crypto' | 'place' | 'uni' | 'non-en';
+export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'crypto' | 'place' | 'uni' | 'non-en' | 'nsfw';
 
 export interface ContentScreenHit {
   signal: ContentScreenSignal;
