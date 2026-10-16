@@ -49,35 +49,9 @@ services:
     networks:
       - app-network
 
-  # Isolated sidecar browser (IndiaMART tabs + noVNC viewer). Deliberately
-  # SECONDARY: hard-capped at 1536m with oom_score_adj 500 (it dies first,
-  # never the bot) and quarter CPU shares (full speed when idle, yields under
-  # contention). No ports published — reachable only via nginx /browser/.
-  # No depends_on in either direction: bot and browser never block each other.
-  browser:
-    build:
-      context: ./browser
-      dockerfile: Dockerfile
-    container_name: rtm-browser
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      - BROWSER_START_URLS=https://seller.indiamart.com/bltxn/?pref=recent https://seller.indiamart.com/bltxn/?pref=relevant
-    mem_limit: 1536m
-    mem_reservation: 1024m
-    memswap_limit: 1536m
-    oom_score_adj: 500
-    cpu_shares: 256
-    volumes:
-      - browser-box:/home/chrome
-    networks:
-      - app-network
-
 volumes:
   insight-uploads:
   browser-profile:
-  browser-box:
   redis-data:
 
 networks:
