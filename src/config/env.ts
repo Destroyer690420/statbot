@@ -33,6 +33,11 @@ const envSchema = z.object({
   PORT: z.string().default('3000').transform(Number),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+  // Requests allowed per IP per 15-minute window across `/api/` (key-gated
+  // companion endpoints are exempt). The limiter is abuse protection, not a
+  // capacity knob — see docs/API.md §1. Keep it at 1000–2000 for this
+  // workload; going much higher removes the runaway-loop guard.
+  API_RATE_LIMIT_MAX: z.string().default('1000').transform(Number).pipe(z.number().int().positive()),
 
   // Dashboard
   DASHBOARD_URL: z.string().default('http://localhost:5173'),

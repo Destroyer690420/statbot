@@ -12,10 +12,12 @@
 | `trust proxy` | `app.set('trust proxy', 1)` |
 | helmet | defaults |
 | CORS | `origin: [DASHBOARD_URL, 'https://goparttime.net', 'https://www.goparttime.net']`, `credentials: true` (extension uses `GM_xmlhttpRequest` which bypasses CORS; plain fetch from goparttime.net allowed) |
-| Rate limit | `express-rate-limit`: **300 requests / 15 min / IP** on `/api/`, `standardHeaders: true`, custom JSON 429 message. Exempt (extension-key-gated, matched on `req.originalUrl` via `isRateLimitExempt` in `src/utils/rate-limit-exempt.ts`): `/automation/claims/pending`, `/automation/sightings`, `/automation/burst`, `/automation/eligibility-bundle`, `/goparttime/assign` |
+| Rate limit | `express-rate-limit`: **1000 requests / 15 min / IP** on `/api/` (`API_RATE_LIMIT_MAX`, default 1000; `min 1`, integer), `standardHeaders: true`, custom JSON 429 message, default in-memory store (per process, reset on restart). Exempt (extension-key-gated, matched on `req.originalUrl` via `isRateLimitExempt` in `src/utils/rate-limit-exempt.ts`): `/automation/claims/pending`, `/automation/sightings`, `/automation/burst`, `/automation/eligibility-bundle`, `/goparttime/assign` |
 | Body | `express.json({ limit: '1mb' })` + urlencoded; scoped exception `express.json({ limit: '6mb' })` on `POST /api/v1/worker/wallet/qr-code` only (a 3 MB QR is ~4 MB as a base64 data URL; the route still rejects decoded images over 3 MB with a 400, and bodies past the scoped cap surface as JSON 413, not 500) |
 | 404 | `{ success:false, message: 'Route <METHOD> <path> not found.' }` |
 | 500 | `{ success:false, message }` (`err.message` dev / `'Internal server error.'` prod) |
+
+**Rate-limit sizing.** The limiter is runaway-client protection, not a capacity ceiling: the API is a single Node process serving millisecond-scale PostgreSQL reads, so 1000/15 min (~1.1 req/s average) is a negligible load. Real demand from one dashboard viewer is dominated by the Accepted page's 5s poll (~180 requests/15 min), so 1000 leaves ~5× headroom for navigation, mutations, the automation/outreach polls, and health checks. Two or three dashboard users behind the same IP should stay at or below ~2000; that is the practical ceiling for this box before the guard stops meaning anything. The genuinely expensive call is `GET /tasks` without a status filter (unpaginated `findMany`, full rows incl. `formattedContent`); if it is ever polled or looped, that—not this limit—is what hurts the server. Raise the cap only via `API_RATE_LIMIT_MAX`, and prefer adding per-route limits or pagination over pushing the global number past ~2000.
 
 **No WebSocket, no express.static** (insight images served by route).
 

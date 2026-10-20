@@ -19,9 +19,9 @@ export function AcceptedTasks() {
     queryKey: ['tasks', 'ACCEPTED'],
     queryFn: () => getTasks({ status: 'ACCEPTED' }),
     // Live queue: watcher tabs accept into ACCEPTED at any moment — poll so
-    // new arrivals appear without a manual reload (same pattern as Automation
-    // + DailyOutreach; global refetchOnWindowFocus is off in App.tsx).
-    refetchInterval: 30_000,
+    // new arrivals appear without a manual reload (faster than Automation /
+    // DailyOutreach on purpose; global refetchOnWindowFocus is off in App.tsx).
+    refetchInterval: 5_000,
   });
 
   const ticketsQuery = useQuery({

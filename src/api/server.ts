@@ -59,8 +59,12 @@ export function createApiServer(discordClient: Client): express.Application {
     // One home IP carries the dashboard (several auto-polling pages), the
     // watcher companion, and manual use at once — 100 was tripping normal
     // operation (dashboard alone polls ~7/min with the automation panel
-    // open). Key-gated companion endpoints stay fully exempt below.
-    max: 300,
+    // open). At 1000/15min (~67/min) the heaviest legitimate view — the
+    // Accepted page polling every 5s ≈ 12/min — plus navigation and
+    // mutations fits with a wide margin. It is abuse protection, not a
+    // capacity ceiling; raise via API_RATE_LIMIT_MAX, not past ~2000.
+    // Key-gated companion endpoints stay fully exempt below.
+    max: env.API_RATE_LIMIT_MAX,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Too many requests. Please try again later.' },
