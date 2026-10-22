@@ -7,6 +7,21 @@ describe('splitParagraphs', () => {
   it('collapses 3+ newlines and trims', () => {
     expect(splitParagraphs('  a\n\n\nb  ')).toEqual(['a', 'b']);
   });
+  it('splits on space-padded blank lines (Reddit rich-text hard breaks)', () => {
+    // Live shape from task 1326259: "text.   \n  \nnext" — the blank line
+    // carries two spaces, so a bare /\n{2,}/ split saw ONE paragraph.
+    expect(splitParagraphs('one.   \n  \ntwo.   \n  \nthree.')).toEqual([
+      'one.',
+      'two.',
+      'three.',
+    ]);
+  });
+  it('splits on NBSP-only blank lines', () => {
+    expect(splitParagraphs('one\n\u00a0\ntwo')).toEqual(['one', 'two']);
+  });
+  it('normalizes bare CR line endings', () => {
+    expect(splitParagraphs('one\r\rtwo')).toEqual(['one', 'two']);
+  });
 });
 
 describe('normalizeInline', () => {

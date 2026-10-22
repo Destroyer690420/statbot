@@ -30,11 +30,16 @@ export function parseFormatDetail(detail?: string | null): FormatCheckDetail | n
 }
 
 export function splitParagraphs(s: string): string[] {
-  return s
-    .replace(/\r\n/g, '\n')
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
+  return (
+    s
+      // Mirror of `src/utils/reddit-format.ts`: a visually blank separator can
+      // carry spaces ("   \n  \n"), so trailing whitespace is stripped first.
+      .replace(/\r\n?/g, '\n')
+      .replace(/[ \t\u00a0]+$/gm, '')
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+  );
 }
 
 export function normalizeInline(s: string): string {

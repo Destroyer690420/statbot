@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Format Check (Session)
 // @namespace    https://statbot.duckdns.org/
-// @version      1.1.0
+// @version      1.1.1
 // @description  Compares the open Reddit post (fetched with your logged-in session) against the exact text Statbot sent to Discord. Display-only pre-check; the server verdict stays the source of truth.
 // @author       Manager
 // @match        *://reddit.com/*
@@ -55,6 +55,12 @@
  * (case / whitespace / markdown insensitive). Paragraph-count rule (v1.1.0):
  * MORE paragraphs than delivered passes (collapsed source re-pasted
  * correctly); only FEWER fails. Title/wording differences pass.
+ *
+ * v1.1.1 - splitParagraphs strips trailing spaces on every line before
+ * splitting. Reddit's rich-text editor keeps markdown hard-break spaces, so
+ * a visually blank separator arrives as "   \n  \n"; the old splitter saw one
+ * paragraph and reported a correctly spaced 3-paragraph post as PARA_SHORT
+ * (1/3) on the bot side. Same fix mirrored in the server + dashboard copies.
  */
 (function () {
   'use strict';
@@ -125,7 +131,10 @@
 
   function splitParagraphs(s) {
     return String(s || '')
-      .replace(/\r\n/g, '\n')
+      // Reddit keeps markdown hard-break spaces, so a visually blank separator
+      // can be "   \n  \n" — strip trailing whitespace before splitting.
+      .replace(/\r\n?/g, '\n')
+      .replace(/[ \t\u00a0]+$/gm, '')
       .split(/\n{2,}/)
       .map(function (p) { return p.trim(); })
       .filter(function (p) { return p.length > 0; });

@@ -44,11 +44,20 @@ export interface FormatCompareResult {
 }
 
 export function splitParagraphs(s: string): string[] {
-  return s
-    .replace(/\r\n/g, '\n')
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
+  return (
+    s
+      // Reddit's rich-text editor keeps markdown hard-break spaces, so a
+      // visually blank paragraph separator arrives as `"   \n  \n"` — the
+      // blank line itself is not empty. Strip trailing whitespace (incl.
+      // NBSP) from every line first, otherwise the whole post counts as ONE
+      // paragraph and a correctly spaced post is misread as PARA_SHORT
+      // (live case 2026-10-22: task 1326259, "3 ¶" post counted 1/3).
+      .replace(/\r\n?/g, '\n')
+      .replace(/[ \t\u00a0]+$/gm, '')
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+  );
 }
 
 /**
