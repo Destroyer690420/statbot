@@ -53,6 +53,16 @@ All commands audit `COMMAND_USED` (user, `/<command>`) before executing; failure
 
 Member join welcome — fires on `GuildMemberAdd` (every join, bots skipped, immediate, no dedup). Resolves `#invites` channel by ID `1520616800063328437`; sends `MEMBER_WELCOME_MESSAGE` (`src/config/constants.ts` — `hey {user} please create your ticket in <#{verification}> then we can get started` with `{user}` → `<@joiner>` and `{verification}` → `1520483343018496104` as `<#1520483343018496104>`) via `channel.send`. Requires **Server Members Intent** (`GuildMembers` already enabled via `src/bot/index.ts:17`) and **Send Messages** in `#invites`. Skips `member.user.bot`.
 
+**Join DM (added 2026-10-22, built — not deployed):** the same handler then DMs the new member `MEMBER_WELCOME_DM_MESSAGE` via `member.send`:
+
+> Hey <@joiner>, welcome to {server name}!
+>
+> To get started with Reddit tasks, create your ticket here: [**Create my ticket**](https://discord.com/channels/<guildId>/1520483343018496104)
+>
+> Once your ticket is open, a manager will guide you through your first task.
+
+Message + placeholders live in `src/config/constants.ts`; `src/utils/member-welcome.ts` (`buildMemberWelcomeDm`, pure + unit-tested) builds the mention and the masked link. Channel mentions (`<#id>`) render as raw text in DMs, so the verification channel is always a `discord.com/channels` URL. The DM is best-effort and isolated in its own `try/catch`: `50007` (DMs closed / no mutual guild) logs at `info` and everything else at `warn`; either way the `#invites` post and invite detection still run. No DB writes, no dedup — one DM per join, same as the channel welcome.
+
 After the welcome (best-effort, never throws): resolves the used invite via `resolveUsedInvite()` (invite-use diff vs the `ready`-time snapshot) and records an `InviteDetection` staging row (`recordJoin()` — keep-first per invitee) which **auto-approves immediately when the inviter is known** (real referral created, no manual step; unknown-inviter joins are skipped with a log + audit). See `docs/REFERRAL_SYSTEM.md` §3b.
 
 ## 4b. Invite Cache Events (`src/bot/events/invites.ts`)

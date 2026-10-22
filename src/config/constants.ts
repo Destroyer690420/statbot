@@ -549,6 +549,17 @@ export const INVITES_CHANNEL_ID = '1520616800063328437';
 export const VERIFICATION_CHANNEL_ID = '1520483343018496104';
 export const MEMBER_WELCOME_MESSAGE = 'hey {user} please create your ticket in <#{verification}> then we can get started';
 
+/**
+ * DM sent to every new member. Channel mentions (`<#id>`) do not render in
+ * DMs, so the verification channel is delivered as a masked link built from
+ * `{link}` (see `utils/member-welcome.ts`).
+ */
+export const MEMBER_WELCOME_DM_MESSAGE = `Hey {user}, welcome to {server}!
+
+To get started with Reddit tasks, create your ticket here: [**Create my ticket**]({link})
+
+Once your ticket is open, a manager will guide you through your first task.`;
+
 /** Payment proof channel where workers may share payment screenshots */
 export const PAYMENT_PROOF_CHANNEL_ID = '1520613959315488930';
 
