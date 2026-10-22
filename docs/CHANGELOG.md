@@ -3,7 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-10-22
-### Built (not deployed) — new-member join DM
+### Deployed (2026-10-22 at `145975c` — app-only rebuild, no migration, redis/dashboard untouched)
+- **New-member join DM live** (`161.118.164.85`; shipped as a HEAD git bundle, removed from the host; no pre-deploy tarball — rollback is `git reset --hard f65ef6e` + rebuild). Verified: 3 services Up with `app` recreated, public health `200`, boot "All systems online!", live-dist gates (`dist/utils/member-welcome.js` present, `Member welcome DM sent` in live `dist/bot/events/guildMemberAdd.js`), 0 error lines. No join landed during the check window — the first real join is the live confirmation.
 - **`guildMemberAdd` now also DMs every new human member** a welcome + a masked link to `#verification` (`1520483343018496104`), so a joiner can open the ticket channel without finding `#invites`. Files: `src/bot/events/guildMemberAdd.ts` (DM in its own `try/catch`, runs after the `#invites` post, before invite detection), `src/utils/member-welcome.ts` (new pure `buildMemberWelcomeDm`), `src/config/constants.ts` (`MEMBER_WELCOME_DM_MESSAGE`). `50007` (DMs closed / no mutual guild) logs at `info`; any other failure logs at `warn`; neither blocks the channel welcome or `InviteDetection`. Channel mentions (`<#id>`) do not render in DMs, so the pointer is `https://discord.com/channels/<guildId>/1520483343018496104`. Tests: `src/__tests__/member-welcome-dm.test.ts` (5 — mention + masked link, DM sent on join, 50007 isolation, other-failure logging, bots skipped). Typecheck clean; full suite 82/83 suites / 1138/1139 tests (single `image-processor` parallel-run flake, passes standalone). No DB, migration, API, or dashboard change.
 
 ## 2026-10-20

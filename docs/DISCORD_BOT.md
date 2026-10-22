@@ -53,7 +53,7 @@ All commands audit `COMMAND_USED` (user, `/<command>`) before executing; failure
 
 Member join welcome — fires on `GuildMemberAdd` (every join, bots skipped, immediate, no dedup). Resolves `#invites` channel by ID `1520616800063328437`; sends `MEMBER_WELCOME_MESSAGE` (`src/config/constants.ts` — `hey {user} please create your ticket in <#{verification}> then we can get started` with `{user}` → `<@joiner>` and `{verification}` → `1520483343018496104` as `<#1520483343018496104>`) via `channel.send`. Requires **Server Members Intent** (`GuildMembers` already enabled via `src/bot/index.ts:17`) and **Send Messages** in `#invites`. Skips `member.user.bot`.
 
-**Join DM (added 2026-10-22, built — not deployed):** the same handler then DMs the new member `MEMBER_WELCOME_DM_MESSAGE` via `member.send`:
+**Join DM (added 2026-10-22, DEPLOYED at `145975c`):** the same handler then DMs the new member `MEMBER_WELCOME_DM_MESSAGE` via `member.send`:
 
 > Hey <@joiner>, welcome to {server name}!
 >
