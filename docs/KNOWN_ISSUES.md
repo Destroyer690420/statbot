@@ -79,6 +79,14 @@
 - **Files**: `dashboard/src/pages/Settings.tsx`, `index.html`.
 - **Next step**: implement or remove.
 
+### 10. Format checker counted space-padded paragraph breaks as ONE paragraph
+- **Description**: Reddit's rich-text editor keeps markdown hard-break spaces, so a visually blank separator is stored as `"   \n  \n"`. `splitParagraphs` split on `/\n{2,}/` only, so a correctly formatted 3-paragraph post counted as 1 and the bot replied "Formatting failed (1/3 ¶)", tagged the owner, and did not queue the link. Confirmed live on task 1326259 (`r/Big4`, post `1xcm5ab`, 2026-10-22): raw `selftext` = `"...CFO.   \n  \nOn paper..."` → old splitter 1 paragraph, fixed splitter 3.
+- **Severity**: High (false rejection of valid submissions; link not queued for auto-submit).
+- **Status**: **Fixed (2026-10-22) and DEPLOYED live at `6e162b0`** (app + dashboard rebuild, no migration). Verified end-to-end: Recheck of task 1326259 returned `MATCH` 3/3 (was `PARA_SHORT` 3/1) and `Submission job scheduled` fired. Tampermonkey copy needs a v1.1.1 script update.
+- **Fix**: strip trailing whitespace incl. NBSP from every line (`/[ \t\u00a0]+$/gm`) and normalize `\r\n?` before splitting — `src/utils/reddit-format.ts`, `dashboard/src/utils/redditFormat.ts`, `scripts/reddit-format-check.user.js` + `dashboard/public/` mirror (v1.1.1).
+- **Recovery for already-failed tasks**: fixed ones need a **Recheck** from the dashboard (it re-runs the check and queues the link through the normal submit gate); task 1326259 was recovered this way on deploy day.
+- **Files**: `src/utils/reddit-format.ts`, `dashboard/src/utils/redditFormat.ts`, `scripts/reddit-format-check.user.js`, `dashboard/public/reddit-format-check.user.js`.
+
 ## Known Limitations (by design / accepted)
 
 | # | Limitation | Notes |
