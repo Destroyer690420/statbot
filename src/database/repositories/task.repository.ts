@@ -171,6 +171,25 @@ export class TaskRepository {
     });
   }
 
+  /**
+   * Batch form for the failed-task scan: one `IN` query per page of IDs
+   * instead of one round trip per task.
+   */
+  async findBySourceExternalIds(source: string, externalTaskIds: string[]) {
+    if (!externalTaskIds.length) return [];
+    return getDb().task.findMany({
+      where: { source, externalTaskId: { in: externalTaskIds } },
+    });
+  }
+
+  /** Batch lookup used by the manual "POST #123" fallback resolution. */
+  async findByIds(ids: string[]) {
+    if (!ids.length) return [];
+    return getDb().task.findMany({
+      where: { id: { in: ids } },
+    });
+  }
+
   async findBySubmittedRedditUrl(url: string) {
     return getDb().task.findFirst({
       where: { submittedRedditUrl: url },

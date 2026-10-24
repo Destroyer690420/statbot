@@ -200,6 +200,7 @@ Source: `scripts/goparttime-submit.user.js`; served at
 ## 8. Installation / Build
 
 - No build step — it's a plain user script. Source copy: `scripts/goparttime-send.user.js`; deployed copy: `dashboard/public/goparttime-send.user.js` (served by nginx at `/goparttime-send.user.js`).
+- Other public scripts use the same source→`dashboard/public` convention: `/goparttime-auto.user.js`, `/goparttime-mobile.user.js`, `/goparttime-submit.user.js`, `/reddit-format-check.user.js`, and (built 2026-10-24, not yet installed) `/goparttime-failed.user.js`.
 - Install into Tampermonkey from the public URL (desktop) or Edge Canary + Tampermonkey (Android, see `ANDROID_SETUP.md`). Updates: re-open the install link.
 - **Keep the two copies in sync** when editing.
 
@@ -227,3 +228,31 @@ Why it exists: the server format check fetches Reddit JSON from the VPS IP (429-
 Flow: open the worker's post → floating "Check Format" button → enter the GoPartTime task number → script `GET`s expected text from `GET /api/v1/goparttime/expected/:taskId` (extension key; exact `title` + `formattedContent` Discord received) via `GM_xmlhttpRequest` (bypasses CORS — reddit.com is not in the backend allowlist, so Tampermonkey is required), fetches live JSON same-origin first then `old.reddit.com` fallback (12s timeout each), compares with a verbatim port of `src/utils/reddit-format.ts` (`splitParagraphs` / `normalizeInline` / `compareRedditFormat` — normalized text; v1.1.0: extra paragraphs pass, only short fails, title/text differences pass; **v1.1.1** strips per-line trailing spaces/NBSP before splitting, so Reddit's `"   \n  \n"` hard-break separators count as paragraphs instead of one), renders MATCH / accepted verdicts / PARA_SHORT + per-paragraph Exp-vs-Live diff + the same hints as the bot reply. COMMENT tasks report SKIPPED; deleted posts report DELETED; a tab URL differing from the worker-submitted URL gets a warning line. Recheck button covers fresh-post 404s. Settings (backend URL + `GOPARTTIME_API_KEY`) via the Tampermonkey "Configure Format Check..." menu, same storage pattern as the sender script; last task ID remembered.
 
 Deliberate non-features: no POST back to Statbot (no verdict persistence, no audit) — advisory only.
+## 11. Third GoPartTime Script — Failed Task Checker (v1.0.0, built 2026-10-24, NOT deployed)
+
+> Source: `scripts/goparttime-failed.user.js`; byte-identical `dashboard/public/goparttime-failed.user.js`; served at `https://statbot.duckdns.org/goparttime-failed.user.js`. This is a **separate script** — it does not modify or replace the sender, watcher, mobile companion, submit executor, or format-check scripts.
+
+**Purpose:** one-click replacement for the manager's daily manual review of `https://goparttime.net/my-tasks/failed`. It finds tasks that GoPartTime marked Failed while Statbot still considers them delivered and not deleted, and asks the backend to send the owner **one consolidated DM per newly detected mismatch**. It never reports, clicks, accepts, fills, or writes anything on GoPartTime.
+
+| Field | Value |
+|---|---|
+| `@match` | `*://goparttime.net/my-tasks/failed*`, `*://www.goparttime.net/my-tasks/failed*` |
+| `@grant` | `GM_getValue`, `GM_setValue`, `GM_registerMenuCommand`, `GM_xmlhttpRequest` |
+| `@connect` | `statbot.duckdns.org`, `161.118.164.85`, `localhost`, `127.0.0.1` |
+| `@run-at` | `document-idle` |
+| `@noframes` | yes |
+
+**Injected UI:**
+- **"Check failed tasks"** fixed button, bottom-left (`#gpt-failed-check-btn`). Manual click only — there is no timer, observer, or auto-scan. Clicking while a scan runs requests cancellation ("Cancelling...").
+- **Result panel** (`#gpt-failed-check-panel`, bottom-left above the button): scanned pages/tasks, DM status, verdict counts, "Not in Statbot (excluded from reports): ..." list, and mismatch cards with task ID, type, Statbot status, reward, failed reason, **NEW** badge for tasks DM'd in this scan, and `Copy` / `Copy all IDs` / `Settings`.
+- **Tampermonkey menu:** "Configure failed-task checker..." (backend base URL + `GOPARTTIME_API_KEY`, stored under `gpt_failed_api_url` / `gpt_failed_api_key`) and "Reset failed-task scan state".
+
+**Scan flow:**
+1. Collect every `div[data-slot="card"]` whose badge says `Failed` on the current page: `Task ID` (leaf "Task ID" → next sibling, heading `#NNN` fallback), type (`Task Type` field first, `Post`/`Comment` heading as fallback), `Failed Reason`, `Reward`, `Deadline`. Unknown IDs are kept for the server (they become `NOT_FOUND`, shown in the panel, never DM'd).
+2. Read the pager: `nav[aria-label="pagination"] a[data-slot="pagination-link"][href]` → page numbers + the **next** link. The next link is followed until absent, so windowed pagers (`1 … 5 6 7 … 20`) do not stop the scan early.
+3. Fetch `?page=N` same-origin (cookies included). If the HTML has no task cards (the site is a client-rendered app), reload that page **once** in the tab and resume from the real DOM; a page that still has no cards is skipped and reported as an "empty page". Each page gets at most one reload — no loops.
+4. Hard caps: `MAX_PAGES=50`, `MAX_TASKS=500` (payload trimmed to 500 before POST). Progress is persisted in `sessionStorage` (`gpt_failed_scan_state`) so the reload fallback resumes; the last result is persisted under `gpt_failed_scan_result` and re-rendered on reload.
+5. POST the full set once to `{base}/failed-tasks/scan` with `{ tasks, pagesScanned }`, Bearer auth, 25s timeout, `GM_xmlhttpRequest` first (CORS bypass) with `fetch` fallback.
+6. On success: render `counts` + `mismatches` + `notFound` + DM status; clear the scan state. On upload failure: keep the collected cards and label the button **"Retry upload"** — clicking retries only the POST, not the page walk.
+
+**Rules/limits:** "deleted" is exactly Statbot's `cancelledReason` (set = expected failure) — there is no live Reddit check and no Feedback click. A scan never sends more than one DM per task ID across scans (`notifiedAt` guard server-side); a failed DM stays retryable. `NOT_COMPARABLE` tasks (CANCELLED without reason, or no stored Reddit link) are reported only as a count. The first live scan must confirm whether GoPartTime's failed-page HTML returns cards to `fetch` (fetch-first) or falls back to one reload per page (slower but automatic).

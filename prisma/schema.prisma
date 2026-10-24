@@ -594,3 +594,31 @@ model RedditSession {
   updatedAt    DateTime @updatedAt
   updatedBy    String
 }
+
+// GoPartTime failed-task checker: one row per GoPartTime task ID ever seen on
+// the site's /my-tasks/failed page. `verdict` is recomputed on every scan
+// (MISMATCH | DELETED | NOT_COMPARABLE | NOT_FOUND); `firstSeenAt` is what
+// makes "only new failures" possible, and `notifiedAt` is the one-shot owner
+// DM guard (a failed DM leaves it NULL so the next scan retries).
+model FailedTaskCheck {
+  externalTaskId  String   @id
+  taskId          String?
+  taskType        String?
+  failedReason    String?
+  reward          String?
+  deadline        String?
+  verdict         String
+  taskStatus      String?
+  cancelledReason String?
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  verdictAt       DateTime @default(now())
+  notifiedAt      DateTime?
+  notifyError     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([verdict])
+  @@index([notifiedAt])
+  @@index([lastSeenAt])
+}

@@ -337,6 +337,24 @@ erDiagram
         timestamp createdAt
         timestamp updatedAt
     }
+    FailedTaskCheck {
+        string externalTaskId PK "GoPartTime sub_task id"
+        string taskId "nullable — resolved Statbot Task.id"
+        string taskType "nullable — post|comment snapshot from the failed card"
+        string failedReason "nullable — GoPartTime reason text"
+        string reward "nullable"
+        string deadline "nullable"
+        string verdict "MISMATCH|DELETED|NOT_COMPARABLE|NOT_FOUND (recomputed each scan)"
+        string taskStatus "nullable — Statbot Task.status at last scan"
+        string cancelledReason "nullable — Statbot deletion reason; set = DELETED"
+        timestamp firstSeenAt "insert only; defines a new failure"
+        timestamp lastSeenAt "last scan that saw the card"
+        timestamp verdictAt "last verdict recomputation"
+        timestamp notifiedAt "nullable — one-shot owner DM guard"
+        string notifyError "nullable — last DM failure; row stays retryable"
+        timestamp createdAt
+        timestamp updatedAt
+    }
 ```
 
 ### Enums (7)
@@ -371,7 +389,7 @@ Consequence: you **cannot delete a Task that has payout/commission items** (REST
 
 ---
 
-## 5. Indexes & Uniques (48 non-unique + 3 unique index statements)
+## 5. Indexes & Uniques (49 non-unique + 6 unique index statements)
 
 | Index | Columns |
 |---|---|
@@ -386,6 +404,7 @@ Consequence: you **cannot delete a Task that has payout/commission items** (REST
 | Referral: `inviterId`, `(inviteeId, inviterId)`, `createdAt` | |
 | CommissionBatch: `batchNumber` | |
 | CommissionItem: `batchId`, `(referralId, inviterId, commissionKind)`, `(inviterId, sourceTaskId, commissionKind)` | |
+| FailedTaskCheck: `verdict`, `notifiedAt`, `lastSeenAt` | no FK — this is a scan/audit side table keyed by the external GoPartTime ID |
 
 ---
 

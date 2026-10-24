@@ -4,6 +4,17 @@
 
 ---
 
+## Verified 2026-10-24
+
+### 0b. GoPartTime failed-task checker built but not deployed
+- **Description**: The manual `/my-tasks/failed` checker exists only in the working tree. The `FailedTaskCheck` table DDL is appended to `prisma/migrations/migration.sql` but has **not** been applied to the production database; the `POST /api/v1/goparttime/failed-tasks/scan` route is not live; the userscript is not installed in Tampermonkey.
+- **Severity**: Low (no live path calls it; nothing else changed).
+- **Status**: Open — awaiting deploy approval + first live scan.
+- **Cause**: Feature was built and verified locally, deliberately not deployed in the same session.
+- **Next step**: apply the `FailedTaskCheck` DDL manually (idempotent), rebuild app + dashboard, install `https://statbot.duckdns.org/goparttime-failed.user.js` and set `GOPARTTIME_API_KEY`, then run one scan and confirm both the fetch-first pagination path and the owner DM. The first live scan is also the first check of the failed-card DOM assumptions (card `data-slot="card"` + `Failed` badge + pager `nav[aria-label="pagination"]`); the Task ID label→sibling read is already proven by the submit executor. See `docs/GOPARTTIME.md` §20.
+
+---
+
 ## Verified 2026-08-17
 
 ### 0. `npm run lint` broken repo-wide (no ESLint config)

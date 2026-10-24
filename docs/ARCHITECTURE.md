@@ -67,7 +67,8 @@ flowchart TB
 | API | `src/api/server.ts` + middleware + 15 route files | REST API `/api/v1` | HTTP | JSON/CSV/files | services, schemas |
 | Scheduler | `src/scheduler/{queue,jobs,worker}.ts` | BullMQ queue/worker for reminders | Redis, DB | reminder embeds, status transitions, overdue alerts | shared Discord client |
 | Services | `src/services/*.ts` (12) | business logic (task, reminder, payout, commission, goparttime, analytics, audit, settings, owner-earnings, insight-storage, state-machine, outreach) | repositories | DB writes, audits, jobs | repositories, utils |
-| Repositories | `src/database/repositories/*.ts` (8) | data access (Prisma queries) | services | Prisma results | Prisma client |
+| Failed-task checker | `src/services/failed-task-check.service.ts`, `src/services/goparttime-task-resolver.service.ts`, `src/utils/failed-task-check.ts` | classify a manual browser batch against Statbot, persist `FailedTaskCheck`, one consolidated owner DM for new mismatches (built 2026-10-24, NOT deployed) | `POST /goparttime/failed-tasks/scan` | DB rows, Discord DM | repositories, resolver |
+| Repositories | `src/database/repositories/*.ts` (14) | data access (Prisma queries) | services | Prisma results | Prisma client |
 | DB bootstrap | `src/database/db.ts` | PrismaClient + PrismaPg adapter | `DATABASE_URL` | client singleton | generated client |
 | Utils | `src/utils/*.ts` | validation, formatting, image + video processing, chunking, logging, permissions | — | — | — |
 
@@ -96,7 +97,7 @@ flowchart TB
 ### 3.1 Request/response flows
 
 1. **Dashboard** → nginx (same-origin `/api/*`) → `proxy_pass http://app:3000` → Express. JWT in `Authorization: Bearer`.
-2. **GoPartTime userscript** → `https://statbot.duckdns.org/api/v1/goparttime/*` → Express with `Authorization: Bearer <GOPARTTIME_API_KEY>` (timing-safe compare).
+2. **GoPartTime userscript** → `https://statbot.duckdns.org/api/v1/goparttime/*` → Express with `Authorization: Bearer <GOPARTTIME_API_KEY>` (timing-safe compare). The same key is used by the sender, Submit View/Link, submit executor, format-check, and failed-task scripts (each endpoint is scoped to its own read/write purpose).
 3. **Discord** → bot via gateway (intents listed above). Bot → Discord via REST/gateway send.
 
 ### 3.2 Background/event-driven

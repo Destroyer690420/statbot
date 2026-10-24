@@ -23,7 +23,7 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 
 **Modules under test must not import `src/config/env.ts`.** `env.ts` calls `process.exit(1)` when the environment is incomplete, so importing it turns any missing var into a dead test run. That is why `utils/video-processor.ts` reads `FFMPEG_PATH` from `MEDIA` in `src/config/constants.ts` (a plain `process.env` read) instead.
 
-## 2. Existing Tests (8 files)
+## 2. Existing Tests (86 files; selected suites below)
 
 | File | Covers |
 |---|---|
@@ -47,6 +47,9 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 | `delivery-order.test.ts` | Background delivery end-to-end-ish: exact send sequence with shuffled image input (1, 2, 3 in order), CAS SENT flip + audit + clocks, idempotent re-run sends nothing, mid-flight reassign stands down untouched, send throw → FAILED — Decision 36 |
 | `automation-claim-lease.test.ts` | Lease picker (+ deferred phases for Decision 37: other work first, parked id back only when nothing else leasable, oldest-deferred first, foreign-held still hidden) |
 | `worker-brand-leak.test.ts` | Brand-leak guard (Decision 32): all submission verdicts, the ticket auto-submit failure notice, nudge/instruction/image-order wording, and a display-brand scan of the worker portal + task-detail UI files carry no external-site brand |
+| `failed-task-check.test.ts` | Failed-task classifier (MISMATCH / DELETED / NOT_COMPARABLE / NOT_FOUND), `cancelledReason` blank vs set, CANCELLED-without-reason, link/no-link, manual-task `redditUrl`, scan schema (numeric coercion, invalid IDs, type/text caps, 500-card max), DM builder (ID-first rows, caps, char budget) |
+| `failed-task-check-service.test.ts` | Scan orchestration: new mismatch persists + DMs once, already-notified never re-DMs, unnotified retry, DM failure leaves `notifiedAt` null + `notifyError`, deleted/no-link/not-found silence, dedupe, empty page, missing Discord client (built 2026-10-24, not deployed) |
+| `goparttime-task-resolver.test.ts` | Shared two-step resolver: exact `(source, externalTaskId)` first, manual-ID fallback candidates, sourced rows never shadow manual candidates, missing → null, dedupe + only unresolved IDs queried |
 
 **No test coverage** for: most services (task/payout/commission/reminder/goparttime/analytics), most repositories, bot commands/events, scheduler/worker, or the dashboard (no frontend tests exist). Worker Portal access repository behavior is covered by `worker-portal-access.test.ts`, and the worker-scoped referral view by `worker-referrals.test.ts` + `worker-isolation.test.ts`. Owner earnings is covered by `owner-earnings.test.ts` (6: creation-basis universe incl. PENDING / deleted+CANCELLED exclusion / settings-driven worker cost / per-task gating incl. indirect special threshold / one-time bonus attributed once to the threshold task's creation day / paid-label flip with unchanged totals / per-inviter bonus, no last-wins).
 

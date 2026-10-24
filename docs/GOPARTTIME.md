@@ -135,6 +135,7 @@ Every guild's TextChannels; `taskStatus`: `awaiting-submission` (a task awaiting
 | `GET /api/v1/goparttime/insight/:externalTaskId` | extension key | **read-only**; the stored insight screenshot for a task's view-data step (`?step=1\|2`, default: resolve automatically); used by Submit View (v1.4.0) |
 | `GET /api/v1/goparttime/expected/:externalTaskId` | extension key | **read-only**; exact expected text Statbot delivered to Discord (`title`, `formattedContent`, `type`, `subreddit`, `submittedRedditUrl`, `formatCheckStatus`); used by the session format-check script (`reddit-format-check.user.js` v1.0.0). Same task resolution as insight (source+external, manual-id fallback); 400 non-numeric id, 404 not found |
 | `POST /api/v1/goparttime/reddit-session` | extension key | paste/refresh the spare Reddit account's login cookie (self-service, no SSH); validated + AES-vaulted, never echoed back |
+| `POST /api/v1/goparttime/failed-tasks/scan` | extension key | failed-task checker (2026-10-24, built — NOT deployed): classify a batch of GoPartTime failed task IDs against Statbot, persist `FailedTaskCheck`, DM the owner once per new `MISMATCH` |
 | `GET /api/v1/discord/tickets` | JWT + admin username | same list for dashboard |
 | `POST /api/v1/tasks/assign-from-goparttime` | JWT | dashboard twin (same service) |
 | `POST /api/v1/tasks/:id/submit-url` | JWT | dashboard URL submission (also runs the auto format check) |
@@ -308,3 +309,43 @@ Acceptor tabs were idle while the server downloaded images + sent ticket message
 - **Races**: reassign removes the queued job and takes over synchronously; an actively sending run checkpoints ticket/worker/PENDING before every send and stands down (deleting only its own partials) when the row moved; crash-redeliveries clean row-listed partials first (records saved progressively), never duplicate. Stale `SENT`/`FAILED` rows make a run return without sending (idempotent).
 - **Failures**: send throw → `FAILED` + error, exactly like the old path (dashboard Retry recovers synchronously); enqueue failure → same `FAILED` shape. NEEDS_PUSH still fires only on persist-time errors (unchanged tab contract: 2xx = accepted-for-delivery).
 - **Recovery**: boot re-enqueues every `PENDING`-delivery ACCEPTED row; the 30-min sweep re-enqueues rows stuck >5min (live synchronous retry/reassign deliveries are seconds old). No migration (no schema change). Nudge + feedback clocks start at SENT-flip, same anchor as before. Rollback: rebundle + app rebuild.
+## 20. Failed-task checker — manual scan of `/my-tasks/failed` (BUILT 2026-10-24, NOT deployed)
+
+**Purpose:** replace the daily manual check of `https://goparttime.net/my-tasks/failed`. The manager opens the failed page and clicks one button; a dedicated userscript walks every failed-task page, sends the task IDs to Statbot, and the backend reports which failures are contradicted by Statbot (the task still has a delivered Reddit link and was not marked deleted). A task that is OK in Statbot but Failed on GoPartTime is a possible wrongful failure worth reviewing.
+
+**End-to-end flow:**
+```
+manager opens goparttime.net/my-tasks/failed
+→ clicks "Check failed tasks" (new userscript; manual only, no auto-scan)
+→ script collects every Failed card across ?page=N (fetch-first; full reload fallback for client-rendered pages)
+→ POST /api/v1/goparttime/failed-tasks/scan { tasks:[{externalTaskId,type,failedReason,reward,deadline}], pagesScanned }
+→ backend resolves each externalTaskId to a Task (shared two-step resolver: exact (source,externalTaskId) link, then manual "POST #123" id fallback when source is empty)
+→ per-task verdict from Statbot data → upsert FailedTaskCheck
+→ one consolidated owner DM for every currently-unnotified MISMATCH (OWNER_USER_ID); notifiedAt stamped only after Discord accepts
+→ script renders counts + mismatch cards (with Copy / Copy all IDs); "Not in Statbot" IDs are listed but never DM'd
+```
+
+**Verdicts (`src/utils/failed-task-check.ts: classifyFailedTask`):**
+
+| Verdict | Rule | DM? |
+|---|---|---|
+| `MISMATCH` | not deleted + has `submittedRedditUrl` (or manual-task `redditUrl`) | yes, once |
+| `DELETED` | `cancelledReason` is set (`deleted`, `deleted_later`, or any admin-entered reason) — matches the dashboard dropdown | no |
+| `NOT_COMPARABLE` | `CANCELLED` without a reason, or no Reddit link at all | no |
+| `NOT_FOUND` | no Statbot task for that GoPartTime ID | no; shown in the panel only |
+
+**Persistence (`FailedTaskCheck`, one row per externalTaskId):** `taskId/taskType/failedReason/reward/deadline` (last-seen snapshot), `verdict/taskStatus/cancelledReason` (last scan), `firstSeenAt` (insert only — defines "new"), `lastSeenAt/verdictAt`, `notifiedAt` (one-shot DM guard), `notifyError` (last DM failure; row stays retryable). `taskType` prefers the resolved Statbot task's stored type; the browser's card hint is used only for `NOT_FOUND` rows, so a card-layout change cannot mislabel a real task. Upserts run in 50-row transactions; the scan result is capped at 500 cards. A process-level in-flight lock returns 429 for a concurrent scan.
+
+**Read-only guarantee:** the script never clicks a card, never opens Feedback, and never writes/submits anything on GoPartTime. No live Reddit re-check is performed; "deleted" is exactly the Statbot `cancelledReason` decision above.
+
+**Files:**
+- `scripts/goparttime-failed.user.js` + byte-identical `dashboard/public/goparttime-failed.user.js` (served at `/goparttime-failed.user.js`)
+- `src/api/routes/goparttime.ts` → `POST /failed-tasks/scan`
+- `src/utils/failed-task-check.ts` (classifier, zod schema, DM builder)
+- `src/services/failed-task-check.service.ts` (orchestration + owner DM)
+- `src/services/goparttime-task-resolver.service.ts` (shared batch resolver, now also used by `/insight`, `/expected`, `/submission`)
+- `src/database/repositories/failed-task-check.repository.ts`
+- `src/database/repositories/task.repository.ts` (`findBySourceExternalIds`, `findByIds`)
+- Tests: `failed-task-check.test.ts`, `failed-task-check-service.test.ts`, `goparttime-task-resolver.test.ts` (44 tests)
+
+**Deploy prerequisites (when approved):** apply the `FailedTaskCheck` DDL at the end of `prisma/migrations/migration.sql` manually (idempotent, schema-only), rebuild app + dashboard, and install/update the userscript from `https://statbot.duckdns.org/goparttime-failed.user.js` with the shared `GOPARTTIME_API_KEY`. The first real scan is also the first live test of the fetch-vs-reload pagination path (the page is a client-rendered app; the script reloads a page once if the HTML has no cards).

@@ -847,3 +847,34 @@ ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'AUTOMATION_ALLOWED';
 -- and the 15-min re-blast. Schema-only, idempotent, safe to re-run.
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'LINK_NUDGE_SENT';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'LINK_ESCALATED';
+
+-- ============================================================
+-- GoPartTime failed-task checker (manager-browser scan)
+-- ============================================================
+-- One row per GoPartTime task ID ever seen on /my-tasks/failed. The userscript
+-- posts every card on every page; the server recomputes the verdict from the
+-- Statbot row and DMs the owner once per new MISMATCH. Schema-only, no data
+-- statements, safe to re-run.
+CREATE TABLE IF NOT EXISTS "FailedTaskCheck" (
+  "externalTaskId" TEXT NOT NULL,
+  "taskId" TEXT,
+  "taskType" TEXT,
+  "failedReason" TEXT,
+  "reward" TEXT,
+  "deadline" TEXT,
+  "verdict" TEXT NOT NULL,
+  "taskStatus" TEXT,
+  "cancelledReason" TEXT,
+  "firstSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "verdictAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "notifiedAt" TIMESTAMP(3),
+  "notifyError" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "FailedTaskCheck_pkey" PRIMARY KEY ("externalTaskId")
+);
+
+CREATE INDEX IF NOT EXISTS "FailedTaskCheck_verdict_idx" ON "FailedTaskCheck"("verdict");
+CREATE INDEX IF NOT EXISTS "FailedTaskCheck_notifiedAt_idx" ON "FailedTaskCheck"("notifiedAt");
+CREATE INDEX IF NOT EXISTS "FailedTaskCheck_lastSeenAt_idx" ON "FailedTaskCheck"("lastSeenAt");

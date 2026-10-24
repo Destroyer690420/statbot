@@ -6,7 +6,8 @@
 
 ## In Progress
 
-- **Nothing is marked in-progress anywhere in the repo.** The working tree has one uncommitted change: `dashboard/vite.config.ts` dev-proxy target `http:` → `https:` (left unfinished locally).
+- **GoPartTime failed-task checker** — built locally 2026-10-24, tests/builds green, **not deployed**. Awaiting approval to apply the `FailedTaskCheck` migration, rebuild, install the userscript, and run the first live scan. See `docs/GOPARTTIME.md` §20.
+- **Nothing else is marked in-progress anywhere in the repo.** The working tree has one uncommitted change: `dashboard/vite.config.ts` dev-proxy target `http:` → `https:` (left unfinished locally).
 
 ## Planned (from specs/plans in repo)
 

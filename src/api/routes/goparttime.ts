@@ -9,11 +9,13 @@ import { redditSessionService } from '../../services/reddit-session.service';
 import { logger } from '../../utils/logger';
 import { reminderService } from '../../services/reminder.service';
 import { resolveInsightReminder } from '../../services/goparttime-insight.service';
-import { buildManualTaskIdCandidates, resolveSubmittedRedditUrl } from '../../services/goparttime-task-lookup.service';
-import { taskRepository } from '../../database/repositories';
-import { toTask } from '../../database/converters';
-import { GOPARTTIME_SOURCE } from '../../config/constants';
-import { Task } from '../../types';
+import { resolveSubmittedRedditUrl } from '../../services/goparttime-task-lookup.service';
+import { findTaskByExternalId } from '../../services/goparttime-task-resolver.service';
+import {
+  FailedTaskScanInProgressError,
+  failedTaskCheckService,
+} from '../../services/failed-task-check.service';
+import { failedTaskScanSchema } from '../../utils/failed-task-check';
 import {
   leaseSubmissionJob,
   pendingSubmissionJobs,
@@ -36,27 +38,30 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
   router.use(extensionAuth);
 
   /**
-   * Resolves a GoPartTime task number to its Statbot task, or null when no task
-   * is linked to it. Shared by every read-only endpoint below so the two-step
-   * resolution is defined once:
-   *
-   *   1. the exact `(source, externalTaskId)` link written by the userscript /
-   *      automation ingest, then
-   *   2. manually-created tasks whose id embeds the number ("POST #688318") —
-   *      only when they carry no `source`, so a real GoPartTime task is never
-   *      shadowed by a manual one.
+   * POST /api/v1/goparttime/failed-tasks/scan
+   * Receives every card the manager-browser script collected from
+   * /my-tasks/failed, resolves each task number against Statbot, and returns
+   * per-task verdicts. New MISMATCH rows (Statbot OK, GoPartTime Failed) are
+   * DM'd to the owner once. Read-only on GoPartTime: this endpoint never
+   * reports, clicks, or writes anything on the task site.
    */
-  async function findTaskByExternalId(externalTaskId: string): Promise<Task | null> {
-    const linked = await taskRepository.findBySourceExternal(GOPARTTIME_SOURCE, externalTaskId);
-    if (linked) return toTask(linked);
-
-    for (const candidateId of buildManualTaskIdCandidates(externalTaskId)) {
-      const candidate = await taskRepository.findById(candidateId);
-      if (candidate && !candidate.source) return toTask(candidate);
-    }
-
-    return null;
-  }
+  router.post(
+    '/failed-tasks/scan',
+    validateBody(failedTaskScanSchema),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const result = await failedTaskCheckService.scan(req.body, discordClient);
+        res.json({ success: true, data: result });
+      } catch (error) {
+        if (error instanceof FailedTaskScanInProgressError) {
+          res.status(429).json({ success: false, message: error.message });
+          return;
+        }
+        logger.error('POST /goparttime/failed-tasks/scan failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
 
   /**
    * GET /api/v1/goparttime/tickets
