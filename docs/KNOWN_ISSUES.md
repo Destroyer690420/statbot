@@ -9,7 +9,8 @@
 ### 0b. GoPartTime failed-task checker not deployed (resolved 2026-10-24)
 - **Was**: the `/my-tasks/failed` checker existed only in the working tree — no `FailedTaskCheck` table, no live route, no served script.
 - **Resolved**: deployed at `1df8027` — `FailedTaskCheck` DDL applied (psql exit 0, 0 unexpected errors; table + 3 indexes + PK verified), app + dashboard rebuilt, 3 services Up, health `200`, boot "All systems online!", route **401** without a key and **200** with it, an empty batch returned zero counts with no DM, a throwaway unknown ID was persisted as `NOT_FOUND` and then removed (table back to 0 rows), and `https://statbot.duckdns.org/goparttime-failed.user.js` serves the exact source bytes. Rollback: restore `rtm-backup-20261024-123214.tar.gz` or rebundle `0fd61dd` + rebuild.
-- **Still open (not a bug)**: the script is **not installed in Tampermonkey yet**, so the first real browser scan (GoPartTime failed-page DOM/pagination) and the first genuine `MISMATCH` owner DM remain unverified. See `docs/GOPARTTIME.md` §20.
+- **Follow-up deployed 2026-10-24 at `9100667`**: userscript **v1.1.0** (single page only, no pagination/fetch/reload; legacy scan cache deleted on load) and server-side unseen-only processing (`skippedKnown`; no resolve/upsert for known IDs). Also fixed the live `tasks.N.failedReason` validation failure — the zod cap was 300 chars; it is now 2000 (live-verified with a 1,500-char reason), with `reward` 64 / `deadline` 128. Backup `rtm-backup-20261024-131628.tar.gz`; no migration.
+- **Still open (not a bug)**: the script is **not installed in Tampermonkey yet**, so the first real browser scan (GoPartTime failed-page DOM) and the first genuine `MISMATCH` owner DM remain unverified. See `docs/GOPARTTIME.md` §20.
 
 ---
 

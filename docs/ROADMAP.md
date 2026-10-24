@@ -10,7 +10,7 @@
 
 ## Recently completed
 
-- **GoPartTime failed-task checker** — **deployed 2026-10-24**: `FailedTaskCheck` DDL applied (0 unexpected errors), app + dashboard rebuilt, route/auth/DB smoke-verified live. Narrowed the same day per owner request to **one page per click + never-seen IDs only** (userscript v1.1.0; backend `skippedKnown`; `failedReason` cap raised 300 → 2000 after a real card was rejected). **Remaining follow-up:** install/update `https://statbot.duckdns.org/goparttime-failed.user.js` in Tampermonkey with the shared API key and run the first real browser scan — that is the first live test of GoPartTime's failed-page DOM and of the genuine `MISMATCH` owner DM. See `docs/GOPARTTIME.md` §20.
+- **GoPartTime failed-task checker** — **deployed 2026-10-24**: `FailedTaskCheck` DDL applied (0 unexpected errors), app + dashboard rebuilt, route/auth/DB smoke-verified live. Narrowed the same day per owner request to **one page per click + never-seen IDs only**, redeployed at `9100667` (userscript v1.1.0; backend `skippedKnown`; `failedReason` cap raised 300 → 2000 after a real card was rejected, live-verified with a 1,500-char reason). **Remaining follow-up:** install/update `https://statbot.duckdns.org/goparttime-failed.user.js` in Tampermonkey with the shared API key and run the first real browser scan — that is the first live test of GoPartTime's failed-page DOM and of the genuine `MISMATCH` owner DM. See `docs/GOPARTTIME.md` §20.
 
 ## Planned (from specs/plans in repo)
 

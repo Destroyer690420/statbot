@@ -200,7 +200,7 @@ Source: `scripts/goparttime-submit.user.js`; served at
 ## 8. Installation / Build
 
 - No build step — it's a plain user script. Source copy: `scripts/goparttime-send.user.js`; deployed copy: `dashboard/public/goparttime-send.user.js` (served by nginx at `/goparttime-send.user.js`).
-- Other public scripts use the same source→`dashboard/public` convention: `/goparttime-auto.user.js`, `/goparttime-mobile.user.js`, `/goparttime-submit.user.js`, `/reddit-format-check.user.js`, and `/goparttime-failed.user.js` (served live 2026-10-24; Tampermonkey install still pending).
+- Other public scripts use the same source→`dashboard/public` convention: `/goparttime-auto.user.js`, `/goparttime-mobile.user.js`, `/goparttime-submit.user.js`, `/reddit-format-check.user.js`, and `/goparttime-failed.user.js` (v1.1.0 served live 2026-10-24; Tampermonkey install still pending).
 - Install into Tampermonkey from the public URL (desktop) or Edge Canary + Tampermonkey (Android, see `ANDROID_SETUP.md`). Updates: re-open the install link.
 - **Keep the two copies in sync** when editing.
 
