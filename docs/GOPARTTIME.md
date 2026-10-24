@@ -309,21 +309,24 @@ Acceptor tabs were idle while the server downloaded images + sent ticket message
 - **Races**: reassign removes the queued job and takes over synchronously; an actively sending run checkpoints ticket/worker/PENDING before every send and stands down (deleting only its own partials) when the row moved; crash-redeliveries clean row-listed partials first (records saved progressively), never duplicate. Stale `SENT`/`FAILED` rows make a run return without sending (idempotent).
 - **Failures**: send throw → `FAILED` + error, exactly like the old path (dashboard Retry recovers synchronously); enqueue failure → same `FAILED` shape. NEEDS_PUSH still fires only on persist-time errors (unchanged tab contract: 2xx = accepted-for-delivery).
 - **Recovery**: boot re-enqueues every `PENDING`-delivery ACCEPTED row; the 30-min sweep re-enqueues rows stuck >5min (live synchronous retry/reassign deliveries are seconds old). No migration (no schema change). Nudge + feedback clocks start at SENT-flip, same anchor as before. Rollback: rebundle + app rebuild.
-## 20. Failed-task checker — manual scan of `/my-tasks/failed` (DEPLOYED 2026-10-24 at `1df8027`)
+## 20. Failed-task checker — manual scan of `/my-tasks/failed` (DEPLOYED 2026-10-24, single-page v1.1.0)
 
-**Purpose:** replace the daily manual check of `https://goparttime.net/my-tasks/failed`. The manager opens the failed page and clicks one button; a dedicated userscript walks every failed-task page, sends the task IDs to Statbot, and the backend reports which failures are contradicted by Statbot (the task still has a delivered Reddit link and was not marked deleted). A task that is OK in Statbot but Failed on GoPartTime is a possible wrongful failure worth reviewing.
+**Purpose:** replace the daily manual check of `https://goparttime.net/my-tasks/failed`. The manager opens the failed page and clicks one button; a dedicated userscript reads **only the page currently open**, sends that page's task IDs to Statbot, and the backend reports which never-seen failures are contradicted by Statbot (the task still has a delivered Reddit link and was not marked deleted). A task that is OK in Statbot but Failed on GoPartTime is a possible wrongful failure worth reviewing.
 
 **End-to-end flow:**
 ```
-manager opens goparttime.net/my-tasks/failed
-→ clicks "Check failed tasks" (new userscript; manual only, no auto-scan)
-→ script collects every Failed card across ?page=N (fetch-first; full reload fallback for client-rendered pages)
-→ POST /api/v1/goparttime/failed-tasks/scan { tasks:[{externalTaskId,type,failedReason,reward,deadline}], pagesScanned }
-→ backend resolves each externalTaskId to a Task (shared two-step resolver: exact (source,externalTaskId) link, then manual "POST #123" id fallback when source is empty)
+manager opens goparttime.net/my-tasks/failed (any ?page=N)
+→ clicks "Check failed tasks" (new userscript; manual only, no auto-scan, no pagination)
+→ script reads the Failed cards in the current DOM only (no fetches, no reloads, no page walking)
+→ POST /api/v1/goparttime/failed-tasks/scan { tasks:[{externalTaskId,type,failedReason,reward,deadline}] }
+→ backend drops IDs already recorded (only never-seen IDs are resolved; a MISMATCH whose DM never sent is retried)
+→ backend resolves the remaining externalTaskIds to Tasks (shared two-step resolver: exact (source,externalTaskId) link, then manual "POST #123" id fallback when source is empty)
 → per-task verdict from Statbot data → upsert FailedTaskCheck
 → one consolidated owner DM for every currently-unnotified MISMATCH (OWNER_USER_ID); notifiedAt stamped only after Discord accepts
 → script renders counts + mismatch cards (with Copy / Copy all IDs); "Not in Statbot" IDs are listed but never DM'd
 ```
+
+**New-only rule:** a task ID is processed only if `FailedTaskCheck` has no row for it. Everything already recorded is skipped untouched — no resolver call, no upsert, no counts, no DM — and returned as `skippedKnown`. The one exception is a previously recorded `MISMATCH` whose `notifiedAt` is still null (the DM failed): it is re-checked and retried without being counted as new. Clicks on the same page are therefore idempotent. The userscript's v1.0.0 multi-page cache (`gpt_failed_scan_state`, `gpt_failed_scan_result`) is deleted on load.
 
 **Verdicts (`src/utils/failed-task-check.ts: classifyFailedTask`):**
 
@@ -334,7 +337,7 @@ manager opens goparttime.net/my-tasks/failed
 | `NOT_COMPARABLE` | `CANCELLED` without a reason, or no Reddit link at all | no |
 | `NOT_FOUND` | no Statbot task for that GoPartTime ID | no; shown in the panel only |
 
-**Persistence (`FailedTaskCheck`, one row per externalTaskId):** `taskId/taskType/failedReason/reward/deadline` (last-seen snapshot), `verdict/taskStatus/cancelledReason` (last scan), `firstSeenAt` (insert only — defines "new"), `lastSeenAt/verdictAt`, `notifiedAt` (one-shot DM guard), `notifyError` (last DM failure; row stays retryable). `taskType` prefers the resolved Statbot task's stored type; the browser's card hint is used only for `NOT_FOUND` rows, so a card-layout change cannot mislabel a real task. Upserts run in 50-row transactions; the scan result is capped at 500 cards. A process-level in-flight lock returns 429 for a concurrent scan.
+**Persistence (`FailedTaskCheck`, one row per externalTaskId):** `taskId/taskType/failedReason/reward/deadline` (last-seen snapshot), `verdict/taskStatus/cancelledReason` (last scan), `firstSeenAt` (insert only — defines "new"), `lastSeenAt/verdictAt`, `notifiedAt` (one-shot DM guard), `notifyError` (last DM failure; row stays retryable). `taskType` prefers the resolved Statbot task's stored type; the browser's card hint is used only for `NOT_FOUND` rows, so a card-layout change cannot mislabel a real task. Upserts run in 50-row transactions; the request is capped at 500 cards (a single failed page is normally well under that). Text caps were widened so page text cannot reject a batch: `failedReason` 2000, `reward` 64, `deadline` 128 (the userscript clamps to 500/32/64 before sending). A process-level in-flight lock returns 429 for a concurrent scan.
 
 **Read-only guarantee:** the script never clicks a card, never opens Feedback, and never writes/submits anything on GoPartTime. No live Reddit re-check is performed; "deleted" is exactly the Statbot `cancelledReason` decision above.
 
@@ -342,10 +345,10 @@ manager opens goparttime.net/my-tasks/failed
 - `scripts/goparttime-failed.user.js` + byte-identical `dashboard/public/goparttime-failed.user.js` (served at `/goparttime-failed.user.js`)
 - `src/api/routes/goparttime.ts` → `POST /failed-tasks/scan`
 - `src/utils/failed-task-check.ts` (classifier, zod schema, DM builder)
-- `src/services/failed-task-check.service.ts` (orchestration + owner DM)
+- `src/services/failed-task-check.service.ts` (orchestration, skip-known filter, owner DM)
 - `src/services/goparttime-task-resolver.service.ts` (shared batch resolver, now also used by `/insight`, `/expected`, `/submission`)
 - `src/database/repositories/failed-task-check.repository.ts`
 - `src/database/repositories/task.repository.ts` (`findBySourceExternalIds`, `findByIds`)
-- Tests: `failed-task-check.test.ts`, `failed-task-check-service.test.ts`, `goparttime-task-resolver.test.ts` (44 tests)
+- Tests: `failed-task-check.test.ts`, `failed-task-check-service.test.ts`, `goparttime-task-resolver.test.ts` (46 tests)
 
 **Deployment (done 2026-10-24, git `1df8027`):** `FailedTaskCheck` DDL applied manually from `prisma/migrations/migration.sql` (`psql` exit 0, 51 expected "already exists" errors from the early non-idempotent section, 0 unexpected; table + 3 indexes + PK verified), app and dashboard rebuilt, `docker compose up -d app redis dashboard`, boot logged all 6 steps ending "All systems online!", public health `200` healthy DB+Redis. Live gates: the four new modules are present in `dist/`, `POST /failed-tasks/scan` returns **401** without a key (route mounted) and **200** with the real key, an empty batch returns all-zero counts with no DM, a throwaway unknown ID returned `NOT_FOUND` in `notFound[]` with `dm.sent:false` and was persisted + removed afterwards (table back to 0 rows), a bad key returns 401, and `https://statbot.duckdns.org/goparttime-failed.user.js` serves the exact source bytes (33,798 bytes, SHA-256 `f89a32f…`). **Not yet verified live:** the browser click itself — GoPartTime pagination/DOM on the real failed page, and the owner DM for a genuine `MISMATCH` (needs a real failed task that is still OK in Statbot). The script is served but **not installed in Tampermonkey yet**. Rollback: restore `/home/ubuntu/rtm-backup-20261024-123214.tar.gz` or rebundle `0fd61dd` + rebuild (the `FailedTaskCheck` table is additive and can stay).

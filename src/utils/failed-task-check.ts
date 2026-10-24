@@ -69,13 +69,17 @@ const externalTaskIdSchema = z.preprocess(
 export const failedTaskScanItemSchema = z.object({
   externalTaskId: externalTaskIdSchema,
   type: z.enum(['post', 'comment']).optional(),
-  failedReason: z.string().trim().max(300).optional(),
-  reward: z.string().trim().max(32).optional(),
-  deadline: z.string().trim().max(64).optional(),
+  // Free text copied verbatim from GoPartTime's card. The caps are generous
+  // because the userscript only reads the page it is on; a long admin-written
+  // reason must never reject the whole batch.
+  failedReason: z.string().trim().max(2000).optional(),
+  reward: z.string().trim().max(64).optional(),
+  deadline: z.string().trim().max(128).optional(),
 });
 
 export const failedTaskScanSchema = z.object({
-  // 500 covers many pages of failures; the browser sends every card it saw.
+  // The userscript sends only the page currently open, so a batch is normally
+  // one page of cards. 500 stays as a hard safety cap.
   tasks: z.array(failedTaskScanItemSchema).max(500),
   pagesScanned: z.number().int().min(0).max(1000).optional(),
 });

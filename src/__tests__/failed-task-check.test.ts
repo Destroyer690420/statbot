@@ -115,9 +115,27 @@ describe('failedTaskScanSchema', () => {
     ).toThrow();
     expect(() =>
       failedTaskScanSchema.parse({
-        tasks: [{ externalTaskId: '1', failedReason: 'x'.repeat(301) }],
+        tasks: [{ externalTaskId: '1', failedReason: 'x'.repeat(2001) }],
       }),
     ).toThrow();
+    expect(() =>
+      failedTaskScanSchema.parse({
+        tasks: [{ externalTaskId: '1', reward: 'x'.repeat(65) }],
+      }),
+    ).toThrow();
+    expect(() =>
+      failedTaskScanSchema.parse({
+        tasks: [{ externalTaskId: '1', deadline: 'x'.repeat(129) }],
+      }),
+    ).toThrow();
+  });
+
+  it('accepts a long failed reason that the old 300-char cap rejected', () => {
+    const longReason = 'y'.repeat(2000);
+    const parsed = failedTaskScanSchema.parse({
+      tasks: [{ externalTaskId: '1', failedReason: longReason }],
+    });
+    expect(parsed.tasks[0].failedReason).toHaveLength(2000);
   });
 
   it('caps one scan at 500 cards', () => {

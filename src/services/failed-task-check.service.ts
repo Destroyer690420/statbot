@@ -1,6 +1,7 @@
 import { Client } from 'discord.js';
 import { OWNER_USER_ID } from '../config/constants';
 import { failedTaskCheckRepository } from '../database/repositories';
+import { Task } from '../types';
 import { logger } from '../utils/logger';
 import {
   buildFailedTaskMismatchDm,
@@ -31,6 +32,7 @@ export interface FailedTaskCheckMismatch {
 
 export interface FailedTaskScanResult {
   scanned: number;
+  skippedKnown: number;
   newTasks: number;
   counts: Record<FailedTaskVerdict, number>;
   mismatches: FailedTaskCheckMismatch[];
@@ -53,10 +55,12 @@ function errorMessage(error: unknown): string {
  * Orchestrates one failed-page scan:
  *
  *   1. dedupe the cards the userscript collected,
- *   2. resolve every GoPartTime number to its Statbot row in two batch queries,
- *   3. classify and upsert (firstSeenAt makes "new" unambiguous),
- *   4. DM the owner once for every currently-unnotified MISMATCH,
- *   5. stamp notifiedAt only after Discord accepted the message.
+ *   2. drop IDs already recorded (only never-seen tasks, plus a MISMATCH whose
+ *      DM never sent, are processed),
+ *   3. resolve the remaining GoPartTime numbers in two batch queries,
+ *   4. classify and upsert (firstSeenAt makes "new" unambiguous),
+ *   5. DM the owner once for every currently-unnotified MISMATCH,
+ *   6. stamp notifiedAt only after Discord accepted the message.
  *
  * The DM is deliberately a review list, not an automatic report: the script
  * never clicks GoPartTime's Feedback button. DB-only verdicts are the chosen
@@ -81,7 +85,25 @@ export class FailedTaskCheckService {
       const ids = Array.from(unique.keys());
       const existingRows = await failedTaskCheckRepository.findByExternalTaskIds(ids);
       const existingById = new Map(existingRows.map((row) => [row.externalTaskId, row]));
-      const resolved = await findTasksByExternalIds(ids);
+
+      // Only never-seen IDs are checked. The single exception is a MISMATCH
+      // whose owner DM never landed (notifiedAt null): the feature promises a
+      // retry, so it is re-checked without being counted as new. Every other
+      // known ID is skipped untouched - no resolve, no upsert, no counts.
+      const pending: Array<[string, (typeof input.tasks)[number]]> = [];
+      for (const entry of unique) {
+        const existing = existingById.get(entry[0]);
+        if (!existing) {
+          pending.push(entry);
+        } else if (existing.verdict === 'MISMATCH' && existing.notifiedAt == null) {
+          pending.push(entry);
+        }
+      }
+      const skippedKnown = unique.size - pending.length;
+
+      const resolved: Map<string, Task> = pending.length
+        ? await findTasksByExternalIds(pending.map(([id]) => id))
+        : new Map();
 
       const counts: Record<FailedTaskVerdict, number> = {
         MISMATCH: 0,
@@ -94,7 +116,7 @@ export class FailedTaskCheckService {
       const notFound: string[] = [];
       let newTasks = 0;
 
-      for (const [externalTaskId, item] of unique) {
+      for (const [externalTaskId, item] of pending) {
         const task = resolved.get(externalTaskId) ?? null;
         const cancelledReason = normalizeOptional(task?.cancelledReason);
         const verdict = classifyFailedTask(
@@ -205,6 +227,7 @@ export class FailedTaskCheckService {
 
       return {
         scanned: unique.size,
+        skippedKnown,
         newTasks,
         counts,
         mismatches,

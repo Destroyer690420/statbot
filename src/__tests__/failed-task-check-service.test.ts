@@ -42,6 +42,7 @@ function task(overrides: Record<string, unknown> = {}) {
 function existingRow(overrides: Record<string, unknown> = {}) {
   return {
     externalTaskId: '1336842',
+    verdict: 'MISMATCH',
     notifiedAt: null,
     ...overrides,
   };
@@ -74,6 +75,7 @@ describe('failedTaskCheckService.scan', () => {
     );
 
     expect(result.scanned).toBe(1);
+    expect(result.skippedKnown).toBe(0);
     expect(result.newTasks).toBe(1);
     expect(result.counts.MISMATCH).toBe(1);
     expect(result.newMismatchIds).toEqual(['1336842']);
@@ -170,8 +172,7 @@ describe('failedTaskCheckService.scan', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('does not re-DM a mismatch that was already notified', async () => {
-    mockedResolve.mockResolvedValue(new Map([['1336842', task()]]));
+  it('skips a mismatch that was already notified - no resolve, no upsert, no DM', async () => {
     mockedFindExisting.mockResolvedValue([
       existingRow({ notifiedAt: new Date('2026-10-01T10:00:00Z') }),
     ]);
@@ -179,10 +180,53 @@ describe('failedTaskCheckService.scan', () => {
 
     const result = await failedTaskCheckService.scan({ tasks: [scanItem] }, client);
 
-    expect(result.mismatches[0].notifiedAt).toBe('2026-10-01T10:00:00.000Z');
+    expect(result.scanned).toBe(1);
+    expect(result.skippedKnown).toBe(1);
+    expect(result.newTasks).toBe(0);
+    expect(result.counts.MISMATCH).toBe(0);
+    expect(result.mismatches).toEqual([]);
     expect(result.newMismatchIds).toEqual([]);
     expect(result.dm.sent).toBe(false);
+    expect(mockedResolve).not.toHaveBeenCalled();
+    expect(mockedUpsert).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it('skips every already-recorded verdict and resolves only unseen ids', async () => {
+    mockedFindExisting.mockResolvedValue([
+      existingRow({ externalTaskId: '111', verdict: 'DELETED', notifiedAt: new Date() }),
+      existingRow({ externalTaskId: '222', verdict: 'NOT_FOUND', notifiedAt: null }),
+      existingRow({
+        externalTaskId: '333',
+        verdict: 'NOT_COMPARABLE',
+        notifiedAt: null,
+      }),
+    ]);
+    mockedResolve.mockResolvedValue(
+      new Map([['444', task({ id: 'Post #444', submittedRedditUrl: 'https://reddit.com/x' })]]),
+    );
+    const { client, send } = makeClient();
+
+    const result = await failedTaskCheckService.scan(
+      {
+        tasks: [
+          { externalTaskId: '111' },
+          { externalTaskId: '222' },
+          { externalTaskId: '333' },
+          { externalTaskId: '444' },
+        ],
+      },
+      client,
+    );
+
+    expect(mockedResolve).toHaveBeenCalledWith(['444']);
+    expect(result.scanned).toBe(4);
+    expect(result.skippedKnown).toBe(3);
+    expect(result.newTasks).toBe(1);
+    expect(result.counts.MISMATCH).toBe(1);
+    expect(mockedUpsert.mock.calls[0][0]).toHaveLength(1);
+    expect(mockedUpsert.mock.calls[0][0][0].externalTaskId).toBe('444');
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it('retries the DM for a previously seen but never-notified mismatch', async () => {
@@ -192,6 +236,7 @@ describe('failedTaskCheckService.scan', () => {
 
     const result = await failedTaskCheckService.scan({ tasks: [scanItem] }, client);
 
+    expect(result.skippedKnown).toBe(0);
     expect(result.mismatches[0].isNew).toBe(false);
     expect(result.newMismatchIds).toEqual(['1336842']);
     expect(send).toHaveBeenCalledTimes(1);
@@ -247,6 +292,7 @@ describe('failedTaskCheckService.scan', () => {
     const result = await failedTaskCheckService.scan({ tasks: [], pagesScanned: 1 }, client);
 
     expect(result.scanned).toBe(0);
+    expect(result.skippedKnown).toBe(0);
     expect(result.newTasks).toBe(0);
     expect(result.counts).toEqual({
       MISMATCH: 0,
