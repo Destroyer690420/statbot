@@ -6,8 +6,11 @@
 
 ## In Progress
 
-- **GoPartTime failed-task checker** — built locally 2026-10-24, tests/builds green, **not deployed**. Awaiting approval to apply the `FailedTaskCheck` migration, rebuild, install the userscript, and run the first live scan. See `docs/GOPARTTIME.md` §20.
-- **Nothing else is marked in-progress anywhere in the repo.** The working tree has one uncommitted change: `dashboard/vite.config.ts` dev-proxy target `http:` → `https:` (left unfinished locally).
+- **Nothing is marked in-progress anywhere in the repo.** The working tree has one uncommitted change: `dashboard/vite.config.ts` dev-proxy target `http:` → `https:` (left unfinished locally).
+
+## Recently completed
+
+- **GoPartTime failed-task checker** — **deployed 2026-10-24 at `1df8027`**: `FailedTaskCheck` DDL applied (0 unexpected errors), app + dashboard rebuilt, route/auth/DB smoke-verified live. **Remaining follow-up:** install `https://statbot.duckdns.org/goparttime-failed.user.js` in Tampermonkey with the shared API key and run the first real browser scan — that is the first live test of GoPartTime's failed-page DOM/pagination and of the genuine `MISMATCH` owner DM. See `docs/GOPARTTIME.md` §20.
 
 ## Planned (from specs/plans in repo)
 

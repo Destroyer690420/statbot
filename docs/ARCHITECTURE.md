@@ -67,7 +67,7 @@ flowchart TB
 | API | `src/api/server.ts` + middleware + 15 route files | REST API `/api/v1` | HTTP | JSON/CSV/files | services, schemas |
 | Scheduler | `src/scheduler/{queue,jobs,worker}.ts` | BullMQ queue/worker for reminders | Redis, DB | reminder embeds, status transitions, overdue alerts | shared Discord client |
 | Services | `src/services/*.ts` (12) | business logic (task, reminder, payout, commission, goparttime, analytics, audit, settings, owner-earnings, insight-storage, state-machine, outreach) | repositories | DB writes, audits, jobs | repositories, utils |
-| Failed-task checker | `src/services/failed-task-check.service.ts`, `src/services/goparttime-task-resolver.service.ts`, `src/utils/failed-task-check.ts` | classify a manual browser batch against Statbot, persist `FailedTaskCheck`, one consolidated owner DM for new mismatches (built 2026-10-24, NOT deployed) | `POST /goparttime/failed-tasks/scan` | DB rows, Discord DM | repositories, resolver |
+| Failed-task checker | `src/services/failed-task-check.service.ts`, `src/services/goparttime-task-resolver.service.ts`, `src/utils/failed-task-check.ts` | classify a manual browser batch against Statbot, persist `FailedTaskCheck`, one consolidated owner DM for new mismatches (DEPLOYED 2026-10-24 at `1df8027`) | `POST /goparttime/failed-tasks/scan` | DB rows, Discord DM | repositories, resolver |
 | Repositories | `src/database/repositories/*.ts` (14) | data access (Prisma queries) | services | Prisma results | Prisma client |
 | DB bootstrap | `src/database/db.ts` | PrismaClient + PrismaPg adapter | `DATABASE_URL` | client singleton | generated client |
 | Utils | `src/utils/*.ts` | validation, formatting, image + video processing, chunking, logging, permissions | — | — | — |

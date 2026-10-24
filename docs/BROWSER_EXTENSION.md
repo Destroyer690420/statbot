@@ -200,7 +200,7 @@ Source: `scripts/goparttime-submit.user.js`; served at
 ## 8. Installation / Build
 
 - No build step — it's a plain user script. Source copy: `scripts/goparttime-send.user.js`; deployed copy: `dashboard/public/goparttime-send.user.js` (served by nginx at `/goparttime-send.user.js`).
-- Other public scripts use the same source→`dashboard/public` convention: `/goparttime-auto.user.js`, `/goparttime-mobile.user.js`, `/goparttime-submit.user.js`, `/reddit-format-check.user.js`, and (built 2026-10-24, not yet installed) `/goparttime-failed.user.js`.
+- Other public scripts use the same source→`dashboard/public` convention: `/goparttime-auto.user.js`, `/goparttime-mobile.user.js`, `/goparttime-submit.user.js`, `/reddit-format-check.user.js`, and `/goparttime-failed.user.js` (served live 2026-10-24; Tampermonkey install still pending).
 - Install into Tampermonkey from the public URL (desktop) or Edge Canary + Tampermonkey (Android, see `ANDROID_SETUP.md`). Updates: re-open the install link.
 - **Keep the two copies in sync** when editing.
 
@@ -228,7 +228,7 @@ Why it exists: the server format check fetches Reddit JSON from the VPS IP (429-
 Flow: open the worker's post → floating "Check Format" button → enter the GoPartTime task number → script `GET`s expected text from `GET /api/v1/goparttime/expected/:taskId` (extension key; exact `title` + `formattedContent` Discord received) via `GM_xmlhttpRequest` (bypasses CORS — reddit.com is not in the backend allowlist, so Tampermonkey is required), fetches live JSON same-origin first then `old.reddit.com` fallback (12s timeout each), compares with a verbatim port of `src/utils/reddit-format.ts` (`splitParagraphs` / `normalizeInline` / `compareRedditFormat` — normalized text; v1.1.0: extra paragraphs pass, only short fails, title/text differences pass; **v1.1.1** strips per-line trailing spaces/NBSP before splitting, so Reddit's `"   \n  \n"` hard-break separators count as paragraphs instead of one), renders MATCH / accepted verdicts / PARA_SHORT + per-paragraph Exp-vs-Live diff + the same hints as the bot reply. COMMENT tasks report SKIPPED; deleted posts report DELETED; a tab URL differing from the worker-submitted URL gets a warning line. Recheck button covers fresh-post 404s. Settings (backend URL + `GOPARTTIME_API_KEY`) via the Tampermonkey "Configure Format Check..." menu, same storage pattern as the sender script; last task ID remembered.
 
 Deliberate non-features: no POST back to Statbot (no verdict persistence, no audit) — advisory only.
-## 11. Third GoPartTime Script — Failed Task Checker (v1.0.0, built 2026-10-24, NOT deployed)
+## 11. Third GoPartTime Script — Failed Task Checker (v1.0.0, served live 2026-10-24)
 
 > Source: `scripts/goparttime-failed.user.js`; byte-identical `dashboard/public/goparttime-failed.user.js`; served at `https://statbot.duckdns.org/goparttime-failed.user.js`. This is a **separate script** — it does not modify or replace the sender, watcher, mobile companion, submit executor, or format-check scripts.
 
