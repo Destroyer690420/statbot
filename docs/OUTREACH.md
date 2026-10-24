@@ -3,6 +3,7 @@
 Verified 2026-08-18 — **deployed** (`4f1b84c` live on `161.118.164.85`; tables applied, route mounted, verified).
 Blast campaigns added 2026-09-09 — **deployed** (`d3153f3` live; `OutreachBlast`/`OutreachBlastMessage`/`OutreachReply` tables applied, verified).
 Worker Portal access column added 2026-09-25 — **deployed** at `675c618` (code `0122775`): `WorkerPortalAccess` table applied to production (empty, no backfill) + admin Daily Outreach indicator live.
+Default message copy changed 2026-10-24 (post-only, no comment) — **deployed** at `1f88575`; no stored `OutreachSettings` override existed, so the new default is live.
 
 ## 1. What It Is
 
