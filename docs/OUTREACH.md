@@ -51,7 +51,7 @@ A successful OTP verification upserts this row once. The write is best-effort: a
 
 | Field | Meaning |
 |---|---|
-| `message` | Daily broadcast text (1–2000 chars; default `DEFAULT_OUTREACH_MESSAGE` in `src/config/constants.ts`: `'Hey, I have got a post and a comment for you. wanna do it? message me once you are free'`) |
+| `message` | Daily broadcast text (1–2000 chars; default `DEFAULT_OUTREACH_MESSAGE` in `src/config/constants.ts`: `'Hey {user}, I have got a post for you. wanna do it? message me once you are free'`) |
 | `updatedAt` / `updatedBy` | audit trail of edits |
 
 Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE INDEX IF NOT EXISTS` + `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'OUTREACH_MESSAGE_SENT'`; Worker Portal access adds an idempotent `WorkerPortalAccess` table block (2026-09-25, applied in production at `675c618`) — all appended to `prisma/migrations/migration.sql` (idempotent, applied manually per Decision 2).
@@ -99,7 +99,7 @@ Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE
 
 - `sendMessage` resolves each ticket's worker (first non-bot, non-admin in `channel.members` — same rule as the Worker column; members fetched once per guild beforehand) and formats the text with `formatOutreachMessage` (`src/utils/outreach-rows.ts`, pure/tested, re-exported by the service).
 - `{user}` in the message is replaced with `<@workerId>` (all occurrences); messages without the placeholder get the mention **prepended**, so previously saved custom texts start tagging with no dashboard edit; unknown worker (left server / not cached) sends the message untagged + `logger.warn`, never fails the channel.
-- Default message is `Hey {user}, I have got a post and a comment for you. wanna do it? message me once you are free` (`DEFAULT_OUTREACH_MESSAGE`); the stored `OutreachSettings` copy wins when customized.
+- Default message is `Hey {user}, I have got a post for you. wanna do it? message me once you are free` (`DEFAULT_OUTREACH_MESSAGE`); the stored `OutreachSettings` copy wins when customized.
 
 ## 7. Tests
 

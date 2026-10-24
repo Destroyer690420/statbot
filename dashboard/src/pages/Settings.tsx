@@ -521,7 +521,7 @@ export function Settings() {
               rows={3}
               maxLength={2000}
               className="input-field w-full"
-              placeholder="Hey {user}, I have got a post and a comment for you. wanna do it? message me once you are free"
+              placeholder="Hey {user}, I have got a post for you. wanna do it? message me once you are free"
             />
           )}
 
