@@ -66,7 +66,7 @@ Task completion → (any time)
 - Best-effort: `sendPayoutNotification()` (`src/services/payout-notification.service.ts`) never throws — missing channel / send failure is logged (`warn`) and returned as `notification: { sent, channelId, reason? }` in the API response. **The payment is never rolled back because of a Discord failure.**
 - Wiring: `src/api/routes/payouts.ts` is a factory `createPayoutRoutes(discordClient)` (same shape as `tasks.ts`); mounted with the client in `src/api/server.ts`.
 
-### Payments-channel proof (every payment)
+### Payments-channel proof (every payment — live 2026-10-26 at `d069b48`)
 
 `PAYMENT_PROOF_CHANNEL_ID` (`1520613959315488930`) is the permanent payment log. Every successful payment posts `paymentProofEmbed` (`src/bot/embeds/index.ts`) there — **payee mention + amount only** (`💸 Payment Sent`, green, `<@payee>`, `## ₹amount`, timestamp, `Reddit Task Manager` footer). Deliberately no task/commission breakdown, no batch/week, no screenshot pointer; the detailed breakdown stays in the worker's ticket message.
 
