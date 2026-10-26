@@ -23,7 +23,7 @@ import auditRoutes from './routes/audit';
 import uploadRoutes from './routes/uploads';
 import createPayoutRoutes from './routes/payouts';
 import payoutSettingsRoutes from './routes/settings';
-import commissionRoutes from './routes/commissions';
+import createCommissionRoutes from './routes/commissions';
 import ownerRoutes from './routes/owner';
 import createWorkerRoutes from './routes/worker';
 
@@ -113,7 +113,7 @@ export function createApiServer(discordClient: Client): express.Application {
   // Settings routes
   app.use('/api/v1/settings', payoutSettingsRoutes);
   // Commission routes
-  app.use('/api/v1/commissions', commissionRoutes);
+  app.use('/api/v1/commissions', createCommissionRoutes(discordClient));
   // Owner routes (hidden panel)
   app.use('/api/v1/owner', ownerRoutes);
   // Worker portal (ticket-OTP login + scoped read-only data).

@@ -197,8 +197,8 @@ Week params (`weekStart`/`weekEnd`) accepted in **query or body** (parsed as Dat
 | GET | `/payouts/eligible` | Eligible tasks grouped by worker (unpaid only) | week params | `[{ workerId, workerName, posts, comments, totalAmount, status:'Ready', tasks[] }]` sorted ₹ desc | 500 |
 | GET | `/payouts/workers/:workerId` | Worker detail | week params | `{ workerName, posts, comments, totalAmount, postsEarnings, commentsEarnings, postRate, commentRate, status, tasks[{id,type,externalTaskId,createdAt,completedAt,amount,paid}] }` | 404 no eligible tasks |
 | GET | `/payouts/workers/:workerId/qr-code` | Worker payment QR for the Pay Worker popup (admin-only) | — | `{ qrCodeUrl, updatedAt, upiId }` (URL/date null, **not an error**, when the worker never uploaded one — paying stays possible; `upiId` is the payee address from a decodable `upi://pay` payload, else null) | 403 non-admin; worker JWTs get 401 |
-| POST | `/payouts/pay-worker/:workerId` | Pay one worker (creates/reuses week batch; COMPLETED→ARCHIVED) | week params in body/query | `{ batch, items }` | 403; 400 none eligible/already paid |
-| POST | `/payouts/pay-all` | Pay all eligible workers (new batch, `paidAt=now`) | week params | `{ batch, items }` | 403; 400 |
+| POST | `/payouts/pay-worker/:workerId` | Pay one worker (creates/reuses week batch; COMPLETED→ARCHIVED) | week params in body/query | `{ batch, items, notification, proofNotification }` — `notification` = ticket notice `{ sent, channelId, reason? }`, `proofNotification` = payments-channel proof `{ sent, channelId, reason? }` | 403; 400 none eligible/already paid |
+| POST | `/payouts/pay-all` | Pay all eligible workers (new batch, `paidAt=now`) | week params | `{ batch, items, proofNotification: { queued } }` — one payments-channel proof per worker posted in the background | 403; 400 |
 | GET | `/payouts/batches` | Batch history | `limit?` (default 20, cap 100) | `PayoutBatch[]` | 500 |
 | GET | `/payouts/batches/:batchId` | Batch detail with items + worker names | — | `{ batch, items[], workerNames{} }` | 404 |
 | GET | `/payouts/export/csv` | Batch/week CSV | `batchId?`, week params | `payout-batch-<id>-<ts>.csv`; headers `Worker Name, Posts, Comments, Total Amount (₹), Payment Date, Batch Number` | 500 |
@@ -227,8 +227,8 @@ Week params (`weekStart`/`weekEnd`) accepted in **query or body** (parsed as Dat
 | POST | `/commissions/referrals` | Create referral (admin) | `{ inviterId, inviterName, inviteeId, inviteeName, inviterType }` (`ticketId` accepted by service but NOT in zod) | 201; 400 dup invitee+inviter |
 | PATCH | `/commissions/referrals/:referralId` | Update (names, inviter/invitee IDs, ticketId; inviter change re-derives type + chain) | `{ inviterId?, inviteeId? (snowflakes), inviterName?, inviteeName?, ticketId? nullable }` | 403; 404; 400 |
 | DELETE | `/commissions/referrals/:referralId` | Delete | — | 403; 400 |
-| POST | `/commissions/pay-inviter/:inviterId` | Pay one inviter (batch + items + referral flags) | — | 403; 400 |
-| POST | `/commissions/pay-all` | Pay all inviters in one batch | — | 403; 400 `'No unpaid commissions available.'` |
+| POST | `/commissions/pay-inviter/:inviterId` | Pay one inviter (batch + items + referral flags) | — | `{ batch, items, proofNotification }` (payments-channel proof) | 403; 400 |
+| POST | `/commissions/pay-all` | Pay all inviters in one batch | — | `{ batch, items, proofNotification: { queued } }` (one background proof per inviter) | 403; 400 `'No unpaid commissions available.'` |
 | GET | `/commissions/invite-detections` | Approval queue (auto-detected joins) | `status?` (`pending` default, `all`), `limit?` (default 100, cap 500) | 500 |
 | POST | `/commissions/invite-detections/:id/approve` | Approve → creates the real Referral | — | 403; 400 (unknown inviter / dup / already handled) |
 | POST | `/commissions/invite-detections/:id/reject` | Reject a pending detection | — | 403; 400 |

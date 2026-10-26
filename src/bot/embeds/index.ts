@@ -310,6 +310,26 @@ export function payoutCreditedEmbed(data: PayoutNotificationData): EmbedBuilder 
     .setFooter({ text: 'Thank you for your work! • Reddit Task Manager' });
 }
 
+export interface PaymentProofData {
+  payeeId: string;
+  amount: number;
+}
+
+/**
+ * Payments-channel payment proof. Deliberately minimal — payee + amount only,
+ * no task/commission breakdown, batch or week — so the channel reads as a
+ * clean, scannable payment log. The detailed breakdown stays in the worker's
+ * ticket message.
+ */
+export function paymentProofEmbed(data: PaymentProofData): EmbedBuilder {
+  return new EmbedBuilder()
+    .setTitle('💸 Payment Sent')
+    .setColor(COLORS.SUCCESS)
+    .setDescription(`<@${data.payeeId}>\n\n## ${formatRs(data.amount)}`)
+    .setTimestamp()
+    .setFooter({ text: 'Reddit Task Manager' });
+}
+
 /**
  * Build a warning embed.
  */

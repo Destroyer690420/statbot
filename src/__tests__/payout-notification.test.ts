@@ -1,5 +1,9 @@
-import { payoutCreditedEmbed, formatIST } from '../bot/embeds';
-import { sendPayoutNotification } from '../services/payout-notification.service';
+import { paymentProofEmbed, payoutCreditedEmbed, formatIST } from '../bot/embeds';
+import {
+  sendPaymentProof,
+  sendPaymentProofs,
+  sendPayoutNotification,
+} from '../services/payout-notification.service';
 import { PAYMENT_PROOF_CHANNEL_ID } from '../config/constants';
 
 jest.mock('../utils/logger', () => ({
@@ -78,5 +82,76 @@ describe('sendPayoutNotification', () => {
     const result = await sendPayoutNotification(client, input);
     expect(result.sent).toBe(false);
     expect(result.channelId).toBe('111');
+  });
+});
+
+describe('paymentProofEmbed', () => {
+  it('shows only the payee and the amount', () => {
+    const json = paymentProofEmbed({ payeeId: '222', amount: 180 }).toJSON();
+
+    expect(json.title).toBe('💸 Payment Sent');
+    expect(json.description).toContain('<@222>');
+    expect(json.description).toContain('₹180');
+    // No breakdown, batch, week or screenshot pointer — this is the proof card
+    // for the payments channel, not the detailed ticket notice.
+    expect(json.fields ?? []).toHaveLength(0);
+    expect(json.description).not.toMatch(/Batch|Screenshot|tasks|📝|💬/);
+    expect(json.footer?.text).toBe('Reddit Task Manager');
+  });
+
+  it('formats non-integer amounts with two decimals', () => {
+    const json = paymentProofEmbed({ payeeId: '222', amount: 180.5 }).toJSON();
+    expect(json.description).toContain('₹180.50');
+  });
+});
+
+describe('sendPaymentProof', () => {
+  it('always posts to the payments channel and tags the payee', async () => {
+    const send = jest.fn().mockResolvedValue({ id: 'm1' });
+    const fetch = jest.fn().mockResolvedValue({ isTextBased: () => true, send });
+    const client: any = { channels: { fetch } };
+
+    const result = await sendPaymentProof(client, { payeeId: '222', amount: 180 });
+
+    expect(result).toEqual({ sent: true, channelId: PAYMENT_PROOF_CHANNEL_ID });
+    expect(fetch).toHaveBeenCalledWith(PAYMENT_PROOF_CHANNEL_ID);
+    const payload = send.mock.calls[0][0];
+    expect(payload.content).toBe('');
+    expect(payload.embeds[0].toJSON().description).toContain('<@222>');
+  });
+
+  it('never throws and reports the reason when the channel is unavailable', async () => {
+    const client: any = { channels: { fetch: async () => null } };
+
+    const result = await sendPaymentProof(client, { payeeId: '222', amount: 180 });
+
+    expect(result).toEqual({
+      sent: false,
+      channelId: PAYMENT_PROOF_CHANNEL_ID,
+      reason: 'channel-unavailable',
+    });
+  });
+});
+
+describe('sendPaymentProofs', () => {
+  it('counts sent and failed proofs without aborting the batch', async () => {
+    const channel: any = {
+      isTextBased: () => true,
+      send: jest
+        .fn()
+        .mockResolvedValueOnce({ id: 'm1' })
+        .mockRejectedValueOnce(new Error('rate limited'))
+        .mockResolvedValueOnce({ id: 'm3' }),
+    };
+    const client: any = { channels: { fetch: async () => channel } };
+
+    const result = await sendPaymentProofs(client, [
+      { payeeId: '1', amount: 60 },
+      { payeeId: '2', amount: 30 },
+      { payeeId: '3', amount: 90 },
+    ]);
+
+    expect(result).toEqual({ sent: 2, failed: 1 });
+    expect(channel.send).toHaveBeenCalledTimes(3);
   });
 });

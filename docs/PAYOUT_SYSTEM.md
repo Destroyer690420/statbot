@@ -54,15 +54,30 @@ Task completion → (any time)
 - **Saturday/Sunday cutoff behavior**: there is no explicit cutoff check. A task completed in week N but paid in week N+1 lands in the batch of whichever window the payer selected — the week window only filters *eligible* tasks by their completion time.
 - `payWorker` throws `"No eligible tasks found for this worker."` / `"All tasks for this worker have already been paid."`; `payAll` throws `"No eligible tasks for payout."` / `"All eligible tasks have already been paid."`; in payAll, if some tasks were already paid, actual totals are recomputed from created items.
 
-## 4a. Pay-Worker Ticket Notification (bot message in the worker's ticket)
+## 4a. Payment Discord Messages
 
-`POST /payouts/pay-worker/:workerId` **only** (Pay All sends nothing) posts a best-effort aesthetic embed in the worker's ticket after the payment commits:
+### Ticket notice (Pay Worker only)
+
+`POST /payouts/pay-worker/:workerId` **only** (Pay All sends nothing to tickets) posts a best-effort aesthetic embed in the worker's ticket after the payment commits:
 
 - Target channel = `channelId` of the paid tasks (each worker owns a single ticket, so all paid tasks share it) — returned as `channelId` from `payWorker()`.
 - Message content tags the worker (`<@workerId>`) + `payoutCreditedEmbed` (`src/bot/embeds/index.ts`): "payment for this week credited at **<IST time>**", `💰 ₹amount for N tasks (📝 posts · 💬 comments)`, `📦 Batch #n · week label`, and "share the payment screenshot in <#1520613959315488930>".
 - Time is IST (`formatIST`, `Asia/Kolkata`, e.g. `20 Sept, 4:32 pm IST`).
 - Best-effort: `sendPayoutNotification()` (`src/services/payout-notification.service.ts`) never throws — missing channel / send failure is logged (`warn`) and returned as `notification: { sent, channelId, reason? }` in the API response. **The payment is never rolled back because of a Discord failure.**
 - Wiring: `src/api/routes/payouts.ts` is a factory `createPayoutRoutes(discordClient)` (same shape as `tasks.ts`); mounted with the client in `src/api/server.ts`.
+
+### Payments-channel proof (every payment)
+
+`PAYMENT_PROOF_CHANNEL_ID` (`1520613959315488930`) is the permanent payment log. Every successful payment posts `paymentProofEmbed` (`src/bot/embeds/index.ts`) there — **payee mention + amount only** (`💸 Payment Sent`, green, `<@payee>`, `## ₹amount`, timestamp, `Reddit Task Manager` footer). Deliberately no task/commission breakdown, no batch/week, no screenshot pointer; the detailed breakdown stays in the worker's ticket message.
+
+| Action | Proof messages | Delivery |
+|---|---|---|
+| Pay Worker | one (worker) | awaited; `proofNotification: { sent, channelId, reason? }` in the response |
+| Pay All | one per worker | background, sequential (rate-limit friendly); response carries `proofNotification: { queued: N }` |
+| Pay Inviter | one (inviter) | awaited; `proofNotification` in the response |
+| Pay All Commissions | one per inviter | background, sequential; response carries `proofNotification: { queued: N }` |
+
+Grouping/summing is pure: `src/utils/payment-proof.ts` (`summarizePayoutItemsByWorker`, `summarizeCommissionItemsByInviter`) turns the items just created into one total per payee, first-seen order. `sendPaymentProof` / `sendPaymentProofs` (`src/services/payout-notification.service.ts`) never throw — a failed send is logged (`warn`) and counted, and never rolls back a payment. Commission routes became a factory (`createCommissionRoutes(discordClient)`) so they can reach the Discord client.
 
 ## 4b. Pay-Worker QR popup (dashboard `PayWorkerModal`, no pay-logic change)
 
@@ -100,10 +115,11 @@ Workers upload their own UPI payment QR once from the Worker Panel Wallet page (
 ## 8. Relevant Files
 
 - `src/services/payout.service.ts` (all logic; `payWorker` also returns the ticket `channelId`)
-- `src/services/payout-notification.service.ts` (best-effort ticket notice sender)
-- `src/bot/embeds/index.ts` (`payoutCreditedEmbed`, `formatIST`)
+- `src/services/payout-notification.service.ts` (best-effort ticket notice + payments-channel proof senders)
+- `src/utils/payment-proof.ts` (pure per-payee grouping for proof messages)
+- `src/bot/embeds/index.ts` (`payoutCreditedEmbed`, `paymentProofEmbed`, `formatIST`)
 - `src/config/constants.ts` (`PAYMENT_PROOF_CHANNEL_ID`)
 - `src/database/repositories/payout.repository.ts`, `settings.repository.ts`
-- `src/api/routes/payouts.ts` (factory `createPayoutRoutes(discordClient)`), `src/api/server.ts` (mount)
-- `src/__tests__/payout-notification.test.ts`
+- `src/api/routes/payouts.ts` (factory `createPayoutRoutes(discordClient)`), `src/api/routes/commissions.ts` (factory `createCommissionRoutes(discordClient)`), `src/api/server.ts` (mount)
+- `src/__tests__/payout-notification.test.ts`, `src/__tests__/payment-proof.test.ts`
 - `dashboard/src/pages/Payout.tsx`

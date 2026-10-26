@@ -1,9 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { Client } from 'discord.js';
 import { payoutService } from '../../services/payout.service';
-import { sendPayoutNotification } from '../../services/payout-notification.service';
+import {
+  PayoutNotificationResult,
+  sendPaymentProof,
+  sendPaymentProofs,
+  sendPayoutNotification,
+} from '../../services/payout-notification.service';
+import { summarizePayoutItemsByWorker } from '../../utils/payment-proof';
 import { getWorkerQrInfo } from '../../services/worker-payment-qr.service';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { PAYMENT_PROOF_CHANNEL_ID } from '../../config/constants';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 
@@ -131,8 +138,9 @@ router.get('/workers/:workerId', async (req: Request, res: Response): Promise<vo
 /**
  * POST /api/v1/payouts/pay-worker/:workerId
  * Pay a single worker's eligible tasks. Accepts optional weekStart/weekEnd.
- * Best-effort: posts a payment-credited notice in the worker's ticket.
- * The payment itself never fails because of a Discord send failure.
+ * Best-effort: posts a payment-credited notice in the worker's ticket and a
+ * copy in the payments channel. The payment itself never fails because of a
+ * Discord send failure.
  */
 router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
@@ -143,22 +151,29 @@ router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promis
     const workerId = String(req.params.workerId);
     const result = await payoutService.payWorker(workerId, userId, weekStart, weekEnd);
 
-    let notification: { sent: boolean; channelId: string; reason?: string } = { sent: false, channelId: result.channelId, reason: 'skipped' };
+    const posts = result.items.filter((i) => i.taskType === 'POST').length;
+    const comments = result.items.filter((i) => i.taskType === 'COMMENT').length;
+    const totalAmount = result.items.reduce((sum, i) => sum + i.amount, 0);
+    const weekLabel = payoutService.getWeekLabel(result.batch.weekStart, result.batch.weekEnd);
+    const paidAt = new Date();
+    const notice = {
+      channelId: result.channelId,
+      workerId,
+      totalAmount,
+      posts,
+      comments,
+      batchNumber: result.batch.batchNumber,
+      weekLabel,
+      paidAt,
+    };
+
+    let notification: PayoutNotificationResult = {
+      sent: false,
+      channelId: result.channelId,
+      reason: 'skipped',
+    };
     try {
-      const posts = result.items.filter((i) => i.taskType === 'POST').length;
-      const comments = result.items.filter((i) => i.taskType === 'COMMENT').length;
-      const totalAmount = result.items.reduce((sum, i) => sum + i.amount, 0);
-      const weekLabel = payoutService.getWeekLabel(result.batch.weekStart, result.batch.weekEnd);
-      notification = await sendPayoutNotification(discordClient, {
-        channelId: result.channelId,
-        workerId,
-        totalAmount,
-        posts,
-        comments,
-        batchNumber: result.batch.batchNumber,
-        weekLabel,
-        paidAt: new Date(),
-      });
+      notification = await sendPayoutNotification(discordClient, notice);
     } catch (notifyError) {
       logger.warn('Pay-worker notification error (payment kept)', {
         workerId,
@@ -167,7 +182,26 @@ router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promis
       });
     }
 
-    res.json({ success: true, data: { ...result, notification } });
+    // Permanent payment-proof copy in the payments channel (payee + amount).
+    let proofNotification: PayoutNotificationResult = {
+      sent: false,
+      channelId: PAYMENT_PROOF_CHANNEL_ID,
+      reason: 'skipped',
+    };
+    try {
+      proofNotification = await sendPaymentProof(discordClient, {
+        payeeId: workerId,
+        amount: totalAmount,
+      });
+    } catch (notifyError) {
+      logger.warn('Pay-worker proof error (payment kept)', {
+        workerId,
+        batchId: result.batch.id,
+        error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+      });
+    }
+
+    res.json({ success: true, data: { ...result, notification, proofNotification } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error.';
     res.status(400).json({ success: false, message });
@@ -177,6 +211,7 @@ router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promis
 /**
  * POST /api/v1/payouts/pay-all
  * Pay all eligible workers. Accepts optional weekStart/weekEnd.
+ * Best-effort: posts one payment proof per worker in the payments channel.
  */
 router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
@@ -185,7 +220,23 @@ router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
     const userId = (req as AuthRequest).userId || 'api';
     const { weekStart, weekEnd } = parseWeekParams(req);
     const result = await payoutService.payAll(userId, weekStart, weekEnd);
-    res.json({ success: true, data: result });
+
+    const proofs = summarizePayoutItemsByWorker(result.items).map((worker) => ({
+      payeeId: worker.workerId,
+      amount: worker.totalAmount,
+    }));
+
+    // A bulk payout can cover many workers; proofs are posted in the
+    // background (sequentially, to respect Discord rate limits) so the HTTP
+    // response is not held open. A failed send never affects the payment.
+    void sendPaymentProofs(discordClient, proofs).catch((err) => {
+      logger.warn('Pay-all proof batch error (payment kept)', {
+        batchId: result.batch.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+
+    res.json({ success: true, data: { ...result, proofNotification: { queued: proofs.length } } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error.';
     res.status(400).json({ success: false, message });

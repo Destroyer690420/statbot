@@ -1,13 +1,22 @@
 import { Router, Request, Response } from 'express';
+import { Client } from 'discord.js';
 import { z } from 'zod';
 import { commissionService } from '../../services/commission.service';
 import { inviteDetectionService } from '../../services/invite-detection.service';
+import {
+  PayoutNotificationResult,
+  sendPaymentProof,
+  sendPaymentProofs,
+} from '../../services/payout-notification.service';
+import { summarizeCommissionItemsByInviter } from '../../utils/payment-proof';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { isAdmin } from '../../utils/permissions';
+import { PAYMENT_PROOF_CHANNEL_ID } from '../../config/constants';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 
+export default function createCommissionRoutes(discordClient: Client): Router {
 const router = Router();
 
 router.use(authMiddleware);
@@ -211,6 +220,7 @@ router.delete('/referrals/:referralId', async (req: Request, res: Response): Pro
 
 /**
  * POST /api/v1/commissions/pay-inviter/:inviterId
+ * Best-effort: posts a payment-proof card in the payments channel.
  */
 router.post('/pay-inviter/:inviterId', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
@@ -218,7 +228,29 @@ router.post('/pay-inviter/:inviterId', async (req: Request, res: Response): Prom
   try {
     const userId = (req as AuthRequest).userId || 'api';
     const result = await commissionService.payInviter(String(req.params.inviterId), userId);
-    res.json({ success: true, data: result });
+
+    let proofNotification: PayoutNotificationResult = {
+      sent: false,
+      channelId: PAYMENT_PROOF_CHANNEL_ID,
+      reason: 'skipped',
+    };
+    try {
+      const summary = summarizeCommissionItemsByInviter(result.items)[0];
+      if (summary) {
+        proofNotification = await sendPaymentProof(discordClient, {
+          payeeId: summary.inviterId,
+          amount: summary.totalAmount,
+        });
+      }
+    } catch (notifyError) {
+      logger.warn('Pay-inviter proof error (payment kept)', {
+        inviterId: String(req.params.inviterId),
+        batchId: result.batch.id,
+        error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+      });
+    }
+
+    res.json({ success: true, data: { ...result, proofNotification } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error.';
     res.status(400).json({ success: false, message });
@@ -227,6 +259,8 @@ router.post('/pay-inviter/:inviterId', async (req: Request, res: Response): Prom
 
 /**
  * POST /api/v1/commissions/pay-all
+ * Best-effort: posts one payment-proof card per inviter in the payments channel
+ * (in the background so the HTTP response is not held open).
  */
 router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
@@ -234,7 +268,20 @@ router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as AuthRequest).userId || 'api';
     const result = await commissionService.payAll(userId);
-    res.json({ success: true, data: result });
+
+    const proofs = summarizeCommissionItemsByInviter(result.items).map((inviter) => ({
+      payeeId: inviter.inviterId,
+      amount: inviter.totalAmount,
+    }));
+
+    void sendPaymentProofs(discordClient, proofs).catch((err) => {
+      logger.warn('Pay-all commissions proof batch error (payment kept)', {
+        batchId: result.batch.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+
+    res.json({ success: true, data: { ...result, proofNotification: { queued: proofs.length } } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error.';
     res.status(400).json({ success: false, message });
@@ -385,4 +432,5 @@ router.patch('/invite-detections/:id', validateBody(updateDetectionSchema), asyn
   }
 });
 
-export default router;
+  return router;
+}

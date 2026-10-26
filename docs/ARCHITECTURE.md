@@ -173,12 +173,16 @@ dashboard (JWT+admin) → payoutService.{payWorker|payAll}
 → eligible = COMPLETED/ARCHIVED, not already paid (paidTaskIds), cancelledReason null, completion-time in IST week window
 → PayoutBatch (payWorker: reuse-or-create per week; payAll: always new batch, paidAt=now)
 → per task: PayoutItem + COMPLETED→ARCHIVED
+→ Discord (best-effort, never rolls back): payWorker posts the detailed embed in the ticket +
+  one payment-proof card per worker in PAYMENT_PROOF_CHANNEL_ID (Pay All: background, one per worker)
 ```
 
 ### 6.4 Commissions
 ```
 /commissions/pay-* → per non-closed referral: payable = one_time (if unpaid + threshold) + per_task (special inviters, dedup on existing items)
 → CommissionBatch (always new, paidAt=now) + CommissionItem rows + referral status flags
+→ Discord (best-effort): one payment-proof card per inviter in PAYMENT_PROOF_CHANNEL_ID
+   (pay-inviter awaited; pay-all background)
 ```
 
 ---
