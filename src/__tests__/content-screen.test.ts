@@ -301,6 +301,46 @@ describe('screenSubredditName (substring rules for names)', () => {
     expect(screenFullContent('austin trip', 'texas bbq and live music', LISTS)).toBeNull();
   });
 
+  it('blocks Philippines-related names (signal ph)', () => {
+    expect(screenSubredditName('philippines', LISTS)).toMatchObject({
+      decision: 'block',
+      signal: 'ph',
+      matched: 'philippin',
+    });
+    expect(screenSubredditName('filipinoamericans', LISTS)).toMatchObject({
+      decision: 'block',
+      signal: 'ph',
+      matched: 'filipino',
+    });
+    expect(screenSubredditName('manila', LISTS)).toMatchObject({ decision: 'block', signal: 'ph' });
+    expect(screenSubredditName('cebucity', LISTS)).toMatchObject({ decision: 'block', signal: 'ph' });
+    expect(screenSubredditName('pinoymemes', LISTS)).toMatchObject({ decision: 'block', signal: 'ph' });
+  });
+
+  it('ignores underscores in Philippine place names', () => {
+    for (const sub of ['cagayan_de_oro', 'lanao_del_norte', 'negros_occidental', 'south_cotabato']) {
+      expect(screenSubredditName(sub, LISTS)).toMatchObject({ decision: 'block', signal: 'ph' });
+    }
+  });
+
+  it('keeps short/ambiguous Philippine place words exact-only', () => {
+    expect(screenSubredditName('laguna', LISTS)).toMatchObject({ decision: 'block', signal: 'ph' });
+    expect(screenSubredditName('lagunabeach', LISTS).decision).toBe('pass');
+    expect(screenSubredditName('samar', LISTS)).toMatchObject({ decision: 'block', signal: 'ph' });
+    expect(screenSubredditName('samaritan', LISTS).decision).toBe('pass');
+    expect(screenSubredditName('cagayan', LISTS)).toMatchObject({ decision: 'block', signal: 'ph' });
+    expect(screenSubredditName('cagayanvalley', LISTS)).toMatchObject({
+      decision: 'block',
+      signal: 'ph',
+      matched: 'cagayanvalley',
+    });
+  });
+
+  it('philippines terms never fire on title/content (name screening only)', () => {
+    expect(screenTitle('moving to manila next year', LISTS)).toBeNull();
+    expect(screenFullContent('a cebu trip', 'filipino food and karaoke', LISTS)).toBeNull();
+  });
+
   it('hyphenated terms and spaced phrases are inert in names', () => {
     // 'e-liquid' cannot occur in a subreddit name (no hyphens allowed).
     expect(screenSubredditName('eliquid', LISTS).decision).toBe('pass');
@@ -329,6 +369,7 @@ describe('buildSeenSet / autoBlockReason', () => {
     expect(autoBlockReason('dojo')).toBe('auto-content:dojo');
     expect(autoBlockReason('place')).toBe('auto-content:place');
     expect(autoBlockReason('uni')).toBe('auto-content:uni');
+    expect(autoBlockReason('ph')).toBe('auto-content:ph');
     expect(autoBlockReason('crypto')).toBe('auto-content:crypto');
     expect(autoBlockReason('non-en')).toBe('auto-content:non-en');
   });

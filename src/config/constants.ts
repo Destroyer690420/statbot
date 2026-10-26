@@ -342,6 +342,54 @@ export const BLOCK_KEYWORDS_UNI_EXACT_ONLY = [
   'syracuseu', 'bostonu', 'ucla', 'nyu', 'usc', 'caltech', 'pennstate', 'byu',
 ] as const;
 
+/**
+ * Philippines-related terms for SUBREDDIT-NAME screening only (added
+ * 2026-10-26, owner directive: ban subreddits related to the Philippines,
+ * broad definition — nationality words plus city/province/island names).
+ *
+ * NEVER content: post text mentioning "Manila" must never block — these lists
+ * are only consulted by `screenSubredditName`, never by `screenText`. Like the
+ * US place rule, the companion carries no copy (name screening is server-side
+ * only), so there is nothing to mirror into the userscript.
+ *
+ * Two shapes, mirroring the US place rule:
+ * - PH_SUBSTRING: nationality/demonym words and long/unambiguous place names —
+ *   fire anywhere in the name (`filipinoamericans` catches `filipino`,
+ *   `cebucity` catches `cebu`). Underscores are ignored for this pass, so
+ *   `cagayan_de_oro`, `lanao_del_norte` and `negros_occidental` still fire.
+ * - PH_EXACT_ONLY: short or ambiguous place words — full name or whole
+ *   underscore-token only (`laguna` must not fire on `lagunabeach`,
+ *   `samar` must not fire on `samaritan`, `cagayan`/`negros` stay ambiguous
+ *   alone but their long forms are covered by PH_SUBSTRING).
+ */
+export const BLOCK_KEYWORDS_PH_SUBSTRING = [
+  // Nationality / demonym / island-group words.
+  'philippin', 'filipino', 'pinoy', 'pinay', 'pilipinas', 'maharlika',
+  'luzon', 'visayas', 'mindanao', 'metromanila', 'bicol',
+  // Metro Manila + major cities (spaceless lowercase).
+  'manila', 'quezon', 'makati', 'taguig', 'pasig', 'paranaque', 'laspinas',
+  'marikina', 'mandaluyong', 'muntinlupa', 'navotas', 'malabon', 'valenzuela',
+  'caloocan', 'pasay', 'antipolo', 'cebu', 'davao', 'bacolod', 'baguio',
+  'iloilo', 'cavite', 'batangas', 'pampanga', 'bulacan', 'zamboanga',
+  'dagupan', 'tarlac', 'pangasinan', 'dumaguete', 'tacloban', 'butuan',
+  'surigao', 'cotabato', 'marawi', 'iligan', 'misamis', 'tagum', 'digos',
+  'koronadal', 'kidapawan', 'generalsantos', 'gensan', 'cagayandeoro',
+  'cagayanvalley', 'nuevaecija',
+  // Islands / tourist regions.
+  'bohol', 'boracay', 'palawan', 'siquijor', 'camiguin', 'siargao', 'leyte',
+  // Provinces (spaceless lowercase).
+  'ilocos', 'launion', 'bataan', 'batanes', 'benguet', 'bukidnon', 'camarines',
+  'capiz', 'catanduanes', 'guimaras', 'ifugao', 'maguindanao', 'marinduque',
+  'masbate', 'occidentalmindoro', 'orientalmindoro', 'quirino', 'romblon',
+  'sarangani', 'sorsogon', 'sulu', 'zambales', 'lanaodelnorte', 'lanaodelsur',
+  'dinagat', 'southcotabato', 'sultankudarat', 'negrosoccidental',
+  'negrosoriental',
+] as const;
+
+export const BLOCK_KEYWORDS_PH_EXACT_ONLY = [
+  'laguna', 'rizal', 'isabela', 'samar', 'negros', 'cagayan',
+] as const;
+
 export const BLOCK_KEYWORDS_PLACE_EXEMPT = [
   'mobilegaming', 'mobilegames', 'toyotatacoma',
 ] as const;

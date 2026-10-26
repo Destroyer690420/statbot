@@ -1,5 +1,5 @@
 /**
- * Two-tier automatic content screen for new subreddits (language / sex / vape / dojo / crypto).
+ * Two-tier automatic content screen for new subreddits (language / sex / vape / dojo / crypto / place / ph).
  *
  * Pure module — no env, no DB, no DOM. Safe for unit tests (see TESTING.md §1:
  * nothing here imports `src/config/env.ts`).
@@ -26,13 +26,15 @@ import {
   BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
   BLOCK_KEYWORDS_UNI_SUBSTRING,
   BLOCK_KEYWORDS_UNI_EXACT_ONLY,
+  BLOCK_KEYWORDS_PH_SUBSTRING,
+  BLOCK_KEYWORDS_PH_EXACT_ONLY,
   BLOCK_KEYWORDS_PLACE_EXEMPT,
   BLOCK_KEYWORDS_NAME_ROOTS,
   BLOCK_KEYWORDS_NAME_EXACT_ONLY,
 } from '../config/constants';
 import { normalizeSubreddit } from '../services/automation/subreddit';
 
-export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'crypto' | 'place' | 'uni' | 'non-en' | 'nsfw';
+export type ContentScreenSignal = 'sex' | 'vape' | 'dojo' | 'crypto' | 'place' | 'uni' | 'ph' | 'non-en' | 'nsfw';
 
 export interface ContentScreenHit {
   signal: ContentScreenSignal;
@@ -57,6 +59,9 @@ export interface ScreenLists {
   /** University terms, NAME screening only (optional — defaults to prod). */
   uniSubstring?: readonly string[];
   uniExactOnly?: readonly string[];
+  /** Philippines terms, NAME screening only (optional — defaults to prod). */
+  phSubstring?: readonly string[];
+  phExactOnly?: readonly string[];
 }
 
 function defaultLists(): ScreenLists {
@@ -71,6 +76,8 @@ function defaultLists(): ScreenLists {
     placeExactOnly: BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
     uniSubstring: BLOCK_KEYWORDS_UNI_SUBSTRING,
     uniExactOnly: BLOCK_KEYWORDS_UNI_EXACT_ONLY,
+    phSubstring: BLOCK_KEYWORDS_PH_SUBSTRING,
+    phExactOnly: BLOCK_KEYWORDS_PH_EXACT_ONLY,
   };
 }
 
@@ -294,6 +301,15 @@ export function screenSubredditName(
       return { decision: 'block', signal: 'uni', matched: term, detail: `subreddit name contains "${term}"` };
     }
   }
+  // Philippines rule: nationality/city/province substrings, matched with
+  // underscores ignored so `cagayan_de_oro` / `lanao_del_norte` still fire.
+  const phTerms = singles(lists.phSubstring ?? BLOCK_KEYWORDS_PH_SUBSTRING);
+  const nameNoUnderscore = name.replace(/_/g, '');
+  for (const term of byLengthDesc(phTerms)) {
+    if (nameNoUnderscore.includes(term)) {
+      return { decision: 'block', signal: 'ph', matched: term, detail: `subreddit name contains "${term}"` };
+    }
+  }
   // Exact-only place words + school acronyms: full name or a whole
   // underscore-token, never a substring (`jackson` must not fire on
   // `michaeljackson`, `usc` must not fire on `music`).
@@ -315,6 +331,8 @@ export function screenSubredditName(
   if (placeExactHit) return placeExactHit;
   const uniExactHit = exactOnly(lists.uniExactOnly ?? BLOCK_KEYWORDS_UNI_EXACT_ONLY, 'uni');
   if (uniExactHit) return uniExactHit;
+  const phExactHit = exactOnly(lists.phExactOnly ?? BLOCK_KEYWORDS_PH_EXACT_ONLY, 'ph');
+  if (phExactHit) return phExactHit;
   // Exact-only vape acronyms: full name or a whole underscore-token, never a
   // substring (`rta` must not fire on `startups`).
   const vapeExactHit = exactOnly(BLOCK_KEYWORDS_NAME_EXACT_ONLY, 'vape');
