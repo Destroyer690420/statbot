@@ -43,6 +43,7 @@ export interface FeedbackTaskState {
   deadlineMs: number | null | undefined;
   feedbackSent: boolean;
   formatCheckStatus?: string | null | undefined;
+  createdAtMs?: number | null | undefined;
 }
 
 /**
@@ -65,15 +66,18 @@ export function decideFeedbackAction(
   if (task.assignmentStatus !== 'SENT') {
     return { schedule: false, reason: 'task not delivered yet', delayMs: 0 };
   }
-  // Deleted post: link cannot be submitted, so an immediate stalling notice ("submitting in a bit") protects the task.
+  if (task.deadlineMs != null && nowMs - task.deadlineMs > FEEDBACK_STALE_AFTER_MS) {
+    return { schedule: false, reason: 'deadline long past', delayMs: 0 };
+  }
+  if (task.createdAtMs != null && nowMs - task.createdAtMs > FEEDBACK_STALE_AFTER_MS) {
+    return { schedule: false, reason: 'task created >24h ago', delayMs: 0 };
+  }
+  // Deleted post: link cannot be submitted, so an immediate stalling notice ("submitting in a bit") protects the new task.
   if (task.formatCheckStatus === 'DELETED') {
     return { schedule: true, reason: 'deleted post feedback', delayMs: 0 };
   }
   if (task.submittedRedditUrl && task.submittedRedditUrl.trim()) {
     return { schedule: false, reason: 'link already submitted', delayMs: 0 };
-  }
-  if (task.deadlineMs != null && nowMs - task.deadlineMs > FEEDBACK_STALE_AFTER_MS) {
-    return { schedule: false, reason: 'deadline long past', delayMs: 0 };
   }
   const delayMs = feedbackDueDelayMs(task.deadlineMs, nowMs);
   if (delayMs === null) {

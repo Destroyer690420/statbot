@@ -70,6 +70,30 @@ describe('decideFeedbackAction', () => {
     expect(d.reason).toContain('already sent');
   });
 
+  it('never schedules for DELETED posts if the deadline or task is long past', () => {
+    const now = Date.now();
+    expect(
+      decideFeedbackAction(
+        task({
+          submittedRedditUrl: 'https://www.reddit.com/r/x/comments/1/',
+          formatCheckStatus: 'DELETED',
+          deadlineMs: now - 25 * 60 * 60 * 1000,
+        }),
+        now,
+      ).schedule,
+    ).toBe(false);
+    expect(
+      decideFeedbackAction(
+        task({
+          submittedRedditUrl: 'https://www.reddit.com/r/x/comments/1/',
+          formatCheckStatus: 'DELETED',
+          createdAtMs: now - 25 * 60 * 60 * 1000,
+        }),
+        now,
+      ).schedule,
+    ).toBe(false);
+  });
+
   it('skips undelivered, terminal, deadline-less and long-past tasks', () => {
     expect(decideFeedbackAction(task({ assignmentStatus: 'PENDING' })).reason).toContain('not delivered');
     expect(decideFeedbackAction(task({ assignmentStatus: null })).schedule).toBe(false);

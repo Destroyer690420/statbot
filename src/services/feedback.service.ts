@@ -95,6 +95,12 @@ export async function scheduleFeedbackForTask(task: Task): Promise<{ scheduled: 
       }
     }
     const feedbackSent = await feedbackAlreadySent(task.id);
+    const createdAtMs =
+      task.createdAt instanceof Date
+        ? task.createdAt.getTime()
+        : task.createdAt
+          ? new Date(task.createdAt).getTime()
+          : null;
     const decision = decideFeedbackAction(
       {
         status: task.status,
@@ -103,6 +109,7 @@ export async function scheduleFeedbackForTask(task: Task): Promise<{ scheduled: 
         deadlineMs: parseDeadlineToMs(task.deadline, task.createdAt),
         feedbackSent,
         formatCheckStatus: task.formatCheckStatus,
+        createdAtMs,
       },
       Date.now(),
     );
@@ -186,6 +193,12 @@ export async function leaseFeedbackJob(
     return { leased: false, reason: `held by ${data.leasedBy}` };
   }
   const task = await taskService.findById(data.taskId).catch(() => null);
+  const createdAtMs =
+    task?.createdAt instanceof Date
+      ? task.createdAt.getTime()
+      : task?.createdAt
+        ? new Date(task.createdAt).getTime()
+        : null;
   const decision = decideFeedbackAction(
     {
       status: task?.status,
@@ -194,6 +207,7 @@ export async function leaseFeedbackJob(
       deadlineMs: task ? parseDeadlineToMs(task.deadline, task.createdAt) : null,
       feedbackSent: task ? await feedbackAlreadySent(task.id) : true,
       formatCheckStatus: task?.formatCheckStatus ?? null,
+      createdAtMs,
     },
     nowMs,
   );

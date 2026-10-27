@@ -264,7 +264,7 @@ export class TaskRepository {
         source: 'goparttime',
         status: { in: ['ACCEPTED' as any, 'PENDING' as any] },
         assignmentStatus: 'SENT',
-        OR: [{ submittedRedditUrl: null }, { formatCheckStatus: 'DELETED' }],
+        submittedRedditUrl: null,
       },
       orderBy: { createdAt: 'asc' },
     });
