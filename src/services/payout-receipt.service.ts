@@ -9,6 +9,8 @@ export function getUpiLogoDataUri(): string {
   if (cachedLogoUri) return cachedLogoUri;
   try {
     const candidates = [
+      path.resolve(__dirname, '../../assets/images/upi-logo-white.png'),
+      path.resolve(process.cwd(), 'assets/images/upi-logo-white.png'),
       path.resolve(__dirname, '../../assets/images/upi-logo-dark.png'),
       path.resolve(process.cwd(), 'assets/images/upi-logo-dark.png'),
     ];
@@ -82,47 +84,51 @@ export function buildReceiptSvg(input: PayoutReceiptInput): string {
   const hasUpiId = Boolean(upiId && upiId.length > 0);
   const logoUri = getUpiLogoDataUri();
 
-  // When upiId is absent (e.g. inviter payouts), the date shifts up cleanly.
-  const dateY = hasUpiId ? 632 : 595;
+  // When upiId is absent, date shifts up cleanly.
+  const dateY = hasUpiId ? 688 : 648;
 
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <style>
-      .font-sans { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+      .font-sans {
+        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
     </style>
   </defs>
 
-  <!-- Background -->
-  <rect width="${width}" height="${height}" fill="#111214"/>
+  <!-- Background: #131313 -->
+  <rect width="${width}" height="${height}" fill="#131313"/>
 
   <!-- Checkmark Circle Badge (Google Pay Style) -->
-  <g transform="translate(270, 275)">
-    <circle r="55" fill="#1A73E8"/>
-    <path d="M -20 1 L -6 15 L 21 -11" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(270, 290)">
+    <circle r="60" fill="#0B57CF"/>
+    <path d="M -17 3 L -4 16 L 20 -8" fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 
-  <!-- Amount -->
-  <text x="270" y="420" class="font-sans" font-size="62" font-weight="600" fill="#FFFFFF" text-anchor="middle">₹${escapeXml(formattedAmount)}</text>
+  <!-- Amount with smaller rupee symbol -->
+  <text x="270" y="445" class="font-sans" fill="#FFFFFF" text-anchor="middle">
+    <tspan font-size="38" dy="-7">₹</tspan><tspan font-size="64" dy="7" font-weight="400">${escapeXml(formattedAmount)}</tspan>
+  </text>
 
   <!-- Paid to -->
-  <text x="270" y="515" class="font-sans" font-size="19" font-weight="400" fill="#9AA0A6" text-anchor="middle">Paid to</text>
+  <text x="270" y="555" class="font-sans" font-size="20" font-weight="400" fill="#C4C7C5" text-anchor="middle">Paid to</text>
 
   <!-- Payee Name / Label -->
-  <text x="270" y="558" class="font-sans" font-size="30" font-weight="600" fill="#FFFFFF" text-anchor="middle">${escapeXml(input.payeeLabel)}</text>
+  <text x="270" y="602" class="font-sans" font-size="34" font-weight="400" fill="#FFFFFF" text-anchor="middle">${escapeXml(input.payeeLabel)}</text>
 
   ${hasUpiId ? `<!-- UPI ID -->
-  <text x="270" y="595" class="font-sans" font-size="18" font-weight="400" fill="#9AA0A6" text-anchor="middle">${escapeXml(upiId!)}</text>` : ''}
+  <text x="270" y="645" class="font-sans" font-size="21" font-weight="400" fill="#E3E3E3" text-anchor="middle">${escapeXml(upiId!)}</text>` : ''}
 
   <!-- Date & Time (IST) -->
-  <text x="270" y="${dateY}" class="font-sans" font-size="16.5" font-weight="400" fill="#9AA0A6" text-anchor="middle">${escapeXml(formattedDate)}</text>
+  <text x="270" y="${dateY}" class="font-sans" font-size="21" font-weight="400" fill="#C4C7C5" text-anchor="middle">${escapeXml(formattedDate)}</text>
 
   <!-- Footer: Powered by UPI -->
   <g transform="translate(270, 875)">
     <!-- POWERED BY text -->
-    <text x="0" y="-32" class="font-sans" font-size="10" font-weight="500" fill="#9AA0A6" text-anchor="middle" letter-spacing="2">POWERED BY</text>
+    <text x="0" y="-30" class="font-sans" font-size="10.5" font-weight="500" fill="#C4C7C5" text-anchor="middle" letter-spacing="1.5">POWERED BY</text>
 
     <!-- Official NPCI UPI Logo (UNIFIED PAYMENTS INTERFACE) -->
-    <image x="-57" y="-20" width="114" height="42" href="${logoUri}" preserveAspectRatio="xMidYMid meet"/>
+    <image x="-60" y="-18" width="120" height="42" href="${logoUri}" preserveAspectRatio="xMidYMid meet"/>
   </g>
 </svg>`;
 }

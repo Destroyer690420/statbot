@@ -46,15 +46,16 @@ describe('buildReceiptSvg and generatePayoutReceipt', () => {
       paidAt: new Date('2026-10-19T17:40:00Z'),
     });
 
-    expect(withUpi).toContain('₹2,000');
+    expect(withUpi).toContain('>₹</tspan>');
+    expect(withUpi).toContain('>2,000</tspan>');
+    expect(withUpi).toContain('fill="#131313"');
     expect(withUpi).toContain('Paid to');
     expect(withUpi).toContain('MR Daksh');
     expect(withUpi).toContain('daksh100@slc');
     expect(withUpi).toContain('POWERED BY');
-    expect(withUpi).toContain('UNIFIED PAYMENTS INTERFACE');
     expect(withUpi).toContain('<image');
     expect(withUpi).toContain('data:image/png;base64');
-    expect(withUpi).toContain('y="632"');
+    expect(withUpi).toContain('y="688"');
 
     const withoutUpi = buildReceiptSvg({
       amount: 420,
@@ -62,11 +63,12 @@ describe('buildReceiptSvg and generatePayoutReceipt', () => {
       paidAt: new Date('2026-10-19T17:40:00Z'),
     });
 
-    expect(withoutUpi).toContain('₹420');
+    expect(withoutUpi).toContain('>₹</tspan>');
+    expect(withoutUpi).toContain('>420</tspan>');
     expect(withoutUpi).toContain('ticket-0595');
     expect(withoutUpi).not.toContain('daksh100@slc');
-    // Shifts up to 595
-    expect(withoutUpi).toContain('y="595"');
+    // Shifts up to 648
+    expect(withoutUpi).toContain('y="648"');
   });
 
   test('generatePayoutReceipt returns a valid 540x960 PNG buffer', async () => {
