@@ -415,18 +415,36 @@ class GoPartTimeService {
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
 
-    // A link arrived — the stalling notice is no longer needed. Drop any
-    // pending feedback job (fire-and-forget, never fails the reply path).
-    try {
-      const { removeFeedbackJobForTask } = await import('./feedback.service');
-      void removeFeedbackJobForTask(task.id).catch(() => undefined);
-    } catch {
-      // ignore — absence of a feedback job is the normal case
+    if (updated.formatCheckStatus === 'DELETED') {
+      // Deleted post: link cannot be submitted, so schedule immediate feedback ("submitting in a bit")
+      try {
+        const { scheduleFeedbackForTask } = await import('./feedback.service');
+        void scheduleFeedbackForTask(updated).catch((error) =>
+          logger.warn('Deleted-post feedback scheduling failed (non-fatal)', {
+            taskId: task.id,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      } catch (error) {
+        logger.warn('Deleted-post feedback scheduling failed (non-fatal)', {
+          taskId: task.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } else {
+      // A non-deleted link arrived — the stalling notice is no longer needed. Drop any
+      // pending feedback job (fire-and-forget, never fails the reply path).
+      try {
+        const { removeFeedbackJobForTask } = await import('./feedback.service');
+        void removeFeedbackJobForTask(task.id).catch(() => undefined);
+      } catch {
+        // ignore — absence of a feedback job is the normal case
+      }
     }
 
     // GoPartTime link auto-submit: enqueue async, never block or fail the
     // Discord reply path. Latest submission wins (replaces any pending job);
-    // the gate (verified + DELETED pass, SHORT/fetch/session states stay
+    // the gate (verified pass, SHORT/DELETED/fetch/session states stay
     // manual) decides inside the enqueue.
     try {
       const { enqueueSubmissionJob } = await import('./submission.service');
@@ -487,6 +505,16 @@ class GoPartTimeService {
     }
     const updated = await taskService.findById(task.id);
     if (!updated) throw new Error('Task not found.');
+
+    if (updated.formatCheckStatus === 'DELETED') {
+      try {
+        const { scheduleFeedbackForTask } = await import('./feedback.service');
+        void scheduleFeedbackForTask(updated).catch(() => undefined);
+      } catch {
+        // ignore
+      }
+    }
+
     // A recheck can flip a task into submittable state (e.g. FETCH_ERROR →
     // MATCH) without any resubmission — re-run the submit gate (no-op unless
     // the gate now passes). Never fails the recheck itself.

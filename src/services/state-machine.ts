@@ -17,6 +17,10 @@ const TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   ],
   [TaskStatus.REMINDER_20_SENT]: [
     TaskStatus.INSIGHT_20_RECEIVED,
+    // A worker can skip the 20h screenshot entirely and answer the 70h
+    // reminder first; the 70h insight is the final step, so this is a valid
+    // forward path (the 20h reminder simply stays uncompleted).
+    TaskStatus.INSIGHT_70_RECEIVED,
     TaskStatus.CANCELLED,
     TaskStatus.ARCHIVED,
   ],

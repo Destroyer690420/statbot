@@ -21,11 +21,12 @@ import {
 } from '../utils/submission-queue';
 
 describe('shouldAutoSubmit (the gate)', () => {
-  it('posts submit on exact, extra-para, title, text and DELETED verdicts', () => {
-    for (const s of ['MATCH', 'PARA_EXTRA', 'TITLE_MISMATCH', 'TEXT_MISMATCH', 'DELETED']) {
+  it('posts submit on exact, extra-para, title, and text verdicts', () => {
+    for (const s of ['MATCH', 'PARA_EXTRA', 'TITLE_MISMATCH', 'TEXT_MISMATCH']) {
       expect(shouldAutoSubmit(s, TaskType.POST)).toBe(true);
     }
     for (const s of [
+      'DELETED',
       'PARA_SHORT',
       'PARA_MISMATCH',
       'FETCH_ERROR',
@@ -123,14 +124,14 @@ describe('decideSubmissionAction', () => {
     expect(retryDelayForAttempt(1, now - 1000, now)).toBe(0);
   });
 
-  it('enqueues DELETED verdicts (removed posts still submit; only SHORT stays manual)', () => {
+  it('never enqueues DELETED verdicts (deleted posts do not submit; manager review / feedback instead)', () => {
     const d = decideSubmissionAction({
       taskType: TaskType.POST,
       formatCheckStatus: 'DELETED',
       submittedRedditUrl: 'https://www.reddit.com/r/x/comments/1/',
     });
-    expect(d.enqueue).toBe(true);
-    expect(d.delayMs).toBe(SUBMISSION_INITIAL_DELAY_MS);
+    expect(d.enqueue).toBe(false);
+    expect(d.reason).toContain('DELETED');
   });
 });
 

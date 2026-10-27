@@ -1030,6 +1030,7 @@ export const WORKER_FORBIDDEN_FIELDS = [
   'insightImageName',
   'jobId',
   'reminderMessageId',
+  'reminderMessageIds',
   'totalWorkers',
   'totalAmount',
   'assignedUserId',

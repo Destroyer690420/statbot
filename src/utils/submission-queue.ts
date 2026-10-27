@@ -26,10 +26,11 @@ export function submissionJobIdFor(taskId: string): string {
  *    content re-pasted with proper blank lines is correct formatting, and
  *    title/wording differences are accepted (owner directive, 2026-10-11).
  *  - POST + DELETED (removed by Reddit/mods/filters, deleted by the user, or
- *    any other removal state) → submit anyway (owner directive, 2026-10-12:
- *    a gone post's link still counts on the task site).
+ *    any other removal state) → never submit (owner directive, 2026-10-27:
+ *    deleted posts do not submit; owner is tagged in ticket and feedback
+ *    "submitting in a bit" is enqueued for GoPartTime instead).
  *  - COMMENT (+SKIPPED, by design — comments carry no format check) → submit.
- *  - EVERYTHING else (PARA_SHORT, FETCH_ERROR, NO_SESSION,
+ *  - EVERYTHING else (PARA_SHORT, DELETED, FETCH_ERROR, NO_SESSION,
  *    SESSION_EXPIRED, null) → never submit; manager reviews.
  */
 export function shouldAutoSubmit(
@@ -41,8 +42,7 @@ export function shouldAutoSubmit(
     formatCheckStatus === 'MATCH' ||
     formatCheckStatus === 'PARA_EXTRA' ||
     formatCheckStatus === 'TITLE_MISMATCH' ||
-    formatCheckStatus === 'TEXT_MISMATCH' ||
-    formatCheckStatus === 'DELETED'
+    formatCheckStatus === 'TEXT_MISMATCH'
   );
 }
 

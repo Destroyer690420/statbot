@@ -185,6 +185,10 @@ model Reminder {
   retryCount         Int          @default(0)
   jobId              String?
   reminderMessageId  String?
+  // Every Discord message that asked for this reminder: the first send plus
+  // each retry. A worker may reply to ANY of them, so the handler matches on
+  // the whole set, not just the latest message.
+  reminderMessageIds String[]     @default([])
   insightImageUrl    String?
   insightImageName   String?
   insightUploadedAt  DateTime?
@@ -194,6 +198,7 @@ model Reminder {
   @@index([taskId])
   @@index([sent, completed])
   @@index([reminderMessageId])
+  @@index([reminderMessageIds], type: Gin)
 }
 
 model AuditLog {

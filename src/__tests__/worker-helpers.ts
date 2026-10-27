@@ -247,6 +247,7 @@ export function createMockDb(state: FixtureState): Record<string, any> {
       retryCount: r.retryCount ?? 0,
       jobId: 'job-secret',
       reminderMessageId: 'rm-secret',
+      reminderMessageIds: ['rm-secret'],
       insightImageUrl: 'https://secret/insight.png',
       insightImageName: 'insight.png',
       insightUploadedAt: null,

@@ -253,10 +253,10 @@ export class TaskRepository {
 
   /**
    * Deadline-feedback candidates: delivered GoPartTime tasks of any type
-   * still waiting for their Reddit link. ACCEPTED and PENDING (activation
-   * does not require a link, and the site-side deadline applies either
-   * way). Auto-marked-deleted rows stay eligible — their links still submit
-   * (Decision 33). Deadline parsing + one-shot guards run in JS.
+   * still waiting for their Reddit link, or posts whose format check proved
+   * DELETED. ACCEPTED and PENDING (activation does not require a link, and the
+   * site-side deadline applies either way). Deadline parsing + one-shot guards
+   * run in JS.
    */
   async findFeedbackCandidates() {
     return getDb().task.findMany({
@@ -264,7 +264,7 @@ export class TaskRepository {
         source: 'goparttime',
         status: { in: ['ACCEPTED' as any, 'PENDING' as any] },
         assignmentStatus: 'SENT',
-        submittedRedditUrl: null,
+        OR: [{ submittedRedditUrl: null }, { formatCheckStatus: 'DELETED' }],
       },
       orderBy: { createdAt: 'asc' },
     });

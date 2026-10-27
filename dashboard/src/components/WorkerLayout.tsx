@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ExternalLink, Hash, Home, ListTodo, LogOut, UserPlus, Wallet } from 'lucide-react';
+import { BookOpen, ExternalLink, Hash, Home, Layers, ListTodo, LogOut, User, UserPlus, Wallet } from 'lucide-react';
 import { useWorkerAuth } from '../hooks/useWorkerAuth';
 
 const TABS = [
@@ -119,9 +119,11 @@ export function WorkerLayout() {
   return (
     <div className="min-h-screen bg-worker-bg text-worker-text">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[220px] flex-col border-r border-worker-border bg-worker-surface lg:flex">
-        <div className="border-b border-worker-border px-5 py-6">
-          <p className="text-xs font-medium text-worker-text-muted">Worker panel</p>
-          <p className="mt-1 font-display text-lg font-bold text-worker-text">Task desk</p>
+        <div className="flex items-center gap-2.5 border-b border-worker-border px-5 py-6">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-worker-accent/15 text-worker-accent">
+            <Layers className="h-[18px] w-[18px]" aria-hidden="true" />
+          </span>
+          <p className="min-w-0 truncate font-display text-lg font-bold text-worker-text">Task desk</p>
         </div>
         <nav className="flex-1 space-y-1 px-3 py-5" aria-label="Worker navigation">
           {tabs.map((tab) => (
@@ -129,9 +131,14 @@ export function WorkerLayout() {
           ))}
         </nav>
         <div className="space-y-3 border-t border-worker-border p-4">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-worker-text">{workerName || 'Worker'}</p>
-            <p className="mt-0.5 text-xs text-worker-text-muted">Signed in</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-worker-border bg-worker-surface-2 text-worker-text-muted">
+              <User className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-worker-text">{workerName || 'Worker'}</p>
+              <p className="mt-0.5 text-xs text-worker-text-muted">Signed in</p>
+            </div>
           </div>
           {ticket?.discordUrl ? (
             <a href={ticket.discordUrl} target="_blank" rel="noopener noreferrer" className="worker-secondary-button w-full">

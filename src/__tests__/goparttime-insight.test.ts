@@ -17,6 +17,7 @@ function makeReminder(overrides: Partial<Reminder> = {}): Reminder {
     retryCount: 0,
     jobId: null,
     reminderMessageId: null,
+    reminderMessageIds: [],
     insightImageUrl: null,
     insightImageName: null,
     insightUploadedAt: null,

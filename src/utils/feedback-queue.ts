@@ -42,12 +42,15 @@ export interface FeedbackTaskState {
   submittedRedditUrl: string | null | undefined;
   deadlineMs: number | null | undefined;
   feedbackSent: boolean;
+  formatCheckStatus?: string | null | undefined;
 }
 
 /**
- * Decides whether a link-less task needs a stalling notice. Schedules only
- * for delivered, still-active tasks with a parseable deadline and no
- * feedback on record yet. Anything else is a no-op with a reason.
+ * Decides whether a link-less task or a task with a deleted post needs a stalling notice.
+ * Schedules for:
+ *   - delivered, still-active tasks with a parseable deadline and no feedback on record yet.
+ *   - delivered, still-active tasks whose format check verified the post is DELETED on Reddit (immediate).
+ * Anything else is a no-op with a reason.
  */
 export function decideFeedbackAction(
   task: FeedbackTaskState,
@@ -56,14 +59,18 @@ export function decideFeedbackAction(
   if (task.feedbackSent) {
     return { schedule: false, reason: 'feedback already sent', delayMs: 0 };
   }
-  if (task.submittedRedditUrl && task.submittedRedditUrl.trim()) {
-    return { schedule: false, reason: 'link already submitted', delayMs: 0 };
+  if (isFeedbackTerminalStatus(task.status)) {
+    return { schedule: false, reason: `task ${task.status}`, delayMs: 0 };
   }
   if (task.assignmentStatus !== 'SENT') {
     return { schedule: false, reason: 'task not delivered yet', delayMs: 0 };
   }
-  if (isFeedbackTerminalStatus(task.status)) {
-    return { schedule: false, reason: `task ${task.status}`, delayMs: 0 };
+  // Deleted post: link cannot be submitted, so an immediate stalling notice ("submitting in a bit") protects the task.
+  if (task.formatCheckStatus === 'DELETED') {
+    return { schedule: true, reason: 'deleted post feedback', delayMs: 0 };
+  }
+  if (task.submittedRedditUrl && task.submittedRedditUrl.trim()) {
+    return { schedule: false, reason: 'link already submitted', delayMs: 0 };
   }
   if (task.deadlineMs != null && nowMs - task.deadlineMs > FEEDBACK_STALE_AFTER_MS) {
     return { schedule: false, reason: 'deadline long past', delayMs: 0 };

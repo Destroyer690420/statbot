@@ -11,7 +11,8 @@ import { taskRepository, automationRepository } from '../../database/repositorie
 import { buildBlocksReport, listScreenEvents } from '../../services/automation/screen-events';
 import { CONTENT_SCREEN, OWNER_USER_ID } from '../../config/constants';
 import { TaskStatus, AuditAction } from '../../types';
-import { getStatusAfterInsightReceived, shouldComplete } from '../../services/state-machine';
+import { shouldComplete, canTransition } from '../../services/state-machine';
+import { insightStepLabel, pickInsightReminder, statusForCompletedInsights } from '../../utils/insight-reply';
 import { auditLogService } from '../../services/audit.service';
 import { logger } from '../../utils/logger';
 import { getAllAdminIds, isAdminOrManager } from '../../utils/permissions';
@@ -204,6 +205,14 @@ async function handleInstructionReply(message: Message): Promise<boolean> {
         )
         .catch(() => undefined);
     }
+    // Deleted post: link is NOT queued, feedback is scheduled, and owner is tagged.
+    if (updated.formatCheckStatus === 'DELETED' && message.channel instanceof TextChannel) {
+      await message.channel
+        .send(
+          `<@${OWNER_USER_ID}> ⚠️ The post was deleted so it was not submitted.`,
+        )
+        .catch(() => undefined);
+    }
   } catch (error) {
     const messageText = error instanceof Error ? error.message : 'Submission could not be recorded.';
     await message.react('❌');
@@ -236,7 +245,13 @@ function trimTrailingPunctuation(url: string): string {
 }
 
 /**
- * Existing insight flow: image reply to a reminder message.
+ * Insight flow: image reply to a reminder message.
+ *
+ * The reply may target ANY message that asked for that insight — the initial
+ * send or any retry (all of them are stored in `Reminder.reminderMessageIds`).
+ * If the target step is already completed, the image is attributed to the one
+ * later step still waiting for a screenshot (e.g. replying to the old 20h
+ * reminder with the 70h view data), which used to be dropped silently.
  */
 async function handleInsightUpload(message: Message): Promise<void> {
   if (message.attachments.size === 0) return;
@@ -251,23 +266,39 @@ async function handleInsightUpload(message: Message): Promise<void> {
   if (!message.reference?.messageId) return;
 
   const repliedToId = message.reference.messageId;
-  const reminder = await reminderService.findByMessageId(repliedToId);
-  if (!reminder) return;
+  const resolved = await reminderService.findByMessageId(repliedToId);
+  if (!resolved) return;
 
-  const task = await taskService.findById(reminder.taskId);
+  const task = await taskService.findById(resolved.taskId);
   if (!task) return;
 
   if (task.assignedUserId !== message.author.id) return;
 
-  if (reminder.completed) {
+  if (
+    task.status === TaskStatus.CANCELLED ||
+    task.status === TaskStatus.ARCHIVED ||
+    task.cancelledReason !== null
+  ) {
+    await message.reply('⚠️ This task is no longer active — the insight was not recorded.');
+    return;
+  }
+
+  const reminders = await reminderService.findByTaskId(task.id);
+  const reminder = pickInsightReminder(resolved, reminders);
+
+  if (!reminder) {
     await message.reply('⚠️ Insight already received.');
     return;
   }
 
   await reminderService.markCompleted(reminder.id, message.author.id);
 
-  const newStatus = getStatusAfterInsightReceived(task.status, task.type);
-  if (newStatus !== task.status) {
+  // Status is derived from what is actually completed, not from the step the
+  // worker happened to reply to: a late 20h reply cannot drag a task back from
+  // the 70h stage, and a 70h reply completes the task even if 20h was skipped.
+  const afterCompletion = await reminderService.findByTaskId(task.id);
+  const newStatus = statusForCompletedInsights(afterCompletion);
+  if (newStatus && newStatus !== task.status && canTransition(task.status, newStatus)) {
     await taskService.updateStatus(task.id, newStatus, message.author.id);
   }
 
@@ -292,7 +323,7 @@ async function handleInsightUpload(message: Message): Promise<void> {
   }
 
   await message.react('✅');
-  await message.reply('✅ Insight received successfully.');
+  await message.reply(`✅ ${insightStepLabel(reminder.type)} insight received successfully.`);
 
   await auditLogService.log(
     AuditAction.INSIGHT_RECEIVED,
@@ -304,6 +335,9 @@ async function handleInsightUpload(message: Message): Promise<void> {
   logger.info('Insight received via reply', {
     taskId: task.id,
     reminderId: reminder.id,
+    reminderType: reminder.type,
+    repliedToReminderId: resolved.id,
+    reassignedFromCompletedStep: resolved.id !== reminder.id,
     userId: message.author.id,
     channelId: message.channel.id,
   });

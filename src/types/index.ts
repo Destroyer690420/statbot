@@ -136,6 +136,8 @@ export interface Reminder {
   retryCount: number;
   jobId: string | null;
   reminderMessageId: string | null;
+  /** Every message ID that asked for this reminder (first send + retries). */
+  reminderMessageIds: string[];
 
   insightImageUrl: string | null;
   insightImageName: string | null;

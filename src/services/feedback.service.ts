@@ -87,7 +87,13 @@ export async function scheduleFeedbackForTask(task: Task): Promise<{ scheduled: 
     const q = getFeedbackQueue();
     const jobId = feedbackJobIdFor(task.id);
     const existing = await q.getJob(jobId).catch(() => null);
-    if (existing) return { scheduled: false, reason: 'already scheduled' };
+    if (existing) {
+      if (task.formatCheckStatus === 'DELETED') {
+        await existing.remove().catch(() => undefined);
+      } else {
+        return { scheduled: false, reason: 'already scheduled' };
+      }
+    }
     const feedbackSent = await feedbackAlreadySent(task.id);
     const decision = decideFeedbackAction(
       {
@@ -96,6 +102,7 @@ export async function scheduleFeedbackForTask(task: Task): Promise<{ scheduled: 
         submittedRedditUrl: task.submittedRedditUrl,
         deadlineMs: parseDeadlineToMs(task.deadline, task.createdAt),
         feedbackSent,
+        formatCheckStatus: task.formatCheckStatus,
       },
       Date.now(),
     );
@@ -186,6 +193,7 @@ export async function leaseFeedbackJob(
       submittedRedditUrl: task?.submittedRedditUrl ?? null,
       deadlineMs: task ? parseDeadlineToMs(task.deadline, task.createdAt) : null,
       feedbackSent: task ? await feedbackAlreadySent(task.id) : true,
+      formatCheckStatus: task?.formatCheckStatus ?? null,
     },
     nowMs,
   );

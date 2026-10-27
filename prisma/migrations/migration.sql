@@ -878,3 +878,19 @@ CREATE TABLE IF NOT EXISTS "FailedTaskCheck" (
 CREATE INDEX IF NOT EXISTS "FailedTaskCheck_verdict_idx" ON "FailedTaskCheck"("verdict");
 CREATE INDEX IF NOT EXISTS "FailedTaskCheck_notifiedAt_idx" ON "FailedTaskCheck"("notifiedAt");
 CREATE INDEX IF NOT EXISTS "FailedTaskCheck_lastSeenAt_idx" ON "FailedTaskCheck"("lastSeenAt");
+
+-- ============================================================
+-- Migration: accept insight replies to ANY reminder message (not just the latest)
+-- ============================================================
+-- A reminder is sent once and then re-sent up to MAX_REMINDER_ATTEMPTS times.
+-- Only the newest message ID was persisted (reminderMessageId), so a worker who
+-- replied to the first reminder (or an earlier retry) was silently ignored —
+-- the handler could not resolve a reminder for that message. This array keeps
+-- every message ID that ever asked for the reminder, so a reply to any of them
+-- completes the same insight. The legacy scalar column stays as-is (it is still
+-- the "latest message" pointer and covers pre-migration rows); the lookup
+-- matches either. GIN is the index type for array containment (`has`).
+-- Schema-only, no data statements, safe to re-run.
+ALTER TABLE "Reminder" ADD COLUMN IF NOT EXISTS "reminderMessageIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+CREATE INDEX IF NOT EXISTS "Reminder_reminderMessageIds_idx" ON "Reminder" USING GIN ("reminderMessageIds");
+

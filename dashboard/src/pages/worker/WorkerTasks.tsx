@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Filter, Search, SlidersHorizontal, X } from 'lucide-react';
 import { getWorkerTasks, workerErrorMessage } from '../../api/workerApi';
 import { WorkerEmptyState, WorkerErrorState, WorkerSkeleton } from '../../components/worker/WorkerUI';
@@ -40,8 +41,16 @@ function TypeControl({ value, onChange, id, mobile = false }: { value: string; o
 }
 
 export default function WorkerTasks() {
-  const [tab, setTab] = useState<Tab>('todo');
-  const [sub, setSub] = useState('all');
+  // Home stat cards deep-link here via ?tab=&sub=; only whitelisted values are honored.
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const subParam = searchParams.get('sub');
+  const [tab, setTab] = useState<Tab>(
+    tabParam === 'completed' || tabParam === 'failed' ? tabParam : 'todo',
+  );
+  const [sub, setSub] = useState(
+    subParam === 'awaiting' || subParam === 'paid' ? subParam : 'all',
+  );
   const [type, setType] = useState('');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');

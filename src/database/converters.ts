@@ -75,6 +75,7 @@ type PrismaReminder = {
   sentAt: Date | null; completedAt: Date | null;
   retryCount: number; jobId: string | null;
   reminderMessageId: string | null;
+  reminderMessageIds?: string[] | null;
   insightImageUrl: string | null; insightImageName: string | null;
   insightUploadedAt: Date | null;
 };
@@ -86,6 +87,11 @@ export function toReminder(r: PrismaReminder): Reminder {
     sentAt: r.sentAt, completedAt: r.completedAt,
     retryCount: r.retryCount, jobId: r.jobId,
     reminderMessageId: r.reminderMessageId,
+    // Legacy rows (and a stale generated client) can come back without the
+    // array; the scalar column is folded in so old reminders still resolve.
+    reminderMessageIds: Array.isArray(r.reminderMessageIds)
+      ? r.reminderMessageIds
+      : (r.reminderMessageId ? [r.reminderMessageId] : []),
     insightImageUrl: r.insightImageUrl, insightImageName: r.insightImageName,
     insightUploadedAt: r.insightUploadedAt,
   };

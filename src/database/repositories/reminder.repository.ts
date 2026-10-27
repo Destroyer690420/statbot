@@ -26,9 +26,20 @@ export class ReminderRepository {
     });
   }
 
+  /**
+   * Resolve a reminder from ANY message that asked for it. The initial send and
+   * every retry post a fresh Discord message, so a worker may reply to any of
+   * them; matching only the latest one dropped the earlier replies.
+   */
   async findByMessageId(messageId: string) {
     return getDb().reminder.findFirst({
-      where: { reminderMessageId: messageId },
+      where: {
+        OR: [
+          { reminderMessageIds: { has: messageId } },
+          // Pre-migration rows only have the scalar column.
+          { reminderMessageId: messageId },
+        ],
+      },
     });
   }
 
@@ -64,6 +75,7 @@ export class ReminderRepository {
     retryCount: number;
     jobId: string | null;
     reminderMessageId: string | null;
+    reminderMessageIds: string[];
     insightImageUrl: string | null;
     insightImageName: string | null;
     insightUploadedAt: Date | null;
@@ -102,7 +114,11 @@ export class ReminderRepository {
   async updateReminderMessageId(reminderId: string, reminderMessageId: string) {
     return getDb().reminder.update({
       where: { id: reminderId },
-      data: { reminderMessageId },
+      data: {
+        // Latest pointer (kept for existing consumers) + the full history.
+        reminderMessageId,
+        reminderMessageIds: { push: reminderMessageId },
+      },
     });
   }
 
@@ -136,6 +152,7 @@ export class ReminderRepository {
     retryCount: number;
     jobId: string | null;
     reminderMessageId: string | null;
+    reminderMessageIds: string[];
     insightImageUrl: string | null;
     insightImageName: string | null;
     insightUploadedAt: Date | null;

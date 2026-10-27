@@ -38,12 +38,36 @@ describe('decideFeedbackAction', () => {
     expect(d.delayMs).toBe(0);
   });
 
-  it('never double-sends (audit guard) and never when a link exists', () => {
+  it('never double-sends (audit guard) and never when a normal link exists', () => {
     expect(decideFeedbackAction(task({ feedbackSent: true })).schedule).toBe(false);
     expect(decideFeedbackAction(task({ feedbackSent: true })).reason).toContain('already sent');
     expect(
       decideFeedbackAction(task({ submittedRedditUrl: 'https://www.reddit.com/r/x/comments/1/' })).schedule,
     ).toBe(false);
+  });
+
+  it('schedules immediately for DELETED posts even if link exists', () => {
+    const d = decideFeedbackAction(
+      task({
+        submittedRedditUrl: 'https://www.reddit.com/r/x/comments/1/',
+        formatCheckStatus: 'DELETED',
+      }),
+    );
+    expect(d.schedule).toBe(true);
+    expect(d.delayMs).toBe(0);
+    expect(d.reason).toBe('deleted post feedback');
+  });
+
+  it('never schedules for DELETED posts if feedback was already sent', () => {
+    const d = decideFeedbackAction(
+      task({
+        submittedRedditUrl: 'https://www.reddit.com/r/x/comments/1/',
+        formatCheckStatus: 'DELETED',
+        feedbackSent: true,
+      }),
+    );
+    expect(d.schedule).toBe(false);
+    expect(d.reason).toContain('already sent');
   });
 
   it('skips undelivered, terminal, deadline-less and long-past tasks', () => {
