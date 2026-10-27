@@ -336,6 +336,11 @@ export async function payInviter(inviterId: string) {
   return data;
 }
 
+export async function getInviterQrCode(inviterId: string) {
+  const { data } = await api.get(`/commissions/inviters/${encodeURIComponent(inviterId)}/qr-code`);
+  return data;
+}
+
 export async function payAllCommissions() {
   const { data } = await api.post('/commissions/pay-all');
   return data;

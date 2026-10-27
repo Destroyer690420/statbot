@@ -223,6 +223,7 @@ Week params (`weekStart`/`weekEnd`) accepted in **query or body** (parsed as Dat
 | GET | `/commissions/summary` | Dashboard cards | week params | `{ totalInviters, totalSuccessfulInvites, totalCommission, totalBonusAmount, totalPerTaskAmount, alreadyPaidCommission }` |
 | GET | `/commissions/breakdown` | Per-inviter breakdown | week params | `[{ inviterId, inviterName, inviterType, totalReferrals, successfulReferrals, totalCommission, status:'Ready' }]` |
 | GET | `/commissions/inviters/:inviterId` | Inviter detail | week params | `{ inviterName, inviterType, status, referrals[{referralId, inviteeName, inviteeTasks, bonusAmount, perTaskAmount, isSuccessful, bonusPaid}], totalBonus, totalPerTask, totalCommission }` |
+| GET | `/commissions/inviters/:inviterId/qr-code` | Inviter payment QR code for the Pay Inviter popup | — | `{ qrCodeUrl, updatedAt, upiId }` (nulls when no QR uploaded) | 401; 403; 500 |
 | GET | `/commissions/referrals` | All referrals | — | `Referral[]` |
 | POST | `/commissions/referrals` | Create referral (admin) | `{ inviterId, inviterName, inviteeId, inviteeName, inviterType }` (`ticketId` accepted by service but NOT in zod) | 201; 400 dup invitee+inviter |
 | PATCH | `/commissions/referrals/:referralId` | Update (names, inviter/invitee IDs, ticketId; inviter change re-derives type + chain) | `{ inviterId?, inviteeId? (snowflakes), inviterName?, inviteeName?, ticketId? nullable }` | 403; 404; 400 |

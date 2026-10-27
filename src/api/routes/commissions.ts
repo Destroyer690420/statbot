@@ -15,6 +15,7 @@ import { isAdmin } from '../../utils/permissions';
 import { PAYMENT_PROOF_CHANNEL_ID } from '../../config/constants';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
+import { getWorkerQrInfo } from '../../services/worker-payment-qr.service';
 
 export default function createCommissionRoutes(discordClient: Client): Router {
 const router = Router();
@@ -135,6 +136,24 @@ router.get('/breakdown', async (req: Request, res: Response): Promise<void> => {
     res.json({ success: true, data: breakdown });
   } catch (error) {
     logger.error('GET /commissions/breakdown failed', { error });
+    res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+});
+
+/**
+ * GET /api/v1/commissions/inviters/:inviterId/qr-code
+ * The inviter's uploaded payment QR for the Pay Inviter popup. Nulls (not an
+ * error) when nothing was uploaded — paying without a QR stays possible.
+ * Admin-only like every other commission payment route.
+ */
+router.get('/inviters/:inviterId/qr-code', async (req: Request, res: Response): Promise<void> => {
+  if (!requireDashboardAdmin(req, res)) return;
+
+  try {
+    const data = await getWorkerQrInfo(String(req.params.inviterId));
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('GET /commissions/inviters/:inviterId/qr-code failed', { error });
     res.status(500).json({ success: false, message: 'Internal server error.' });
   }
 });

@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Loader2,
   UserPlus,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { getCommissionBreakdown, getInviterDetail, payInviter } from '../../../api/client';
+import { getCommissionBreakdown, getInviterDetail } from '../../../api/client';
 import { formatCurrency } from '../utils';
 import { InviterDetail } from './InviterDetail';
-import { ConfirmPayButton } from './ConfirmPayButton';
+import { PayInviterModal } from './PayInviterModal';
 
 interface InviterBreakdownProps {
   dateParams: Record<string, string> | undefined;
@@ -20,7 +20,7 @@ interface InviterBreakdownProps {
 
 export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInvalidate }: InviterBreakdownProps) {
   const [expandedInviter, setExpandedInviter] = useState<string | null>(null);
-  const [confirmPayInviter, setConfirmPayInviter] = useState<string | null>(null);
+  const [payModalInviter, setPayModalInviter] = useState<{ inviterId: string; inviterName: string; totalCommission: number } | null>(null);
 
   const breakdownQuery = useQuery({
     queryKey: ['commission-breakdown', dateParams],
@@ -32,15 +32,6 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
     queryKey: ['inviter-detail', expandedInviter, dateParams],
     queryFn: () => getInviterDetail(expandedInviter!, dateParams),
     enabled: !!expandedInviter,
-  });
-
-  const payInviterMutation = useMutation({
-    mutationFn: (inviterId: string) => payInviter(inviterId),
-    onSuccess: () => {
-      setConfirmPayInviter(null);
-      setExpandedInviter(null);
-      onInvalidate();
-    },
   });
 
   const inviters = breakdownQuery.data?.data || [];
@@ -120,14 +111,16 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
                             {inv.totalCommission === 0 ? (
                               <span className="text-dark-500 text-xs">—</span>
                             ) : (
-                              <ConfirmPayButton
-                                label="Pay Inviter"
-                                isConfirming={confirmPayInviter === inv.inviterId}
-                                isPending={payInviterMutation.isPending}
-                                onStartConfirm={() => setConfirmPayInviter(inv.inviterId)}
-                                onConfirm={() => payInviterMutation.mutate(inv.inviterId)}
-                                onCancel={() => setConfirmPayInviter(null)}
-                              />
+                              <button
+                                onClick={() => setPayModalInviter({
+                                  inviterId: inv.inviterId,
+                                  inviterName: inv.inviterName,
+                                  totalCommission: inv.totalCommission,
+                                })}
+                                className="btn-primary text-xs py-1.5 px-3"
+                              >
+                                Pay Inviter
+                              </button>
                             )}
                           </td>
                         )}
@@ -190,14 +183,16 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
 
                   {isCurrentWeek && inv.totalCommission > 0 && expandedInviter !== inv.inviterId && (
                     <div className="px-3.5 pb-3 flex justify-end" onClick={e => e.stopPropagation()}>
-                      <ConfirmPayButton
-                        label="Pay Inviter"
-                        isConfirming={confirmPayInviter === inv.inviterId}
-                        isPending={payInviterMutation.isPending}
-                        onStartConfirm={() => setConfirmPayInviter(inv.inviterId)}
-                        onConfirm={() => payInviterMutation.mutate(inv.inviterId)}
-                        onCancel={() => setConfirmPayInviter(null)}
-                      />
+                      <button
+                        onClick={() => setPayModalInviter({
+                          inviterId: inv.inviterId,
+                          inviterName: inv.inviterName,
+                          totalCommission: inv.totalCommission,
+                        })}
+                        className="btn-primary text-xs py-1.5 px-3"
+                      >
+                        Pay Inviter
+                      </button>
                     </div>
                   )}
 
@@ -205,14 +200,16 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
                     <div className="border-t border-dark-700/30 bg-dark-900/40 p-3.5">
                       {isCurrentWeek && inv.totalCommission > 0 && (
                         <div className="mb-3 flex justify-end" onClick={e => e.stopPropagation()}>
-                          <ConfirmPayButton
-                            label="Pay Inviter"
-                            isConfirming={confirmPayInviter === inv.inviterId}
-                            isPending={payInviterMutation.isPending}
-                            onStartConfirm={() => setConfirmPayInviter(inv.inviterId)}
-                            onConfirm={() => payInviterMutation.mutate(inv.inviterId)}
-                            onCancel={() => setConfirmPayInviter(null)}
-                          />
+                          <button
+                            onClick={() => setPayModalInviter({
+                              inviterId: inv.inviterId,
+                              inviterName: inv.inviterName,
+                              totalCommission: inv.totalCommission,
+                            })}
+                            className="btn-primary text-xs py-1.5 px-3"
+                          >
+                            Pay Inviter
+                          </button>
                         </div>
                       )}
                       {inviterDetailQuery.isLoading ? (
@@ -231,11 +228,20 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
             </div>
           </>
         )}
-
-        {payInviterMutation.isError && (
-          <p className="mt-3 text-danger text-sm">{(payInviterMutation.error as Error).message}</p>
-        )}
       </div>
+
+      {payModalInviter && (
+        <PayInviterModal
+          inviterId={payModalInviter.inviterId}
+          inviterName={payModalInviter.inviterName}
+          totalCommission={payModalInviter.totalCommission}
+          onClose={() => setPayModalInviter(null)}
+          onPaid={() => {
+            setExpandedInviter(null);
+            onInvalidate();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, Check, Clock3, Hash, Info, TrendingUp, UserPlus, Users } from 'lucide-react';
 import { getInviteeDmUrl, getWorkerInvites, workerErrorMessage } from '../../api/workerApi';
 import { formatISTDate, formatMoney } from '../../utils/workerFormat';
+import { PaymentQrCard } from '../../components/worker/PaymentQrCard';
 import {
   WorkerCard,
   WorkerEmptyState,
@@ -135,6 +136,8 @@ export default function WorkerInvites() {
           People you invited and what you have earned from them.
         </p>
       </div>
+
+      <PaymentQrCard />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <SummaryCard

@@ -73,6 +73,7 @@ describe('admin worker QR endpoint + static serving', () => {
     };
 
     const createPayoutRoutes = (await import('../api/routes/payouts')).default;
+    const createCommissionRoutes = (await import('../api/routes/commissions')).default;
     const uploadRoutes = (await import('../api/routes/uploads')).default;
 
     const app = express();
@@ -80,6 +81,7 @@ describe('admin worker QR endpoint + static serving', () => {
     app.use('/api/v1', uploadRoutes);
     // The QR paths never touch Discord; the client is unused here.
     app.use('/api/v1/payouts', createPayoutRoutes({} as never));
+    app.use('/api/v1/commissions', createCommissionRoutes({} as never));
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => resolve()) as unknown as { close: (cb?: () => void) => void };
     });
@@ -163,6 +165,30 @@ describe('admin worker QR endpoint + static serving', () => {
     const { status, body } = await api('/payouts/workers/ghost-worker/qr-code', undefined, adminToken);
     expect(status).toBe(200);
     expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null, upiId: null });
+  });
+
+  test('admin inviter QR endpoint requires auth', async () => {
+    const { status } = await api(`/commissions/inviters/${WORKER}/qr-code`);
+    expect(status).toBe(401);
+  });
+
+  test('a non-admin gets 401 on the admin inviter QR endpoint', async () => {
+    const wrongUser = jwt.sign({ username: 'someone-else' }, process.env.JWT_SECRET as string);
+    const { status } = await api(`/commissions/inviters/${WORKER}/qr-code`, undefined, wrongUser);
+    expect(status).toBe(401);
+  });
+
+  test('an inviter with no upload reads as nulls, not an error', async () => {
+    const { status, body } = await api(`/commissions/inviters/unuploaded-inviter/qr-code`, undefined, adminToken);
+    expect(status).toBe(200);
+    expect(body.data).toEqual({ qrCodeUrl: null, updatedAt: null, upiId: null });
+  });
+
+  test('an uploaded inviter QR is returned with a cache-busted URL and upiId', async () => {
+    const { status, body } = await api(`/commissions/inviters/${WORKER}/qr-code`, undefined, adminToken);
+    expect(status).toBe(200);
+    expect(body.data.qrCodeUrl).toContain(`/api/v1/uploads/payment-qr/${WORKER}/${WORKER}.png`);
+    expect(body.data.upiId).toBe('payee@upi');
   });
 
   test('static QR serving: file bytes, traversal guard, name guard, 404', async () => {
