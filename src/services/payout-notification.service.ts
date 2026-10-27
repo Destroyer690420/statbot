@@ -129,26 +129,17 @@ async function resolvePayeeLabelAndUpi(
     upiId = qrInfo.upiId;
   }
 
-  if (payeeLabel) {
-    return { payeeLabel, upiId };
-  }
-
+  // 1. Decoded QR bank payee name (e.g. "MR Daksh")
   if (qrInfo?.payeeName) {
     return { payeeLabel: qrInfo.payeeName, upiId };
   }
 
-  try {
-    const task = await taskRepository.findByWorkerId(input.payeeId);
-    if (task?.channelName) {
-      return { payeeLabel: task.channelName, upiId };
-    }
-    if (task?.assignedUserName) {
-      return { payeeLabel: task.assignedUserName, upiId };
-    }
-  } catch {
-    // best-effort
+  // 2. Caller-provided label (e.g. workerName or inviterName)
+  if (payeeLabel) {
+    return { payeeLabel, upiId };
   }
 
+  // 3. Referral record (if this payee is an inviter)
   try {
     const refs = await referralRepository.findByInviterId(input.payeeId);
     if (refs.length > 0 && refs[0].inviterName) {
@@ -158,10 +149,31 @@ async function resolvePayeeLabelAndUpi(
     // best-effort
   }
 
+  // 4. Assigned user name from task (if this payee is a worker)
+  try {
+    const task = await taskRepository.findByWorkerId(input.payeeId);
+    if (task?.assignedUserName) {
+      return { payeeLabel: task.assignedUserName, upiId };
+    }
+  } catch {
+    // best-effort
+  }
+
+  // 5. Discord display name or username
   try {
     const user = await discordClient.users.fetch(input.payeeId).catch(() => null);
     if (user?.displayName || user?.username) {
       return { payeeLabel: user.displayName || user.username, upiId };
+    }
+  } catch {
+    // best-effort
+  }
+
+  // 6. Channel name fallback
+  try {
+    const task = await taskRepository.findByWorkerId(input.payeeId);
+    if (task?.channelName) {
+      return { payeeLabel: task.channelName, upiId };
     }
   } catch {
     // best-effort
@@ -197,6 +209,7 @@ export async function sendPaymentProof(
     });
 
     await (channel as any).send({
+      content: `<@${input.payeeId}>`,
       files: [{ attachment: receiptBuffer, name: `payment-receipt-${input.payeeId}.png` }],
     });
     logger.info('Payment proof sent', { channelId, payeeId: input.payeeId, amount: input.amount });
