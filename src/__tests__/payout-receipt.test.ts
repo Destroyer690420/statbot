@@ -52,6 +52,8 @@ describe('buildReceiptSvg and generatePayoutReceipt', () => {
     expect(withUpi).toContain('daksh100@slc');
     expect(withUpi).toContain('POWERED BY');
     expect(withUpi).toContain('UNIFIED PAYMENTS INTERFACE');
+    expect(withUpi).toContain('<image');
+    expect(withUpi).toContain('data:image/png;base64');
     expect(withUpi).toContain('y="632"');
 
     const withoutUpi = buildReceiptSvg({

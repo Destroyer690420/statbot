@@ -1,4 +1,29 @@
+import fs from 'fs';
+import path from 'path';
 import sharp from 'sharp';
+import { UPI_LOGO_DATA_URI } from './upi-logo-constant';
+
+let cachedLogoUri: string | null = null;
+
+export function getUpiLogoDataUri(): string {
+  if (cachedLogoUri) return cachedLogoUri;
+  try {
+    const candidates = [
+      path.resolve(__dirname, '../../assets/images/upi-logo-dark.png'),
+      path.resolve(process.cwd(), 'assets/images/upi-logo-dark.png'),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        cachedLogoUri = `data:image/png;base64,${fs.readFileSync(p).toString('base64')}`;
+        return cachedLogoUri;
+      }
+    }
+  } catch {
+    // ignore filesystem errors and fall back to constant
+  }
+  cachedLogoUri = UPI_LOGO_DATA_URI;
+  return cachedLogoUri;
+}
 
 export interface PayoutReceiptInput {
   amount: number;
@@ -55,6 +80,7 @@ export function buildReceiptSvg(input: PayoutReceiptInput): string {
   const formattedDate = formatReceiptDate(input.paidAt);
   const upiId = input.upiId ? input.upiId.trim() : null;
   const hasUpiId = Boolean(upiId && upiId.length > 0);
+  const logoUri = getUpiLogoDataUri();
 
   // When upiId is absent (e.g. inviter payouts), the date shifts up cleanly.
   const dateY = hasUpiId ? 632 : 595;
@@ -91,23 +117,12 @@ export function buildReceiptSvg(input: PayoutReceiptInput): string {
   <text x="270" y="${dateY}" class="font-sans" font-size="16.5" font-weight="400" fill="#9AA0A6" text-anchor="middle">${escapeXml(formattedDate)}</text>
 
   <!-- Footer: Powered by UPI -->
-  <g transform="translate(270, 870)">
+  <g transform="translate(270, 875)">
     <!-- POWERED BY text -->
-    <text x="0" y="-30" class="font-sans" font-size="10" font-weight="500" fill="#9AA0A6" text-anchor="middle" letter-spacing="2">POWERED BY</text>
+    <text x="0" y="-32" class="font-sans" font-size="10" font-weight="500" fill="#9AA0A6" text-anchor="middle" letter-spacing="2">POWERED BY</text>
 
-    <!-- NPCI UPI Wordmark -->
-    <g transform="translate(-52, -18) scale(0.95)">
-      <!-- UPI letters and arrows -->
-      <path d="M 0 0 L 10 0 L 7.5 16 C 7 19.5 4.5 22 1 22 L -3 22 C -6.5 22 -8.5 19.5 -8 16 L -5.5 0 L 4.5 0 L 2.5 14 C 2.3 15.5 1.5 16.5 0 16.5 C -1.5 16.5 -2 15.5 -2.2 14 Z" fill="#FFFFFF" transform="translate(18, 0)"/>
-      <path d="M 33 0 L 46 0 C 50.5 0 53 2.5 52.2 7 C 51.5 11.5 48.5 14 44 14 L 37.5 14 L 35.5 22 L 26.5 22 Z M 38.5 8 L 42.5 8 C 44.5 8 45.5 7 45.8 5.5 C 46.1 4 45.5 3 43.5 3 L 39.5 3 Z" fill="#FFFFFF"/>
-      <path d="M 58 0 L 67 0 L 63.5 22 L 54.5 22 Z" fill="#FFFFFF"/>
-      <!-- Chevrons -->
-      <polygon points="76,0 87,11 73,22 79,22 93,11 82,0" fill="#097939"/>
-      <polygon points="86,0 97,11 83,22 89,22 103,11 92,0" fill="#ED7524"/>
-    </g>
-
-    <!-- UNIFIED PAYMENTS INTERFACE subtext -->
-    <text x="0" y="14" class="font-sans" font-size="6.5" font-weight="500" fill="#757575" text-anchor="middle" letter-spacing="1.2">UNIFIED PAYMENTS INTERFACE</text>
+    <!-- Official NPCI UPI Logo (UNIFIED PAYMENTS INTERFACE) -->
+    <image x="-57" y="-20" width="114" height="42" href="${logoUri}" preserveAspectRatio="xMidYMid meet"/>
   </g>
 </svg>`;
 }

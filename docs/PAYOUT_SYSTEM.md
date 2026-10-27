@@ -66,16 +66,16 @@ Task completion → (any time)
 - Best-effort: `sendPayoutNotification()` (`src/services/payout-notification.service.ts`) never throws — missing channel / send failure is logged (`warn`) and returned as `notification: { sent, channelId, reason? }` in the API response. **The payment is never rolled back because of a Discord failure.**
 - Wiring: `src/api/routes/payouts.ts` is a factory `createPayoutRoutes(discordClient)` (same shape as `tasks.ts`); mounted with the client in `src/api/server.ts`.
 
-### Payments-channel proof (every payment — live 2026-10-26 at `d069b48`)
+### Payments-channel proof (every payment — live 2026-10-27 at `e063e05`)
 
-`PAYMENT_PROOF_CHANNEL_ID` (`1520613959315488930`) is the permanent payment log. Every successful payment posts `paymentProofEmbed` (`src/bot/embeds/index.ts`) there — **payee mention + amount only** (`💸 Payment Sent`, green, `<@payee>`, `## ₹amount`, timestamp, `Reddit Task Manager` footer). Deliberately no task/commission breakdown, no batch/week, no screenshot pointer; the detailed breakdown stays in the worker's ticket message.
+`PAYMENT_PROOF_CHANNEL_ID` (`1520613959315488930`) is the permanent payment log. Every successful payment generates a **Google Pay / UPI mobile payout receipt PNG image** (`src/services/payout-receipt.service.ts`) and sends it as a file attachment (`payment-receipt-<id>.png`). Styled identically to dark-mode UPI mobile receipts: `#111214` canvas, `#1A73E8` circular checkmark badge, large comma-formatted rupee amount (`₹{amount}`), muted "Paid to", bold payee name/label (resolved in priority order: decoded QR `payeeName` > ticket channel name `ticket-xxxx` > referral inviter name > Discord displayName/username > fallback ID slice), optional UPI ID line (omitted when empty, smoothly shifting the date up), IST date & time, and NPCI vector footer ("POWERED BY" + white UPI wordmark + chevrons + "UNIFIED PAYMENTS INTERFACE"). Deliberately no task/commission breakdown, no batch/week, no screenshot pointer; the detailed breakdown stays in the worker's ticket message.
 
 | Action | Proof messages | Delivery |
 |---|---|---|
-| Pay Worker | one (worker) | awaited; `proofNotification: { sent, channelId, reason? }` in the response |
-| Pay All | one per worker | background, sequential (rate-limit friendly); response carries `proofNotification: { queued: N }` |
-| Pay Inviter | one (inviter) | awaited; `proofNotification` in the response |
-| Pay All Commissions | one per inviter | background, sequential; response carries `proofNotification: { queued: N }` |
+| Pay Worker | one (worker receipt PNG) | awaited; `proofNotification: { sent, channelId, reason? }` in the response |
+| Pay All | one receipt PNG per worker | background, sequential (rate-limit friendly); response carries `proofNotification: { queued: N }` |
+| Pay Inviter | one (inviter receipt PNG) | awaited; `proofNotification` in the response |
+| Pay All Commissions | one receipt PNG per inviter | background, sequential; response carries `proofNotification: { queued: N }` |
 
 Grouping/summing is pure: `src/utils/payment-proof.ts` (`summarizePayoutItemsByWorker`, `summarizeCommissionItemsByInviter`) turns the items just created into one total per payee, first-seen order. `sendPaymentProof` / `sendPaymentProofs` (`src/services/payout-notification.service.ts`) never throw — a failed send is logged (`warn`) and counted, and never rolls back a payment. Commission routes became a factory (`createCommissionRoutes(discordClient)`) so they can reach the Discord client.
 

@@ -95,7 +95,7 @@ POST /commissions/pay-inviter/:inviterId | /pay-all   [admin]
 
 - **Commission timing**: computed on-demand at pay time from *current* task states — not snapshotted at task completion. Deleting/archiving a task before pay changes the outcome.
 - Batch reuse: **none** (unlike worker payouts) — each pay call creates a new batch.
-- **Payments-channel proof**: pay-inviter and pay-all also post a `paymentProofEmbed` card (payee mention + total amount only — no bonus/per-task/team breakdown) in `PAYMENT_PROOF_CHANNEL_ID`. Pay-inviter awaits the send and returns `proofNotification`; pay-all groups items per inviter (`summarizeCommissionItemsByInviter`) and posts in the background, returning `proofNotification: { queued: N }`. Best-effort — a Discord failure is logged and never rolls back a commission. See `docs/PAYOUT_SYSTEM.md` §4a.
+- **Payments-channel proof**: pay-inviter and pay-all also post a generated Google Pay / UPI mobile payout receipt PNG image (`src/services/payout-receipt.service.ts`) attached to `PAYMENT_PROOF_CHANNEL_ID` (payee label + total amount, IST timestamp, powered by UPI footer — no bonus/per-task/team breakdown). Pay-inviter awaits the send and returns `proofNotification`; pay-all groups items per inviter (`summarizeCommissionItemsByInviter`) and posts in the background, returning `proofNotification: { queued: N }`. Best-effort — a Discord failure is logged and never rolls back a commission. See `docs/PAYOUT_SYSTEM.md` §4a.
 
 ## 6. Backfill Script (`scripts/backfill-indirect-referrers.ts`)
 
