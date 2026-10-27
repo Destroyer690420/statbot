@@ -903,3 +903,13 @@ CREATE INDEX IF NOT EXISTS "Reminder_reminderMessageIds_idx" ON "Reminder" USING
 -- Schema-only, no data statements, safe to re-run.
 ALTER TABLE "WorkerPaymentInfo" ADD COLUMN IF NOT EXISTS "payeeName" TEXT;
 
+
+-- ============================================================
+-- Migration: Weekly owner digest audit marker
+-- ============================================================
+-- The weekly owner digest (Thursday -> Wednesday IST, DM to the owner) stamps
+-- one DIGEST_SENT row per served week (details = 'owner-digest:<week-start-
+-- yyyy-mm-dd>') so the scheduler is exactly-once across restarts and can
+-- catch up a missed send within its grace window. Enum-only, additive,
+-- safe to re-run.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'DIGEST_SENT';

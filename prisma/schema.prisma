@@ -76,6 +76,7 @@ enum AuditAction {
   FEEDBACK_FAILED
   LINK_NUDGE_SENT
   LINK_ESCALATED
+  DIGEST_SENT
 }
 
 enum ReferralStatus {

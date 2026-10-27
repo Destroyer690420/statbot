@@ -230,6 +230,17 @@ async function main(): Promise<void> {
       logger.error('Outreach ban scan scheduler failed to start', { error });
     }
 
+    // 7d. Weekly owner digest (fires Thursday 00:10 IST for the closed
+    // Thursday→Wednesday week: created/completed/deleted/open counts plus
+    // revenue, worker pay, commissions and net saved — DM to the owner,
+    // exactly-once via a DIGEST_SENT audit marker per week).
+    try {
+      const { startOwnerDigestScheduler } = await import('./services/owner-digest.service');
+      await startOwnerDigestScheduler(discordClient);
+    } catch (error) {
+      logger.error('Owner digest scheduler failed to start', { error });
+    }
+
     // 8. Burst reply hooks: blast wins convert to accept claims (lazy accept).
     // Manual blasts have no burst row — the hook resolves to null for them.
     try {
@@ -430,6 +441,12 @@ async function main(): Promise<void> {
       try {
         const { stopOutreachBanScanScheduler } = await import('./services/outreach-ban-scan.service');
         stopOutreachBanScanScheduler();
+      } catch {
+        // ignore — trigger is best-effort
+      }
+      try {
+        const { stopOwnerDigestScheduler } = await import('./services/owner-digest.service');
+        stopOwnerDigestScheduler();
       } catch {
         // ignore — trigger is best-effort
       }

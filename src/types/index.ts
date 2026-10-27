@@ -196,6 +196,7 @@ export enum AuditAction {
   FEEDBACK_FAILED = 'FEEDBACK_FAILED',
   LINK_NUDGE_SENT = 'LINK_NUDGE_SENT',
   LINK_ESCALATED = 'LINK_ESCALATED',
+  DIGEST_SENT = 'DIGEST_SENT',
 }
 
 export interface AuditLog {

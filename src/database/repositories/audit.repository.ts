@@ -26,6 +26,15 @@ export class AuditRepository {
       take: limit,
     });
   }
+
+  /** Newest-first rows of one action (e.g. the weekly owner digest marker). */
+  async findLatestByAction(action: string, limit = 10) {
+    return getDb().auditLog.findMany({
+      where: { action } as any,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
 }
 
 export const auditRepository = new AuditRepository();

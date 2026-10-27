@@ -11,8 +11,8 @@ const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 // Owner-confirmed revenue (per post / per comment). No settings table exists
 // for revenue, so these stay hardcoded by design (worker cost + commissions
 // below are read live from settings so admin rate changes apply).
-const REVENUE_PER_POST = 250;
-const REVENUE_PER_COMMENT = 100;
+export const REVENUE_PER_POST = 250;
+export const REVENUE_PER_COMMENT = 100;
 
 type EarningsSummary = {
   totalTasks: number;
@@ -447,6 +447,66 @@ class OwnerEarningsService {
     const shared = await this.loadShared();
     const windowTasks = await this.loadWindowTasks(dateStartUTC, dateEndUTC);
     return this.buildForWindow(windowTasks, shared, dateStartUTC, dateEndUTC);
+  }
+
+  /**
+   * Weekly owner digest window (any range, the digest uses Thursday→Wednesday
+   * IST). Same creation-basis money as `calculateForWindow` above, plus the
+   * full created cohort split by outcome so the digest counts reconcile:
+   * completed (COMPLETED|ARCHIVED, live) + deleted (CANCELLED or any
+   * cancelledReason — the exact exclusion predicate above) + everything still
+   * open. Deleted tasks contribute exactly zero to the summary, and the
+   * summary still includes not-yet-completed live tasks on creation (the
+   * owner-confirmed accrual basis), so "completed" is intentionally smaller
+   * than the task set counted for money — the digest labels both.
+   */
+  async getDigestWindow(
+    startUTC: Date,
+    endUTC: Date,
+  ): Promise<{
+    cohort: {
+      total: number;
+      posts: number;
+      comments: number;
+      completed: number;
+      deleted: number;
+      open: number;
+    };
+    summary: EarningsSummary;
+    rates: { revenuePerPost: number; revenuePerComment: number; workerPerPost: number; workerPerComment: number };
+  }> {
+    const shared = await this.loadShared();
+    const db = getDb() as any;
+    const rows: any[] = await db.task.findMany({
+      where: { createdAt: { gte: startUTC, lte: endUTC } },
+    });
+    const tasks = (rows as any[]).map((r) => toTask(r as any));
+    const included = tasks.filter((t) => !this.isExcluded(t));
+    const completed = included.filter(
+      (t) => t.status === TaskStatus.COMPLETED || t.status === TaskStatus.ARCHIVED,
+    ).length;
+    const deleted = tasks.length - included.length;
+    const posts = tasks.filter((t) => t.type === TaskType.POST).length;
+
+    const built = this.buildForWindow(included, shared, startUTC, endUTC);
+
+    return {
+      cohort: {
+        total: tasks.length,
+        posts,
+        comments: tasks.length - posts,
+        completed,
+        deleted,
+        open: tasks.length - completed - deleted,
+      },
+      summary: built.summary,
+      rates: {
+        revenuePerPost: REVENUE_PER_POST,
+        revenuePerComment: REVENUE_PER_COMMENT,
+        workerPerPost: shared.payoutRates.postRate,
+        workerPerComment: shared.payoutRates.commentRate,
+      },
+    };
   }
 
   async getDailyEarnings(): Promise<{
