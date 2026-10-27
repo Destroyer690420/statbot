@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, QrCode, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { getInviterQrCode, payInviter } from '../../../api/client';
 import { CopyButton } from '../../../components/CopyButton';
 import { formatCurrency } from '../utils';
+import { buildUpiPayLink } from '../utils/upiLink';
 
 interface PayInviterModalProps {
   inviterId: string;
@@ -42,6 +44,8 @@ export function PayInviterModal({
 
   const qrCodeUrl: string | null = qrQuery.data?.data?.qrCodeUrl ?? null;
   const upiId: string | null = qrQuery.data?.data?.upiId ?? null;
+  const upiLink = upiId ? buildUpiPayLink(upiId, totalCommission, inviterName) : null;
+  const hasQr = !!upiLink || !!qrCodeUrl;
   const [lightbox, setLightbox] = useState(false);
 
   return (
@@ -62,6 +66,17 @@ export function PayInviterModal({
             <div className="flex shrink-0 items-center justify-center">
               {qrQuery.isLoading ? (
                 <div className="skeleton h-64 w-64 rounded-lg" />
+              ) : upiLink ? (
+                <button
+                  type="button"
+                  onClick={() => setLightbox(true)}
+                  className="rounded-lg transition-opacity duration-150 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  title="View full size"
+                >
+                  <div className="flex h-64 w-64 items-center justify-center rounded-lg bg-white p-2">
+                    <QRCodeSVG value={upiLink} size={240} />
+                  </div>
+                </button>
               ) : qrCodeUrl ? (
                 <button
                   type="button"
@@ -87,8 +102,10 @@ export function PayInviterModal({
               <p className="text-sm font-medium text-text-primary truncate">{inviterName}</p>
               <p className="mt-1 text-2xl font-semibold text-text-primary">{formatCurrency(totalCommission)}</p>
               <p className="mt-2 text-xs leading-5 text-dark-400">
-                Scan the QR to pay, then Confirm to record the commission payment.
-                {qrCodeUrl ? ' Click the code for a larger view.' : ''}
+                {upiLink
+                  ? 'Scan to pay — the amount is already filled in.'
+                  : 'Scan the QR to pay, then Confirm to record the commission payment.'}
+                {hasQr ? ' Click the code for a larger view.' : ''}
               </p>
               {upiId ? (
                 <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900/40 px-2.5 py-1.5">
@@ -120,17 +137,23 @@ export function PayInviterModal({
           </div>
         </div>
       </div>
-      {lightbox && qrCodeUrl ? (
+      {lightbox && hasQr ? (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 sm:p-6"
           onClick={() => setLightbox(false)}
         >
           <div className="relative max-h-full" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={qrCodeUrl}
-              alt={`${inviterName} payment QR code, full size`}
-              className="max-h-[85vh] w-auto max-w-[90vw] rounded-lg bg-white object-contain p-2"
-            />
+            {upiLink ? (
+              <div className="flex items-center justify-center rounded-lg bg-white p-6 shadow-pop">
+                <QRCodeSVG value={upiLink} size={340} />
+              </div>
+            ) : qrCodeUrl ? (
+              <img
+                src={qrCodeUrl}
+                alt={`${inviterName} payment QR code, full size`}
+                className="max-h-[85vh] w-auto max-w-[90vw] rounded-lg bg-white object-contain p-2"
+              />
+            ) : null}
             <button
               type="button"
               onClick={() => setLightbox(false)}
