@@ -96,6 +96,7 @@ describe('worker payment QR repository + save flow', () => {
     expect(row?.mimeType).toBe('image/jpeg');
     // A re-upload without a decodable UPI payload resets the stored ID.
     expect(row?.upiId).toBeNull();
+    expect(row?.payeeName).toBeNull();
   });
 
   test('getWorkerQrInfo returns nulls when nothing was uploaded', async () => {

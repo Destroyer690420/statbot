@@ -9,13 +9,17 @@ export class WorkerPaymentInfoRepository {
     return getDb().workerPaymentInfo.findMany();
   }
 
-  async upsert(workerId: string, data: { filename: string; mimeType: string; upiId?: string | null }) {
+  async upsert(
+    workerId: string,
+    data: { filename: string; mimeType: string; upiId?: string | null; payeeName?: string | null },
+  ) {
     const now = new Date();
     const upiId = data.upiId ?? null;
+    const payeeName = data.payeeName ?? null;
     return getDb().workerPaymentInfo.upsert({
       where: { workerId },
-      create: { workerId, filename: data.filename, mimeType: data.mimeType, upiId, updatedAt: now },
-      update: { filename: data.filename, mimeType: data.mimeType, upiId, updatedAt: now },
+      create: { workerId, filename: data.filename, mimeType: data.mimeType, upiId, payeeName, updatedAt: now },
+      update: { filename: data.filename, mimeType: data.mimeType, upiId, payeeName, updatedAt: now },
     });
   }
 }

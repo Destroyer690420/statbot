@@ -45,6 +45,8 @@ export interface ProcessedQrImage {
   cropped: boolean;
   /** UPI ID from a decodable upi:// payload, else null. */
   upiId: string | null;
+  /** Payee name (pn) from a decodable upi:// payload, else null. */
+  payeeName: string | null;
 }
 
 export interface QrCrop {
@@ -63,6 +65,7 @@ export interface DetectedQr {
   crop: QrCrop | null;
   payload: string;
   upiId: string | null;
+  payeeName: string | null;
 }
 
 // Detection runs on a downscaled copy (fast, still plenty for finding
@@ -133,6 +136,25 @@ export function parseUpiId(payload: string): string | null {
 }
 
 /**
+ * Extract the payee name (`pn`) from a decoded QR payload. Only `upi://`
+ * payloads with a non-empty `pn` value qualify — anything else yields null.
+ * Trims and collapses multiple spaces.
+ */
+export function parsePayeeName(payload: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(String(payload || '').trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'upi:') return null;
+  const pn = url.searchParams.get('pn');
+  if (!pn) return null;
+  const cleaned = pn.trim().replace(/\s+/g, ' ');
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+/**
  * Locate the QR code in an image. Returns the crop box plus the decoded
  * payload, or null when nothing decodes (stylized/damaged codes, non-QR
  * images that still passed the format sniff). Never throws — callers treat
@@ -191,12 +213,13 @@ export async function detectQrRegion(raw: Buffer, origWidth: number, origHeight:
 
   const payload = found.data;
   const upiId = parseUpiId(payload);
+  const payeeName = parsePayeeName(payload);
   // Already a tight QR (the padded box is the whole frame): nothing to cut,
   // but the payload is still worth reporting.
   if (left <= 0 && top <= 0 && right >= origWidth && bottom >= origHeight) {
-    return { crop: null, payload, upiId };
+    return { crop: null, payload, upiId, payeeName };
   }
-  return { crop: { left, top, width, height }, payload, upiId };
+  return { crop: { left, top, width, height }, payload, upiId, payeeName };
 }
 
 /**
@@ -244,6 +267,7 @@ export async function processQrImage(raw: Buffer): Promise<ProcessedQrImage> {
       resized: final.resized,
       cropped: final.cropped,
       upiId: final.upiId,
+      payeeName: final.payeeName,
     };
   } catch (error) {
     if (error instanceof QrValidationError) throw error;
@@ -270,16 +294,19 @@ export async function finalizeQrBuffer(raw: Buffer, origWidth: number, origHeigh
   resized: boolean;
   cropped: boolean;
   upiId: string | null;
+  payeeName: string | null;
 }> {
   let source = raw;
   let width = origWidth;
   let height = origHeight;
   let cropped = false;
   let upiId: string | null = null;
+  let payeeName: string | null = null;
 
   const detected = await detectQrRegion(raw, origWidth, origHeight);
   if (detected) {
     upiId = detected.upiId;
+    payeeName = detected.payeeName;
     if (detected.crop) {
       try {
         // rotate() first so the extract coordinates (measured on the
@@ -305,10 +332,10 @@ export async function finalizeQrBuffer(raw: Buffer, origWidth: number, origHeigh
         withoutEnlargement: true,
       })
       .toBuffer();
-    return { buffer: resized, resized: true, cropped, upiId };
+    return { buffer: resized, resized: true, cropped, upiId, payeeName };
   }
   // Byte-for-byte path — still force a full decode so a valid header with
   // a corrupt body is rejected before anything is saved.
   await sharp(source).stats();
-  return { buffer: source, resized: false, cropped, upiId };
+  return { buffer: source, resized: false, cropped, upiId, payeeName };
 }

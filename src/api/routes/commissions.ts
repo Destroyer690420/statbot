@@ -259,6 +259,7 @@ router.post('/pay-inviter/:inviterId', async (req: Request, res: Response): Prom
         proofNotification = await sendPaymentProof(discordClient, {
           payeeId: summary.inviterId,
           amount: summary.totalAmount,
+          paidAt: result.batch.createdAt,
         });
       }
     } catch (notifyError) {
@@ -291,6 +292,7 @@ router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
     const proofs = summarizeCommissionItemsByInviter(result.items).map((inviter) => ({
       payeeId: inviter.inviterId,
       amount: inviter.totalAmount,
+      paidAt: result.batch.createdAt,
     }));
 
     void sendPaymentProofs(discordClient, proofs).catch((err) => {

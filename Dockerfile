@@ -18,7 +18,7 @@ WORKDIR /app
 # Xvfb lets the poller run headFUL (real-desktop signals for bot management).
 # ffmpeg re-encodes task videos that are over Discord's 25 MB upload limit;
 # without it an oversized video fails the whole assignment with a 413.
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont xvfb unzip ffmpeg
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont xvfb unzip ffmpeg fontconfig
 ENV PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium-browser
 ENV DISPLAY=:99
 ENV POLLER_HEADFUL=1
@@ -30,6 +30,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/generated/prisma ./src/generated/prisma
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./
+COPY assets/ ./assets/
+RUN mkdir -p /usr/share/fonts/inter && cp assets/fonts/*.ttf /usr/share/fonts/inter/ && fc-cache -f
 RUN mkdir -p logs
 
 EXPOSE 3000

@@ -894,3 +894,12 @@ CREATE INDEX IF NOT EXISTS "FailedTaskCheck_lastSeenAt_idx" ON "FailedTaskCheck"
 ALTER TABLE "Reminder" ADD COLUMN IF NOT EXISTS "reminderMessageIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 CREATE INDEX IF NOT EXISTS "Reminder_reminderMessageIds_idx" ON "Reminder" USING GIN ("reminderMessageIds");
 
+-- ============================================================
+-- Migration: Payee name on worker payment QR codes
+-- ============================================================
+-- The upload pipeline parses the payee name (pn) from upi://pay payloads
+-- so generated payout receipts can display the worker's real registered name.
+-- Nullable: absent in some QR codes, undecodable uploads store NULL.
+-- Schema-only, no data statements, safe to re-run.
+ALTER TABLE "WorkerPaymentInfo" ADD COLUMN IF NOT EXISTS "payeeName" TEXT;
+

@@ -426,6 +426,7 @@ model WorkerPaymentInfo {
   filename   String
   mimeType   String
   upiId      String?
+  payeeName  String?
   updatedAt  DateTime @updatedAt
 }
 

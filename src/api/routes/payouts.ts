@@ -192,6 +192,7 @@ router.post('/pay-worker/:workerId', async (req: Request, res: Response): Promis
       proofNotification = await sendPaymentProof(discordClient, {
         payeeId: workerId,
         amount: totalAmount,
+        paidAt: result.batch.createdAt,
       });
     } catch (notifyError) {
       logger.warn('Pay-worker proof error (payment kept)', {
@@ -224,6 +225,7 @@ router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
     const proofs = summarizePayoutItemsByWorker(result.items).map((worker) => ({
       payeeId: worker.workerId,
       amount: worker.totalAmount,
+      paidAt: result.batch.createdAt,
     }));
 
     // A bulk payout can cover many workers; proofs are posted in the

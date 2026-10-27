@@ -16,6 +16,7 @@ export interface WorkerQrInfo {
   qrCodeUrl: string | null;
   updatedAt: string | null;
   upiId: string | null;
+  payeeName?: string | null;
 }
 
 /**
@@ -33,6 +34,7 @@ export async function getWorkerQrInfo(workerId: string): Promise<WorkerQrInfo> {
     qrCodeUrl: buildQrCodeUrl(workerId, row.filename, row.updatedAt),
     updatedAt: row.updatedAt.toISOString(),
     upiId: row.upiId ?? null,
+    ...(row.payeeName ? { payeeName: row.payeeName } : {}),
   };
 }
 
@@ -61,11 +63,13 @@ export async function saveWorkerQrCode(workerId: string, image: unknown): Promis
     filename,
     mimeType: processed.mimeType,
     upiId: processed.upiId,
+    payeeName: processed.payeeName,
   });
   return {
     qrCodeUrl: buildQrCodeUrl(workerId, row.filename, row.updatedAt),
     updatedAt: row.updatedAt.toISOString(),
     upiId: row.upiId ?? null,
+    ...(row.payeeName ? { payeeName: row.payeeName } : {}),
   };
 }
 
@@ -104,7 +108,13 @@ export async function backfillQrCrops(opts?: { dryRun?: boolean }): Promise<QrBa
       continue;
     }
 
-    let final: { buffer: Buffer; resized: boolean; cropped: boolean; upiId: string | null };
+    let final: {
+      buffer: Buffer;
+      resized: boolean;
+      cropped: boolean;
+      upiId: string | null;
+      payeeName: string | null;
+    };
     try {
       const sniffed = await sniffQrImage(raw);
       final = await finalizeQrBuffer(raw, sniffed.width, sniffed.height);
@@ -119,7 +129,8 @@ export async function backfillQrCrops(opts?: { dryRun?: boolean }): Promise<QrBa
 
     const bytesChanged = final.cropped && !final.buffer.equals(raw);
     const upiChanged = (final.upiId ?? null) !== (row.upiId ?? null);
-    if (!bytesChanged && !upiChanged) {
+    const payeeChanged = (final.payeeName ?? null) !== (row.payeeName ?? null);
+    if (!bytesChanged && !upiChanged && !payeeChanged) {
       result.skipped += 1;
       continue;
     }
@@ -134,11 +145,12 @@ export async function backfillQrCrops(opts?: { dryRun?: boolean }): Promise<QrBa
         await fs.writeFile(filePath, final.buffer);
         result.recropped += 1;
       }
-      if (upiChanged) {
+      if (upiChanged || payeeChanged) {
         await workerPaymentInfoRepository.upsert(row.workerId, {
           filename: row.filename,
           mimeType: row.mimeType,
           upiId: final.upiId,
+          payeeName: final.payeeName,
         });
         if (final.upiId) result.upiSet += 1;
       }
