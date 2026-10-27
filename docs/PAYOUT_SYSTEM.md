@@ -36,8 +36,8 @@ Amount per task = `type === POST ? postRate : commentRate`. No karma-based or ty
 ```
 Task completion → (any time) 
 → dashboard Payout page: week picker (current/previous/custom)
-→ Pay Worker button → QR popup (worker name + amount + uploaded payment QR,
-   or a "No QR code uploaded yet" placeholder — paying is never blocked)
+→ Pay Worker button → QR popup (worker name + amount + dynamic generated UPI QR with pre-filled amount when upiId is decoded,
+   or fallback to uploaded payment QR, or a "No QR code uploaded yet" placeholder — paying is never blocked)
 → Confirm → POST /payouts/pay-worker/:workerId  OR  POST /payouts/pay-all   [admin]
 → eligible set (filters above)
 → PayoutBatch:
@@ -126,3 +126,6 @@ The Worker Breakdown's "Pay Worker" button opens `PayWorkerModal` (fetched via `
 - `src/api/routes/payouts.ts` (factory `createPayoutRoutes(discordClient)`), `src/api/routes/commissions.ts` (factory `createCommissionRoutes(discordClient)`), `src/api/server.ts` (mount)
 - `src/__tests__/payout-notification.test.ts`, `src/__tests__/payment-proof.test.ts`
 - `dashboard/src/pages/Payout.tsx`
+- `dashboard/src/pages/payout/components/PayWorkerModal.tsx`, `PayInviterModal.tsx`
+- `dashboard/src/pages/payout/utils/upiLink.ts`
+- `dashboard/src/pages/payout/__tests__/upi-qr.test.tsx`
