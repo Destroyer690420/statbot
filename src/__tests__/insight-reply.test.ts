@@ -117,6 +117,7 @@ describe('statusForCompletedInsights', () => {
 
   it('allows the 20h-skipped jump in the task state machine', () => {
     expect(canTransition(TaskStatus.REMINDER_20_SENT, TaskStatus.INSIGHT_70_RECEIVED)).toBe(true);
+    expect(canTransition(TaskStatus.INSIGHT_20_RECEIVED, TaskStatus.INSIGHT_70_RECEIVED)).toBe(true);
   });
 });
 

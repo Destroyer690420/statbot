@@ -21,7 +21,6 @@ export interface PaymentProofInput {
   payeeId: string;
   amount: number;
   payeeLabel?: string | null;
-  upiId?: string | null;
   paidAt?: Date;
 }
 
@@ -102,20 +101,23 @@ export async function sendPayoutNotification(
 }
 
 /**
- * Resolve payee label and optional UPI ID.
+ * Resolve payee label shown on the receipt.
  * Priority order:
- * 1. Explicitly provided input.payeeLabel
- * 2. Decoded QR payeeName (pn)
- * 3. Assigned task channelName (e.g. ticket-0595) or assignedUserName
- * 4. Inviter name from referrals
+ * 1. Decoded QR payeeName (pn) (e.g. "MR Daksh")
+ * 2. Explicitly provided input.payeeLabel
+ * 3. Referral inviter name
+ * 4. Assigned task assignedUserName or channelName (e.g. ticket-0595)
  * 5. Discord user display name or username
  * 6. Fallback to payeeId slice
+ *
+ * The UPI ID is intentionally NOT resolved anymore — the receipt never
+ * displays it (owner request 2026-10-28); the QR lookup stays because it
+ * supplies the QR bank payee name.
  */
-async function resolvePayeeLabelAndUpi(
+async function resolvePayeeLabel(
   discordClient: Client,
   input: PaymentProofInput,
-): Promise<{ payeeLabel: string; upiId: string | null }> {
-  let upiId = input.upiId ?? null;
+): Promise<{ payeeLabel: string }> {
   const payeeLabel = input.payeeLabel?.trim() || null;
 
   let qrInfo = null;
@@ -125,25 +127,21 @@ async function resolvePayeeLabelAndUpi(
     // best-effort
   }
 
-  if (upiId === null && qrInfo?.upiId) {
-    upiId = qrInfo.upiId;
-  }
-
   // 1. Decoded QR bank payee name (e.g. "MR Daksh")
   if (qrInfo?.payeeName) {
-    return { payeeLabel: qrInfo.payeeName, upiId };
+    return { payeeLabel: qrInfo.payeeName };
   }
 
   // 2. Caller-provided label (e.g. workerName or inviterName)
   if (payeeLabel) {
-    return { payeeLabel, upiId };
+    return { payeeLabel };
   }
 
   // 3. Referral record (if this payee is an inviter)
   try {
     const refs = await referralRepository.findByInviterId(input.payeeId);
     if (refs.length > 0 && refs[0].inviterName) {
-      return { payeeLabel: refs[0].inviterName, upiId };
+      return { payeeLabel: refs[0].inviterName };
     }
   } catch {
     // best-effort
@@ -153,7 +151,7 @@ async function resolvePayeeLabelAndUpi(
   try {
     const task = await taskRepository.findByWorkerId(input.payeeId);
     if (task?.assignedUserName) {
-      return { payeeLabel: task.assignedUserName, upiId };
+      return { payeeLabel: task.assignedUserName };
     }
   } catch {
     // best-effort
@@ -163,7 +161,7 @@ async function resolvePayeeLabelAndUpi(
   try {
     const user = await discordClient.users.fetch(input.payeeId).catch(() => null);
     if (user?.displayName || user?.username) {
-      return { payeeLabel: user.displayName || user.username, upiId };
+      return { payeeLabel: user.displayName || user.username };
     }
   } catch {
     // best-effort
@@ -173,18 +171,19 @@ async function resolvePayeeLabelAndUpi(
   try {
     const task = await taskRepository.findByWorkerId(input.payeeId);
     if (task?.channelName) {
-      return { payeeLabel: task.channelName, upiId };
+      return { payeeLabel: task.channelName };
     }
   } catch {
     // best-effort
   }
 
-  return { payeeLabel: input.payeeId.slice(0, 8), upiId };
+  return { payeeLabel: input.payeeId.slice(0, 8) };
 }
 
 /**
  * Payments-channel receipt proof: generates a UPI/Google Pay mobile payment
  * confirmation image and posts it as a file attachment to the payments channel.
+ * The payee is NOT mentioned — only the receipt image is sent (owner request).
  * Never throws — failures are logged and reported via `{ sent: false }` so the
  * payment itself is never rolled back because of Discord.
  */
@@ -200,16 +199,14 @@ export async function sendPaymentProof(
       return { sent: false, channelId, reason: 'channel-unavailable' };
     }
 
-    const { payeeLabel, upiId } = await resolvePayeeLabelAndUpi(discordClient, input);
+    const { payeeLabel } = await resolvePayeeLabel(discordClient, input);
     const receiptBuffer = await generatePayoutReceipt({
       amount: input.amount,
       payeeLabel,
-      upiId,
       paidAt: input.paidAt,
     });
 
     await (channel as any).send({
-      content: `<@${input.payeeId}>`,
       files: [{ attachment: receiptBuffer, name: `payment-receipt-${input.payeeId}.png` }],
     });
     logger.info('Payment proof sent', { channelId, payeeId: input.payeeId, amount: input.amount });

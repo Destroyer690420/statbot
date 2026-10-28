@@ -38,11 +38,12 @@ describe('payout receipt formatting helpers', () => {
 });
 
 describe('buildReceiptSvg and generatePayoutReceipt', () => {
-  test('buildReceiptSvg includes amount, payee label, and conditionally renders upiId', () => {
+  test('buildReceiptSvg includes amount and payee label and never renders a UPI ID', () => {
+    // UPI ID is never shown on the receipt anymore (owner request 2026-10-28),
+    // so the date always sits at the no-UPI-layout position (y=648).
     const withUpi = buildReceiptSvg({
       amount: 2000,
       payeeLabel: 'MR Daksh',
-      upiId: 'daksh100@slc',
       paidAt: new Date('2026-10-19T17:40:00Z'),
     });
 
@@ -51,11 +52,11 @@ describe('buildReceiptSvg and generatePayoutReceipt', () => {
     expect(withUpi).toContain('fill="#131313"');
     expect(withUpi).toContain('Paid to');
     expect(withUpi).toContain('MR Daksh');
-    expect(withUpi).toContain('daksh100@slc');
+    expect(withUpi).not.toContain('daksh100@slc');
     expect(withUpi).toContain('POWERED BY');
     expect(withUpi).toContain('<image');
     expect(withUpi).toContain('data:image/png;base64');
-    expect(withUpi).toContain('y="688"');
+    expect(withUpi).toContain('y="648"');
 
     const withoutUpi = buildReceiptSvg({
       amount: 420,
@@ -67,15 +68,14 @@ describe('buildReceiptSvg and generatePayoutReceipt', () => {
     expect(withoutUpi).toContain('>420</tspan>');
     expect(withoutUpi).toContain('ticket-0595');
     expect(withoutUpi).not.toContain('daksh100@slc');
-    // Shifts up to 648
     expect(withoutUpi).toContain('y="648"');
+    expect(withoutUpi.toLowerCase()).not.toContain('@upi');
   });
 
   test('generatePayoutReceipt returns a valid 540x960 PNG buffer', async () => {
     const buffer = await generatePayoutReceipt({
       amount: 2000,
       payeeLabel: 'MR Daksh',
-      upiId: 'daksh100@slc',
       paidAt: new Date('2026-10-19T17:40:00Z'),
     });
 

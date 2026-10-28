@@ -96,7 +96,8 @@ erDiagram
         timestamp completedAt "nullable"
         int retryCount
         string jobId "nullable"
-        string reminderMessageId "nullable"
+        string reminderMessageId "nullable (latest message)"
+        string[] reminderMessageIds "all send+retry message IDs (default {})"
         string insightImageUrl "nullable"
         string insightImageName "nullable"
         timestamp insightUploadedAt "nullable"
@@ -396,7 +397,7 @@ Consequence: you **cannot delete a Task that has payout/commission items** (REST
 |---|---|
 | Task: `status`, `(status, guildId)`, `channelId`, `assignedUserId`, `(redditUrl, guildId)`, `(channelName, status)`, `(assignedUserId, status)`, `createdAt` | |
 | **`Task_source_externalTaskId_key` (UNIQUE)** | `(source, externalTaskId)` — GoPartTime dedupe |
-| Reminder: `taskId`, `(sent, completed)`, `reminderMessageId` | |
+| Reminder: `taskId`, `(sent, completed)`, `reminderMessageId`, GIN `reminderMessageIds` | |
 | AuditLog: `(taskId, createdAt)`, `createdAt` | |
 | PayoutBatch: `batchNumber`, `(weekStart, weekEnd)`, `weekEnd` | |
 | PayoutItem: `batchId`, `taskId` | no `workerId` index (known performance gap) |

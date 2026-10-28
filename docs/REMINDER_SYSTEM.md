@@ -41,7 +41,7 @@ Cancellation: `cancelJob(jobId)` (remove single), `cancelTaskJobs(taskId)` (remo
 3. Load reminder; skip if missing or `completed`.
 4. Fetch `task.channelId` → must be a `TextChannel` (else error + skip).
 5. Send embed: `channel.send({ content: '<@assignedUser>', embeds: [reminderEmbed] })`.
-6. Persist `reminderMessageId` (this enables reply detection later).
+6. Persist `reminderMessageId` (latest message) **and push the same ID into `reminderMessageIds`** (the full send+retry history that reply detection matches on).
 7. If not yet `sent`: `markSent` + state advance — `PENDING → REMINDER_20_SENT`, `INSIGHT_20_RECEIVED → REMINDER_70_SENT` (`state-machine.getStatusAfterReminderSent`).
 8. Send failure → log + **rethrow** (triggers BullMQ's own 3 attempts with 5s exponential backoff).
 
@@ -68,12 +68,13 @@ Runs at startup (step 5/6) and every **30 minutes** (`setInterval`):
 
 ## 7. Reminder ↔ Insight Flow
 
-- Worker sends message → `reminderMessageId` stored → worker replies to that message with a screenshot → `messageCreate.handleInsightUpload` finds the reminder by `reminder.reminderMessageId` → `markCompleted` (+ `completedAt=now`) → state machine advance (+ possibly COMPLETED).
+- Worker sends message → the message ID is stored in `reminderMessageId` (latest) and appended to `reminderMessageIds` (all sends/retries) → the worker replies with a screenshot to **any** of those messages → `messageCreate.handleInsightUpload` resolves the reminder by that message ID (array `has`, legacy scalar fallback) → `markCompleted` (+ `completedAt=now`) → status derived from the completed steps (`src/utils/insight-reply.ts`) → state machine advance (+ possibly COMPLETED).
+- If the replied message belongs to an **already-completed** step, the screenshot is recorded for the single later step still waiting for one (e.g. reply to the finished 20h reminder with the 70h view data); with nothing pending it is reported as a duplicate. See `docs/INSIGHT_SYSTEM.md` §3.
 - Dashboard shows timeline via `GET /tasks/:id` (reminders) / `GET /tasks/:taskId/reminders`.
 
 ## 8. Database Representation
 
-`Reminder` table: `id, taskId(FK CASCADE), type, dueAt, sent, completed, sentAt, completedAt, retryCount, jobId, reminderMessageId, insightImageUrl, insightImageName, insightUploadedAt`; indexes on `(taskId)`, `(sent, completed)`, `(reminderMessageId)`.
+`Reminder` table: `id, taskId(FK CASCADE), type, dueAt, sent, completed, sentAt, completedAt, retryCount, jobId, reminderMessageId, reminderMessageIds (TEXT[], default {}), insightImageUrl, insightImageName, insightUploadedAt`; indexes on `(taskId)`, `(sent, completed)`, `(reminderMessageId)`, and a **GIN** index on `(reminderMessageIds)` for the array-containment lookup.
 
 ## 9. Failure Behavior Matrix
 

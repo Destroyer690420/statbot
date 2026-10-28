@@ -30,7 +30,6 @@ export function getUpiLogoDataUri(): string {
 export interface PayoutReceiptInput {
   amount: number;
   payeeLabel: string;
-  upiId?: string | null;
   paidAt?: Date;
 }
 
@@ -80,12 +79,7 @@ export function buildReceiptSvg(input: PayoutReceiptInput): string {
   const height = 960;
   const formattedAmount = formatReceiptAmount(input.amount);
   const formattedDate = formatReceiptDate(input.paidAt);
-  const upiId = input.upiId ? input.upiId.trim() : null;
-  const hasUpiId = Boolean(upiId && upiId.length > 0);
   const logoUri = getUpiLogoDataUri();
-
-  // When upiId is absent, date shifts up cleanly.
-  const dateY = hasUpiId ? 688 : 648;
 
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -116,11 +110,8 @@ export function buildReceiptSvg(input: PayoutReceiptInput): string {
   <!-- Payee Name / Label -->
   <text x="270" y="602" class="font-sans" font-size="34" font-weight="400" fill="#FFFFFF" text-anchor="middle">${escapeXml(input.payeeLabel)}</text>
 
-  ${hasUpiId ? `<!-- UPI ID -->
-  <text x="270" y="645" class="font-sans" font-size="21" font-weight="400" fill="#E3E3E3" text-anchor="middle">${escapeXml(upiId!)}</text>` : ''}
-
   <!-- Date & Time (IST) -->
-  <text x="270" y="${dateY}" class="font-sans" font-size="21" font-weight="400" fill="#C4C7C5" text-anchor="middle">${escapeXml(formattedDate)}</text>
+  <text x="270" y="648" class="font-sans" font-size="21" font-weight="400" fill="#C4C7C5" text-anchor="middle">${escapeXml(formattedDate)}</text>
 
   <!-- Footer: Powered by UPI -->
   <g transform="translate(270, 875)">

@@ -134,7 +134,9 @@ describe('sendPaymentProof', () => {
     expect(result).toEqual({ sent: true, channelId: PAYMENT_PROOF_CHANNEL_ID });
     expect(fetch).toHaveBeenCalledWith(PAYMENT_PROOF_CHANNEL_ID);
     const payload = send.mock.calls[0][0];
-    expect(payload.content).toBe('<@222>');
+    // Only the screenshot is sent — the payee is never mentioned/tagged.
+    expect(payload.content).toBeUndefined();
+    expect(JSON.stringify(payload)).not.toContain('<@222>');
     expect(payload.files).toBeDefined();
     expect(payload.files[0].name).toBe('payment-receipt-222.png');
     expect(Buffer.isBuffer(payload.files[0].attachment)).toBe(true);

@@ -26,7 +26,8 @@
 - **Solution**: use `retry-assignment` if FAILED; reply to the correct message with one reddit.com URL.
 
 ### Insight reply "⚠️ Insight already received."
-- **Cause**: reminder already `completed` (duplicate screenshot).
+- **Cause**: the replied-to reminder is already `completed` **and** no later insight step of that task is waiting for a screenshot (a genuine duplicate).
+- **Note**: replying to the *first* reminder or an *earlier retry* is fine — every send/retry message ID is stored. Replying to the finished 20h reminder with the 70h screenshot is recorded for the pending 70h step automatically.
 - **Solution**: informational; nothing to do.
 
 ## 2. GoPartTime / Extension

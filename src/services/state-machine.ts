@@ -26,6 +26,9 @@ const TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   ],
   [TaskStatus.INSIGHT_20_RECEIVED]: [
     TaskStatus.REMINDER_70_SENT,   // Post only
+    // Defensive: a 70h screenshot can land before the status advanced to
+    // REMINDER_70_SENT (send/DB race or pre-existing inconsistent row).
+    TaskStatus.INSIGHT_70_RECEIVED,
     TaskStatus.COMPLETED,           // Comment (no 70h)
     TaskStatus.CANCELLED,
     TaskStatus.ARCHIVED,
@@ -82,6 +85,12 @@ export function getStatusAfterReminderSent(currentStatus: TaskStatus): TaskStatu
 
 /**
  * Get the next expected status when an insight is received.
+ *
+ * NOTE: the live insight handler (`messageCreate.handleInsightUpload`) no
+ * longer uses this mapping — it derives the status from the reminders that are
+ * actually completed (`src/utils/insight-reply.ts:statusForCompletedInsights`)
+ * so a late reply to an earlier step cannot move a task backwards. Kept for
+ * reference and its unit tests.
  */
 export function getStatusAfterInsightReceived(
   currentStatus: TaskStatus,
