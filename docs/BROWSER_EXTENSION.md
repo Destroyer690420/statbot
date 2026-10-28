@@ -158,7 +158,7 @@ Source: `scripts/goparttime-mobile.user.js`; served at
 **instead of** (not alongside) the desktop script on the phone — running both
 would double-fire the autofill.
 
-## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.2.0, DEPLOYED 2026-10-12 — tab update required for feedback)
+## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.2.1, LOCAL 2026-10-28 — tab update required for feedback + report retry)
 
 Dedicated tab that finishes the Submit Link loop: polls `GET /submit-jobs/pending`
 every ~5s (own tab id; the response now also carries `feedbackJobs`, which older
@@ -172,11 +172,15 @@ setter + `input`/`change` events — the input setter does not apply to textarea
 manager-typed notice wins and is submitted as-is), short 1.2–2.5s pause, clicks the
 dialog's own Submit. Verify: intercepted `success:true`, else dialog auto-closed
 (manually corroborated — Submit closes it). Reports to
-`POST /feedback-jobs/:id/result`. In-flight job (either kind) survives `?page=` hops
+`POST /feedback-jobs/:id/result` — **v1.2.1 retries that report** (3 tries, 2s/4s
+backoff; 404 = final): a lost verdict used to leave the job leased and the 5-min
+lease reclaim then re-submitted the same feedback (paired with the server-side
+Decision 48 hardening). In-flight job (either kind) survives `?page=` hops
 via sessionStorage; status pill bottom-left (Send owns bottom-right). Shares storage
 keys (`gpt_api_url`, `gpt_api_key`) so no new configuration. Runs ALONE on its tab —
 never the watcher tab (it never touches `/tasks`, claims, or accept buttons).
-Source: `scripts/goparttime-submit.user.js`; served at
+Source: `scripts/goparttime-submit.user.js` (mirrored byte-identical in
+`dashboard/public/`); served at
 `https://statbot.duckdns.org/goparttime-submit.user.js` after the dashboard rebuild.
 
 ## 6. User-Facing Error Mapping (`parseStatus`)

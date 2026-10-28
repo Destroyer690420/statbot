@@ -5,12 +5,20 @@
  * services/feedback.service.ts; everything decidable lives here and is
  * unit-tested. Follows the utils/submission-queue.ts split (TESTING.md §1).
  *
- * One shot per task: the service skips when a FEEDBACK_SENT audit exists and
- * drops the job the moment a link arrives. Fire-time re-validation (lease)
- * re-runs the same decision against fresh state.
+ * One shot per task: the service skips when a FEEDBACK_SENT **or
+ * FEEDBACK_FAILED** audit exists (a give-up tags the manager once — it must
+ * never re-schedule, or the 30-min re-hydration re-fires the notice forever)
+ * and drops the job the moment a link arrives. A stale-lease reclaim counts
+ * as an attempt so a job whose executor died before reporting cannot be
+ * re-submitted every lease timeout. Fire-time re-validation (lease) re-runs
+ * the same decision against fresh state.
  */
 
-import { FEEDBACK_LEASE_TIMEOUT_MS, FEEDBACK_STALE_AFTER_MS } from '../config/constants';
+import {
+  FEEDBACK_LEASE_TIMEOUT_MS,
+  FEEDBACK_MAX_ATTEMPTS,
+  FEEDBACK_STALE_AFTER_MS,
+} from '../config/constants';
 import { TaskStatus } from '../types';
 import { feedbackDueDelayMs, feedbackRetryDelayMs } from './deadline';
 
@@ -25,6 +33,31 @@ const TERMINAL_STATUSES = new Set([
   TaskStatus.ARCHIVED,
   TaskStatus.CANCELLED,
 ]);
+
+/**
+ * Terminal feedback outcomes: FEEDBACK_SENT (notice went out) or
+ * FEEDBACK_FAILED (gave up — the manager was tagged to send it by hand).
+ * Either one must stop every future schedule, or the 30-min re-hydration
+ * re-fires the notice forever.
+ */
+export function isFeedbackHandledAction(action: string): boolean {
+  return action === 'FEEDBACK_SENT' || action === 'FEEDBACK_FAILED';
+}
+
+/**
+ * Attempt bookkeeping at lease time. A stale lease means the previous tab
+ * died mid-flow — it may have already submitted — so the reclaim counts as
+ * one attempt; null = attempts exhausted (the caller must remove the job,
+ * audit FEEDBACK_FAILED, and tag the manager instead of re-leasing, or a
+ * report-losing executor would re-submit every lease timeout).
+ */
+export function feedbackLeaseAttempt(
+  currentAttempt: number | undefined,
+  hadStaleLease: boolean,
+): number | null {
+  const attempt = hadStaleLease ? (currentAttempt ?? 1) + 1 : currentAttempt ?? 1;
+  return attempt > FEEDBACK_MAX_ATTEMPTS ? null : attempt;
+}
 
 export function isFeedbackTerminalStatus(status: TaskStatus | string | null | undefined): boolean {
   return typeof status === 'string' && TERMINAL_STATUSES.has(status as TaskStatus);

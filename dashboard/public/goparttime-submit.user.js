@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Link Submitter
 // @namespace    https://goparttime.net/
-// @version      1.2.0
+// @version      1.2.1
 // @description  Dedicated executor tab for GoPartTime link auto-submit + deadline feedback: polls Statbot for verified worker links and stalling notices, finds each task card across /my-tasks/todo pages, fills the Submit Task dialog (or the Feedback dialog with "submitting in a bit"), and clicks Submit. Never accepts tasks, never consumes accept-claim leases.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,15 @@
 // ==/UserScript==
 
 /**
+ * v1.2.1 - Feedback result reports are retried (3 tries, short backoff; a 404
+ * "job gone" is final, not transient). A lost verdict used to leave the job
+ * leased, and after the 5-min lease reclaim it was picked up and submitted
+ * AGAIN — the same task got repeated "submitting in a bit" entries on a fixed
+ * cadence. Server-side hardening pairs with this: reclaims now count as
+ * attempts (max 2, then the job is dropped and the manager tagged once), and
+ * a FEEDBACK_FAILED audit is terminal so the 30-min re-hydration never
+ * re-schedules a task the bot already gave up on.
+ *
  * v1.2.0 - Deadline feedback ("submitting in a bit"). The pending poll now
  * also returns feedbackJobs (link-less tasks near their task-site deadline);
  * feedback is processed before submit jobs. Flow per feedback job: lease,
@@ -82,7 +91,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.2.0';
+  var VERSION = '1.2.1';
   var DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/goparttime',
     apiKey: '',
@@ -745,13 +754,22 @@
   }
 
   async function reportFeedbackResult(settings, jobId, ok, failureReason) {
-    try {
-      await request(settings, 'POST', '/feedback-jobs/' + encodeURIComponent(jobId) + '/result', {
-        ok: !!ok,
-        failureReason: failureReason || null,
-      });
-    } catch (e) {
-      console.log('[Submitter] feedback result report failed:', e && e.message);
+    // The verdict must not get lost: a failed report leaves the job leased,
+    // and after the 5-min lease reclaim it would be picked up and submitted
+    // again. Retry transient failures (server/network); a 404 means the job
+    // is already gone (done/replaced/terminated) — final, not transient.
+    for (var i = 0; i < 3; i++) {
+      try {
+        await request(settings, 'POST', '/feedback-jobs/' + encodeURIComponent(jobId) + '/result', {
+          ok: !!ok,
+          failureReason: failureReason || null,
+        });
+        return;
+      } catch (e) {
+        console.log('[Submitter] feedback result report failed (try ' + (i + 1) + '/3):', e && e.message);
+        if (e && e.status === 404) return;
+        if (i < 2) await sleep(2000 * (i + 1));
+      }
     }
   }
 

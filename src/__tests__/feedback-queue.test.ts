@@ -7,6 +7,8 @@ import { TaskStatus } from '../types';
 import {
   decideFeedbackAction,
   feedbackJobIdFor,
+  feedbackLeaseAttempt,
+  isFeedbackHandledAction,
   isFeedbackTerminalStatus,
   pickFeedbackJobs,
   StoredFeedbackJob,
@@ -115,6 +117,28 @@ describe('decideFeedbackAction', () => {
     expect(isFeedbackTerminalStatus(TaskStatus.CANCELLED)).toBe(true);
     expect(isFeedbackTerminalStatus(TaskStatus.PENDING)).toBe(false);
     expect(isFeedbackTerminalStatus(null)).toBe(false);
+  });
+});
+
+describe('feedback one-shot hardening (no repeat submissions)', () => {
+  it('treats FEEDBACK_SENT and FEEDBACK_FAILED as terminal outcomes — a give-up must never re-schedule', () => {
+    expect(isFeedbackHandledAction('FEEDBACK_SENT')).toBe(true);
+    expect(isFeedbackHandledAction('FEEDBACK_FAILED')).toBe(true);
+    expect(isFeedbackHandledAction('GPT_LINK_SUBMITTED')).toBe(false);
+    expect(isFeedbackHandledAction('REMINDER_SENT')).toBe(false);
+    expect(isFeedbackHandledAction('')).toBe(false);
+  });
+
+  it('first lease keeps attempt 1 (never-leased and fresh same-tab re-takes do not burn attempts)', () => {
+    expect(feedbackLeaseAttempt(undefined, false)).toBe(1);
+    expect(feedbackLeaseAttempt(1, false)).toBe(1);
+    expect(feedbackLeaseAttempt(2, false)).toBe(2);
+  });
+
+  it('a stale-lease reclaim counts as an attempt; past the max the lease must terminate instead', () => {
+    expect(feedbackLeaseAttempt(undefined, true)).toBe(2);
+    expect(feedbackLeaseAttempt(1, true)).toBe(2);
+    expect(feedbackLeaseAttempt(2, true)).toBeNull();
   });
 });
 

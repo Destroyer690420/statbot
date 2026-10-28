@@ -7,11 +7,13 @@
  * manager-browser executor tab polls GET /feedback-jobs/pending (folded into
  * the submit-jobs pending response so the tab keeps one poll loop), clicks
  * the task card's Feedback button in-page, writes the stalling notice, and
- * reports back. One shot per task — the FEEDBACK_SENT audit is the durable
- * guard (Redis has no persistence), and the job is dropped the moment a
- * link arrives. Fire-time re-validation happens at lease: a task that gained
- * a link, went terminal, or already got its notice refuses the lease and the
- * job is removed.
+ * reports back. One shot per task — a FEEDBACK_SENT **or FEEDBACK_FAILED**
+ * audit is the durable guard (Redis has no persistence; a give-up tags the
+ * manager once and must never re-schedule), and the job is dropped the
+ * moment a link arrives. Fire-time re-validation happens at lease: a task
+ * that gained a link, went terminal, or already got its notice refuses the
+ * lease and the job is removed. A stale-lease reclaim burns an attempt so a
+ * tab that died before reporting cannot re-submit every lease timeout.
  */
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
@@ -26,7 +28,9 @@ import { FeedbackJobData, Task, AuditAction } from '../types';
 import {
   decideFeedbackAction,
   feedbackJobIdFor,
+  feedbackLeaseAttempt,
   feedbackRetryDelayFor,
+  isFeedbackHandledAction,
   StoredFeedbackJob,
 } from '../utils/feedback-queue';
 import { parseDeadlineToMs } from '../utils/deadline';
@@ -67,11 +71,15 @@ export async function closeFeedbackQueue(): Promise<void> {
 
 export { feedbackJobIdFor };
 
-/** Durable one-shot guard: a FEEDBACK_SENT audit means the notice went out. */
-async function feedbackAlreadySent(taskId: string): Promise<boolean> {
+/** Durable one-shot guard: FEEDBACK_SENT (notice went out) or FEEDBACK_FAILED
+ *  (gave up — the manager was tagged) means the task must never re-schedule.
+ *  FAILED is terminal too: without it, every 30-min re-hydration pass re-added
+ *  a fresh job for tasks the executor kept failing to confirm, and the notice
+ *  was submitted again and again on a fixed cadence. */
+async function feedbackAlreadyHandled(taskId: string): Promise<boolean> {
   try {
     const logs = await auditLogService.getByTaskId(taskId, 100);
-    return logs.some((l) => l.action === 'FEEDBACK_SENT');
+    return logs.some((l) => isFeedbackHandledAction(l.action));
   } catch {
     return false;
   }
@@ -94,7 +102,7 @@ export async function scheduleFeedbackForTask(task: Task): Promise<{ scheduled: 
         return { scheduled: false, reason: 'already scheduled' };
       }
     }
-    const feedbackSent = await feedbackAlreadySent(task.id);
+    const feedbackSent = await feedbackAlreadyHandled(task.id);
     const createdAtMs =
       task.createdAt instanceof Date
         ? task.createdAt.getTime()
@@ -177,20 +185,41 @@ export async function pendingFeedbackJobs(nowMs: number = Date.now()): Promise<S
 /**
  * Per-tab lease with fire-time re-validation: a task that gained a link,
  * went terminal, or already got its notice refuses the lease and the stale
- * job is removed instead.
+ * job is removed instead. A STALE lease (previous tab's lease expired — it
+ * died mid-flow and may have already submitted) counts as one attempt; a
+ * reclaim past FEEDBACK_MAX_ATTEMPTS terminates the job (remove + FEEDBACK_FAILED
+ * audit + manager tag) instead of re-serving it every lease timeout — that
+ * unbounded reclaim loop was re-submitting the notice on a fixed cadence.
  */
 export async function leaseFeedbackJob(
   jobId: string,
   tabId: string,
   nowMs: number = Date.now(),
+  discordClient: Client | null = null,
 ): Promise<{ leased: boolean; reason: string; job?: StoredFeedbackJob }> {
   const q = getFeedbackQueue();
   const job = await q.getJob(jobId).catch(() => null);
   if (!job) return { leased: false, reason: 'job not found (done, replaced, or expired)' };
   const data = (job.data || {}) as FeedbackJobData;
-  const stale = !data.leasedBy || !data.leasedAt || nowMs - data.leasedAt > FEEDBACK_LEASE_TIMEOUT_MS;
+  const leasedAt = data.leasedAt ?? 0;
+  const hadLease = Boolean(data.leasedBy && data.leasedAt != null);
+  const stale = !hadLease || nowMs - leasedAt > FEEDBACK_LEASE_TIMEOUT_MS;
   if (!stale && data.leasedBy !== tabId) {
     return { leased: false, reason: `held by ${data.leasedBy}` };
+  }
+  const reclaim = hadLease && nowMs - leasedAt > FEEDBACK_LEASE_TIMEOUT_MS;
+  const attempt = feedbackLeaseAttempt(data.attempt, reclaim);
+  if (attempt === null) {
+    await job.remove().catch(() => undefined);
+    const reason = `executor lease expired ${Math.round(FEEDBACK_LEASE_TIMEOUT_MS / 60000)}min without a report`;
+    await auditLogService
+      .log(AuditAction.FEEDBACK_FAILED, data.taskId, 'feedback-executor', `Stalling notice gave up: ${reason}`)
+      .catch(() => undefined);
+    logger.warn('Feedback job gave up (lease expired with no report)', { jobId, taskId: data.taskId });
+    if (discordClient) {
+      await notifyTicketFeedbackFailed(discordClient, data.taskId, reason).catch(() => undefined);
+    }
+    return { leased: false, reason: 'stale: feedback attempts exhausted' };
   }
   const task = await taskService.findById(data.taskId).catch(() => null);
   const createdAtMs =
@@ -205,7 +234,7 @@ export async function leaseFeedbackJob(
       assignmentStatus: task?.assignmentStatus ?? null,
       submittedRedditUrl: task?.submittedRedditUrl ?? null,
       deadlineMs: task ? parseDeadlineToMs(task.deadline, task.createdAt) : null,
-      feedbackSent: task ? await feedbackAlreadySent(task.id) : true,
+      feedbackSent: task ? await feedbackAlreadyHandled(task.id) : true,
       formatCheckStatus: task?.formatCheckStatus ?? null,
       createdAtMs,
     },
@@ -215,8 +244,12 @@ export async function leaseFeedbackJob(
     await job.remove().catch(() => undefined);
     return { leased: false, reason: `stale: ${!task ? 'task gone' : decision.reason}` };
   }
-  await job.updateData({ ...data, leasedBy: tabId, leasedAt: nowMs }).catch(() => undefined);
-  return { leased: true, reason: 'leased', job: toStored({ id: job.id, data: { ...data, leasedBy: tabId, leasedAt: nowMs }, timestamp: job.timestamp, opts: job.opts }) };
+  await job.updateData({ ...data, attempt, leasedBy: tabId, leasedAt: nowMs }).catch(() => undefined);
+  return {
+    leased: true,
+    reason: 'leased',
+    job: toStored({ id: job.id, data: { ...data, attempt, leasedBy: tabId, leasedAt: nowMs }, timestamp: job.timestamp, opts: job.opts }),
+  };
 }
 
 export interface FeedbackResult {
@@ -228,7 +261,9 @@ export interface FeedbackResult {
  * Handles the executor verdict. Success removes the job + audits (the audit
  * is the one-shot guard). One retry after a transient failure; then gives
  * up: removes the job, audits FAILED, and tags the manager in the ticket so
- * the notice goes out by hand before expiry.
+ * the notice goes out by hand before expiry. The FEEDBACK_FAILED audit is
+ * terminal for scheduling — re-hydration must never re-add a job for a
+ * task the bot already gave up on.
  */
 export async function reportFeedbackResult(
   jobId: string,

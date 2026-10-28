@@ -381,13 +381,15 @@ export default function createGoPartTimeRoutes(discordClient: Client): Router {
    * Per-tab lease on a feedback job (same 409/404 semantics as submit-job
    * leases). Leasing re-validates: a task that gained a link, went terminal,
    * or already got its notice refuses the lease and the stale job is gone.
+   * A stale-lease reclaim counts as an attempt; past the max the job is
+   * dropped and the manager tagged once (no repeated re-servicing).
    */
   router.post(
     '/feedback-jobs/:id/lease',
     validateBody(z.object({ tabId: z.string().min(1).max(64) })),
     async (req: Request, res: Response): Promise<void> => {
       try {
-        const outcome = await leaseFeedbackJob(String(req.params.id), req.body.tabId);
+        const outcome = await leaseFeedbackJob(String(req.params.id), req.body.tabId, Date.now(), discordClient);
         if (!outcome.leased) {
           const code = outcome.reason.startsWith('stale:') || outcome.reason === 'job not found (done, replaced, or expired)' ? 404 : 409;
           res.status(code).json({ success: false, message: outcome.reason });
