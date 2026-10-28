@@ -1,6 +1,6 @@
 # REMINDER_SYSTEM.md — Reminder Engine
 
-> Verified against `src/scheduler/**`, `src/services/reminder.service.ts`, `src/config/constants.ts`, `src/index.ts` on 2026-08-11.
+> Verified against `src/scheduler/**`, `src/services/reminder.service.ts`, `src/config/constants.ts`, `src/index.ts` on 2026-10-28. **Deployed 2026-10-28 at `96d83db`** — every send/retry message ID is now stored (`reminderMessageIds`) and matched for insight replies.
 
 ---
 

@@ -1,6 +1,6 @@
 # INSIGHT_SYSTEM.md — Insight (View-Data) Submission System
 
-> Verified against `src/bot/events/messageCreate.ts`, `src/utils/insight-reply.ts`, `src/services/insight-storage.service.ts`, `src/services/reminder.service.ts`, `src/api/routes/uploads.ts`, `src/index.ts` on 2026-10-28.
+> Verified against `src/bot/events/messageCreate.ts`, `src/utils/insight-reply.ts`, `src/services/insight-storage.service.ts`, `src/services/reminder.service.ts`, `src/api/routes/uploads.ts`, `src/index.ts` on 2026-10-28. **Deployed 2026-10-28 at `96d83db`** (app + dashboard rebuild, idempotent migration re-run; host DB has `Reminder.reminderMessageIds` + its GIN index). The multi-message reply behaviour is live in `dist/` but has not yet been confirmed by a real reply to an older reminder.
 
 ---
 
