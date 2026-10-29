@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Link Submitter
 // @namespace    https://goparttime.net/
-// @version      1.2.1
+// @version      1.2.2
 // @description  Dedicated executor tab for GoPartTime link auto-submit + deadline feedback: polls Statbot for verified worker links and stalling notices, finds each task card across /my-tasks/todo pages, fills the Submit Task dialog (or the Feedback dialog with "submitting in a bit"), and clicks Submit. Never accepts tasks, never consumes accept-claim leases.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,16 @@
 // ==/UserScript==
 
 /**
+ * v1.2.2 - Multi-page hunt wraps around. The tab keeps whatever ?page=N it
+ * was left on (usually the last page of the previous job), and the list
+ * shifts as tasks are submitted, so the old forward-only walk missed cards
+ * on earlier pages: once page 4 was reached, a card on page 2 was reported
+ * "not found". The hunt now remembers every page it has already searched
+ * (persisted in sessionStorage across the ?page= hops) and wraps from the
+ * last page back to page 1 until all pages were checked exactly once. An
+ * out-of-range/empty page no longer aborts the hunt either — it just moves
+ * on to the next page. Same fix for Feedback jobs (identical walk).
+ *
  * v1.2.1 - Feedback result reports are retried (3 tries, short backoff; a 404
  * "job gone" is final, not transient). A lost verdict used to leave the job
  * leased, and after the 5-min lease reclaim it was picked up and submitted
@@ -91,7 +101,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.2.1';
+  var VERSION = '1.2.2';
   var DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/goparttime',
     apiKey: '',
@@ -336,6 +346,43 @@
       return Math.min(max, MAX_PAGES);
     } catch (e) { return 1; }
   }
+
+  // --- Multi-page hunt state (survives ?page=N hops) ---
+  //
+  // A job must search EVERY todo page, not just pages after the one the tab
+  // happens to be on: the tab is often left on the last page of the previous
+  // job while the new card sits on page 1, and cards shift pages as other
+  // tasks are submitted. Track the pages already searched for this job and
+  // wrap forward (4 → 1 → 2 → 3) until each page was checked once.
+
+  // ─── page-scan:start ───
+  function trackScannedPage(active, page, hasCards) {
+    var scan = active.scan;
+    if (!scan || typeof scan !== 'object') {
+      scan = { visited: [], maxPages: 1, sawCards: false };
+      active.scan = scan;
+    }
+    if (!Array.isArray(scan.visited)) scan.visited = [];
+    // Landing on an out-of-range page (e.g. ?page=4 while only 2 pages exist)
+    // must not make the hunt think it has fewer pages than the tab can reach.
+    // Clamped to MAX_PAGES so a bogus ?page=999 can never start a long walk.
+    scan.maxPages = Math.min(MAX_PAGES, Math.max(scan.maxPages || 1, maxTodoPages(), page));
+    if (scan.visited.indexOf(page) === -1) scan.visited.push(page);
+    if (hasCards) scan.sawCards = true;
+    return scan;
+  }
+
+  // Next page not yet searched in this hunt (forward, wrapping past the last
+  // page), or null when pages 1..maxPages were all searched.
+  function nextUnvisitedPage(scan, page) {
+    var max = scan.maxPages || 1;
+    for (var step = 1; step <= max; step++) {
+      var candidate = ((page - 1 + step) % max) + 1;
+      if (scan.visited.indexOf(candidate) === -1) return candidate;
+    }
+    return null;
+  }
+  // ─── page-scan:end ───
 
   function findCardByTaskId(taskId) {
     var cards = Array.from(document.querySelectorAll('div[data-slot="card"]'));
@@ -613,28 +660,32 @@
       return;
     }
 
-    var cardsReady = document.querySelectorAll('div[data-slot="card"]').length > 0;
-    for (var i = 0; i < 30 && !cardsReady; i++) {
+    // Wait for this page's list to render. A page can legitimately have no
+    // cards (out of range after the list shrank); the hunt then moves on to
+    // the other pages instead of failing.
+    var cardCount = document.querySelectorAll('div[data-slot="card"]').length;
+    for (var i = 0; i < 30 && cardCount === 0; i++) {
       await sleep(150);
-      cardsReady = document.querySelectorAll('div[data-slot="card"]').length > 0;
-    }
-    if (!cardsReady) {
-      await reportResult(settings, active.jobId, false, 'Submissions list did not render.');
-      saveActive(null);
-      return;
+      cardCount = document.querySelectorAll('div[data-slot="card"]').length;
     }
 
-    // 1. Find the card, walking ?page=N (bounded).
+    // 1. Find the card, scanning EVERY page once (wraps from the last page
+    //    back to page 1, so an earlier page is never skipped).
     var card = findCardByTaskId(active.externalTaskId);
     if (!card) {
       var page = currentTodoPage();
-      var max = maxTodoPages();
-      if (page < max) {
-        console.log('[Submitter] task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + (page + 1));
-        window.location.href = '/my-tasks/todo?page=' + (page + 1);
+      var scan = trackScannedPage(active, page, cardCount > 0);
+      var nextPage = nextUnvisitedPage(scan, page);
+      if (nextPage !== null) {
+        console.log('[Submitter] task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + nextPage + ' (scanned ' + scan.visited.join(',') + ' of ' + scan.maxPages + ')');
+        saveActive(active);
+        window.location.href = '/my-tasks/todo?page=' + nextPage;
         return;
       }
-      await reportResult(settings, active.jobId, false, 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo (may already be submitted).');
+      var reason = scan.sawCards
+        ? 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo (may already be submitted).'
+        : 'Submissions list did not render.';
+      await reportResult(settings, active.jobId, false, reason);
       setStatus(false, 'task #' + active.externalTaskId + ' card missing');
       saveActive(null);
       return;
@@ -781,28 +832,31 @@
       return;
     }
 
-    var cardsReady = document.querySelectorAll('div[data-slot="card"]').length > 0;
-    for (var i = 0; i < 30 && !cardsReady; i++) {
+    // Wait for this page's list to render; an empty page is not fatal — the
+    // hunt continues on the pages that have not been searched yet.
+    var cardCount = document.querySelectorAll('div[data-slot="card"]').length;
+    for (var i = 0; i < 30 && cardCount === 0; i++) {
       await sleep(150);
-      cardsReady = document.querySelectorAll('div[data-slot="card"]').length > 0;
-    }
-    if (!cardsReady) {
-      await reportFeedbackResult(settings, active.jobId, false, 'Submissions list did not render.');
-      saveActive(null);
-      return;
+      cardCount = document.querySelectorAll('div[data-slot="card"]').length;
     }
 
-    // 1. Find the card, walking ?page=N (bounded).
+    // 1. Find the card, scanning EVERY page once (wraps from the last page
+    //    back to page 1, so an earlier page is never skipped).
     var card = findCardByTaskId(active.externalTaskId);
     if (!card) {
       var page = currentTodoPage();
-      var max = maxTodoPages();
-      if (page < max) {
-        console.log('[Submitter] feedback task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + (page + 1));
-        window.location.href = '/my-tasks/todo?page=' + (page + 1);
+      var scan = trackScannedPage(active, page, cardCount > 0);
+      var nextPage = nextUnvisitedPage(scan, page);
+      if (nextPage !== null) {
+        console.log('[Submitter] feedback task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + nextPage + ' (scanned ' + scan.visited.join(',') + ' of ' + scan.maxPages + ')');
+        saveActive(active);
+        window.location.href = '/my-tasks/todo?page=' + nextPage;
         return;
       }
-      await reportFeedbackResult(settings, active.jobId, false, 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo.');
+      var reason = scan.sawCards
+        ? 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo.'
+        : 'Submissions list did not render.';
+      await reportFeedbackResult(settings, active.jobId, false, reason);
       setStatus(false, 'feedback task #' + active.externalTaskId + ' card missing');
       saveActive(null);
       return;

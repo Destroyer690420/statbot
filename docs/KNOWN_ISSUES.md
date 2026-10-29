@@ -17,6 +17,11 @@
 - **Follow-up deployed 2026-10-24 at `9100667`**: userscript **v1.1.0** (single page only, no pagination/fetch/reload; legacy scan cache deleted on load) and server-side unseen-only processing (`skippedKnown`; no resolve/upsert for known IDs). Also fixed the live `tasks.N.failedReason` validation failure — the zod cap was 300 chars; it is now 2000 (live-verified with a 1,500-char reason), with `reward` 64 / `deadline` 128. Backup `rtm-backup-20261024-131628.tar.gz`; no migration.
 - **Still open (not a bug)**: the script is **not installed in Tampermonkey yet**, so the first real browser scan (GoPartTime failed-page DOM) and the first genuine `MISMATCH` owner DM remain unverified. See `docs/GOPARTTIME.md` §20.
 
+### 0c. Link-submit executor missed cards on earlier todo pages (fixed in source 2026-10-29, NOT deployed)
+- **Was**: with 3–4 pages on `/my-tasks/todo`, the executor (`goparttime-submit.user.js` v1.2.1) walked `?page=N` forward only from the page the tab was left on. After the previous job left the tab on page 4, a card on page 2 was never searched: the walk reported "card not found" at the last page instead of wrapping back to page 1. The `?page=` hop is a full reload, so no earlier-page knowledge survived.
+- **Resolved (source)**: v1.2.2 persists the hunt in the in-flight job (`active.scan`: `visited`, `maxPages`, `sawCards`) and wraps forward (`4 → 1 → 2 → 3`) until every page 1..max was checked once; empty/out-of-range pages advance instead of aborting. Same for feedback jobs. Both copies byte-identical, `node --check` clean, userscript tests 33/33 green (new `submit-page-scan.test.ts` pins the wrap-around, out-of-range recovery, and `MAX_PAGES` cap).
+- **Still open (not a bug)**: the fix is **not deployed** — the dashboard must be rebuilt to serve v1.2.2 at `/goparttime-submit.user.js`, then the executor tab needs a Tampermonkey update. Until then the live tab keeps the forward-only v1.2.1 walk (v1.2.2 supersedes the pending v1.2.1 tab update).
+
 ---
 
 ## Verified 2026-08-17
