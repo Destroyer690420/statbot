@@ -85,6 +85,8 @@ Workers upload their own UPI payment QR once from the Worker Panel Wallet page (
 
 The Worker Breakdown's "Pay Worker" button opens `PayWorkerModal` (fetched via `GET /payouts/workers/:workerId/qr-code`), and the Inviter Breakdown's "Pay Inviter" button opens `PayInviterModal` (fetched via `GET /commissions/inviters/:inviterId/qr-code`). Both modals display the payee's QR code beside their name and payout amount, with click-to-zoom full-screen lightbox and copyable UPI ID. Confirm runs the existing `payWorker` or `payInviter` action. If no QR was uploaded, a placeholder is rendered and the Confirm button stays enabled so payment is never blocked.
 
+**Special inviters — +30% at payment time (dashboard-only, 2026-10-29):** when the breakdown row's `inviterType` is `special` (the three hardcoded Discord IDs), `PayInviterModal` shows three lines — **Actual amount** (the recorded commission), **Special inviter bonus (+30%)** and **Total to pay** — and builds the generated `upi://pay` QR with the **total** (`actual × 1.3`, rounded to paise). Normal inviters keep the exact previous single-amount popup. This is display/payment only: the Confirm request is unchanged, so `POST /commissions/pay-inviter/:inviterId` still records the actual commission items, batch total and payments-channel receipt; the extra 30% is not persisted as a commission item. A special inviter without a decodable `upiId` still sees the total, but the uploaded static QR cannot pre-fill it (same limitation as before). The helper is `dashboard/src/pages/payout/utils/specialInviterPayout.ts`.
+
 ## 5. Reads (dashboard endpoints)
 
 | Endpoint | Returns |

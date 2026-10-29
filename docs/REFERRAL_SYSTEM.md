@@ -96,6 +96,7 @@ POST /commissions/pay-inviter/:inviterId | /pay-all   [admin]
 - **Commission timing**: computed on-demand at pay time from *current* task states — not snapshotted at task completion. Deleting/archiving a task before pay changes the outcome.
 - Batch reuse: **none** (unlike worker payouts) — each pay call creates a new batch.
 - **Payments-channel proof**: pay-inviter and pay-all also post a generated Google Pay / UPI mobile payout receipt PNG image (`src/services/payout-receipt.service.ts`) attached to `PAYMENT_PROOF_CHANNEL_ID` (payee label + total amount, IST timestamp, powered by UPI footer — no bonus/per-task/team breakdown). Pay-inviter awaits the send and returns `proofNotification`; pay-all groups items per inviter (`summarizeCommissionItemsByInviter`) and posts in the background, returning `proofNotification: { queued: N }`. Best-effort — a Discord failure is logged and never rolls back a commission. See `docs/PAYOUT_SYSTEM.md` §4a.
+- **Special inviter +30% at pay time (dashboard-only, 2026-10-29)**: the Pay Inviter popup for a `special` inviter shows the actual commission, a `Special inviter bonus (+30%)` line and the total, and generates the UPI QR for the total. Confirm still calls the unchanged `POST /commissions/pay-inviter/:inviterId`, so only the actual commission is recorded in `CommissionItem`/`CommissionBatch` and the receipt — the 30% is an owner payment rule, not a commission item. Normal inviters are unchanged.
 
 ## 6. Backfill Script (`scripts/backfill-indirect-referrers.ts`)
 

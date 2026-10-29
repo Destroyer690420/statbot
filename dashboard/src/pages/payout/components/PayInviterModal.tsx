@@ -6,10 +6,12 @@ import { getInviterQrCode, payInviter } from '../../../api/client';
 import { CopyButton } from '../../../components/CopyButton';
 import { formatCurrency } from '../utils';
 import { buildUpiPayLink } from '../utils/upiLink';
+import { computeSpecialInviterPayout } from '../utils/specialInviterPayout';
 
 interface PayInviterModalProps {
   inviterId: string;
   inviterName: string;
+  inviterType: 'normal' | 'special';
   totalCommission: number;
   onClose: () => void;
   onPaid: () => void;
@@ -20,10 +22,16 @@ interface PayInviterModalProps {
  * commission amount, then Confirms through payInviter request and closes on success.
  * A missing QR never blocks paying — the placeholder stays and Confirm
  * stays enabled.
+ *
+ * Special inviters get an extra 30% at payment time: the popup shows the
+ * actual commission, the bonus and the total, and the generated UPI QR is
+ * built for the total. The Confirm request is unchanged, so the backend still
+ * records only the actual commission.
  */
 export function PayInviterModal({
   inviterId,
   inviterName,
+  inviterType,
   totalCommission,
   onClose,
   onPaid,
@@ -44,7 +52,8 @@ export function PayInviterModal({
 
   const qrCodeUrl: string | null = qrQuery.data?.data?.qrCodeUrl ?? null;
   const upiId: string | null = qrQuery.data?.data?.upiId ?? null;
-  const upiLink = upiId ? buildUpiPayLink(upiId, totalCommission, inviterName) : null;
+  const payout = computeSpecialInviterPayout(totalCommission, inviterType);
+  const upiLink = upiId ? buildUpiPayLink(upiId, payout.totalAmount, inviterName) : null;
   const hasQr = !!upiLink || !!qrCodeUrl;
   const [lightbox, setLightbox] = useState(false);
 
@@ -100,13 +109,39 @@ export function PayInviterModal({
 
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-text-primary truncate">{inviterName}</p>
-              <p className="mt-1 text-2xl font-semibold text-text-primary">{formatCurrency(totalCommission)}</p>
+              {payout.isSpecial ? (
+                <div className="mt-2 space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-3 text-xs">
+                    <span className="text-dark-400">Actual amount</span>
+                    <span className="font-medium text-text-primary">{formatCurrency(payout.actualAmount)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 text-xs">
+                    <span className="text-warning">Special inviter bonus (+30%)</span>
+                    <span className="font-medium text-warning">+{formatCurrency(payout.bonusAmount)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 border-t border-dark-700/50 pt-1.5">
+                    <span className="text-sm font-medium text-text-primary">Total to pay</span>
+                    <span className="text-2xl font-semibold text-text-primary">{formatCurrency(payout.totalAmount)}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-1 text-2xl font-semibold text-text-primary">{formatCurrency(payout.actualAmount)}</p>
+              )}
               <p className="mt-2 text-xs leading-5 text-dark-400">
-                {upiLink
-                  ? 'Scan to pay — the amount is already filled in.'
-                  : 'Scan the QR to pay, then Confirm to record the commission payment.'}
+                {payout.isSpecial
+                  ? upiLink
+                    ? 'Scan to pay — the total including the 30% special inviter bonus is already filled in.'
+                    : `Pay ${formatCurrency(payout.totalAmount)} (commission + 30% special inviter bonus), then Confirm to record the commission payment.`
+                  : upiLink
+                    ? 'Scan to pay — the amount is already filled in.'
+                    : 'Scan the QR to pay, then Confirm to record the commission payment.'}
                 {hasQr ? ' Click the code for a larger view.' : ''}
               </p>
+              {payout.isSpecial ? (
+                <p className="mt-1 text-[11px] leading-4 text-dark-500">
+                  Confirm records the actual commission ({formatCurrency(payout.actualAmount)}); the extra 30% is added to the payment total above.
+                </p>
+              ) : null}
               {upiId ? (
                 <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900/40 px-2.5 py-1.5">
                   <p className="min-w-0 flex-1 truncate font-mono text-xs text-text-primary" title={upiId}>

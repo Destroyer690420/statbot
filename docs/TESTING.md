@@ -15,6 +15,7 @@
 | `npm run lint` | ESLint on `src/ --ext .ts` |
 | `npm run dev` | tsx watch |
 | `npm run deploy-commands` | register guild slash commands |
+| `cd dashboard && npm test` | dashboard payout tests (`tsx --test src/pages/payout/__tests__/*.test.tsx`) |
 | `cd dashboard && npm run build` | dashboard typecheck + Vite build |
 
 Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<rootDir>/src`.
@@ -51,7 +52,7 @@ Jest config: preset ts-jest, `testEnvironment: node`, roots `src`, `@/` → `<ro
 | `failed-task-check-service.test.ts` | Scan orchestration: new mismatch persists + DMs once, **already-recorded IDs skipped (`skippedKnown`) with no resolve/upsert/counts**, unnotified MISMATCH retry, DM failure leaves `notifiedAt` null + `notifyError`, deleted/no-link/not-found silence, dedupe, empty page, missing Discord client |
 | `goparttime-task-resolver.test.ts` | Shared two-step resolver: exact `(source, externalTaskId)` first, manual-ID fallback candidates, sourced rows never shadow manual candidates, missing → null, dedupe + only unresolved IDs queried |
 
-**No test coverage** for: most services (task/payout/commission/reminder/goparttime/analytics), most repositories, bot commands/events, scheduler/worker, or the dashboard (no frontend tests exist). Worker Portal access repository behavior is covered by `worker-portal-access.test.ts`, and the worker-scoped referral view by `worker-referrals.test.ts` + `worker-isolation.test.ts`. Owner earnings is covered by `owner-earnings.test.ts` (6: creation-basis universe incl. PENDING / deleted+CANCELLED exclusion / settings-driven worker cost / per-task gating incl. indirect special threshold / one-time bonus attributed once to the threshold task's creation day / paid-label flip with unchanged totals / per-inviter bonus, no last-wins).
+**No test coverage** for: most services (task/payout/commission/reminder/goparttime/analytics), most repositories, bot commands/events, scheduler/worker, or most of the dashboard. Dashboard payout coverage exists at `dashboard/src/pages/payout/__tests__/upi-qr.test.tsx` (17 cases: UPI deep-link building, Pay Worker modal states, Pay Inviter modal states, and special-inviter 30% payout math). Worker Portal access repository behavior is covered by `worker-portal-access.test.ts`, and the worker-scoped referral view by `worker-referrals.test.ts` + `worker-isolation.test.ts`. Owner earnings is covered by `owner-earnings.test.ts` (6: creation-basis universe incl. PENDING / deleted+CANCELLED exclusion / settings-driven worker cost / per-task gating incl. indirect special threshold / one-time bonus attributed once to the threshold task's creation day / paid-label flip with unchanged totals / per-inviter bonus, no last-wins).
 
 ### Worker portal suites (2026-09-25)
 | File | Covers |

@@ -20,7 +20,7 @@ interface InviterBreakdownProps {
 
 export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInvalidate }: InviterBreakdownProps) {
   const [expandedInviter, setExpandedInviter] = useState<string | null>(null);
-  const [payModalInviter, setPayModalInviter] = useState<{ inviterId: string; inviterName: string; totalCommission: number } | null>(null);
+  const [payModalInviter, setPayModalInviter] = useState<{ inviterId: string; inviterName: string; inviterType: 'normal' | 'special'; totalCommission: number } | null>(null);
 
   const breakdownQuery = useQuery({
     queryKey: ['commission-breakdown', dateParams],
@@ -115,6 +115,7 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
                                 onClick={() => setPayModalInviter({
                                   inviterId: inv.inviterId,
                                   inviterName: inv.inviterName,
+                                  inviterType: inv.inviterType,
                                   totalCommission: inv.totalCommission,
                                 })}
                                 className="btn-primary text-xs py-1.5 px-3"
@@ -187,6 +188,7 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
                         onClick={() => setPayModalInviter({
                           inviterId: inv.inviterId,
                           inviterName: inv.inviterName,
+                          inviterType: inv.inviterType,
                           totalCommission: inv.totalCommission,
                         })}
                         className="btn-primary text-xs py-1.5 px-3"
@@ -204,6 +206,7 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
                             onClick={() => setPayModalInviter({
                               inviterId: inv.inviterId,
                               inviterName: inv.inviterName,
+                              inviterType: inv.inviterType,
                               totalCommission: inv.totalCommission,
                             })}
                             className="btn-primary text-xs py-1.5 px-3"
@@ -234,6 +237,7 @@ export function InviterBreakdown({ dateParams, filterMode, isCurrentWeek, onInva
         <PayInviterModal
           inviterId={payModalInviter.inviterId}
           inviterName={payModalInviter.inviterName}
+          inviterType={payModalInviter.inviterType}
           totalCommission={payModalInviter.totalCommission}
           onClose={() => setPayModalInviter(null)}
           onPaid={() => {

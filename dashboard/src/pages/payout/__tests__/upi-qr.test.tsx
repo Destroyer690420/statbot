@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { buildUpiPayLink } from '../utils/upiLink';
+import { computeSpecialInviterPayout, SPECIAL_INVITER_BONUS_RATE } from '../utils/specialInviterPayout';
 import { PayWorkerModal } from '../components/PayWorkerModal';
 import { PayInviterModal } from '../components/PayInviterModal';
 
@@ -40,6 +41,42 @@ describe('buildUpiPayLink util', () => {
     assert.strictEqual(url.searchParams.get('cu'), 'INR');
     assert.strictEqual(url.searchParams.get('pn'), 'Alice & Bob / ticket #123');
     assert.strictEqual(url.searchParams.get('tn'), 'Payout for task ?a=1&b=2');
+  });
+});
+
+describe('computeSpecialInviterPayout', () => {
+  it('adds the 30% bonus for special inviters', () => {
+    assert.deepStrictEqual(computeSpecialInviterPayout(250, 'special'), {
+      isSpecial: true,
+      actualAmount: 250,
+      bonusAmount: 75,
+      totalAmount: 325,
+    });
+  });
+
+  it('rounds the bonus and total to paise', () => {
+    assert.deepStrictEqual(computeSpecialInviterPayout(45, 'special'), {
+      isSpecial: true,
+      actualAmount: 45,
+      bonusAmount: 13.5,
+      totalAmount: 58.5,
+    });
+  });
+
+  it('leaves normal inviters exactly as before', () => {
+    assert.deepStrictEqual(computeSpecialInviterPayout(250, 'normal'), {
+      isSpecial: false,
+      actualAmount: 250,
+      bonusAmount: 0,
+      totalAmount: 250,
+    });
+  });
+
+  it('builds the UPI QR for the total special-inviter amount', () => {
+    const payout = computeSpecialInviterPayout(250, 'special');
+    const link = buildUpiPayLink('inviter202@ybl', payout.totalAmount, 'TopInviter');
+    assert.ok(link.includes('am=325.00'));
+    assert.strictEqual(SPECIAL_INVITER_BONUS_RATE, 0.3);
   });
 });
 
@@ -167,6 +204,7 @@ describe('PayInviterModal states', () => {
         <PayInviterModal
           inviterId="inviter-202"
           inviterName="TopInviter"
+          inviterType="normal"
           totalCommission={250}
           onClose={() => {}}
           onPaid={() => {}}
@@ -180,6 +218,10 @@ describe('PayInviterModal states', () => {
     assert.ok(html.includes('Scan to pay — the amount is already filled in.'));
     // Shows copyable UPI ID
     assert.ok(html.includes('inviter202@ybl'));
+    // Normal inviters keep the old single-amount display (no 30% breakdown)
+    assert.ok(html.includes('₹250'));
+    assert.ok(!html.includes('Special inviter bonus'));
+    assert.ok(!html.includes('Total to pay'));
   });
 
   it('State 2: falls back to uploaded static image when upiId is null', () => {
@@ -192,6 +234,7 @@ describe('PayInviterModal states', () => {
         <PayInviterModal
           inviterId="inviter-202"
           inviterName="TopInviter"
+          inviterType="normal"
           totalCommission={250}
           onClose={() => {}}
           onPaid={() => {}}
@@ -217,6 +260,7 @@ describe('PayInviterModal states', () => {
         <PayInviterModal
           inviterId="inviter-202"
           inviterName="TopInviter"
+          inviterType="normal"
           totalCommission={250}
           onClose={() => {}}
           onPaid={() => {}}
@@ -229,5 +273,60 @@ describe('PayInviterModal states', () => {
     // Confirm button remains present and enabled
     assert.ok(html.includes('Confirm'));
     assert.ok(!html.includes('<img'));
+  });
+
+  it('Special inviter: shows actual amount, +30% bonus and total, and generates the QR for the total', () => {
+    const Wrapper = createWrapper({
+      qrCodeUrl: 'https://example.com/uploads/inviter-202.png',
+      upiId: 'inviter202@ybl',
+    });
+    const html = renderToStaticMarkup(
+      <Wrapper>
+        <PayInviterModal
+          inviterId="inviter-202"
+          inviterName="TopInviter"
+          inviterType="special"
+          totalCommission={250}
+          onClose={() => {}}
+          onPaid={() => {}}
+        />
+      </Wrapper>
+    );
+
+    assert.ok(html.includes('Actual amount'));
+    assert.ok(html.includes('₹250'));
+    assert.ok(html.includes('Special inviter bonus (+30%)'));
+    assert.ok(html.includes('+₹75'));
+    assert.ok(html.includes('Total to pay'));
+    assert.ok(html.includes('₹325'));
+    assert.ok(html.includes('total including the 30% special inviter bonus'));
+    assert.ok(html.includes('Confirm records the actual commission (₹250); the extra 30% is added to the payment total above.'));
+    assert.ok(html.includes('<svg'), 'Should render generated SVG QR code');
+  });
+
+  it('Special inviter without a decodable UPI ID still shows the total to pay', () => {
+    const Wrapper = createWrapper({
+      qrCodeUrl: 'https://example.com/uploads/inviter-202.png',
+      upiId: null,
+    });
+    const html = renderToStaticMarkup(
+      <Wrapper>
+        <PayInviterModal
+          inviterId="inviter-202"
+          inviterName="TopInviter"
+          inviterType="special"
+          totalCommission={250}
+          onClose={() => {}}
+          onPaid={() => {}}
+        />
+      </Wrapper>
+    );
+
+    assert.ok(html.includes('Actual amount'));
+    assert.ok(html.includes('+₹75'));
+    assert.ok(html.includes('Total to pay'));
+    assert.ok(html.includes('₹325'));
+    assert.ok(html.includes('Pay ₹325 (commission + 30% special inviter bonus)'));
+    assert.ok(html.includes('<img src="https://example.com/uploads/inviter-202.png"'));
   });
 });
