@@ -101,8 +101,8 @@ export default function WorkerTasks() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <div>
-        <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl lg:hidden">Tasks</h1>
-        <p className="mt-1 hidden text-sm text-worker-text-muted lg:block">Keep track of what needs your attention and what has been paid.</p>
+        <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl">Tasks</h1>
+        <p className="mt-1 text-sm text-worker-text-muted">Keep track of what needs your attention and what has been paid.</p>
       </div>
 
       <div className="sticky top-16 z-20 -mx-1 bg-worker-bg/95 px-1 py-2 backdrop-blur sm:-mx-2 sm:px-2" role="tablist" aria-label="Task status">

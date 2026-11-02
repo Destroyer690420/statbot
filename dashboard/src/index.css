@@ -312,6 +312,14 @@
   .worker-route-fade {
     animation: worker-route-fade 150ms ease-out both;
   }
+
+  .worker-drawer {
+    animation: worker-drawer-in 180ms ease-out both;
+  }
+
+  .worker-backdrop {
+    animation: worker-backdrop-in 180ms ease-out both;
+  }
 }
 
 @keyframes modal-in {
@@ -334,8 +342,28 @@
   }
 }
 
+@keyframes worker-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes worker-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .worker-route-fade,
+  .worker-drawer,
+  .worker-backdrop,
   .modal-panel {
     animation: none;
   }

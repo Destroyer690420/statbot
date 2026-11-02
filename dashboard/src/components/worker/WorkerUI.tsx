@@ -7,7 +7,7 @@ export function WorkerCard({ children, className = '', id, as: Tag = 'div' }: { 
 
 export function WorkerPageTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="mb-6 lg:hidden">
+    <div className="mb-6">
       <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl">{title}</h1>
       {subtitle ? <p className="mt-1 text-sm text-worker-text-muted">{subtitle}</p> : null}
     </div>

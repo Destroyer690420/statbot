@@ -196,7 +196,7 @@ export async function getMeData(workerId: string, ticketChannelId: string): Prom
 export async function getHomeData(workerId: string): Promise<{
   stats: ReturnType<typeof computeHomeStats>;
   actionNeeded: ReturnType<typeof buildActionNeeded>;
-  walletSnapshot: { thisWeekTotal: number; awaitingEstimated: number; lifetimePaid: number };
+  walletSnapshot: { awaitingEstimated: number; lastWeekPaid: number; lifetimePaid: number };
 }> {
   const bundle = await loadWorkerBundle(workerId);
   const now = new Date();
@@ -226,8 +226,9 @@ export async function getHomeData(workerId: string): Promise<{
     stats,
     actionNeeded,
     walletSnapshot: {
-      thisWeekTotal: wallet.thisWeek.total,
       awaitingEstimated: wallet.awaitingAll.estimated,
+      // Actual amount credited for tasks completed in the previous IST payout week.
+      lastWeekPaid: wallet.lastWeek.paid,
       lifetimePaid: wallet.lifetimePaid,
     },
   };

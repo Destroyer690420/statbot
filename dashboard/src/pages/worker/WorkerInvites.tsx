@@ -132,9 +132,6 @@ export default function WorkerInvites() {
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <WorkerPageTitle title="Invites" subtitle="People you invited and what you have earned from them." />
-        <p className="hidden text-sm text-worker-text-muted lg:block">
-          People you invited and what you have earned from them.
-        </p>
       </div>
 
       <PaymentQrCard />

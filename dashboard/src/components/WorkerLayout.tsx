@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ExternalLink, Hash, Home, Layers, ListTodo, LogOut, User, UserPlus, Wallet } from 'lucide-react';
+import { BookOpen, Hash, Home, Layers, ListTodo, LogOut, Menu, User, UserPlus, Wallet, X } from 'lucide-react';
 import { useWorkerAuth } from '../hooks/useWorkerAuth';
 
 const TABS = [
@@ -8,7 +8,7 @@ const TABS = [
   { to: '/worker/tasks', label: 'Tasks', icon: ListTodo, end: false, needs: 'tasks' },
   { to: '/worker/wallet', label: 'Wallet', icon: Wallet, end: false, needs: 'tasks' },
   { to: '/worker/invites', label: 'Invites', icon: UserPlus, end: false, needs: 'invites' },
-  { to: '/worker/how-to', label: 'How to', icon: BookOpen, end: false, needs: null },
+  { to: '/worker/how-to', label: 'How-to', icon: BookOpen, end: false, needs: null },
 ] as const;
 
 function useNoIndex() {
@@ -32,54 +32,39 @@ function useNoIndex() {
   }, []);
 }
 
-function pageTitle(pathname: string) {
-  if (pathname === '/worker') return 'Home';
-  if (pathname.startsWith('/worker/tasks/')) return 'Task details';
-  if (pathname === '/worker/tasks') return 'Tasks';
-  if (pathname === '/worker/wallet') return 'Wallet';
-  if (pathname === '/worker/invites') return 'Invites';
-  if (pathname === '/worker/how-to') return 'How to';
-  return 'Worker panel';
-}
-
 function WorkerNavLink({
   to,
   label,
   icon: Icon,
   end,
-  mobile = false,
+  onNavigate,
 }: {
   to: string;
   label: string;
   icon: typeof Home;
   end: boolean;
-  mobile?: boolean;
+  onNavigate: () => void;
 }) {
   return (
     <NavLink
       to={to}
       end={end}
+      onClick={onNavigate}
       className={({ isActive }) =>
-        mobile
-          ? `relative flex min-h-[64px] flex-col items-center justify-center gap-1 px-2 py-2 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-worker-accent ${
-              isActive ? 'text-worker-accent' : 'text-worker-text-muted hover:text-worker-text'
-            }`
-          : `group relative flex min-h-[48px] items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent ${
-              isActive
-                ? 'bg-worker-accent/10 text-worker-text'
-                : 'text-worker-text-muted hover:bg-worker-surface-2 hover:text-worker-text'
-            }`
+        `group relative flex min-h-[48px] items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent ${
+          isActive
+            ? 'bg-worker-accent/10 text-worker-text'
+            : 'text-worker-text-muted hover:bg-worker-surface-2 hover:text-worker-text'
+        }`
       }
     >
       {({ isActive }) => (
         <>
           <span
-            className={`${mobile ? 'absolute inset-x-4 top-0 h-0.5 rounded-full' : 'absolute inset-y-2 left-0 w-0.5 rounded-full'} ${
-              isActive ? 'bg-worker-accent opacity-100' : 'opacity-0'
-            }`}
+            className={`absolute inset-y-2 left-0 w-0.5 rounded-full ${isActive ? 'bg-worker-accent opacity-100' : 'opacity-0'}`}
             aria-hidden="true"
           />
-          <Icon className={mobile ? 'h-5 w-5' : 'h-[18px] w-[18px]'} aria-hidden="true" />
+          <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
           <span>{label}</span>
         </>
       )}
@@ -92,8 +77,8 @@ export function WorkerLayout() {
   const { workerName, ticket, logout, capabilities } = useWorkerAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const firstName = workerName?.trim().split(/\s+/)[0] || 'Worker';
-  const currentTitle = pageTitle(location.pathname);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // A pure inviter has no tasks at all, so the work tabs would be permanently
   // empty for them: show only what this account can actually use. While
@@ -106,102 +91,125 @@ export function WorkerLayout() {
   });
   const isPureInviter = capabilities !== null && !capabilities.hasTasks && capabilities.hasInvites;
 
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleKeyDown);
+    closeButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen]);
+
   // Land a ticket-less inviter straight on the invites dashboard.
   if (isPureInviter && location.pathname === '/worker') {
     return <Navigate to="/worker/invites" replace />;
   }
 
   const handleLogout = async () => {
+    setMenuOpen(false);
     await logout();
     navigate('/worker/login', { replace: true });
   };
 
   return (
     <div className="min-h-screen bg-worker-bg text-worker-text">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[220px] flex-col border-r border-worker-border bg-worker-surface lg:flex">
-        <div className="flex items-center gap-2.5 border-b border-worker-border px-5 py-6">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-worker-accent/15 text-worker-accent">
-            <Layers className="h-[18px] w-[18px]" aria-hidden="true" />
-          </span>
-          <p className="min-w-0 truncate font-display text-lg font-bold text-worker-text">Task desk</p>
-        </div>
-        <nav className="flex-1 space-y-1 px-3 py-5" aria-label="Worker navigation">
-          {tabs.map((tab) => (
-            <WorkerNavLink key={tab.to} {...tab} />
-          ))}
-        </nav>
-        <div className="space-y-3 border-t border-worker-border p-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-worker-border bg-worker-surface-2 text-worker-text-muted">
-              <User className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-worker-text">{workerName || 'Worker'}</p>
-              <p className="mt-0.5 text-xs text-worker-text-muted">Signed in</p>
-            </div>
-          </div>
-          {ticket?.discordUrl ? (
-            <a href={ticket.discordUrl} target="_blank" rel="noopener noreferrer" className="worker-secondary-button w-full">
-              <Hash className="h-4 w-4" aria-hidden="true" />
-              Open ticket
-            </a>
-          ) : null}
-          <button type="button" onClick={handleLogout} className="worker-ghost-button w-full justify-start text-worker-text-muted">
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            Logout
+      <header className="sticky top-0 z-30 border-b border-worker-border bg-worker-bg/95 backdrop-blur">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+          <p className="min-w-0 truncate font-display text-lg font-bold tracking-tight text-worker-text">Reddit Tasks</p>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            className="worker-icon-button -mr-2"
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+            aria-controls="worker-menu"
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-      </aside>
+      </header>
 
-      <div className="lg:pl-[220px]">
-        <header className="sticky top-0 z-30 border-b border-worker-border bg-worker-bg/95 backdrop-blur">
-          <div className="mx-auto flex h-16 min-w-0 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-            <div className="flex min-w-0 items-center gap-2 lg:hidden">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-worker-text">{firstName}</p>
-                <p className="truncate text-xs text-worker-text-muted">Worker panel</p>
+      <main className="mx-auto w-full max-w-6xl px-4 pb-12 pt-4 sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
+        <div key={location.pathname} className="worker-route-fade">
+          <Outlet />
+        </div>
+      </main>
+
+      {menuOpen ? (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Worker menu">
+          <div
+            className="worker-backdrop absolute inset-0 bg-black/60"
+            onClick={() => setMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <aside
+            id="worker-menu"
+            className="worker-drawer absolute inset-y-0 right-0 flex w-80 max-w-[85vw] flex-col border-l border-worker-border bg-worker-surface shadow-pop"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-worker-border px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-worker-accent/15 text-worker-accent">
+                  <Layers className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <p className="min-w-0 truncate font-display text-base font-bold text-worker-text">Reddit Tasks</p>
+              </div>
+              <button
+                ref={closeButtonRef}
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                className="worker-icon-button -mr-1"
+                aria-label="Close menu"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4" aria-label="Worker navigation">
+              {tabs.map((tab) => (
+                <WorkerNavLink key={tab.to} {...tab} onNavigate={() => setMenuOpen(false)} />
+              ))}
+            </nav>
+
+            <div className="space-y-3 border-t border-worker-border p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-worker-border bg-worker-surface-2 text-worker-text-muted">
+                  <User className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-worker-text">{workerName || 'Worker'}</p>
+                  <p className="mt-0.5 text-xs text-worker-text-muted">Signed in</p>
+                </div>
               </div>
               {ticket?.discordUrl ? (
                 <a
                   href={ticket.discordUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="worker-secondary-button min-w-0 max-w-[132px] px-2.5 text-xs"
+                  onClick={() => setMenuOpen(false)}
+                  className="worker-secondary-button w-full"
                 >
-                  <Hash className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span className="truncate">{ticket.channelName || 'Ticket'}</span>
+                  <Hash className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{ticket.channelName || 'Open ticket'}</span>
                 </a>
               ) : null}
-            </div>
-            <h1 className="hidden min-w-0 truncate font-display text-lg font-semibold text-worker-text lg:block">{currentTitle}</h1>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
-              <button type="button" onClick={handleLogout} className="worker-icon-button lg:hidden" aria-label="Log out">
+              <button type="button" onClick={handleLogout} className="worker-ghost-button w-full justify-start text-worker-text-muted">
                 <LogOut className="h-4 w-4" aria-hidden="true" />
+                Logout
               </button>
-              {ticket?.discordUrl ? (
-                <a href={ticket.discordUrl} target="_blank" rel="noopener noreferrer" className="worker-secondary-button hidden lg:inline-flex">
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                  Open ticket
-                </a>
-              ) : null}
             </div>
-          </div>
-        </header>
-
-        <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6 sm:pt-8 lg:px-10 lg:pb-12 lg:pt-10">
-          <div key={location.pathname} className="worker-route-fade">
-            <Outlet />
-          </div>
-        </main>
-      </div>
-
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-worker-border bg-worker-surface/95 backdrop-blur lg:hidden" aria-label="Worker navigation">
-        <div className="mx-auto grid max-w-2xl grid-cols-5">
-          {tabs.map((tab) => (
-            <WorkerNavLink key={tab.to} {...tab} mobile />
-          ))}
+          </aside>
         </div>
-      </nav>
+      ) : null}
     </div>
   );
 }
