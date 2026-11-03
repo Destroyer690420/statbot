@@ -637,13 +637,17 @@ export class InactiveTicketService {
     ];
 
     if (totalProtected > 0) {
-      lines.push(`\n📋 **Sample Protected Tickets (first 10):**`);
-      for (const p of protectedRecords.slice(0, 10)) {
+      lines.push(`\n📋 **Sample Protected Tickets (first 5):**`);
+      for (const p of protectedRecords.slice(0, 5)) {
         const worker = p.workerId ? `<@${p.workerId}>` : (p.workerUsername || 'unknown');
-        lines.push(`• **#${p.channelName || p.channelId}** (${worker}): ${p.protectionReason || 'Protected'}`);
+        let shortReason = p.protectionReason || 'Protected';
+        if (shortReason.length > 70) {
+          shortReason = shortReason.slice(0, 67) + '...';
+        }
+        lines.push(`• **#${p.channelName || p.channelId}** (${worker}): ${shortReason}`);
       }
-      if (totalProtected > 10) {
-        lines.push(`\n_...and ${totalProtected - 10} more in attached file._`);
+      if (totalProtected > 5) {
+        lines.push(`\n_...and ${totalProtected - 5} more in attached file._`);
       }
     } else {
       lines.push(`No tickets are currently protected.`);
