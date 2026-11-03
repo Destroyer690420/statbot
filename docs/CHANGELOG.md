@@ -3,6 +3,18 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-03
+### Changed + deployed (2026-11-03 at `f63886f` — app rebuild, no migration)
+- **Pending Payment Only Protection & Stale Inactive Task Cleanup (>30d).**
+  - **Refined Protection Rules**: Per user requirement, ONLY tickets with pending payments are protected from deletion (`(status in ['COMPLETED', 'ARCHIVED'] && !paidTaskIds.has(id))` or payable referral commissions). Tasks in progress (`PENDING`, `ACCEPTED`, reminder/insight states) older than 30 days do NOT protect tickets. When such inactive tickets (30+ days) are deleted, any associated stale tasks in PostgreSQL are closed cleanly with `status = 'CANCELLED'`, `cancelledReason = 'ticket_inactivity_30d'`.
+  - **Zero Disk Backups**: Zero transcripts, zero attachment downloads, zero disk files generated. All critical task history and payment records are preserved in PostgreSQL.
+  - **Live Cleanup Execution**: Swept 313 channels in the Discord server:
+    - 270 channels active (< 30 days inactivity)
+    - 43 channels inactive (>= 30 days)
+    - 5 channels protected due to pending payment: `#ticket-0151` (unpaid referral), `#ticket-0173` (unpaid referral), `#ticket-0250` (unpaid task #1124189), `#ticket-0281` (unpaid task #1110109), `#ticket-0368` (unpaid referral)
+    - 38 inactive channels deleted directly from Discord
+  - **Admin Notifications**: Initial Cleanup Report and updated Protected Tickets Report (with interactive refresh button, Daily Outreach link button, and `protected-tickets.txt` attachment) sent in DM to admin mac (`1299323714101317715`).
+  - **Testing**: 97/97 Jest test suites / 1,297 tests pass; TypeScript typechecks clean; deployed to production `161.118.164.85`.
+
 ### Changed + deployed (2026-11-03 at `5a7da7e` — app + dashboard rebuild, no migration)
 - **Direct inactive ticket deletion without disk backup, protected tickets DM with Discord buttons, and Daily Outreach delete button.**
   - **No Disk Backup Requirement**: Removed transcript creation and attachment downloading on ticket channel deletion per user instruction ("just payment history and task history is enough nothing else has to be saved"). Payment history (`PayoutItem`, `PayoutBatch`) and task history (`Task`) remain permanently preserved in PostgreSQL. Cleaned up 72.9MB of disk attachments from `/app/uploads/ticket-backups/` in container storage.
