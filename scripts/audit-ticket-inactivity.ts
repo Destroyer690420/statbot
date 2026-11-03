@@ -149,8 +149,9 @@ export async function auditSingleTicket(
   const protectionReasons: string[] = [];
 
   // Check tasks in this channel
+  let hasRecentInProgressTask = false;
   for (const t of tasks) {
-    // Active in-progress states
+    // In-progress tasks
     if ([
       'ACCEPTED',
       'PENDING',
@@ -159,10 +160,15 @@ export async function auditSingleTicket(
       'REMINDER_70_SENT',
       'INSIGHT_70_RECEIVED',
     ].includes(t.status)) {
-      protectionReasons.push(`Active task ${t.id} (${t.status})`);
+      const taskCreatedAt = (t as any).createdAt ? new Date((t as any).createdAt) : channel.createdAt;
+      const taskAgeDays = (now.getTime() - taskCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (taskAgeDays < 30) {
+        hasRecentInProgressTask = true;
+      }
+      // Tasks pending >= 30 days do NOT protect the ticket
     }
 
-    // Completed or archived but not yet paid
+    // Completed or archived but not yet paid (Pending Payment)
     if ((t.status === 'COMPLETED' || t.status === 'ARCHIVED') && !paidTaskIds.has(t.id)) {
       if (t.cancelledReason === null || t.cancelledReason === undefined) {
         protectionReasons.push(`Unpaid task ${t.id} (${t.status})`);
@@ -196,7 +202,7 @@ export async function auditSingleTicket(
   }
 
   const isProtected = protectionReasons.length > 0;
-  const eligibleForDeletion = isInactive30Plus && !isProtected;
+  const eligibleForDeletion = isInactive30Plus && !isProtected && !hasRecentInProgressTask;
 
   return {
     channelId: channel.id,

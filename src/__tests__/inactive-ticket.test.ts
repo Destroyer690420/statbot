@@ -55,6 +55,7 @@ describe('InactiveTicketService', () => {
     mockDb = {
       task: {
         findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       workerPortalAccess: {
         findUnique: jest.fn().mockResolvedValue(null),
@@ -155,11 +156,12 @@ describe('InactiveTicketService', () => {
       expect(audit.eligibleForDeletion).toBe(true);
     });
 
-    it('protects tickets with active in-progress tasks', async () => {
+    it('does NOT protect tickets whose in-progress tasks are older than 30 days', async () => {
       const channelCreatedAt = new Date('2026-08-01T00:00:00Z'); // 90 days ago
+      const taskCreatedAt = new Date('2026-08-15T00:00:00Z');    // ~80 days ago
 
       mockDb.task.findMany.mockResolvedValue([
-        { id: 'TASK-1', status: 'PENDING', assignedUserId: 'worker-3', cancelledReason: null },
+        { id: 'TASK-STALE', status: 'PENDING', createdAt: taskCreatedAt, assignedUserId: 'worker-3', cancelledReason: null },
       ]);
 
       const channel: any = {
@@ -176,9 +178,34 @@ describe('InactiveTicketService', () => {
       const audit = await service.auditChannel(channel, staffSet, paidTaskIds, now);
 
       expect(audit.isInactive30Plus).toBe(true);
-      expect(audit.isProtected).toBe(true);
-      expect(audit.protectionReasons[0]).toContain('Active in-progress task TASK-1');
-      expect(audit.eligibleForDeletion).toBe(false);
+      expect(audit.isProtected).toBe(false);
+      expect(audit.eligibleForDeletion).toBe(true);
+    });
+
+    it('retains (does NOT delete) tickets with recent in-progress tasks (< 30 days old)', async () => {
+      const channelCreatedAt = new Date('2026-08-01T00:00:00Z');
+      const taskCreatedAt = new Date('2026-10-30T00:00:00Z'); // 4 days ago
+
+      mockDb.task.findMany.mockResolvedValue([
+        { id: 'TASK-RECENT', status: 'PENDING', createdAt: taskCreatedAt, assignedUserId: 'worker-3', cancelledReason: null },
+      ]);
+
+      const channel: any = {
+        id: 'ch-3b',
+        name: 'ticket-0003b',
+        createdAt: channelCreatedAt,
+        members: new Map(),
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map()),
+        },
+      };
+
+      const now = new Date('2026-11-03T12:00:00Z');
+      const audit = await service.auditChannel(channel, staffSet, paidTaskIds, now);
+
+      expect(audit.isInactive30Plus).toBe(true);
+      expect(audit.isProtected).toBe(false); // Only pending payments protect
+      expect(audit.eligibleForDeletion).toBe(false); // Retained because task is < 30 days old
     });
 
     it('protects tickets with unpaid completed tasks', async () => {

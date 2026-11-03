@@ -188,8 +188,10 @@ export class InactiveTicketService {
     const isInactive25Plus = inactivityDays >= TICKET_INACTIVITY_FINAL_WARNING_DAYS;
     const isInactive30Plus = inactivityDays >= TICKET_INACTIVITY_DELETE_DAYS;
 
-    // 3. Critical Data Protection Rules
+    // 3. Critical Data Protection Rules: ONLY pending payments protect a ticket.
+    // Tasks pending for >= 30 days do NOT protect; stale tasks will be cancelled upon deletion.
     const protectionReasons: string[] = [];
+    let hasRecentInProgressTask = false;
 
     for (const t of tasks) {
       // In-progress tasks
@@ -201,10 +203,15 @@ export class InactiveTicketService {
         'REMINDER_70_SENT',
         'INSIGHT_70_RECEIVED',
       ].includes(t.status)) {
-        protectionReasons.push(`Active in-progress task ${t.id} (${t.status})`);
+        const taskCreatedAt = (t as any).createdAt ? new Date((t as any).createdAt) : channel.createdAt;
+        const taskAgeDays = (now.getTime() - taskCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
+        if (taskAgeDays < 30) {
+          hasRecentInProgressTask = true;
+        }
+        // Tasks pending >= 30 days do NOT protect the ticket
       }
 
-      // Unpaid completed or archived tasks
+      // Unpaid completed or archived tasks (Pending Payment)
       if ((t.status === 'COMPLETED' || t.status === 'ARCHIVED') && !paidTaskIds.has(t.id)) {
         if (t.cancelledReason === null || t.cancelledReason === undefined) {
           protectionReasons.push(`Pending payment on task ${t.id} (${t.status})`);
@@ -212,7 +219,7 @@ export class InactiveTicketService {
       }
     }
 
-    // Check worker's pending referral commissions
+    // Check worker's pending referral commissions (Pending Payment)
     if (workerId) {
       try {
         const rates = await commissionService.getCommissionRates();
@@ -238,7 +245,7 @@ export class InactiveTicketService {
     }
 
     const isProtected = protectionReasons.length > 0;
-    const eligibleForDeletion = isInactive30Plus && !isProtected;
+    const eligibleForDeletion = isInactive30Plus && !isProtected && !hasRecentInProgressTask;
 
     return {
       channelId: channel.id,
@@ -327,6 +334,7 @@ export class InactiveTicketService {
     const staffSet = new Set(getAllAdminIds());
     const paidTaskIds = await payoutService.getPaidTaskIds();
     const now = new Date();
+    const db = getDb();
 
     const ticketChannels = [...guild.channels.cache.values()]
       .filter((c: any): c is TextChannel => (c instanceof TextChannel || Boolean(c.messages)) && c.name?.startsWith('ticket-'))
@@ -351,14 +359,22 @@ export class InactiveTicketService {
         }
 
         // Persist activity baseline in DB
+        const computedStatus = (audit.isInactive30Plus && audit.isProtected)
+          ? 'PROTECTED'
+          : (audit.isInactive30Plus
+            ? 'WARNED_25'
+            : (audit.isInactive25Plus
+              ? 'WARNED_25'
+              : (audit.isInactive15Plus ? 'WARNED_15' : 'ACTIVE')));
+
         await ticketInactivityRepository.upsertActivity(channel.id, {
           channelName: channel.name,
           workerId: audit.workerId,
           workerUsername: audit.workerUsername,
           lastActivityAt: audit.lastActivityAt,
           hasWorkerMessages: audit.hasWorkerMessages,
-          status: audit.isProtected ? 'PROTECTED' : (audit.isInactive30Plus ? 'WARNED_25' : (audit.isInactive25Plus ? 'WARNED_25' : (audit.isInactive15Plus ? 'WARNED_15' : 'ACTIVE'))),
-          protectionReason: audit.isProtected ? audit.protectionReasons.join('; ') : null,
+          status: computedStatus,
+          protectionReason: (audit.isInactive30Plus && audit.isProtected) ? audit.protectionReasons.join('; ') : null,
         }).catch((err) => logger.warn('DB upsertActivity error', { channelId: channel.id, error: err }));
 
         return { channel, audit };
@@ -367,7 +383,7 @@ export class InactiveTicketService {
 
     // Process actions sequentially to strictly respect Discord rate limits
     for (const { channel, audit } of audits) {
-      if (audit.isProtected) {
+      if (audit.isInactive30Plus && audit.isProtected) {
         protectedTickets.push({
           channelId: channel.id,
           channelName: channel.name,
@@ -401,6 +417,20 @@ export class InactiveTicketService {
           });
           continue;
         }
+
+        // Cancel any stale in-progress tasks in PostgreSQL so they do not hang
+        await db.task.updateMany({
+          where: {
+            channelId: channel.id,
+            status: { in: ['ACCEPTED', 'PENDING', 'REMINDER_20_SENT', 'INSIGHT_20_RECEIVED', 'REMINDER_70_SENT', 'INSIGHT_70_RECEIVED'] },
+          },
+          data: {
+            status: 'CANCELLED',
+            cancelledReason: 'ticket_inactivity_30d',
+          },
+        }).catch((err: unknown) => {
+          logger.warn('Failed to cancel stale tasks for deleted ticket', { channelId: channel.id, error: err });
+        });
 
         // Delete Discord ticket channel directly (payment & task history safely preserved in PostgreSQL)
         try {
@@ -494,7 +524,7 @@ export class InactiveTicketService {
     const inactive30Plus = audits.filter(({ audit }) => audit.isInactive30Plus).length;
     const inactive25Plus = audits.filter(({ audit }) => audit.isInactive25Plus && !audit.isInactive30Plus).length;
     const inactive15Plus = audits.filter(({ audit }) => audit.isInactive15Plus && !audit.isInactive25Plus).length;
-    const active = audits.filter(({ audit }) => !audit.isInactive30Plus && !audit.isProtected).length;
+    const active = audits.filter(({ audit }) => !audit.isInactive30Plus).length;
 
     return {
       scanned: audits.length,
