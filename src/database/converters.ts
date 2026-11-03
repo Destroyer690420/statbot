@@ -9,6 +9,7 @@ import {
   CommissionBatch,
   PayoutSettings, CommissionRates,
   InviteDetection, InviteDetectionStatus,
+  TicketInactivity,
 } from '../types';
 
 type PrismaTask = {
@@ -227,5 +228,24 @@ export function toInviteDetection(r: PrismaInviteDetection): InviteDetection {
     ticketChannelId: r.ticketChannelId, ticketName: r.ticketName,
     status: r.status as InviteDetectionStatus,
     createdAt: r.createdAt, updatedAt: r.updatedAt,
+  };
+}
+
+export function toTicketInactivity(r: any): TicketInactivity {
+  return {
+    channelId: r.channelId,
+    channelName: r.channelName,
+    workerId: r.workerId,
+    workerUsername: r.workerUsername,
+    lastActivityAt: r.lastActivityAt,
+    hasWorkerMessages: r.hasWorkerMessages,
+    firstWarningSentAt: r.firstWarningSentAt,
+    finalWarningSentAt: r.finalWarningSentAt,
+    status: r.status,
+    protectionReason: r.protectionReason,
+    backupPath: r.backupPath,
+    deletedAt: r.deletedAt,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
   };
 }

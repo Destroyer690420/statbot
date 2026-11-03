@@ -17,7 +17,7 @@
  */
 import { Client, TextChannel } from 'discord.js';
 import { AuditAction } from '../types';
-import { OWNER_USER_ID } from '../config/constants';
+import { LINK_ESCALATION_BURST_GRACE_MS, OWNER_USER_ID } from '../config/constants';
 import { deliverySentAt, isEscalateDue, isNudgeCandidate } from '../utils/link-nudge';
 import { outreachService } from './outreach.service';
 import { outreachRepository, taskRepository } from '../database/repositories';
@@ -43,7 +43,7 @@ interface EscalationRound {
 let openRound: EscalationRound | null = null;
 
 /** Currently-overdue posts, most overdue first (fresh state, no cache). */
-export async function collectOverduePool(): Promise<{ id: string; sentAt: number }[]> {
+export async function collectOverduePool(maxAgeMs: number = Infinity): Promise<{ id: string; sentAt: number }[]> {
   const rows = await taskRepository.findUnsubmittedSentPosts().catch(() => []);
   const now = Date.now();
   const pool: { id: string; sentAt: number }[] = [];
@@ -52,6 +52,7 @@ export async function collectOverduePool(): Promise<{ id: string; sentAt: number
       const task = toTask(row as any);
       if (!isNudgeCandidate(task)) continue;
       const sentAt = deliverySentAt(task).getTime();
+      if (maxAgeMs !== Infinity && now - sentAt > maxAgeMs) continue;
       if (isEscalateDue(task, now)) pool.push({ id: task.id, sentAt });
     } catch {
       // skip unreadable rows
@@ -63,14 +64,41 @@ export async function collectOverduePool(): Promise<{ id: string; sentAt: number
 
 /**
  * Escalation trigger: pool everything overdue now and blast it — unless an
- * escalation round is already open (join it) or a foreign round is open
- * (defer; the next trigger retries — never supersede a live hour burst).
+ * escalation round is already open (join it) or a live round is open (defer;
+ * the recovery sweep retries in ~2 min). An under-filled BURST round only
+ * holds us off while its reply window is fresh: after
+ * {@link LINK_ESCALATION_BURST_GRACE_MS} it is superseded, because a burst
+ * blast otherwise stays OPEN until the next :10 IST and starves the +15 min
+ * reassignment for a whole hour. Manual and escalation blasts are never
+ * superseded implicitly.
+ *
+ * Serialized: the per-task +15 job and the 2-min recovery sweep can fire at
+ * the same time. Without a mutex both would see no open round and open two
+ * competing blasts (the second superseding the first).
  */
 export async function escalateDueTasks(
   discordClient: Client,
+  opts: { maxAgeMs?: number } = {},
+): Promise<{ blasted: boolean; blastId: string | null; pooled: number; deferred: boolean }> {
+  return serializedEscalation(() => escalateRound(discordClient, opts.maxAgeMs));
+}
+
+let escalationTail: Promise<void> = Promise.resolve();
+function serializedEscalation<T>(fn: () => Promise<T>): Promise<T> {
+  const run = escalationTail.then(fn, fn);
+  escalationTail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function escalateRound(
+  discordClient: Client,
+  maxAgeMs?: number,
 ): Promise<{ blasted: boolean; blastId: string | null; pooled: number; deferred: boolean }> {
   const empty = { blasted: false, blastId: null as string | null, pooled: 0, deferred: false };
-  const pool = await collectOverduePool();
+  const pool = await collectOverduePool(maxAgeMs);
   const fresh = pool.filter(
     (p) => !(openRound && (openRound.taskIds.includes(p.id) || [...openRound.assigned.keys()].includes(p.id))),
   );
@@ -78,14 +106,36 @@ export async function escalateDueTasks(
 
   const openBlast = await outreachRepository.getOpenBlast().catch(() => null);
   if (openBlast && openBlast.createdBy !== ESCALATION_SENDER) {
-    logger.info('Escalation deferred: a live round is open (retry on next trigger)', {
+    const ageMs = Date.now() - new Date(openBlast.createdAt).getTime();
+    const staleBurst =
+      openBlast.createdBy === 'burst' &&
+      Number.isFinite(ageMs) &&
+      ageMs >= LINK_ESCALATION_BURST_GRACE_MS;
+    if (!staleBurst) {
+      logger.info('Escalation deferred: a live round is open (retry on next sweep)', {
+        openBlastId: openBlast.id,
+        pooled: pool.length,
+      });
+      return { ...empty, pooled: pool.length, deferred: true };
+    }
+    logger.info('Escalation supersedes an under-filled burst round (reply window over)', {
       openBlastId: openBlast.id,
+      ageMs,
       pooled: pool.length,
     });
-    return { ...empty, pooled: pool.length, deferred: true };
   }
 
-  if (openBlast && openRound && openBlast.id === openRound.blastId && fresh.length > 0) {
+  // Adoption is only for OUR rounds: adopting a foreign blast would attach
+  // escalation hooks to a burst/manual round and steal its replies.
+  const ourOpenBlast = openBlast && openBlast.createdBy === ESCALATION_SENDER ? openBlast : null;
+
+  if (ourOpenBlast && openRound && ourOpenBlast.id === openRound.blastId) {
+    if (fresh.length === 0) {
+      // Already tracking this round and nothing new is overdue — the sweep's
+      // steady state. Never fall through and reopen the same round (that
+      // would re-blast every contacted ticket every sweep tick).
+      return { blasted: false, blastId: ourOpenBlast.id, pooled: openRound.taskIds.length, deferred: false };
+    }
     // Join the live round: grow its slots, zero new messages (burst-merge
     // semantics — replies are still flowing into it).
     for (const p of fresh) {
@@ -93,34 +143,35 @@ export async function escalateDueTasks(
     }
     const slackers = await slackerSet(openRound.taskIds);
     openRound.slackers = slackers;
-    await outreachRepository.bumpBlastSlots(openBlast.id, fresh.length).catch(() => undefined);
+    await outreachRepository.bumpBlastSlots(ourOpenBlast.id, fresh.length).catch(() => undefined);
     logger.info('Escalation joined the live round', {
-      blastId: openBlast.id,
+      blastId: ourOpenBlast.id,
       joined: fresh.length,
       pooled: openRound.taskIds.length,
     });
-    return { blasted: false, blastId: openBlast.id, pooled: openRound.taskIds.length, deferred: false };
+    return { blasted: false, blastId: ourOpenBlast.id, pooled: openRound.taskIds.length, deferred: false };
   }
 
-  if (openBlast && (!openRound || openBlast.id !== openRound.blastId)) {
+  if (ourOpenBlast && (!openRound || ourOpenBlast.id !== openRound.blastId)) {
     // An escalation blast is open but this process lost its round map
     // (restart): adopt it rather than opening a competing blast.
     openRound = {
-      blastId: openBlast.id,
+      blastId: ourOpenBlast.id,
       taskIds: pool.map((p) => p.id),
       assigned: new Map(),
       slackers: await slackerSet(pool.map((p) => p.id)),
       createdAt: Date.now(),
     };
-    outreachService.setBlastHooksFor(openBlast.id, {
+    outreachService.setBlastHooksFor(ourOpenBlast.id, {
       onReply: (blastId, channelId, workerId, client) => handleEscalationReply(blastId, channelId, workerId, client),
       onClosed: (blastId) => closeEscalationForBlast(blastId, discordClient),
     });
-    logger.info('Escalation adopted the open round after restart', { blastId: openBlast.id, pooled: pool.length });
-    return { blasted: false, blastId: openBlast.id, pooled: pool.length, deferred: false };
+    logger.info('Escalation adopted the open round after restart', { blastId: ourOpenBlast.id, pooled: pool.length });
+    return { blasted: false, blastId: ourOpenBlast.id, pooled: pool.length, deferred: false };
   }
 
-  // Fresh round for everything overdue.
+  // Fresh round for everything overdue. beginBlast supersedes any foreign
+  // round here (a stale burst, by the check above).
   const taskIds = pool.map((p) => p.id);
   const slackers = await slackerSet(taskIds);
   const blast = await outreachService.beginBlast(discordClient, taskIds.length, ESCALATION_SENDER);

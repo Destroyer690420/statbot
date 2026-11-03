@@ -197,6 +197,9 @@ export enum AuditAction {
   LINK_NUDGE_SENT = 'LINK_NUDGE_SENT',
   LINK_ESCALATED = 'LINK_ESCALATED',
   DIGEST_SENT = 'DIGEST_SENT',
+  TICKET_WARNED = 'TICKET_WARNED',
+  TICKET_DELETED = 'TICKET_DELETED',
+  TICKET_PROTECTED = 'TICKET_PROTECTED',
 }
 
 export interface AuditLog {
@@ -517,4 +520,25 @@ export interface ValidationResult {
   nameVerdict?: 'block' | 'quarantine' | null;
   nameMatched?: string | null;
   nameSignal?: ContentScreenSignal;
+}
+
+// ─── Ticket Inactivity ───────────────────────────────────────
+
+export type TicketInactivityStatus = 'ACTIVE' | 'WARNED_15' | 'WARNED_25' | 'PROTECTED' | 'DELETED';
+
+export interface TicketInactivity {
+  channelId: string;
+  channelName: string | null;
+  workerId: string | null;
+  workerUsername: string | null;
+  lastActivityAt: Date;
+  hasWorkerMessages: boolean;
+  firstWarningSentAt: Date | null;
+  finalWarningSentAt: Date | null;
+  status: string;
+  protectionReason: string | null;
+  backupPath: string | null;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }

@@ -913,3 +913,32 @@ ALTER TABLE "WorkerPaymentInfo" ADD COLUMN IF NOT EXISTS "payeeName" TEXT;
 -- catch up a missed send within its grace window. Enum-only, additive,
 -- safe to re-run.
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'DIGEST_SENT';
+
+-- ============================================================
+-- Migration: Automatic inactive ticket management system
+-- ============================================================
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TICKET_WARNED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TICKET_DELETED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TICKET_PROTECTED';
+
+CREATE TABLE IF NOT EXISTS "TicketInactivity" (
+  "channelId" TEXT NOT NULL,
+  "channelName" TEXT,
+  "workerId" TEXT,
+  "workerUsername" TEXT,
+  "lastActivityAt" TIMESTAMP(3) NOT NULL,
+  "hasWorkerMessages" BOOLEAN NOT NULL DEFAULT false,
+  "firstWarningSentAt" TIMESTAMP(3),
+  "finalWarningSentAt" TIMESTAMP(3),
+  "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+  "protectionReason" TEXT,
+  "backupPath" TEXT,
+  "deletedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "TicketInactivity_pkey" PRIMARY KEY ("channelId")
+);
+
+CREATE INDEX IF NOT EXISTS "TicketInactivity_status_idx" ON "TicketInactivity"("status");
+CREATE INDEX IF NOT EXISTS "TicketInactivity_lastActivityAt_idx" ON "TicketInactivity"("lastActivityAt");
+CREATE INDEX IF NOT EXISTS "TicketInactivity_workerId_idx" ON "TicketInactivity"("workerId");

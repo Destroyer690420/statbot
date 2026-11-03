@@ -158,13 +158,13 @@ Source: `scripts/goparttime-mobile.user.js`; served at
 **instead of** (not alongside) the desktop script on the phone — running both
 would double-fire the autofill.
 
-## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.2.2, DEPLOYED 2026-10-29 at `09a00c0` — tab update required)
+## 5h. Link-submit executor — `goparttime-submit.user.js` (v1.3.0 built 2026-10-31 — NOT deployed; v1.2.2 served since 2026-10-29 at `09a00c0`)
 
 Dedicated tab that finishes the Submit Link loop: polls `GET /submit-jobs/pending`
 every ~5s (own tab id; the response now also carries `feedbackJobs`, which older
 tabs ignore), leases one job — feedback jobs first (deadline shields), then submit
-jobs — scans **every** `/my-tasks/todo?page=N` page exactly once (bounded 10) for
-the card by Task ID, then:
+jobs — starts its `/my-tasks/todo` hunt at **page 1** and walks forward
+(`1 → 2 → 3 …`, bounded 10) until the card is found or the list ends, then:
 - submit jobs: unchanged (fast-path Server Action, dialog fallback, authoritative
 verify, `setReactInputValue`, 3–8s human wait).
 - feedback jobs (new in v1.2.0): clicks the card's exact-text "Feedback" button,
@@ -176,16 +176,22 @@ dialog's own Submit. Verify: intercepted `success:true`, else dialog auto-closed
 `POST /feedback-jobs/:id/result` — **v1.2.1 retries that report** (3 tries, 2s/4s
 backoff; 404 = final): a lost verdict used to leave the job leased and the 5-min
 lease reclaim then re-submitted the same feedback (paired with the server-side
-Decision 48 hardening). **v1.2.2 fixes the multi-page hunt**: the old walk went
-forward only from whatever page the tab was left on (usually the last page of the
-previous job) and gave up at the last page, so a card on an earlier page was never
-searched (reported "card not found"). The hunt now persists the pages already
-searched in the in-flight job (`active.scan`, sessionStorage across `?page=` hops),
-wraps from the current/last page back to page 1, and stops only after every page
-1..max was checked once — so page 4 → 1 → 2 → 3 finds a card anywhere. Empty /
-out-of-range pages (list shrank after the tab sat on page 4) no longer abort the
-hunt; they just advance to the next unvisited page. Identical walk for Feedback jobs.
-In-flight job (either kind) survives `?page=` hops
+Decision 48 hardening). **v1.3.0 fixes the multi-page hunt for good**: every new
+job now forces a fresh `/my-tasks/todo?page=1` load and walks forward
+(`1 → 2 → 3 …`) until the card is found or the list ends. The old v1.2.2 walk
+still started on whatever page the tab was left on (usually the last page of the
+previous job) and depended on `maxTodoPages()` reading the pagination markup, so
+a card on page 2 could still be missed while the tab sat on page 3/4; the served
+copy had also never reached the executor tab (manual Tampermonkey update
+pending), so the browser kept running the forward-only v1.2.1. The hunt state
+(`page`, `nextPage`, `visited`, `lastFingerprint`, `sawCards`) lives in the
+in-flight job (`active.hunt`, sessionStorage across `?page=` hops): the next page
+is only recorded after a page actually renders, an empty page or a repeated card
+set (site ignored `?page=`) ends the walk, a failed/redirected navigation retries
+once then gives up instead of looping, and `MAX_PAGES` (10) bounds a broken site.
+A pre-1.3.0 in-flight job (`active.scan`) is migrated to a fresh page-1 hunt.
+Identical walk for Feedback jobs. `@updateURL`/`@downloadURL` were added so future
+fixes can auto-update the tab. In-flight job (either kind) survives `?page=` hops
 via sessionStorage; status pill bottom-left (Send owns bottom-right). Shares storage
 keys (`gpt_api_url`, `gpt_api_key`) so no new configuration. Runs ALONE on its tab —
 never the watcher tab (it never touches `/tasks`, claims, or accept buttons).

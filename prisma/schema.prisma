@@ -77,6 +77,9 @@ enum AuditAction {
   LINK_NUDGE_SENT
   LINK_ESCALATED
   DIGEST_SENT
+  TICKET_WARNED
+  TICKET_DELETED
+  TICKET_PROTECTED
 }
 
 enum ReferralStatus {
@@ -628,4 +631,27 @@ model FailedTaskCheck {
   @@index([verdict])
   @@index([notifiedAt])
   @@index([lastSeenAt])
+}
+
+// Automatic inactive ticket management: tracks worker activity and warning/deletion
+// lifecycle per ticket channel.
+model TicketInactivity {
+  channelId          String    @id
+  channelName        String?
+  workerId           String?
+  workerUsername     String?
+  lastActivityAt     DateTime
+  hasWorkerMessages  Boolean   @default(false)
+  firstWarningSentAt DateTime?
+  finalWarningSentAt DateTime?
+  status             String    @default("ACTIVE")
+  protectionReason   String?
+  backupPath         String?
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status])
+  @@index([lastActivityAt])
+  @@index([workerId])
 }

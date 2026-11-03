@@ -1,3 +1,4 @@
+import { inactiveTicketService } from '../../services/inactive-ticket.service';
 import { Message, TextChannel } from 'discord.js';
 import { reminderService } from '../../services/reminder.service';
 import { taskService } from '../../services/task.service';
@@ -36,6 +37,16 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 
   try {
     await outreachService.onWorkerMessage(message.channel.id, message.author.id, message.client);
+
+    // Inactivity monitoring: any message from non-staff worker resets the ticket inactivity timer
+    if (!getAllAdminIds().includes(message.author.id)) {
+      await inactiveTicketService.onWorkerMessage(
+        message.channel.id,
+        message.author.id,
+        message.author.tag,
+        message.createdAt,
+      ).catch(() => undefined);
+    }
 
     // Automation Stage-2: worker reply within the 5-min confirmation window.
     await handleAutomationReply(message.channel.id, message.author.id).catch(() => undefined);

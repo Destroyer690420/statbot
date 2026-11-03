@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name         GoPartTime Link Submitter
 // @namespace    https://goparttime.net/
-// @version      1.2.2
+// @version      1.3.0
+// @updateURL    https://statbot.duckdns.org/goparttime-submit.user.js
+// @downloadURL  https://statbot.duckdns.org/goparttime-submit.user.js
 // @description  Dedicated executor tab for GoPartTime link auto-submit + deadline feedback: polls Statbot for verified worker links and stalling notices, finds each task card across /my-tasks/todo pages, fills the Submit Task dialog (or the Feedback dialog with "submitting in a bit"), and clicks Submit. Never accepts tasks, never consumes accept-claim leases.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +20,19 @@
 // ==/UserScript==
 
 /**
+ * v1.3.0 - Every job starts its page hunt at page 1. v1.2.2 still started
+ * from whatever ?page=N the tab was left on and depended on maxTodoPages()
+ * reading the pagination markup; when the tab sat on page 3/4 (the usual
+ * leftover from the previous job) earlier pages could still be missed and the
+ * job reported "card not found". The hunt is now deterministic and
+ * forward-only: page 1 → 2 → 3 … until the card is found or the list ends.
+ * The next page is persisted in the in-flight job, so each full-page ?page=
+ * hop resumes exactly where it left off; a page with no cards (or a page that
+ * renders the same card set again because the site ignored ?page=) ends the
+ * walk. MAX_PAGES still bounds a broken site. Same walk for Feedback jobs.
+ * Adds @updateURL/@downloadURL so future fixes can reach the executor tab
+ * without a manual reinstall.
+ *
  * v1.2.2 - Multi-page hunt wraps around. The tab keeps whatever ?page=N it
  * was left on (usually the last page of the previous job), and the list
  * shifts as tasks are submitted, so the old forward-only walk missed cards
@@ -101,7 +116,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.2.2';
+  var VERSION = '1.3.0';
   var DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/goparttime',
     apiKey: '',
@@ -335,54 +350,98 @@
     } catch (e) { return 1; }
   }
 
-  function maxTodoPages() {
+  // Always load a specific todo page. A full navigation is deliberate: it
+  // gives the hunt a fresh card list (newly accepted posts never render
+  // without a reload) and the in-flight job in sessionStorage survives it.
+  function goToTodoPage(page) {
+    var target = '/my-tasks/todo?page=' + page;
     try {
-      var links = Array.from(document.querySelectorAll('nav[aria-label="pagination"] a[data-slot="pagination-link"][href]'));
-      var max = 1;
-      for (var i = 0; i < links.length; i++) {
-        var m = /[?&]page=(\d+)/.exec(links[i].getAttribute('href') || '');
-        if (m) max = Math.max(max, parseInt(m[1], 10));
-      }
-      return Math.min(max, MAX_PAGES);
-    } catch (e) { return 1; }
+      if (window.location.pathname + window.location.search === target) window.location.reload();
+      else window.location.href = target;
+    } catch (e) {
+      window.location.href = target;
+    }
   }
 
-  // --- Multi-page hunt state (survives ?page=N hops) ---
+  // Task IDs visible on the current page, used to detect a site that ignores
+  // ?page= and keeps rendering the same cards (without this the walk would
+  // keep probing identical pages until MAX_PAGES).
+  function cardTaskIds() {
+    try {
+      return Array.from(document.querySelectorAll('div[data-slot="card"]'))
+        .map(detectCardTaskId)
+        .filter(function (id) { return !!id; })
+        .sort();
+    } catch (e) { return []; }
+  }
+
+  // --- Forward-only page hunt (always starts at page 1) ---
   //
-  // A job must search EVERY todo page, not just pages after the one the tab
-  // happens to be on: the tab is often left on the last page of the previous
-  // job while the new card sits on page 1, and cards shift pages as other
-  // tasks are submitted. Track the pages already searched for this job and
-  // wrap forward (4 → 1 → 2 → 3) until each page was checked once.
+  // The tab is often left on the last page of the previous job, and cards
+  // shift pages as tasks are submitted. A new job therefore NEVER inherits
+  // that page: it starts at page 1 and walks forward until the card is found
+  // or the list ends. The state lives in the in-flight job (sessionStorage),
+  // so every full-page ?page=N hop resumes exactly where it left off.
 
-  // ─── page-scan:start ───
-  function trackScannedPage(active, page, hasCards) {
-    var scan = active.scan;
-    if (!scan || typeof scan !== 'object') {
-      scan = { visited: [], maxPages: 1, sawCards: false };
-      active.scan = scan;
-    }
-    if (!Array.isArray(scan.visited)) scan.visited = [];
-    // Landing on an out-of-range page (e.g. ?page=4 while only 2 pages exist)
-    // must not make the hunt think it has fewer pages than the tab can reach.
-    // Clamped to MAX_PAGES so a bogus ?page=999 can never start a long walk.
-    scan.maxPages = Math.min(MAX_PAGES, Math.max(scan.maxPages || 1, maxTodoPages(), page));
-    if (scan.visited.indexOf(page) === -1) scan.visited.push(page);
-    if (hasCards) scan.sawCards = true;
-    return scan;
+  // ─── page-hunt:start ───
+  function newHuntState() {
+    return { page: 1, nextPage: null, repeatCount: 0, started: false, visited: [], lastFingerprint: null, sawCards: false };
   }
 
-  // Next page not yet searched in this hunt (forward, wrapping past the last
-  // page), or null when pages 1..maxPages were all searched.
-  function nextUnvisitedPage(scan, page) {
-    var max = scan.maxPages || 1;
-    for (var step = 1; step <= max; step++) {
-      var candidate = ((page - 1 + step) % max) + 1;
-      if (scan.visited.indexOf(candidate) === -1) return candidate;
+  function ensureHuntState(active) {
+    var hunt = active.hunt;
+    if (!hunt || typeof hunt !== 'object') {
+      hunt = newHuntState();
+      active.hunt = hunt;
     }
-    return null;
+    if (!Array.isArray(hunt.visited)) hunt.visited = [];
+    if (typeof hunt.page !== 'number' || isNaN(hunt.page) || hunt.page < 1) hunt.page = 1;
+    if (hunt.page > MAX_PAGES) hunt.page = MAX_PAGES;
+    if (typeof hunt.nextPage === 'undefined') hunt.nextPage = null;
+    if (typeof hunt.repeatCount !== 'number') hunt.repeatCount = 0;
+    if (typeof hunt.started !== 'boolean') hunt.started = false;
+    if (typeof hunt.lastFingerprint === 'undefined') hunt.lastFingerprint = null;
+    if (typeof hunt.sawCards !== 'boolean') hunt.sawCards = false;
+    return hunt;
   }
-  // ─── page-scan:end ───
+
+  // Records the page just searched and returns the next page to load, or null
+  // when the forward walk is finished. `cardIds` is the current page's task-id
+  // list; an empty page (or an identical card set on consecutive pages) means
+  // there is nothing further to search.
+  function nextHuntPage(active, page, hasCards, cardIds) {
+    var hunt = ensureHuntState(active);
+    if (hunt.visited.indexOf(page) === -1) {
+      hunt.visited.push(page);
+      hunt.repeatCount = 0;
+    } else if (hunt.nextPage && hunt.nextPage !== page) {
+      // The same page was processed again before/after a navigation attempt.
+      // Retry the page already chosen once; a second repeat means the site
+      // keeps cycling us back (e.g. it redirects an out-of-range ?page=N),
+      // so end the walk instead of looping forever.
+      hunt.repeatCount += 1;
+      if (hunt.repeatCount < 2) return hunt.nextPage;
+      hunt.nextPage = null;
+      return null;
+    }
+    if (hasCards) hunt.sawCards = true;
+
+    if (!hasCards) {
+      hunt.nextPage = null;
+      return null;
+    }
+
+    var fingerprint = (cardIds || []).join(',');
+    if (hunt.lastFingerprint !== null && fingerprint === hunt.lastFingerprint) {
+      hunt.nextPage = null;
+      return null;
+    }
+    hunt.lastFingerprint = fingerprint;
+
+    hunt.nextPage = page >= MAX_PAGES ? null : page + 1;
+    return hunt.nextPage;
+  }
+  // ─── page-hunt:end ───
 
   function findCardByTaskId(taskId) {
     var cards = Array.from(document.querySelectorAll('div[data-slot="card"]'));
@@ -653,37 +712,63 @@
   var busy = false;
 
   async function processActiveJob(settings, tabId, active) {
-    // Stay on the submissions list; any other page navigates back to it.
+    var hunt = ensureHuntState(active);
+
+    // Stay on the submissions list; any other page navigates back to the
+    // page the hunt is on.
     if (!/^\/my-tasks\/todo\/?$/.test(window.location.pathname)) {
       console.log('[Submitter] job ' + active.jobId + ' waiting for /my-tasks/todo (on ' + window.location.pathname + ')');
-      window.location.href = '/my-tasks/todo';
+      saveActive(active);
+      goToTodoPage(hunt.nextPage || hunt.page);
       return;
     }
 
+    var currentPage = currentTodoPage();
+
+    // A brand-new job (or one resumed from a pre-1.3.0 state) must begin at
+    // page 1, no matter which page the tab was left on.
+    if (!hunt.started) {
+      if (currentPage !== 1) {
+        console.log('[Submitter] job ' + active.jobId + ' starting hunt at page 1 (on page ' + currentPage + ')');
+        saveActive(active);
+        goToTodoPage(1);
+        return;
+      }
+      hunt.started = true;
+      hunt.page = 1;
+      saveActive(active);
+    } else if (currentPage !== hunt.page) {
+      // The URL is authoritative: accept whatever page actually rendered (the
+      // site may redirect an out-of-range ?page=N). nextHuntPage's repeat
+      // guard ends the walk if the same page keeps coming back.
+      console.log('[Submitter] job ' + active.jobId + ' landed on page ' + currentPage + ' (expected ' + hunt.page + '), searching it');
+      hunt.page = currentPage;
+      saveActive(active);
+    }
+
     // Wait for this page's list to render. A page can legitimately have no
-    // cards (out of range after the list shrank); the hunt then moves on to
-    // the other pages instead of failing.
+    // cards (past the last page); the hunt then ends.
     var cardCount = document.querySelectorAll('div[data-slot="card"]').length;
-    for (var i = 0; i < 30 && cardCount === 0; i++) {
+    for (var i = 0; i < 60 && cardCount === 0; i++) {
       await sleep(150);
       cardCount = document.querySelectorAll('div[data-slot="card"]').length;
     }
 
-    // 1. Find the card, scanning EVERY page once (wraps from the last page
-    //    back to page 1, so an earlier page is never skipped).
+    // 1. Find the card. The hunt always starts at page 1 and walks forward
+    //    (1 → 2 → 3 …) until the card is found or the list ends.
     var card = findCardByTaskId(active.externalTaskId);
     if (!card) {
       var page = currentTodoPage();
-      var scan = trackScannedPage(active, page, cardCount > 0);
-      var nextPage = nextUnvisitedPage(scan, page);
+      var nextPage = nextHuntPage(active, page, cardCount > 0, cardTaskIds());
       if (nextPage !== null) {
-        console.log('[Submitter] task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + nextPage + ' (scanned ' + scan.visited.join(',') + ' of ' + scan.maxPages + ')');
+        console.log('[Submitter] task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + nextPage + ' (visited ' + hunt.visited.join(',') + ')');
+        setStatus(true, 'searching page ' + nextPage + ' for task #' + active.externalTaskId);
         saveActive(active);
-        window.location.href = '/my-tasks/todo?page=' + nextPage;
+        goToTodoPage(nextPage);
         return;
       }
-      var reason = scan.sawCards
-        ? 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo (may already be submitted).'
+      var reason = hunt.sawCards
+        ? 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo after searching page(s) ' + hunt.visited.join(',') + ' (may already be submitted).'
         : 'Submissions list did not render.';
       await reportResult(settings, active.jobId, false, reason);
       setStatus(false, 'task #' + active.externalTaskId + ' card missing');
@@ -825,36 +910,63 @@
   }
 
   async function processFeedbackJob(settings, tabId, active) {
-    // Stay on the submissions list; any other page navigates back to it.
+    var hunt = ensureHuntState(active);
+
+    // Stay on the submissions list; any other page navigates back to the
+    // page the hunt is on.
     if (!/^\/my-tasks\/todo\/?$/.test(window.location.pathname)) {
       console.log('[Submitter] feedback ' + active.jobId + ' waiting for /my-tasks/todo (on ' + window.location.pathname + ')');
-      window.location.href = '/my-tasks/todo';
+      saveActive(active);
+      goToTodoPage(hunt.nextPage || hunt.page);
       return;
     }
 
-    // Wait for this page's list to render; an empty page is not fatal — the
-    // hunt continues on the pages that have not been searched yet.
+    var currentPage = currentTodoPage();
+
+    // A brand-new feedback job (or one resumed from a pre-1.3.0 state) must
+    // begin at page 1, no matter which page the tab was left on.
+    if (!hunt.started) {
+      if (currentPage !== 1) {
+        console.log('[Submitter] feedback ' + active.jobId + ' starting hunt at page 1 (on page ' + currentPage + ')');
+        saveActive(active);
+        goToTodoPage(1);
+        return;
+      }
+      hunt.started = true;
+      hunt.page = 1;
+      saveActive(active);
+    } else if (currentPage !== hunt.page) {
+      // The URL is authoritative (same forward walk as submit jobs). Accept
+      // whatever page actually rendered; nextHuntPage's repeat guard ends the
+      // walk if the site keeps cycling us back.
+      console.log('[Submitter] feedback ' + active.jobId + ' landed on page ' + currentPage + ' (expected ' + hunt.page + '), searching it');
+      hunt.page = currentPage;
+      saveActive(active);
+    }
+
+    // Wait for this page's list to render; a page past the last one is not
+    // fatal — it just ends the forward walk.
     var cardCount = document.querySelectorAll('div[data-slot="card"]').length;
-    for (var i = 0; i < 30 && cardCount === 0; i++) {
+    for (var i = 0; i < 60 && cardCount === 0; i++) {
       await sleep(150);
       cardCount = document.querySelectorAll('div[data-slot="card"]').length;
     }
 
-    // 1. Find the card, scanning EVERY page once (wraps from the last page
-    //    back to page 1, so an earlier page is never skipped).
+    // 1. Find the card. The hunt always starts at page 1 and walks forward
+    //    (1 → 2 → 3 …) until the card is found or the list ends.
     var card = findCardByTaskId(active.externalTaskId);
     if (!card) {
       var page = currentTodoPage();
-      var scan = trackScannedPage(active, page, cardCount > 0);
-      var nextPage = nextUnvisitedPage(scan, page);
+      var nextPage = nextHuntPage(active, page, cardCount > 0, cardTaskIds());
       if (nextPage !== null) {
-        console.log('[Submitter] feedback task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + nextPage + ' (scanned ' + scan.visited.join(',') + ' of ' + scan.maxPages + ')');
+        console.log('[Submitter] feedback task #' + active.externalTaskId + ' not on page ' + page + ', trying page ' + nextPage + ' (visited ' + hunt.visited.join(',') + ')');
+        setStatus(true, 'searching page ' + nextPage + ' for feedback task #' + active.externalTaskId);
         saveActive(active);
-        window.location.href = '/my-tasks/todo?page=' + nextPage;
+        goToTodoPage(nextPage);
         return;
       }
-      var reason = scan.sawCards
-        ? 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo.'
+      var reason = hunt.sawCards
+        ? 'Task #' + active.externalTaskId + ' card not found on /my-tasks/todo after searching page(s) ' + hunt.visited.join(',') + '.'
         : 'Submissions list did not render.';
       await reportFeedbackResult(settings, active.jobId, false, reason);
       setStatus(false, 'feedback task #' + active.externalTaskId + ' card missing');
@@ -958,18 +1070,16 @@
           console.log('[Submitter] lease refused for ' + next.job.jobId + ': ' + (e && e.message));
           return;
         }
-        active = { kind: next.kind, jobId: next.job.jobId, externalTaskId: next.job.externalTaskId, url: next.job.submittedRedditUrl || null, attempt: next.job.attempt || 1 };
+        active = { kind: next.kind, jobId: next.job.jobId, externalTaskId: next.job.externalTaskId, url: next.job.submittedRedditUrl || null, attempt: next.job.attempt || 1, hunt: newHuntState() };
         saveActive(active);
         setStatus(true, 'leased ' + next.kind + ' task #' + active.externalTaskId);
-        // Fresh list first: newly accepted posts never render without a
-        // reload, so a job must never hunt on a stale DOM. After the reload
-        // the same active job resumes on the next tick (re-takes its own
-        // lease) on the current list. One reload per job — jobs are
-        // infrequent, polls are not. If the reload itself fails, the next
-        // tick resumes on whatever DOM is current (page-walk still applies).
+        // Fresh list first, ALWAYS from page 1: newly accepted posts never
+        // render without a reload, and the job must never inherit the page
+        // the tab was left on (that was the "card on page 2 is never found"
+        // bug). After the reload the same active job resumes on the next tick
+        // (re-takes its own lease) and walks forward from page 1.
         try {
-          if (/^\/my-tasks\/todo\/?$/.test(window.location.pathname)) window.location.reload();
-          else window.location.href = '/my-tasks/todo';
+          goToTodoPage(1);
         } catch (e) { /* next tick resumes regardless */ }
         return;
       } else {

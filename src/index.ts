@@ -11,7 +11,12 @@ import { logger } from './utils/logger';
 import { taskService } from './services/task.service';
 import { initializeDatabase } from './database/db';
 import { reminderRepository } from './database/repositories';
-import { ARCHIVE_AFTER_DAYS, MAX_REMINDER_ATTEMPTS } from './config/constants';
+import {
+  ARCHIVE_AFTER_DAYS,
+  LINK_ESCALATION_SWEEP_INTERVAL_MS,
+  MAX_REMINDER_ATTEMPTS,
+  NUDGE_BACKFILL_MAX_AGE_MS,
+} from './config/constants';
 import { scheduleReminderJob, scheduleRetryJob } from './scheduler/jobs';
 import { Reminder, ReminderType, TaskStatus } from './types';
 
@@ -390,6 +395,32 @@ async function main(): Promise<void> {
 
   logger.info('Reminder reconciliation scheduled (every 30 minutes)');
 
+  // ─── Link-Escalation Recovery Sweep (every 2 min) ───────────
+  // The +15 min escalation job is a one-shot trigger. If it was consumed
+  // while a foreign blast round was open (or Redis lost it), the post used to
+  // stay link-less forever: the warning went out and nothing followed. This
+  // sweep re-pools every overdue post, so a missed trigger is recovered
+  // within ~2 minutes instead of never.
+
+  const escalationSweepInterval = setInterval(async () => {
+    try {
+      const { escalateDueTasks } = await import('./services/escalation.service');
+      const out = await escalateDueTasks(discordClient, { maxAgeMs: NUDGE_BACKFILL_MAX_AGE_MS });
+      if (out.pooled > 0) {
+        logger.info('Link-escalation sweep', {
+          pooled: out.pooled,
+          blasted: out.blasted,
+          deferred: out.deferred,
+          blastId: out.blastId,
+        });
+      }
+    } catch (error) {
+      logger.error('Link-escalation sweep failed', { error });
+    }
+  }, LINK_ESCALATION_SWEEP_INTERVAL_MS);
+
+  logger.info('Link-escalation recovery sweep scheduled (every 2 minutes)');
+
   // ─── Survival Proof Cleanup (15-day TTL) ───────────────────
 
   const SURVIVAL_CLEANUP_INTERVAL = 60 * 60 * 1000;
@@ -415,6 +446,7 @@ async function main(): Promise<void> {
       clearInterval(archiveInterval);
       clearInterval(insightCleanupInterval);
       clearInterval(rehydrateInterval);
+      clearInterval(escalationSweepInterval);
       clearInterval(survivalCleanupInterval);
 
       discordClient.destroy();

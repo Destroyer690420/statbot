@@ -108,12 +108,24 @@ export async function rehydrateNudgeJobs(maxAgeMs: number): Promise<number> {
     try {
       const task = toTask(row as any);
       if (!isNudgeCandidate(task)) continue;
-      const { deliverySentAt } = await import('../utils/link-nudge');
+      const { deliverySentAt, isEscalateDue } = await import('../utils/link-nudge');
       if (now - deliverySentAt(task).getTime() > maxAgeMs) continue;
       const q = getNudgeQueue();
       const nudge = await q.getJob(nudgeJobIdFor(task.id)).catch(() => null);
       const esc = await q.getJob(escalateJobIdFor(task.id)).catch(() => null);
       if (nudge || esc) continue;
+      // Already past the +15 min mark: go straight to escalation. Scheduling
+      // a fresh nudge here would send a duplicate 10-min warning after a
+      // restart and only escalate 5 min later.
+      if (isEscalateDue(task, now)) {
+        await q.add(
+          'link-escalate',
+          { taskId: task.id, stage: 'escalate' } satisfies NudgeJobData,
+          { delay: 0, jobId: escalateJobIdFor(task.id), removeOnComplete: true },
+        );
+        scheduled++;
+        continue;
+      }
       const delay = msUntilNudge(task, now);
       await q.add(
         'link-nudge',

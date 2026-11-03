@@ -153,12 +153,81 @@ describe('escalateDueTasks', () => {
     expect(outreachSvc.beginBlast).not.toHaveBeenCalled();
   });
 
-  it('defers when a foreign round is open (never supersedes a live hour burst)', async () => {
+  it('defers when a fresh foreign round is open (never supersedes a live hour burst)', async () => {
     seedTwo();
-    outreachRepo.getOpenBlast.mockResolvedValue({ id: 'blast-hour', status: 'OPEN', createdBy: 'burst' });
+    outreachRepo.getOpenBlast.mockResolvedValue({
+      id: 'blast-hour',
+      status: 'OPEN',
+      createdBy: 'burst',
+      createdAt: new Date(),
+    });
     const out = await escalateDueTasks({} as any);
     expect(out.deferred).toBe(true);
     expect(out.pooled).toBe(2);
+    expect(outreachSvc.beginBlast).not.toHaveBeenCalled();
+    // Never adopt a foreign blast: doing so would steal its replies.
+    expect(outreachSvc.setBlastHooksFor).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op sweep tick while its own round is still open (no re-blast)', async () => {
+    seedTwo();
+    const first = await escalateDueTasks({} as any);
+    expect(first).toMatchObject({ blasted: true, blastId: 'blast-e1', pooled: 2 });
+    outreachRepo.getOpenBlast.mockResolvedValue({
+      id: 'blast-e1',
+      status: 'OPEN',
+      createdBy: ESCALATION_SENDER,
+      createdAt: new Date(),
+    });
+    const second = await escalateDueTasks({} as any);
+    expect(second).toMatchObject({ blasted: false, blastId: 'blast-e1', pooled: 2 });
+    expect(outreachSvc.beginBlast).toHaveBeenCalledTimes(1);
+    expect(outreachSvc.sendBlastMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('joins its own open round for newly overdue posts without re-messaging', async () => {
+    seedTwo();
+    await escalateDueTasks({} as any);
+    outreachRepo.getOpenBlast.mockResolvedValue({
+      id: 'blast-e1',
+      status: 'OPEN',
+      createdBy: ESCALATION_SENDER,
+      createdAt: new Date(),
+    });
+    taskById.set('Post #3', row('Post #3', 'w3', 'c3'));
+    const out = await escalateDueTasks({} as any);
+    expect(out).toMatchObject({ blasted: false, blastId: 'blast-e1', pooled: 3 });
+    expect(outreachRepo.bumpBlastSlots).toHaveBeenCalledWith('blast-e1', 1);
+    expect(outreachSvc.beginBlast).toHaveBeenCalledTimes(1);
+    expect(outreachSvc.sendBlastMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('supersedes an under-filled burst once its reply window is over', async () => {
+    seedTwo();
+    outreachRepo.getOpenBlast.mockResolvedValue({
+      id: 'blast-burst-old',
+      status: 'OPEN',
+      createdBy: 'burst',
+      createdAt: new Date(Date.now() - 10 * 60 * 1000),
+    });
+    const out = await escalateDueTasks({} as any);
+    expect(out).toMatchObject({ blasted: true, blastId: 'blast-e1', pooled: 2 });
+    expect(outreachSvc.beginBlast).toHaveBeenCalledWith(expect.anything(), 2, ESCALATION_SENDER);
+    // The escalation attaches its hooks to its own new round, not the burst.
+    expect(outreachSvc.setBlastHooksFor).toHaveBeenCalledWith('blast-e1', expect.anything());
+    expect(outreachSvc.setBlastHooksFor).not.toHaveBeenCalledWith('blast-burst-old', expect.anything());
+  });
+
+  it('never supersedes a manual round (manager-owned), however old', async () => {
+    seedTwo();
+    outreachRepo.getOpenBlast.mockResolvedValue({
+      id: 'blast-manual',
+      status: 'OPEN',
+      createdBy: 'manager',
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+    });
+    const out = await escalateDueTasks({} as any);
+    expect(out.deferred).toBe(true);
     expect(outreachSvc.beginBlast).not.toHaveBeenCalled();
   });
 

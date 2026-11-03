@@ -21,3 +21,7 @@ export {
   workerPaymentInfoRepository,
   WorkerPaymentInfoRepository,
 } from './worker-payment-info.repository';
+export {
+  ticketInactivityRepository,
+  TicketInactivityRepository,
+} from './ticket-inactivity.repository';

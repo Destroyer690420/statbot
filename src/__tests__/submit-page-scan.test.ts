@@ -1,16 +1,13 @@
 /**
  * Link-submit executor page hunt.
  *
- * Regression pin for the v1.2.2 fix: the executor used to walk
- * `/my-tasks/todo?page=N` forward only from whatever page the tab was left on
- * (usually the last page of the previous job) and reported "card not found"
- * at the last page. With 4 todo pages, a card on page 2 was therefore never
- * searched once the tab was on page 4. The hunt now keeps its visited set in
- * the in-flight job and wraps (4 → 1 → 2 → 3) until every page was checked.
- *
- * The helpers are lifted verbatim out of the shipped userscript between the
- * `page-scan` sentinels and run with an injected `MAX_PAGES`/`maxTodoPages`,
- * so this test exercises the real shipped code, not a copy.
+ * v1.3.0 regression pin: every new job starts at page 1 and walks forward
+ * (1 → 2 → 3 …) until the card is found or the list ends. The old v1.2.2
+ * wrap-around still inherited the tab's current page and depended on
+ * maxTodoPages() reading the pagination markup; when the tab sat on page 3/4
+ * a card on page 2 could still be missed. The helpers are lifted verbatim out
+ * of the shipped userscript between the `page-hunt` sentinels, so this test
+ * exercises the real shipped code, not a copy.
  */
 import fs from 'fs';
 import path from 'path';
@@ -20,50 +17,65 @@ const SOURCE = path.join(ROOT, 'scripts', 'goparttime-submit.user.js');
 const MIRROR = path.join(ROOT, 'dashboard', 'public', 'goparttime-submit.user.js');
 const MAX_PAGES = 10;
 
-interface Scan {
+interface Hunt {
+  page: number;
+  nextPage?: number | null;
+  repeatCount?: number;
+  started?: boolean;
   visited: number[];
-  maxPages: number;
+  lastFingerprint: string | null;
   sawCards: boolean;
 }
 
-type TrackScannedPage = (active: { scan?: Scan }, page: number, hasCards: boolean) => Scan;
-type NextUnvisitedPage = (scan: Scan, page: number) => number | null;
+type NewHuntState = () => Hunt;
+type EnsureHuntState = (active: { hunt?: Hunt }) => Hunt;
+type NextHuntPage = (
+  active: { hunt?: Hunt },
+  page: number,
+  hasCards: boolean,
+  cardIds: string[],
+) => number | null;
 
 interface Helpers {
-  trackScannedPage: TrackScannedPage;
-  nextUnvisitedPage: NextUnvisitedPage;
+  newHuntState: NewHuntState;
+  ensureHuntState: EnsureHuntState;
+  nextHuntPage: NextHuntPage;
 }
 
-function loadHelpers(file: string, maxTodoPages: () => number): Helpers {
+function loadHelpers(file: string): Helpers {
   const source = fs.readFileSync(file, 'utf8');
-  const start = source.indexOf('// ─── page-scan:start ───');
-  const end = source.indexOf('// ─── page-scan:end ───');
+  const start = source.indexOf('// ─── page-hunt:start ───');
+  const end = source.indexOf('// ─── page-hunt:end ───');
   if (start === -1 || end === -1 || end < start) {
-    throw new Error('page-scan sentinels not found — did the hunt helpers get renamed?');
+    throw new Error('page-hunt sentinels not found — did the hunt helpers get renamed?');
   }
   const body = source.slice(start, end);
   // eslint-disable-next-line no-new-func
-  return new Function('MAX_PAGES', 'maxTodoPages', `${body}\nreturn { trackScannedPage, nextUnvisitedPage };`)(
+  return new Function('MAX_PAGES', `${body}\nreturn { newHuntState, ensureHuntState, nextHuntPage };`)(
     MAX_PAGES,
-    maxTodoPages,
   ) as Helpers;
 }
 
-function walk(start: number, maxTodo: number): { sequence: number[]; scan: Scan } {
-  const { trackScannedPage, nextUnvisitedPage } = loadHelpers(SOURCE, () => maxTodo);
-  const active: { scan?: Scan } = {};
+function walk(
+  pages: string[][],
+  target?: string,
+): { sequence: number[]; hunt: Hunt; foundOn: number | null } {
+  const { newHuntState, ensureHuntState, nextHuntPage } = loadHelpers(SOURCE);
+  const active: { hunt?: Hunt } = { hunt: newHuntState() };
+  const hunt = ensureHuntState(active);
   const sequence: number[] = [];
-  let page = start;
-  // A correct hunt visits at most MAX_PAGES real pages plus one out-of-range
-  // landing page; the guard only exists to fail loudly instead of hanging.
-  for (let guard = 0; guard <= MAX_PAGES + 1; guard += 1) {
-    const scan = trackScannedPage(active, page, true);
+  // A correct walk visits at most MAX_PAGES real pages plus one empty page;
+  // the guard only exists to fail loudly instead of hanging.
+  for (let guard = 0; guard <= MAX_PAGES + 2; guard += 1) {
+    const page = hunt.page;
     sequence.push(page);
-    const next = nextUnvisitedPage(scan, page);
-    if (next === null) return { sequence, scan };
-    page = next;
+    const cards = pages[page - 1] || [];
+    if (target && cards.includes(target)) return { sequence, hunt, foundOn: page };
+    const next = nextHuntPage(active, page, cards.length > 0, cards);
+    if (next === null) return { sequence, hunt, foundOn: null };
+    hunt.page = next;
   }
-  throw new Error(`page hunt did not terminate from page ${start} with max ${maxTodo}: ${sequence.join(',')}`);
+  throw new Error(`page hunt did not terminate: ${sequence.join(',')}`);
 }
 
 describe('link-submit executor page hunt', () => {
@@ -71,37 +83,72 @@ describe('link-submit executor page hunt', () => {
     expect(fs.readFileSync(MIRROR, 'utf8')).toBe(fs.readFileSync(SOURCE, 'utf8'));
   });
 
-  it.each([
-    [1, 4],
-    [2, 4],
-    [3, 4],
-    [4, 4],
-    [1, 1],
-    [2, 3],
-  ])('searches every page exactly once (start %i, max %i)', (start, max) => {
-    const { sequence } = walk(start, max);
-    expect([...sequence].sort((a, b) => a - b)).toEqual(Array.from({ length: max }, (_, i) => i + 1));
-    expect(new Set(sequence).size).toBe(sequence.length);
+  it('always starts a new job at page 1', () => {
+    const { newHuntState, ensureHuntState } = loadHelpers(SOURCE);
+    expect(newHuntState().page).toBe(1);
+    expect(newHuntState().started).toBe(false);
+    // A legacy in-flight job from v1.2.2 carried `scan` instead of `hunt`.
+    const legacy: { hunt?: Hunt; scan?: unknown } = {
+      scan: { visited: [3, 4], maxPages: 4, sawCards: true },
+    };
+    expect(ensureHuntState(legacy).page).toBe(1);
+    expect(ensureHuntState(legacy).started).toBe(false);
   });
 
-  it('wraps from the last page back to page 1 instead of giving up', () => {
-    expect(walk(4, 4).sequence).toEqual([4, 1, 2, 3]);
+  it('walks forward from page 1 and stops at the first empty page', () => {
+    const { sequence, hunt } = walk([['11'], ['22'], ['33'], ['44'], []]);
+    expect(sequence).toEqual([1, 2, 3, 4, 5]);
+    expect(hunt.visited).toEqual([1, 2, 3, 4, 5]);
+    expect(hunt.sawCards).toBe(true);
   });
 
-  it('searches the earlier pages after the tab is left on the last page', () => {
-    const { sequence } = walk(3, 3);
-    expect(sequence).toEqual([3, 1, 2]);
+  it('finds a card on page 2 after starting on page 1 (the reported bug)', () => {
+    const { sequence, foundOn } = walk([['11'], ['22'], ['33'], ['44']], '22');
+    expect(foundOn).toBe(2);
+    expect(sequence).toEqual([1, 2]);
   });
 
-  it('recovers when the tab sits on an out-of-range page', () => {
-    // Tab left on page 3, list now has 2 pages: page 3 is empty, but pages 1
-    // and 2 must still be searched before the job is declared missing.
-    expect(walk(3, 2).sequence).toEqual([3, 1, 2]);
+  it('finds a card on the last page', () => {
+    const { sequence, foundOn } = walk([['11'], ['22'], ['33'], ['44']], '44');
+    expect(foundOn).toBe(4);
+    expect(sequence).toEqual([1, 2, 3, 4]);
   });
 
-  it('caps a bogus ?page=999 walk at MAX_PAGES', () => {
-    const { sequence } = walk(999, 4);
-    expect(sequence.length).toBeLessThanOrEqual(MAX_PAGES + 1);
-    for (let page = 1; page <= 4; page += 1) expect(sequence).toContain(page);
+  it('stops when the site ignores ?page= and renders the same cards again', () => {
+    const { sequence, hunt } = walk([['11', '22'], ['11', '22'], ['33']]);
+    expect(sequence).toEqual([1, 2]);
+    expect(hunt.sawCards).toBe(true);
+  });
+
+  it('stops immediately on an empty first page', () => {
+    const { sequence, hunt } = walk([[], ['22']]);
+    expect(sequence).toEqual([1]);
+    expect(hunt.sawCards).toBe(false);
+  });
+
+  it('retries the chosen next page once when the navigation did not take, then stops', () => {
+    const { newHuntState, ensureHuntState, nextHuntPage } = loadHelpers(SOURCE);
+    const active: { hunt?: Hunt } = { hunt: newHuntState() };
+    const hunt = ensureHuntState(active);
+    expect(nextHuntPage(active, 1, true, ['11'])).toBe(2);
+    // Same page again (the ?page=2 navigation did not happen): retry it once.
+    expect(nextHuntPage(active, 1, true, ['11'])).toBe(2);
+    // Still the same page: the site is cycling us back — stop, do not loop.
+    expect(nextHuntPage(active, 1, true, ['11'])).toBeNull();
+    expect(hunt.sawCards).toBe(true);
+  });
+
+  it('caps a broken walk at MAX_PAGES', () => {
+    const pages = Array.from({ length: MAX_PAGES + 3 }, (_, i) => [`id-${i}`]);
+    const { sequence } = walk(pages);
+    expect(sequence).toEqual(Array.from({ length: MAX_PAGES }, (_, i) => i + 1));
+  });
+
+  it('wires the fresh-job start to page 1 and the shared hunt state', () => {
+    const source = fs.readFileSync(SOURCE, 'utf8');
+    expect(source).toMatch(/hunt:\s*newHuntState\(\)/);
+    expect(source).toMatch(/goToTodoPage\(1\)/);
+    expect(source).toMatch(/!hunt\.started/);
+    expect(source).toMatch(/currentPage !== hunt\.page/);
   });
 });

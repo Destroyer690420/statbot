@@ -60,6 +60,24 @@ export const NUDGE_QUEUE_NAME = 'nudge-queue';
 export const LINK_NUDGE_DELAY_MS = 10 * 60 * 1000;
 /** Delay from the reminder to escalation when the link still has not arrived. */
 export const LINK_ESCALATE_DELAY_MS = 5 * 60 * 1000;
+/**
+ * How long a live BURST round may block an escalation re-blast.
+ *
+ * A burst blast opens at :10 IST and, when fewer workers reply than there are
+ * pooled posts, stays OPEN until the next :10 supersedes it (late replies keep
+ * converting by design). An escalation that lands in that hour used to defer
+ * and be lost forever. Once the burst reply window is over this long after the
+ * blast was created, the escalation round may supersede it — an already
+ * accepted post with no link is more urgent than an unfilled new-post round.
+ */
+export const LINK_ESCALATION_BURST_GRACE_MS = 6 * 60 * 1000;
+/**
+ * Recovery sweep period for link-less posts. The per-task +15 min job is a
+ * one-shot trigger; if it was consumed while a foreign round was open (or
+ * lost with Redis), this sweep re-pools every overdue post and opens/joins an
+ * escalation round. Cheap no-op when nothing is overdue.
+ */
+export const LINK_ESCALATION_SWEEP_INTERVAL_MS = 2 * 60 * 1000;
 /** Boot backfill ignores tasks delivered longer ago than this (ancient
  *  tickets need a manager, not an automated nudge). */
 export const NUDGE_BACKFILL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -621,3 +639,12 @@ export const COLORS = {
   COMPLETED: 0x00d26a,
   OVERDUE: 0xff6348,
 } as const;
+
+/**
+ * Inactive Ticket Management Configuration
+ */
+export const TICKET_INACTIVITY_WARNING_1_DAYS = 15;
+export const TICKET_INACTIVITY_FINAL_WARNING_DAYS = 25;
+export const TICKET_INACTIVITY_DELETE_DAYS = 30;
+export const TICKET_BACKUP_BASE_DIR = 'uploads/ticket-backups';
+export const TICKET_MONITORING_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours

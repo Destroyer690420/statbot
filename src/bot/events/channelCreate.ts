@@ -1,3 +1,4 @@
+import { inactiveTicketService } from '../../services/inactive-ticket.service';
 import { AuditLogEvent, Channel, TextChannel } from 'discord.js';
 import { getAllAdminIds } from '../../utils/permissions';
 import { logger } from '../../utils/logger';
@@ -22,6 +23,9 @@ const RETRY_DELAY_MS = 3000;
 export async function handleChannelCreate(channel: Channel): Promise<void> {
   if (!(channel instanceof TextChannel)) return;
   if (!channel.guild) return;
+
+  // Inactive ticket management: register new ticket channel
+  void inactiveTicketService.onChannelCreate(channel).catch(() => undefined);
 
   try {
     await new Promise((r) => setTimeout(r, WELCOME_DELAY_MS));

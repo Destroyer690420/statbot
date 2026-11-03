@@ -30,6 +30,11 @@
 - **Note**: replying to the *first* reminder or an *earlier retry* is fine — every send/retry message ID is stored. Replying to the finished 20h reminder with the 70h screenshot is recorded for the pending 70h step automatically.
 - **Solution**: informational; nothing to do.
 
+### Link warning arrives but the +15 min escalation blast / reassignment never happens
+- **Cause (fixed 2026-10-31, not yet deployed)**: the +15 min escalation is a one-shot BullMQ job. When it fired while a burst blast was still OPEN (the hourly :10 IST round stays open until filled or superseded), `escalateDueTasks` returned `deferred` and the job was consumed — no retry, so the post was never escalated. Live logs show `Escalation deferred: a live round is open` and the blocking blast has `createdBy='burst'`.
+- **Diagnosis**: `docker compose logs app` — repeated `Escalation deferred` with no following `LINK_ESCALATED` audit/reassignment; check `AutomationBlast` for an old open `createdBy='burst'` row.
+- **Solution (new build)**: the escalation now supersedes a burst once its 6-min reply window is over, and a 2-min `escalateDueTasks` sweep recovers any deferred/lost trigger (pool capped to posts delivered within 24h). On deploy, confirm `Link-escalation recovery sweep scheduled (every 2 minutes)` at boot. Manual and `link-escalation` rounds are still never implicitly superseded. See `docs/GOPARTTIME.md` §"Post-link nudge + escalation re-blast", Decision 50.
+
 ## 2. GoPartTime / Extension
 
 ### "Task has already been assigned."
