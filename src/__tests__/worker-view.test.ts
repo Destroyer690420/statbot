@@ -409,6 +409,17 @@ describe('task DTO whitelist', () => {
     expect(json).not.toContain('job-secret');
     expect(dto.payout.batchNumber).toBe(7);
     expect(dto.displayId).toBe('Post #1');
+    // Admin-style worker card renders the per-task rate from the DTO.
+    expect(dto.rate).toBe(60);
+    const commentDto = toWorkerTaskDto(
+      task({ id: 'Comment #2', type: TaskType.COMMENT }),
+      [],
+      null,
+      null,
+      RATES,
+      new Date(),
+    );
+    expect(commentDto.rate).toBe(30);
   });
 
   it('timeline covers assigned -> paid without leaking internals', () => {
