@@ -11,6 +11,20 @@ const TABS = [
   { to: '/worker/how-to', label: 'How-to', icon: BookOpen, end: false, needs: null },
 ] as const;
 
+const PAGE_TITLES: Record<string, string> = {
+  '/worker': 'Home',
+  '/worker/tasks': 'Tasks',
+  '/worker/wallet': 'Wallet',
+  '/worker/invites': 'Invites',
+  '/worker/how-to': 'How-to',
+};
+
+function pageTitleFor(pathname: string): string {
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+  if (pathname.startsWith('/worker/tasks/')) return 'Task details';
+  return 'Home';
+}
+
 function useNoIndex() {
   useEffect(() => {
     let meta = document.querySelector('meta[name="robots"]') as HTMLMetaElement | null;
@@ -79,6 +93,7 @@ export function WorkerLayout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const pageTitle = pageTitleFor(location.pathname);
 
   // A pure inviter has no tasks at all, so the work tabs would be permanently
   // empty for them: show only what this account can actually use. While
@@ -125,7 +140,7 @@ export function WorkerLayout() {
     <div className="min-h-screen bg-worker-bg text-worker-text">
       <header className="sticky top-0 z-30 border-b border-worker-border bg-worker-bg/95 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-          <p className="min-w-0 truncate font-display text-lg font-bold tracking-tight text-worker-text">Reddit Tasks</p>
+          <p className="min-w-0 truncate font-display text-lg font-bold tracking-tight text-worker-text">{pageTitle}</p>
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
