@@ -20,8 +20,9 @@ const PAGE_TITLES: Record<string, string> = {
 };
 
 function pageTitleFor(pathname: string): string {
-  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
-  if (pathname.startsWith('/worker/tasks/')) return 'Task details';
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  if (PAGE_TITLES[path]) return PAGE_TITLES[path];
+  if (path.startsWith('/worker/tasks/')) return 'Task details';
   return 'Home';
 }
 
