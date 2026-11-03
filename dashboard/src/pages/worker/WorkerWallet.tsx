@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, CheckCircle2, ChevronDown, Clock3, Info, Wallet } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, Clock3, Info } from 'lucide-react';
 import { getWorkerWallet, workerErrorMessage } from '../../api/workerApi';
 import { formatISTDate, formatMoney } from '../../utils/workerFormat';
 import { WorkerCard, WorkerErrorState, WorkerSkeleton } from '../../components/worker/WorkerUI';
@@ -38,9 +38,9 @@ export default function WorkerWallet() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-5xl space-y-4">
-        <WorkerSkeleton className="h-64 w-full" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((item) => <WorkerSkeleton key={item} className="h-48" />)}
+        <WorkerSkeleton className="h-40 w-full" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          {[0, 1].map((item) => <WorkerSkeleton key={item} className="h-48" />)}
         </div>
         <WorkerSkeleton className="h-72 w-full" />
       </div>
@@ -54,38 +54,21 @@ export default function WorkerWallet() {
   const wallet = data.data;
   const payments = Array.isArray(wallet.payments) ? wallet.payments : [];
 
-  const scrollToHistory = () => {
-    const target = document.getElementById('payment-history');
-    if (!target) return;
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
-  };
-
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <PaymentQrCard />
 
-      <WorkerCard className="overflow-hidden border-0 bg-wallet-gradient p-6 text-white sm:p-8">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-white/75">Awaiting payment</p>
-            <p className="mt-3 font-display text-4xl font-bold tabular-nums sm:text-5xl">~{formatMoney(wallet.awaitingAll.estimated)}</p>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
-            <Wallet className="h-5 w-5" aria-hidden="true" />
-          </div>
+      <WorkerCard className="relative overflow-hidden border-0 bg-wallet-gradient text-white">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">Awaiting payment</p>
+          <p className="mt-3 font-display text-4xl font-bold tabular-nums leading-none sm:text-5xl">~{formatMoney(wallet.awaitingAll.estimated)}</p>
         </div>
-        <p className="mt-3 text-sm text-white/75">{wallet.awaitingAll.count} tasks · estimated at today&apos;s rates</p>
-        <p className="mt-5 max-w-md text-sm leading-6 text-white/80">Paid manually by your manager, usually weekly.</p>
-        <button type="button" onClick={scrollToHistory} className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70">
-          View payment history
-        </button>
       </WorkerCard>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <WeekCard title="This week" week={wallet.thisWeek} current />
+      <div className="grid gap-4 sm:grid-cols-2">
         <WeekCard title="Last week" week={wallet.lastWeek} />
-        <WorkerCard className="p-4 sm:col-span-2 sm:p-5 lg:col-span-1">
+        <WorkerCard className="p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-medium text-worker-text-muted">Lifetime paid</p>

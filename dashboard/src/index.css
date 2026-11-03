@@ -33,20 +33,20 @@
     --radius-xl: 12px;
     --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.25);
 
-    /* Worker portal tokens (untouched scope) */
-    --wp-bg: #0b0e14;
-    --wp-surface: #12161f;
-    --wp-surface-2: #171c27;
-    --wp-border: #232a38;
-    --wp-text: #e7eaf2;
-    --wp-text-muted: #93a0b4;
-    --wp-text-faint: #5c6779;
-    --wp-accent: #7c86ff;
-    --wp-accent-hover: #8f98ff;
-    --wp-success: #34d399;
-    --wp-warning: #f5b454;
-    --wp-danger: #fb7185;
-    --wp-info: #7c86ff;
+    /* Worker portal tokens — aligned with the admin design tokens (2026-11-03) */
+    --wp-bg: #0b0d0f;
+    --wp-surface: #171b20;
+    --wp-surface-2: #1d2229;
+    --wp-border: #272d35;
+    --wp-text: #f2f4f7;
+    --wp-text-muted: #98a1ad;
+    --wp-text-faint: #66707c;
+    --wp-accent: #6c8cff;
+    --wp-accent-hover: #829eff;
+    --wp-success: #4caf82;
+    --wp-warning: #d6a85a;
+    --wp-danger: #d66b72;
+    --wp-info: #6c8cff;
   }
 
   * {

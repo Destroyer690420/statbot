@@ -9,15 +9,11 @@ import { WorkerTaskCard } from '../../components/worker/WorkerTaskCard';
 type Tab = 'todo' | 'completed' | 'failed';
 
 export default function WorkerTasks() {
-  // Home stat cards deep-link here via ?tab=&sub=; only whitelisted values are honored.
+  // Home stat cards deep-link here via ?tab=; only whitelisted values are honored.
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const subParam = searchParams.get('sub');
   const [tab, setTab] = useState<Tab>(
     tabParam === 'completed' || tabParam === 'failed' ? tabParam : 'todo',
-  );
-  const [sub, setSub] = useState(
-    subParam === 'awaiting' || subParam === 'paid' ? subParam : 'all',
   );
   const [page, setPage] = useState(1);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -28,10 +24,9 @@ export default function WorkerTasks() {
   }, []);
 
   const params: Record<string, string | number> = { tab, page, limit: 20 };
-  if (tab === 'completed') params.sub = sub;
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['worker-tasks', tab, sub, page],
+    queryKey: ['worker-tasks', tab, page],
     queryFn: () => getWorkerTasks(params),
     refetchInterval: 60000,
   });
@@ -78,29 +73,6 @@ export default function WorkerTasks() {
           })}
         </div>
       </div>
-
-      {tab === 'completed' ? (
-        <div className="grid w-full min-w-0 grid-cols-3 gap-1 rounded-xl border border-worker-border bg-worker-surface p-1 sm:flex sm:w-auto" role="group" aria-label="Payment filter">
-          {[
-            { key: 'all', label: 'All' },
-            { key: 'awaiting', label: 'Awaiting payment' },
-            { key: 'paid', label: 'Paid' },
-          ].map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              aria-pressed={sub === item.key}
-              onClick={() => {
-                setSub(item.key);
-                setPage(1);
-              }}
-              className={`worker-segment flex min-w-0 items-center justify-center px-2 sm:px-3 ${sub === item.key ? 'worker-segment-active' : ''}`}
-            >
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
 
       {tab === 'failed' ? (
         <p className="rounded-xl border border-worker-border bg-worker-surface-2 px-4 py-3 text-sm leading-6 text-worker-text-muted">

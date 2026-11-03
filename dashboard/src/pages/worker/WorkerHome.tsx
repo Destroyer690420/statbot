@@ -46,10 +46,10 @@ function StatCard({ card }: { card: StatCardData }) {
 function HomeSkeleton() {
   return (
     <div className="mx-auto min-w-0 w-full max-w-3xl space-y-5">
-      <WorkerSkeleton className="h-44" />
       <div className="grid grid-cols-1 gap-3">
         {[0, 1, 2, 3].map((item) => <WorkerSkeleton key={item} className="h-[114px]" />)}
       </div>
+      <WorkerSkeleton className="h-44" />
       <div className="space-y-3">
         <WorkerSkeleton className="h-5 w-36" />
         <WorkerSkeleton className="h-24" />
@@ -82,7 +82,7 @@ export default function WorkerHome() {
   const cards: StatCardData[] = [
     { label: 'Total tasks', value: stats.total, icon: ListTodo, tone: 'accent', to: '/worker/tasks' },
     { label: 'Completed', value: stats.completed, icon: CheckCircle2, tone: 'success', to: '/worker/tasks?tab=completed' },
-    { label: 'Paid', value: stats.paid, icon: Wallet, tone: 'accent', to: '/worker/tasks?tab=completed&sub=paid' },
+    { label: 'Paid', value: stats.paid, icon: Wallet, tone: 'accent', to: '/worker/tasks?tab=completed' },
     {
       label: 'Insights to submit',
       value: stats.insightsDue,
@@ -93,6 +93,12 @@ export default function WorkerHome() {
   ];
   return (
     <div className="mx-auto min-w-0 w-full max-w-3xl space-y-5">
+      <section aria-label="Task overview">
+        <div className="grid min-w-0 grid-cols-1 gap-3">
+          {cards.map((card) => <StatCard key={card.label} card={card} />)}
+        </div>
+      </section>
+
       <section aria-label="Payments">
         <WorkerCard className="overflow-hidden border-0 bg-wallet-gradient text-white">
           <div className="flex items-start justify-between gap-4 p-5">
@@ -115,12 +121,6 @@ export default function WorkerHome() {
             </div>
           </div>
         </WorkerCard>
-      </section>
-
-      <section aria-label="Task overview">
-        <div className="grid min-w-0 grid-cols-1 gap-3">
-          {cards.map((card) => <StatCard key={card.label} card={card} />)}
-        </div>
       </section>
 
       <section className="min-w-0" aria-labelledby="action-needed-heading">

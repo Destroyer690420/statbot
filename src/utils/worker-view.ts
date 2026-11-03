@@ -713,6 +713,7 @@ export interface WorkerTaskDto {
   displayId: string;
   type: string;
   status: string;
+  rate: number;
   workerStatus: WorkerStatus;
   tab: WorkerTab;
   subreddit: string | null;
@@ -763,6 +764,7 @@ export function toWorkerTaskDto(
     displayId: displayTaskId(task.id, task.type, task.externalTaskId ?? null),
     type: String(task.type),
     status: String(task.status),
+    rate: rateForType(task.type, rates),
     workerStatus: derived,
     tab: derived.tab,
     subreddit: task.subreddit ?? null,

@@ -1,106 +1,29 @@
 import { Link } from 'react-router-dom';
-import { BellRing, CheckCircle2, Clock3, ExternalLink, Wallet } from 'lucide-react';
-import { countdownText, formatIST, formatMoney } from '../../utils/workerFormat';
-import { WorkerCard, WorkerMiniStat, WorkerStatusPill } from './WorkerUI';
+import { ArrowRight, BellRing, ExternalLink } from 'lucide-react';
+import { countdownText, formatISTDate, formatMoney } from '../../utils/workerFormat';
+import { WorkerCard, WorkerStatusPill } from './WorkerUI';
 
 type TaskLike = {
   [key: string]: any;
 };
 
-function nextPendingReminder(task: TaskLike) {
-  const reminders = Array.isArray(task.reminders) ? task.reminders : [];
-  return reminders
-    .filter((reminder: TaskLike) => !reminder.completed)
-    .sort((a: TaskLike, b: TaskLike) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0];
-}
-
-function nextDueAt(task: TaskLike) {
-  return task.workerStatus?.nextDueAt || task.dueAt || nextPendingReminder(task)?.dueAt || null;
-}
-
 function taskId(task: TaskLike) {
   return task.id || task.taskId || '';
 }
 
-function rewardText(task: TaskLike) {
-  if (task.payout?.state === 'paid') return formatMoney(task.payout.amount);
-  if (task.payout?.state === 'awaiting') return `~${formatMoney(task.payout.amount)} est.`;
-  return '—';
+function shortTaskId(task: TaskLike) {
+  const display = String(task.displayId || '');
+  const stripped = display.replace(/^(POST|COMMENT)\s*#?/i, '');
+  return stripped || taskId(task);
 }
 
-export function WorkerInsightChips({ task, nowMs }: { task: TaskLike; nowMs: number }) {
-  if (task.tab === 'failed') return null;
-  const chips: { label: string; className: string; icon: typeof CheckCircle2 }[] = [];
-  const reminders = Array.isArray(task.reminders) ? task.reminders : [];
-  const isPost = String(task.type).toUpperCase() === 'POST';
-  const r20 = reminders.find((reminder: TaskLike) => String(reminder.type).includes('20H'));
-  const r70 = reminders.find((reminder: TaskLike) => String(reminder.type).includes('70H'));
-
-  const addChip = (reminder: TaskLike | undefined, label: string) => {
-    if (!reminder) return;
-    if (reminder.completed) {
-      chips.push({
-        label: `${label} done`,
-        className: 'border-worker-success/25 bg-worker-success/10 text-worker-success',
-        icon: CheckCircle2,
-      });
-    } else if (reminder.sent && new Date(reminder.dueAt).getTime() < nowMs) {
-      chips.push({
-        label: `${label} overdue`,
-        className: 'border-worker-danger/25 bg-worker-danger/10 text-worker-danger',
-        icon: Clock3,
-      });
-    } else if (reminder.sent) {
-      chips.push({
-        label: `${label} ${countdownText(nowMs, reminder.dueAt)}`,
-        className: 'border-worker-warning/25 bg-worker-warning/10 text-worker-warning',
-        icon: Clock3,
-      });
-    } else {
-      chips.push({
-        label: `${label} due ${formatIST(reminder.dueAt)}`,
-        className: 'border-worker-border bg-worker-surface-2 text-worker-text-muted',
-        icon: Clock3,
-      });
-    }
-  };
-
-  addChip(r20, '20h');
-  if (isPost) addChip(r70, '70h');
-  if (chips.length === 0) return null;
-
-  return (
-    <div className="mt-3 flex flex-wrap gap-1.5">
-      {chips.map((chip) => {
-        const Icon = chip.icon;
-        return (
-          <span key={chip.label} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium ${chip.className}`}>
-            <Icon className="h-3 w-3" aria-hidden="true" />
-            {chip.label}
-          </span>
-        );
-      })}
-    </div>
-  );
+function nextDueAt(task: TaskLike) {
+  return task.workerStatus?.nextDueAt || task.dueAt || null;
 }
 
-export function WorkerPayoutChip({ task }: { task: TaskLike }) {
-  if (task.tab !== 'completed' || !task.payout || task.payout.state === 'none') return null;
-  if (task.payout.state === 'paid') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-worker-success/25 bg-worker-success/10 px-2.5 py-1 text-xs font-medium tabular-nums text-worker-success">
-        <Wallet className="h-3 w-3" aria-hidden="true" />
-        Paid {formatMoney(task.payout.amount)}
-        {task.payout.paidAt ? ` · ${formatIST(task.payout.paidAt)}` : ''}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-worker-warning/25 bg-worker-warning/10 px-2.5 py-1 text-xs font-medium tabular-nums text-worker-warning">
-      <Wallet className="h-3 w-3" aria-hidden="true" />
-      Awaiting ~{formatMoney(task.payout.amount)} est.
-    </span>
-  );
+function rateText(task: TaskLike) {
+  const rate = typeof task.rate === 'number' ? task.rate : task.payout?.amount;
+  return typeof rate === 'number' && rate > 0 ? formatMoney(rate) : '—';
 }
 
 export function WorkerTaskCard({
@@ -120,36 +43,54 @@ export function WorkerTaskCard({
   const id = taskId(task);
   const statusLabel = status?.label || task.status;
   const statusKey = status?.key || task.statusKey;
-  const typeLabel = task.type || 'Task';
+  const detailTo = `/worker/tasks/${encodeURIComponent(id)}`;
 
   return (
-    <WorkerCard className="worker-card-interactive min-w-0 overflow-hidden h-full p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-display text-base font-semibold tracking-tight text-worker-text sm:text-[17px]">{task.displayId}</p>
-          <p className="mt-1 truncate text-xs text-worker-text-muted">
-            {typeLabel} · {variant === 'action' ? 'Task assigned to you' : task.subreddit ? `r/${task.subreddit}` : 'Reddit'}
-          </p>
-        </div>
-        {variant !== 'action' ? (
-          <WorkerStatusPill label={statusLabel} tone={status?.tone} statusKey={statusKey} overdue={overdue} />
-        ) : null}
+    <WorkerCard className="min-w-0 overflow-hidden rounded-lg border-worker-border/60 p-0">
+      <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
+        <Link to={detailTo} className="min-w-0">
+          <span className="block truncate font-mono text-base font-bold tracking-tight text-worker-accent-hover">
+            {task.displayId || taskId(task)}
+          </span>
+        </Link>
+        <WorkerStatusPill label={statusLabel} tone={status?.tone} statusKey={statusKey} overdue={overdue} />
       </div>
 
-      {task.title ? <p className="mt-3 line-clamp-2 break-words text-sm leading-6 text-worker-text-muted">{task.title}</p> : null}
-
-      {variant !== 'action' ? (
-        <div className="mt-4 grid grid-cols-3 gap-3 border-y border-worker-border py-3">
-          <WorkerMiniStat label="Subreddit" value={task.subreddit ? `r/${task.subreddit}` : '—'} />
-          <WorkerMiniStat label={dueAt ? 'Next due' : 'Created'} value={dueAt ? countdownText(nowMs, dueAt) : task.createdAt ? formatIST(task.createdAt) : '—'} />
-          <div className="text-right">
-            <WorkerMiniStat label="Reward" value={rewardText(task)} emphasis title={task.payout?.state === 'none' || !task.payout ? 'Paid at completion' : undefined} />
-          </div>
+      <div className="grid grid-cols-3 gap-1 border-t border-worker-border/60 px-4 py-2.5">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-worker-text-faint">Task ID</p>
+          <p className="truncate font-mono text-xs font-medium text-worker-text-muted">{shortTaskId(task)}</p>
         </div>
-      ) : null}
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-worker-text-faint">Created</p>
+          <p className="truncate text-xs font-medium text-worker-text-muted">{formatISTDate(task.createdAt)}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-worker-text-faint">Rate</p>
+          <p className="truncate font-mono text-xs font-medium text-worker-text-muted">{rateText(task)}</p>
+        </div>
+      </div>
+
+      {task.redditLink ? (
+        <div className="px-4 py-2">
+          <a
+            href={task.redditLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-worker-accent-hover transition-colors hover:text-worker-accent"
+          >
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="underline decoration-worker-accent-hover/40 underline-offset-2">link</span>
+          </a>
+        </div>
+      ) : (
+        <div className="px-4 py-2">
+          <span className="text-xs italic text-worker-text-faint">No link yet</span>
+        </div>
+      )}
 
       {action && shouldShowAction ? (
-        <div className={`mt-4 flex items-start gap-2.5 rounded-lg border-l-2 bg-worker-warning/10 px-3 py-2.5 ${overdue ? 'border-worker-danger' : 'border-worker-warning'}`}>
+        <div className={`mx-4 mb-3 flex items-start gap-2.5 rounded-lg border-l-2 bg-worker-warning/10 px-3 py-2.5 ${overdue ? 'border-worker-danger' : 'border-worker-warning'}`}>
           <BellRing className={`mt-0.5 h-4 w-4 shrink-0 ${overdue ? 'text-worker-danger' : 'text-worker-warning'}`} aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="break-words text-xs font-medium leading-5 text-worker-text">{action}</p>
@@ -158,24 +99,15 @@ export function WorkerTaskCard({
         </div>
       ) : null}
 
-      {variant !== 'action' ? <WorkerInsightChips task={task} nowMs={nowMs} /> : null}
-      {variant !== 'action' ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <WorkerPayoutChip task={task} />
-        </div>
-      ) : null}
-
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="flex items-center justify-between border-t border-worker-border/60 bg-worker-surface-2/40 px-4 py-3">
         {id ? (
-          <Link to={`/worker/tasks/${encodeURIComponent(id)}`} className="worker-primary-button flex-1">
+          <Link
+            to={detailTo}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-worker-border bg-worker-surface-2 px-3 py-1.5 text-xs font-semibold text-worker-text transition-colors duration-150 hover:border-worker-accent/40 hover:text-worker-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent"
+          >
             View task
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
-        ) : null}
-        {task.redditLink ? (
-          <a href={task.redditLink} target="_blank" rel="noopener noreferrer" className="worker-secondary-button flex-1 sm:flex-none">
-            Reddit link
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-          </a>
         ) : null}
       </div>
     </WorkerCard>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, Home, ListTodo, LogOut, Menu, UserPlus, Wallet, X } from 'lucide-react';
+import { BookOpen, Home, ListTodo, LogOut, Menu, UserPlus, Wallet } from 'lucide-react';
 import { useWorkerAuth } from '../hooks/useWorkerAuth';
 
 const TABS = [
@@ -89,7 +89,7 @@ export function WorkerLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
   const pageTitle = pageTitleFor(location.pathname);
 
   // A pure inviter has no tasks at all, so the work tabs would be permanently
@@ -115,7 +115,7 @@ export function WorkerLayout() {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', handleKeyDown);
-    closeButtonRef.current?.focus();
+    drawerRef.current?.focus();
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
@@ -166,26 +166,17 @@ export function WorkerLayout() {
           />
           <aside
             id="worker-menu"
-            className="worker-drawer absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-worker-border bg-worker-surface"
+            ref={drawerRef}
+            tabIndex={-1}
+            className="worker-drawer absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-worker-border bg-worker-surface outline-none"
           >
-            <div className="flex h-16 items-center justify-between gap-3 px-5">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <img
-                  src="https://statbot.duckdns.org/logo.png"
-                  alt=""
-                  className="h-7 w-7 shrink-0 rounded-full object-contain"
-                />
-                <p className="min-w-0 truncate font-display text-[15px] font-semibold text-worker-text">Reddit Tasks</p>
-              </div>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                onClick={() => setMenuOpen(false)}
-                className="worker-icon-button -mr-2"
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
+            <div className="flex h-16 items-center gap-2.5 px-5">
+              <img
+                src="https://statbot.duckdns.org/logo.png"
+                alt=""
+                className="h-7 w-7 shrink-0 rounded-full object-contain"
+              />
+              <p className="min-w-0 truncate font-display text-[15px] font-semibold text-worker-text">Reddit Tasks</p>
             </div>
 
             <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2" aria-label="Worker navigation">
