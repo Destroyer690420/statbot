@@ -3,6 +3,22 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-03
+### Changed + deployed (2026-11-03 at `5a7da7e` — app + dashboard rebuild, no migration)
+- **Direct inactive ticket deletion without disk backup, protected tickets DM with Discord buttons, and Daily Outreach delete button.**
+  - **No Disk Backup Requirement**: Removed transcript creation and attachment downloading on ticket channel deletion per user instruction ("just payment history and task history is enough nothing else has to be saved"). Payment history (`PayoutItem`, `PayoutBatch`) and task history (`Task`) remain permanently preserved in PostgreSQL. Cleaned up 72.9MB of disk attachments from `/app/uploads/ticket-backups/` in container storage.
+  - **Protected Tickets DM to Admin Mac with Buttons**: Admin mac (`1299323714101317715`) receives a comprehensive DM with the breakdown of the 160 protected tickets, sample tickets preview, full unabridged `protected-tickets.txt` attachment, and an ActionRow containing a Link button to Daily Outreach (`https://statbot.duckdns.org/outreach`) and an interactive button to refresh the protected report (handled via `interactionCreate`). Message content safely formatted within Discord's 2,000 character limit.
+  - **Daily Outreach Direct Ticket Deletion**:
+    - Added a delete button (`Trash2`) next to each ticket channel row in the Daily Outreach "Select Tickets" modal (`dashboard/src/pages/DailyOutreach.tsx`).
+    - Added delete buttons to the desktop table and mobile cards view.
+    - Added a Delete Confirmation modal clearly confirming channel deletion while noting payment & task records in database are safely preserved.
+    - Added backend endpoint `DELETE /api/v1/outreach/tickets/:channelId` which deletes the channel in Discord, removes it from `TicketOutreach`, marks `TicketInactivity` as `DELETED`, and logs `AuditAction.TICKET_DELETED`.
+    - Added `deleteOutreachTicket` API client helper and automated cache invalidation / draft selection cleanup.
+  - **Testing & Verification**:
+    - Full Jest test suite 97/97 suites / 1,296 tests passing green (including new `outreach-delete-ticket.test.ts` and updated `inactive-ticket.test.ts`).
+    - Backend build, frontend build (`rtm-dashboard`), and TypeScript typechecks clean.
+    - Container images rebuilt and deployed live on `161.118.164.85`.
+    - Protected tickets report DM delivered live to admin mac.
+
 ### Added + deployed (2026-11-03 at `545f63a` — app rebuild, migration applied)
 - **Automated Inactive Ticket Management System & Initial Backlog Cleanup.**
   - **Initial Backlog Cleanup**: Audited all 486 ticket channels in Discord against the last 30 days of actual worker message history (messages from staff, bots, or non-ticket owners are ignored; worker messages reset inactivity). 174 tickets were 30+ days inactive and eligible for deletion (0 active tasks, 0 unpaid tasks, 0 pending referral commissions). Every eligible ticket was fully backed up before deletion: all message history, attachments (images, videos, payment QR codes), and database records (Tasks, Reminders, Payouts, Onboarding, WorkerPaymentInfo, Referrals) were saved to `/app/uploads/ticket-backups/<channelId>/` inside the persistent Docker volume `insight-uploads`. 169 tickets were protected and kept intact. 0 backup failures. 174 channels were deleted, bringing Discord ticket channels down from 486 to 312 and resolving Discord's 500-channel server cap pressure. A consolidated Initial Cleanup Report with an attached `deleted-tickets-log.txt` was sent in DM to admin mac (`1299323714101317715`).

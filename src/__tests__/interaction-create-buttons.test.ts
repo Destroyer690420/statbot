@@ -19,6 +19,12 @@ jest.mock('../services/outreach-selection.service', () => ({
   handleOutreachAddButton: (...args: unknown[]) => mockHandleOutreachAddButton(...args),
 }));
 
+jest.mock('../services/inactive-ticket.service', () => ({
+  inactiveTicketService: {
+    sendProtectedTicketsReport: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
 jest.mock('../bot/commands/task', () => ({ execute: (...a: unknown[]) => mockCommandExecute(...a) }));
 jest.mock('../bot/commands/status', () => ({ execute: jest.fn() }));
 jest.mock('../bot/commands/find', () => ({ execute: jest.fn() }));
