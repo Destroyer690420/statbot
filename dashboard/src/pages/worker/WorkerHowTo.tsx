@@ -72,10 +72,6 @@ export default function WorkerHowTo() {
         </aside>
 
         <div className="min-w-0 max-w-3xl">
-          <div className="mb-6">
-            <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl">How to</h1>
-            <p className="mt-1 text-sm text-worker-text-muted">A quick reference for your tasks and payments.</p>
-          </div>
           <div className="lg:hidden">
             <GuideNav activeId={activeId} mobile />
           </div>

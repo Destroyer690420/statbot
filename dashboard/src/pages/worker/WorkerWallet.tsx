@@ -63,11 +63,6 @@ export default function WorkerWallet() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl">Wallet</h1>
-        <p className="mt-1 text-sm text-worker-text-muted">A clear view of completed work, estimated payouts and payment history.</p>
-      </div>
-
       <PaymentQrCard />
 
       <WorkerCard className="overflow-hidden border-0 bg-wallet-gradient p-6 text-white sm:p-8">

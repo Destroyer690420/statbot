@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, Eye, Hourglass, ListTodo, Wallet, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Eye, ListTodo, Wallet } from 'lucide-react';
 import { getWorkerHome, workerErrorMessage } from '../../api/workerApi';
 import { formatMoney } from '../../utils/workerFormat';
 import { WorkerCard, WorkerErrorState, WorkerSkeleton } from '../../components/worker/WorkerUI';
@@ -50,7 +50,6 @@ function HomeSkeleton() {
       <div className="grid grid-cols-1 gap-3">
         {[0, 1, 2, 3].map((item) => <WorkerSkeleton key={item} className="h-[114px]" />)}
       </div>
-      <WorkerSkeleton className="h-28" />
       <div className="space-y-3">
         <WorkerSkeleton className="h-5 w-36" />
         <WorkerSkeleton className="h-24" />
@@ -92,12 +91,6 @@ export default function WorkerHome() {
       to: '/worker/tasks?tab=todo',
     },
   ];
-  const secondary = [
-    { label: 'Awaiting pay', value: stats.awaitingPayment, icon: Hourglass, tone: 'text-worker-warning' },
-    { label: 'In progress', value: stats.inProgress, icon: ListTodo, tone: 'text-worker-accent' },
-    { label: 'Failed', value: stats.failed, icon: XCircle, tone: 'text-worker-danger' },
-  ];
-
   return (
     <div className="mx-auto min-w-0 w-full max-w-3xl space-y-5">
       <section aria-label="Payments">
@@ -127,21 +120,6 @@ export default function WorkerHome() {
       <section aria-label="Task overview">
         <div className="grid min-w-0 grid-cols-1 gap-3">
           {cards.map((card) => <StatCard key={card.label} card={card} />)}
-        </div>
-      </section>
-
-      <section aria-label="Task mix">
-        <div className="grid min-w-0 grid-cols-3 divide-x divide-worker-border overflow-hidden rounded-xl border border-worker-border bg-worker-surface">
-          {secondary.map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <div key={stat.label} className="min-w-0 p-4">
-                <Icon className={`h-5 w-5 ${stat.tone}`} aria-hidden="true" />
-                <p className="mt-3 min-w-0 truncate text-[13px] font-medium leading-5 text-worker-text-muted">{stat.label}</p>
-                <p className="mt-1.5 font-display text-2xl font-bold tabular-nums leading-none text-worker-text">{stat.value}</p>
-              </div>
-            );
-          })}
         </div>
       </section>
 

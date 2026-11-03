@@ -1,44 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Filter, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { getWorkerTasks, workerErrorMessage } from '../../api/workerApi';
 import { WorkerEmptyState, WorkerErrorState, WorkerSkeleton } from '../../components/worker/WorkerUI';
 import { WorkerTaskCard } from '../../components/worker/WorkerTaskCard';
 
 type Tab = 'todo' | 'completed' | 'failed';
-
-function SearchControl({ value, onChange, id }: { value: string; onChange: (value: string) => void; id: string }) {
-  return (
-    <div className="relative min-w-0 flex-1 basis-0">
-      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-worker-text-faint" aria-hidden="true" />
-      <input
-        id={id}
-        type="text"
-        placeholder="Search tasks"
-        className="worker-input pl-10"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </div>
-  );
-}
-
-function TypeControl({ value, onChange, id, mobile = false }: { value: string; onChange: (value: string) => void; id: string; mobile?: boolean }) {
-  return (
-    <select
-      id={id}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className={`worker-input appearance-none px-3 ${mobile ? 'w-full' : '!w-[150px] flex-none'}`}
-      aria-label="Filter by type"
-    >
-      <option value="">All types</option>
-      <option value="POST">Post</option>
-      <option value="COMMENT">Comment</option>
-    </select>
-  );
-}
 
 export default function WorkerTasks() {
   // Home stat cards deep-link here via ?tab=&sub=; only whitelisted values are honored.
@@ -51,20 +19,8 @@ export default function WorkerTasks() {
   const [sub, setSub] = useState(
     subParam === 'awaiting' || subParam === 'paid' ? subParam : 'all',
   );
-  const [type, setType] = useState('');
-  const [search, setSearch] = useState('');
-  const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(1);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [filtersOpen, setFiltersOpen] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebounced(search);
-      setPage(1);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [search]);
 
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 30000);
@@ -73,11 +29,9 @@ export default function WorkerTasks() {
 
   const params: Record<string, string | number> = { tab, page, limit: 20 };
   if (tab === 'completed') params.sub = sub;
-  if (type) params.type = type;
-  if (debounced.trim()) params.q = debounced.trim();
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['worker-tasks', tab, sub, type, debounced, page],
+    queryKey: ['worker-tasks', tab, sub, page],
     queryFn: () => getWorkerTasks(params),
     refetchInterval: 60000,
   });
@@ -86,25 +40,14 @@ export default function WorkerTasks() {
   const counts = data?.counts || { todo: 0, completed: 0, failed: 0 };
   const total = data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / 20));
-  const activeFilterCount = (type ? 1 : 0) + (search.trim() ? 1 : 0);
   const tabs: { key: Tab; label: string }[] = [
     { key: 'todo', label: 'To-do' },
     { key: 'completed', label: 'Completed' },
     { key: 'failed', label: 'Failed' },
   ];
 
-  const handleTypeChange = (value: string) => {
-    setType(value);
-    setPage(1);
-  };
-
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <div>
-        <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl">Tasks</h1>
-        <p className="mt-1 text-sm text-worker-text-muted">Keep track of what needs your attention and what has been paid.</p>
-      </div>
-
       <div className="sticky top-16 z-20 -mx-1 bg-worker-bg/95 px-1 py-2 backdrop-blur sm:-mx-2 sm:px-2" role="tablist" aria-label="Task status">
         <div className="relative grid w-full min-w-0 grid-cols-3 gap-1 rounded-xl border border-worker-border bg-worker-surface p-1">
           <span
@@ -156,55 +99,6 @@ export default function WorkerTasks() {
               <span className="truncate">{item.label}</span>
             </button>
           ))}
-        </div>
-      ) : null}
-
-      <div className="hidden items-center gap-2 lg:flex">
-        <SearchControl id="worker-task-search-desktop" value={search} onChange={setSearch} />
-        <TypeControl id="worker-task-type-desktop" value={type} onChange={handleTypeChange} />
-      </div>
-
-      <div className="flex items-center justify-between gap-3 lg:hidden">
-        <button type="button" onClick={() => setFiltersOpen(true)} className="worker-secondary-button flex-1 justify-center">
-          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-          Filters
-          {activeFilterCount > 0 ? <span className="rounded-full bg-worker-accent px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums">{activeFilterCount}</span> : null}
-        </button>
-        {search || type ? (
-          <button
-            type="button"
-            onClick={() => {
-              setSearch('');
-              setType('');
-              setPage(1);
-            }}
-            className="worker-ghost-button px-2"
-          >
-            Clear
-          </button>
-        ) : null}
-      </div>
-
-      {filtersOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-worker-bg/80 p-0 backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true" aria-label="Task filters" onClick={() => setFiltersOpen(false)}>
-          <div className="w-full rounded-t-xl border-t border-worker-border bg-worker-surface p-5 pb-8" onClick={(event) => event.stopPropagation()}>
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="font-display text-base font-semibold text-worker-text">Filter tasks</p>
-                <p className="mt-1 text-xs text-worker-text-muted">Search and narrow the current list.</p>
-              </div>
-              <button type="button" onClick={() => setFiltersOpen(false)} className="worker-icon-button" aria-label="Close filters">
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <SearchControl id="worker-task-search-mobile" value={search} onChange={setSearch} />
-              <TypeControl id="worker-task-type-mobile" value={type} onChange={handleTypeChange} mobile />
-            </div>
-            <button type="button" onClick={() => setFiltersOpen(false)} className="worker-primary-button mt-5 w-full">
-              Show tasks
-            </button>
-          </div>
         </div>
       ) : null}
 
