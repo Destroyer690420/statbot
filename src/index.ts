@@ -437,6 +437,10 @@ async function main(): Promise<void> {
     }
   }, SURVIVAL_CLEANUP_INTERVAL);
 
+  // ─── Inactive Ticket Monitoring Sweep (every 6 hours) ───────
+  const { startInactiveTicketScheduler } = await import('./services/inactive-ticket-scheduler.service');
+  const inactiveTicketInterval = startInactiveTicketScheduler(discordClient);
+
   // ─── Graceful Shutdown ──────────────────────────────────────
 
   const shutdown = async (signal: string) => {
@@ -448,6 +452,7 @@ async function main(): Promise<void> {
       clearInterval(rehydrateInterval);
       clearInterval(escalationSweepInterval);
       clearInterval(survivalCleanupInterval);
+      clearInterval(inactiveTicketInterval);
 
       discordClient.destroy();
       logger.info('Discord client destroyed');
