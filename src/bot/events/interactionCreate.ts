@@ -21,6 +21,7 @@ import * as myinvitesCmd from '../commands/myinvites';
 import * as logincodeCmd from '../commands/logincode';
 import { handleBlastButton } from '../../services/automation/blast-approval.service';
 import { handleOutreachAddButton } from '../../services/outreach-selection.service';
+import { inactiveTicketService } from '../../services/inactive-ticket.service';
 
 const commands = new Map<string, { execute: (interaction: ChatInputCommandInteraction) => Promise<void> }>();
 commands.set('task', taskCmd);
@@ -52,6 +53,15 @@ export async function handleInteractionCreate(interaction: Interaction): Promise
         await handleOutreachAddButton(interaction);
       } catch (error) {
         logger.error('Button handling failed', { error });
+      }
+      return;
+    }
+    if (interaction.customId === 'refresh_protected_tickets') {
+      try {
+        await interaction.deferUpdate();
+        await inactiveTicketService.sendProtectedTicketsReport(interaction.client);
+      } catch (error) {
+        logger.error('Button refresh_protected_tickets handling failed', { error });
       }
       return;
     }

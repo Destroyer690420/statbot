@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getOutreach, saveOutreachSelection, sendOutreachMessage } from '../api/client';
-import { Loader2, RefreshCw, Check, X, Users, Send, Save, Search } from 'lucide-react';
+import { getOutreach, saveOutreachSelection, sendOutreachMessage, deleteOutreachTicket } from '../api/client';
+import { Loader2, RefreshCw, Check, X, Users, Send, Save, Search, Trash2 } from 'lucide-react';
 
 interface OutreachTicket {
   channelId: string;
@@ -58,6 +58,7 @@ export function DailyOutreach() {
   const [sendNote, setSendNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [slotsOpen, setSlotsOpen] = useState(false);
   const [slotsInput, setSlotsInput] = useState('5');
+  const [deletingTicket, setDeletingTicket] = useState<OutreachTicket | null>(null);
 
   const statusQuery = useQuery({
     queryKey: ['outreach'],
@@ -110,6 +111,29 @@ export function DailyOutreach() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['outreach'] });
       setSelectOpen(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (channelId: string) => deleteOutreachTicket(channelId),
+    onSuccess: (_, channelId) => {
+      queryClient.setQueryData(['outreach'], (old: any) => {
+        if (!old?.data) return old;
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            tickets: (old.data.tickets || []).filter((t: OutreachTicket) => t.channelId !== channelId),
+          },
+        };
+      });
+      setDraft((prev) => {
+        const next = new Map(prev);
+        next.delete(channelId);
+        return next;
+      });
+      setDeletingTicket(null);
+      setSendNote({ ok: true, text: 'Ticket channel deleted successfully.' });
     },
   });
 
@@ -287,18 +311,19 @@ export function DailyOutreach() {
                 <th className="px-6 py-4 font-semibold text-dark-200">Available</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Post</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Comment</th>
+                <th className="px-6 py-4 font-semibold text-dark-200 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dark-700/50">
               {statusQuery.isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center">
+                  <td colSpan={7} className="px-6 py-10 text-center">
                     <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : visibleTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center text-dark-400">
+                  <td colSpan={7} className="px-6 py-10 text-center text-dark-400">
                     No tickets selected yet — open Select Tickets to add.
                   </td>
                 </tr>
@@ -329,6 +354,17 @@ export function DailyOutreach() {
                     <td className="px-6 py-4"><StatusIcon ok={t.available} /></td>
                     <td className="px-6 py-4"><CountCell count={t.post} /></td>
                     <td className="px-6 py-4"><CountCell count={t.comment} /></td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setDeletingTicket(t)}
+                        disabled={deleteMutation.isPending}
+                        className="p-1.5 text-dark-400 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors inline-flex items-center"
+                        title={`Delete #${t.channelName || t.channelId}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -363,6 +399,15 @@ export function DailyOutreach() {
                 <div className="flex shrink-0 items-center gap-1.5">
                   <span className="text-[10px] font-semibold text-dark-500 uppercase tracking-wider">Portal</span>
                   <PortalIcon accessed={t.portalAccessed} lastSeenAt={t.portalLastSeenAt} />
+                  <button
+                    type="button"
+                    onClick={() => setDeletingTicket(t)}
+                    disabled={deleteMutation.isPending}
+                    className="p-1 text-dark-400 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors ml-1"
+                    title={`Delete #${t.channelName || t.channelId}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-1 px-4 py-2 border-t border-dark-700/30">
@@ -424,11 +469,11 @@ export function DailyOutreach() {
                 </p>
               ) : (
                 filteredModalTickets.map((t) => (
-                  <label
+                  <div
                     key={t.channelId}
-                    className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60 hover:border-primary-500/30 transition-colors cursor-pointer"
+                    className="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-900/60 border border-dark-700/60 hover:border-primary-500/30 transition-colors"
                   >
-                    <span className="flex items-center gap-3 min-w-0">
+                    <label className="flex items-center gap-3 min-w-0 cursor-pointer flex-1 mr-2 select-none">
                       <input
                         type="checkbox"
                         checked={!!draft.get(t.channelId)}
@@ -439,12 +484,24 @@ export function DailyOutreach() {
                       {t.taskStatus === 'awaiting-submission' && (
                         <span className="status-badge border bg-warning-muted text-warning border-warning/30">busy</span>
                       )}
-                    </span>
-                    <span className="ml-3 flex shrink-0 items-center gap-2">
+                    </label>
+                    <div className="ml-3 flex shrink-0 items-center gap-2">
                       <span className="text-xs text-dark-500">{t.workerName || '—'}</span>
                       <PortalIcon accessed={t.portalAccessed} lastSeenAt={t.portalLastSeenAt} />
-                    </span>
-                  </label>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingTicket(t);
+                        }}
+                        disabled={deleteMutation.isPending}
+                        className="p-1.5 text-dark-400 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors ml-1"
+                        title={`Delete #${t.channelName || t.channelId}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 ))
               )}
             </div>
@@ -471,6 +528,63 @@ export function DailyOutreach() {
             </div>
             {saveMutation.isError && (
               <p className="mt-3 text-danger text-sm">Failed to save selection: {(saveMutation.error as Error).message}</p>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation modal */}
+      {deletingTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm duration-200">
+          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-md mx-4 border border-dark-700 shadow-pop modal-panel">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-danger flex items-center gap-2">
+                <Trash2 className="w-5 h-5" />
+                Delete Ticket Channel?
+              </h3>
+              <button
+                onClick={() => setDeletingTicket(null)}
+                disabled={deleteMutation.isPending}
+                className="text-dark-500 hover:text-text-primary transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-dark-300 text-sm mb-3">
+              Are you sure you want to delete Discord channel <strong className="text-text-primary">#{deletingTicket.channelName || deletingTicket.channelId}</strong>?
+            </p>
+            <div className="text-xs text-dark-400 mb-5 bg-dark-900/60 p-3 rounded-lg border border-dark-700/50 space-y-1">
+              <p>• The Discord channel will be deleted permanently.</p>
+              <p>• Worker: <span className="text-text-secondary">{deletingTicket.workerName || '—'}</span></p>
+              <p className="text-success-muted text-green-400">• Task history and payment history in database are safely preserved.</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingTicket(null)}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 text-sm text-dark-400 hover:text-text-primary transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(deletingTicket.channelId)}
+                disabled={deleteMutation.isPending}
+                className="bg-danger hover:bg-danger/80 text-white font-medium flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Delete Ticket
+              </button>
+            </div>
+            {deleteMutation.isError && (
+              <p className="mt-3 text-danger text-sm">
+                Failed to delete: {(deleteMutation.error as Error).message}
+              </p>
             )}
           </div>
         </div>

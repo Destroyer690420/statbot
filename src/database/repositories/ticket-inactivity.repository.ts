@@ -139,14 +139,21 @@ export class TicketInactivityRepository {
 
   async recordDeleted(
     channelId: string,
-    backupPath: string,
-    deletedAt: Date,
+    backupPath?: string | null,
+    deletedAt: Date = new Date(),
   ): Promise<TicketInactivity> {
-    const row = await getDb().ticketInactivity.update({
+    const row = await getDb().ticketInactivity.upsert({
       where: { channelId },
-      data: {
+      create: {
+        channelId,
         status: 'DELETED',
-        backupPath,
+        backupPath: backupPath ?? null,
+        deletedAt,
+        lastActivityAt: deletedAt,
+      },
+      update: {
+        status: 'DELETED',
+        backupPath: backupPath ?? null,
         deletedAt,
       },
     });

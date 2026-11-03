@@ -11,7 +11,6 @@ process.env.DASHBOARD_PASSWORD = 'test-password';
 
 import { InactiveTicketService } from '../services/inactive-ticket.service';
 import { ticketInactivityRepository } from '../database/repositories';
-import { backupTicketChannel } from '../utils/ticket-backup';
 import { OWNER_USER_ID } from '../config/constants';
 
 jest.mock('../database/db', () => ({
@@ -43,15 +42,6 @@ jest.mock('../services/audit.service', () => ({
   auditLogService: {
     log: jest.fn().mockResolvedValue(undefined),
   },
-}));
-
-jest.mock('../utils/ticket-backup', () => ({
-  backupTicketChannel: jest.fn().mockResolvedValue({
-    success: true,
-    backupDir: 'uploads/ticket-backups/test-ch-1',
-    messagesCount: 15,
-    attachmentsCount: 2,
-  }),
 }));
 
 describe('InactiveTicketService', () => {
@@ -287,7 +277,7 @@ describe('InactiveTicketService', () => {
   });
 
   describe('runLifecycleSweep', () => {
-    it('backs up and deletes 30+ days inactive tickets and notifies admin mac', async () => {
+    it('deletes 30+ days inactive tickets directly without disk backup and notifies admin mac', async () => {
       const channelCreatedAt = new Date('2026-09-01T00:00:00Z'); // 63 days ago
 
       const mockDelete = jest.fn().mockResolvedValue(undefined);
@@ -335,59 +325,46 @@ describe('InactiveTicketService', () => {
         notifyAdminOnDeletion: true,
       });
 
-      expect(backupTicketChannel).toHaveBeenCalled();
       expect(mockDelete).toHaveBeenCalledWith(expect.stringContaining('Inactive for'));
       expect(mockAdminUser.send).toHaveBeenCalledWith(expect.stringContaining('Inactive Ticket Deleted'));
       expect(mockAdminUser.send).toHaveBeenCalledWith(expect.stringContaining('ticket-0499'));
       expect(result.deleted).toBe(1);
     });
 
-    it('skips channel deletion if backup fails to preserve data safety', async () => {
-      const channelCreatedAt = new Date('2026-09-01T00:00:00Z');
-
-      (backupTicketChannel as jest.Mock).mockResolvedValueOnce({
-        success: false,
-        error: 'Disk write failed',
-      });
-
-      const mockDelete = jest.fn().mockResolvedValue(undefined);
-      const mockChannel: any = {
-        id: 'ch-fail',
-        name: 'ticket-0500',
-        createdAt: channelCreatedAt,
-        members: new Map(),
-        messages: {
-          fetch: jest.fn().mockResolvedValue(new Map()),
-        },
-        delete: mockDelete,
+    it('sends protected tickets report with buttons and attachment to admin mac', async () => {
+      const mockAdminUser = {
+        send: jest.fn().mockResolvedValue(undefined),
       };
 
       const mockClient: any = {
-        guilds: {
-          fetch: jest.fn().mockResolvedValue({
-            channels: {
-              fetch: jest.fn().mockResolvedValue(undefined),
-              cache: new Map([['ch-fail', mockChannel]]),
-            },
-            members: {
-              fetch: jest.fn().mockResolvedValue(undefined),
-            },
-          }),
-        },
         users: {
-          fetch: jest.fn().mockResolvedValue({ send: jest.fn().mockResolvedValue(undefined) }),
+          fetch: jest.fn().mockImplementation((id: string) => {
+            if (id === OWNER_USER_ID) return Promise.resolve(mockAdminUser);
+            return Promise.resolve(null);
+          }),
         },
       };
 
-      const result = await service.runLifecycleSweep(mockClient, {
-        dryRun: false,
-        sendWarnings: true,
-        deleteEligible: true,
-      });
+      jest.spyOn(ticketInactivityRepository, 'findByStatus').mockResolvedValueOnce([
+        {
+          channelId: 'ch-prot-1',
+          channelName: 'ticket-0010',
+          workerId: 'worker-10',
+          workerUsername: 'alex',
+          lastActivityAt: new Date('2026-09-01T00:00:00Z'),
+          status: 'PROTECTED',
+          protectionReason: 'Pending payment on task clxxxx1',
+        } as any,
+      ]);
 
-      expect(mockDelete).not.toHaveBeenCalled();
-      expect(result.skippedBackupFailed).toBe(1);
-      expect(result.deleted).toBe(0);
+      await service.sendProtectedTicketsReport(mockClient);
+
+      expect(mockAdminUser.send).toHaveBeenCalled();
+      const sendPayload = mockAdminUser.send.mock.calls[0][0];
+      expect(sendPayload.content).toContain('Protected Tickets Report');
+      expect(sendPayload.content).toContain('Pending Payments');
+      expect(sendPayload.components.length).toBeGreaterThan(0);
+      expect(sendPayload.files.length).toBe(1);
     });
 
     it('sends warnings at Day 15 and Day 25 without deleting', async () => {

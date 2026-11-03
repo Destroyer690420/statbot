@@ -4,6 +4,10 @@ import { z } from 'zod';
 import { outreachService } from '../../services/outreach.service';
 import { authMiddleware, AuthRequest, requireDashboardAdmin } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
+import { getDb } from '../../database/db';
+import { ticketInactivityRepository } from '../../database/repositories';
+import { auditLogService } from '../../services/audit.service';
+import { AuditAction } from '../../types';
 import { logger } from '../../utils/logger';
 
 const selectionSchema = z.object({
@@ -143,6 +147,65 @@ export default function createOutreachRoutes(discordClient: Client): Router {
       }
     },
   );
+
+  /**
+   * DELETE /api/v1/outreach/tickets/:channelId
+   * Deletes the specified ticket channel in Discord, removes it from outreach,
+   * updates inactivity status to DELETED, and logs the action.
+   */
+  router.delete('/tickets/:channelId', async (req: Request, res: Response): Promise<void> => {
+    if (!requireDashboardAdmin(req, res)) return;
+    const channelId = req.params.channelId as string;
+    const userId = (req as AuthRequest).userId || 'unknown';
+
+    try {
+      let channelName: string | null = null;
+      let channelFound = false;
+
+      try {
+        const channel = await discordClient.channels.fetch(channelId);
+        if (channel && 'name' in channel && 'delete' in channel) {
+          channelName = (channel as any).name || null;
+          channelFound = true;
+          await (channel as any).delete(`Deleted via Daily Outreach dashboard by ${userId}`);
+          logger.info(`Discord channel ${channelId} (#${channelName}) deleted via Daily Outreach`, { userId });
+        }
+      } catch (discErr: any) {
+        if (discErr.code === 10003) {
+          logger.info(`Channel ${channelId} was already deleted in Discord`, { channelId });
+        } else {
+          logger.warn(`Failed deleting Discord channel ${channelId}`, { error: discErr });
+        }
+      }
+
+      // Remove from TicketOutreach table
+      await getDb().ticketOutreach.deleteMany({
+        where: { channelId },
+      }).catch((err) => logger.warn('Failed deleting ticketOutreach row', { channelId, error: err }));
+
+      // Mark in TicketInactivity as DELETED
+      await ticketInactivityRepository.recordDeleted(channelId, null, new Date()).catch((err) => {
+        logger.warn('Failed updating ticketInactivity recordDeleted', { channelId, error: err });
+      });
+
+      // Audit log
+      await auditLogService.log(
+        AuditAction.TICKET_DELETED,
+        null,
+        userId,
+        `Ticket channel ${channelId} (#${channelName || 'unknown'}) deleted by admin via Daily Outreach dashboard.`,
+      ).catch(() => undefined);
+
+      res.json({
+        success: true,
+        message: `Ticket #${channelName || channelId} deleted successfully.`,
+        data: { channelId, channelName, channelFound },
+      });
+    } catch (error) {
+      logger.error('DELETE /outreach/tickets/:channelId failed', { channelId, error });
+      res.status(500).json({ success: false, message: 'Failed to delete ticket channel.' });
+    }
+  });
 
   return router;
 }

@@ -1,4 +1,4 @@
-import { AttachmentBuilder, Client, Collection, Message, TextChannel } from 'discord.js';
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, Client, Collection, Message, TextChannel } from 'discord.js';
 import { getDb } from '../database/db';
 import { ticketInactivityRepository } from '../database/repositories';
 import { getAllAdminIds } from '../utils/permissions';
@@ -6,7 +6,6 @@ import { mapWithConcurrency } from '../utils/bounded-concurrency';
 import { payoutService } from '../services/payout.service';
 import { commissionService } from '../services/commission.service';
 import { auditLogService } from '../services/audit.service';
-import { backupTicketChannel } from '../utils/ticket-backup';
 import { env } from '../config/env';
 import {
   OWNER_USER_ID,
@@ -52,7 +51,7 @@ export interface InactivitySweepResult {
     workerUsername: string | null;
     lastActivityAt: Date;
     deletedAt: Date;
-    backupPath: string;
+    backupPath?: string | null;
   }>;
   protectedTickets: Array<{
     channelId: string;
@@ -398,42 +397,29 @@ export class InactiveTicketService {
             workerUsername: audit.workerUsername,
             lastActivityAt: audit.lastActivityAt,
             deletedAt: now,
-            backupPath: `uploads/ticket-backups/${channel.id}`,
+            backupPath: null,
           });
           continue;
         }
 
-        // 1. Back up all payment proofs, task proofs, verification info, and messages
-        logger.info(`Backing up inactive ticket #${channel.name} before deletion...`, { channelId: channel.id });
-        const backupRes = await backupTicketChannel(channel, audit.workerId, audit.workerUsername);
-
-        if (!backupRes.success) {
-          logger.error(`Backup failed for #${channel.name} — aborting deletion to preserve data!`, {
-            channelId: channel.id,
-            error: backupRes.error,
-          });
-          skippedBackupFailed += 1;
-          continue;
-        }
-
-        // 2. Delete Discord ticket channel
+        // Delete Discord ticket channel directly (payment & task history safely preserved in PostgreSQL)
         try {
-          await channel.delete(`Inactive for ${audit.inactivityDays} days (30+ days inactive). Backed up to ${backupRes.backupDir}`);
+          await channel.delete(`Inactive for ${audit.inactivityDays} days (30+ days inactive).`);
           logger.info(`Deleted inactive ticket channel #${channel.name}`, { channelId: channel.id });
         } catch (delErr) {
           logger.error(`Failed to delete Discord channel #${channel.name}`, { channelId: channel.id, error: delErr });
           continue;
         }
 
-        // 3. Record deletion in database
-        await ticketInactivityRepository.recordDeleted(channel.id, backupRes.backupDir, now).catch(() => undefined);
+        // Record deletion in database
+        await ticketInactivityRepository.recordDeleted(channel.id, null, now).catch(() => undefined);
 
-        // 4. Audit log
+        // Audit log
         await auditLogService.log(
           AuditAction.TICKET_DELETED,
           null,
           audit.workerId,
-          `Ticket #${channel.name} (${channel.id}) deleted after ${audit.inactivityDays} days of inactivity. Worker: ${audit.workerId || 'none'}. Backup: ${backupRes.backupDir}`,
+          `Ticket #${channel.name} (${channel.id}) deleted after ${audit.inactivityDays} days of inactivity. Worker: ${audit.workerId || 'none'}.`,
         ).catch(() => undefined);
 
         deletedTickets.push({
@@ -443,10 +429,10 @@ export class InactiveTicketService {
           workerUsername: audit.workerUsername,
           lastActivityAt: audit.lastActivityAt,
           deletedAt: now,
-          backupPath: backupRes.backupDir,
+          backupPath: null,
         });
 
-        // 5. Send DM to admin (mac) on deletion
+        // Send DM to admin (mac) on deletion
         if (notifyAdminOnDeletion) {
           await this.notifyAdminOfDeletion(client, {
             channelId: channel.id,
@@ -455,8 +441,6 @@ export class InactiveTicketService {
             workerUsername: audit.workerUsername,
             lastActivityAt: audit.lastActivityAt,
             deletedAt: now,
-            messagesCount: backupRes.messagesCount,
-            attachmentsCount: backupRes.attachmentsCount,
           }).catch((dmErr) => {
             logger.warn('Failed to send deletion DM to admin mac', { error: dmErr });
           });
@@ -594,8 +578,6 @@ export class InactiveTicketService {
       workerUsername: string | null;
       lastActivityAt: Date;
       deletedAt: Date;
-      messagesCount: number;
-      attachmentsCount: number;
     },
   ): Promise<void> {
     const adminUser = await client.users.fetch(OWNER_USER_ID).catch(() => null);
@@ -611,10 +593,109 @@ export class InactiveTicketService {
       `• **Worker Discord ID:** ${workerTag}`,
       `• **Last Activity Date:** ${lastAct}`,
       `• **Deletion Date:** ${delDate}`,
-      `• **Backup Saved:** ${info.messagesCount} messages, ${info.attachmentsCount} attachments`,
     ].join('\n');
 
     await adminUser.send(msg);
+  }
+
+  /**
+   * Sends the list of protected tickets to admin (mac) via DM with a button.
+   */
+  async sendProtectedTicketsReport(client: Client): Promise<void> {
+    const adminUser = await client.users.fetch(OWNER_USER_ID).catch(() => null);
+    if (!adminUser) {
+      logger.error('Could not resolve admin mac to send protected tickets report');
+      return;
+    }
+
+    const protectedRecords = await ticketInactivityRepository.findByStatus('PROTECTED');
+    const totalProtected = protectedRecords.length;
+
+    let pendingPaymentCount = 0;
+    let inProgressCount = 0;
+    let referralCommissionCount = 0;
+    let otherCount = 0;
+
+    for (const p of protectedRecords) {
+      const reason = p.protectionReason || '';
+      if (reason.includes('Pending payment')) pendingPaymentCount++;
+      else if (reason.includes('in-progress') || reason.includes('Active')) inProgressCount++;
+      else if (reason.includes('commission') || reason.includes('referral')) referralCommissionCount++;
+      else otherCount++;
+    }
+
+    const lines: string[] = [
+      `🔒 **Protected Tickets Report**`,
+      `═══════════════════════════════════════`,
+      `**Total Protected Tickets:** \`${totalProtected}\``,
+      `These tickets are inactive (30+ days) but protected from deletion to safeguard data:`,
+      `• **Pending Payments:** ${pendingPaymentCount}`,
+      `• **Active / In-Progress Tasks:** ${inProgressCount}`,
+      `• **Pending Referral Commissions:** ${referralCommissionCount}`,
+      ...(otherCount > 0 ? [`• **Other Reasons:** ${otherCount}`] : []),
+      `═══════════════════════════════════════`,
+    ];
+
+    if (totalProtected > 0) {
+      lines.push(`\n📋 **Sample Protected Tickets (first 10):**`);
+      for (const p of protectedRecords.slice(0, 10)) {
+        const worker = p.workerId ? `<@${p.workerId}>` : (p.workerUsername || 'unknown');
+        lines.push(`• **#${p.channelName || p.channelId}** (${worker}): ${p.protectionReason || 'Protected'}`);
+      }
+      if (totalProtected > 10) {
+        lines.push(`\n_...and ${totalProtected - 10} more in attached file._`);
+      }
+    } else {
+      lines.push(`No tickets are currently protected.`);
+    }
+
+    // Interactive button row
+    const outreachBtn = new ButtonBuilder()
+      .setLabel('Open Daily Outreach')
+      .setStyle(ButtonStyle.Link)
+      .setURL('https://statbot.duckdns.org/outreach')
+      .setEmoji('📋');
+
+    const refreshBtn = new ButtonBuilder()
+      .setCustomId('refresh_protected_tickets')
+      .setLabel('Refresh Protected List')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('🔄');
+
+    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(outreachBtn, refreshBtn);
+
+    // Build complete file attachment
+    const fileLines = [
+      `PROTECTED TICKETS REPORT`,
+      `Generated: ${new Date().toISOString()}`,
+      `Total Protected Tickets: ${totalProtected}`,
+      `Pending Payments: ${pendingPaymentCount} | Active Tasks: ${inProgressCount} | Commissions: ${referralCommissionCount}`,
+      `================================================================================\n`,
+    ];
+
+    for (const p of protectedRecords) {
+      fileLines.push(
+        `Channel: #${p.channelName || 'unknown'} (ID: ${p.channelId})\n` +
+        `Worker: ${p.workerUsername || 'unknown'} (ID: ${p.workerId || 'none'})\n` +
+        `Last Activity: ${p.lastActivityAt ? p.lastActivityAt.toISOString().slice(0, 10) : 'none'}\n` +
+        `Reason: ${p.protectionReason || 'Protected'}\n` +
+        `--------------------------------------------------------------------------------`,
+      );
+    }
+
+    const fileBuffer = Buffer.from(fileLines.join('\n'), 'utf8');
+    const attachment = new AttachmentBuilder(fileBuffer, { name: 'protected-tickets.txt' });
+
+    await adminUser.send({
+      content: lines.join('\n'),
+      components: [actionRow],
+      files: [attachment],
+    });
+
+    logger.info('Protected tickets report sent to admin mac successfully', {
+      adminId: OWNER_USER_ID,
+      totalProtected,
+    });
   }
 
   /**

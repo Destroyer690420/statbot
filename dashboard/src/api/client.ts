@@ -207,6 +207,11 @@ export async function deleteDeadTickets(channelIds: string[]) {
 
 // ─── Payouts ─────────────────────────────────────────────────
 
+export async function deleteOutreachTicket(channelId: string) {
+  const { data } = await api.delete(`/outreach/tickets/${channelId}`);
+  return data;
+}
+
 export async function getPayoutWeek() {
   const { data } = await api.get('/payouts/week');
   return data;
