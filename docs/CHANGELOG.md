@@ -3,7 +3,7 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-04
-### Changed (local, awaits deploy)
+### Changed + deployed (2026-11-04 at `ac14276` — app rebuild + migration)
 - **Ticket onboarding: "done" reading confirmation response**
   - When a passing worker (`profileCheckStatus === 'PASSED'`) finishes reading the 3 onboarding channels and replies with `"done"` (normalized with quotes, case, trailing punctuation, or `done reading`), the bot replies in the ticket:
     `"If you have any doubts, please ask them. the admins will contact you soon."`
