@@ -8,6 +8,7 @@ import {
   formatReaskMessage,
   formatUnverifiableMessage,
   formatVerifiedMessage,
+  isDoneReply,
   isTerminalProfileStatus,
   totalKarma,
 } from '../utils/reddit-profile-link';
@@ -244,5 +245,47 @@ describe('messages', () => {
 
   it('uses the configured approver id', () => {
     expect(REDDIT_PROFILE_APPROVAL_ADMIN_ID).toMatch(/^\d{17,20}$/);
+  });
+});
+
+describe('isDoneReply', () => {
+  it('accepts exact word done case-insensitively', () => {
+    expect(isDoneReply('done')).toBe(true);
+    expect(isDoneReply('Done')).toBe(true);
+    expect(isDoneReply('DONE')).toBe(true);
+    expect(isDoneReply('  done  ')).toBe(true);
+  });
+
+  it('accepts done enclosed in straight or curly/smart quotes', () => {
+    expect(isDoneReply('"done"')).toBe(true);
+    expect(isDoneReply("'done'")).toBe(true);
+    expect(isDoneReply('“done”')).toBe(true);
+    expect(isDoneReply('‘done’')).toBe(true);
+    expect(isDoneReply('"Done"')).toBe(true);
+    expect(isDoneReply('“Done”')).toBe(true);
+  });
+
+  it('accepts done with trailing punctuation', () => {
+    expect(isDoneReply('done.')).toBe(true);
+    expect(isDoneReply('done!')).toBe(true);
+    expect(isDoneReply('"done!"')).toBe(true);
+    expect(isDoneReply('"done."')).toBe(true);
+  });
+
+  it('accepts common natural variations', () => {
+    expect(isDoneReply('done reading')).toBe(true);
+    expect(isDoneReply('i am done')).toBe(true);
+    expect(isDoneReply("i'm done")).toBe(true);
+    expect(isDoneReply('"done reading"')).toBe(true);
+  });
+
+  it('rejects unrelated words and profile URLs', () => {
+    expect(isDoneReply('')).toBe(false);
+    expect(isDoneReply('hi')).toBe(false);
+    expect(isDoneReply('ok')).toBe(false);
+    expect(isDoneReply('not done')).toBe(false);
+    expect(isDoneReply('well done')).toBe(false);
+    expect(isDoneReply('https://www.reddit.com/user/done')).toBe(false);
+    expect(isDoneReply('what do i do next?')).toBe(false);
   });
 });

@@ -66,6 +66,25 @@ export class OnboardingRepository {
   }
 
   /**
+   * Records that the passing worker replied "done" after reading the onboarding channels.
+   */
+  async markGuideDone(channelId: string, at: Date = new Date()) {
+    return getDb().ticketOnboarding.upsert({
+      where: { channelId },
+      create: { channelId, guideDoneAt: at, updatedAt: at },
+      update: { guideDoneAt: at, updatedAt: at },
+    });
+  }
+
+  async isGuideDone(channelId: string): Promise<boolean> {
+    const row = await getDb().ticketOnboarding.findUnique({
+      where: { channelId },
+      select: { guideDoneAt: true },
+    });
+    return row?.guideDoneAt != null;
+  }
+
+  /**
    * Records that this ticket's worker was asked for their Reddit profile link.
    *
    * Part of the one-off sweep (`scripts/ask-reddit-profile-links.ts`), not a

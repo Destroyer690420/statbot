@@ -1,5 +1,5 @@
 import { Client, TextChannel } from 'discord.js';
-import { onboardingRepository } from '../database/repositories';
+import { onboardingRepository, taskRepository } from '../database/repositories';
 import {
   PROFILE_CHECK_BANNED,
   PROFILE_CHECK_LOW_KARMA,
@@ -7,6 +7,7 @@ import {
   PROFILE_CHECK_UNVERIFIABLE,
   REDDIT_PROFILE_APPROVAL_ADMIN_ID,
   REDDIT_PROFILE_MAX_REASKS,
+  TICKET_ONBOARDING_DONE_MESSAGE,
 } from '../config/constants';
 import { describeLookupFailure, lookupRedditProfile } from './reddit-profile-check.service';
 import {
@@ -21,6 +22,7 @@ import {
   formatUnverifiableDm,
   formatUnverifiableMessage,
   formatVerifiedMessage,
+  isDoneReply,
   isTerminalProfileStatus,
   type ProfileCheckStatus,
 } from '../utils/reddit-profile-link';
@@ -311,15 +313,6 @@ export async function handleTicketProfileFlow(args: {
   // never landed. Never touch it. An unrecognized status also lands here.
   const status = asProfileCheckStatus(onboarding.profileCheckStatus);
   if (!status) return false;
-  // Already settled: nothing more to say in this ticket.
-  if (isTerminalProfileStatus(status)) return false;
-  // NOTE: guideSentAt deliberately does NOT gate here. It used to ("the guide
-  // is the pass reward"), but ~280 pre-existing tickets carry a guideSentAt
-  // from the 2026-09-28 auto-guide era without ever going through a profile
-  // check — gating on it silently dropped every link those workers shared
-  // (ticket-0457, 2026-10-14: link replied, zero log lines, username never
-  // stored, 7am scan re-asked the next morning). PASSED already exits via the
-  // terminal check above, which is the only settled state that matters.
 
   // Only the ticket's own worker drives the flow, resolved the same way the
   // welcome and the old guide handler resolved them: exactly one non-bot,
@@ -336,6 +329,33 @@ export async function handleTicketProfileFlow(args: {
     });
     return false;
   }
+
+  // Once the worker has passed and received the guide, they are instructed to
+  // read the channels and reply "done". Acknowledge their "done" reply once.
+  if (status === 'PASSED') {
+    if (!onboarding.guideDoneAt && isDoneReply(content)) {
+      const hasTasks = await taskRepository.hasTasksForChannel(channelId).catch(() => false);
+      if (!hasTasks) {
+        try {
+          await channel.send(TICKET_ONBOARDING_DONE_MESSAGE);
+          await onboardingRepository.markGuideDone(channelId);
+          logger.info('Ticket onboarding: worker completed guide reading', { channelId, authorId });
+          return true;
+        } catch (error) {
+          logger.warn('Ticket onboarding: failed to send guide-done message', {
+            channelId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return false;
+        }
+      }
+    }
+    // Already settled (or non-"done" message): nothing more to say in this ticket.
+    return false;
+  }
+
+  // Already settled for any other terminal status:
+  if (isTerminalProfileStatus(status)) return false;
 
   const username = extractProfileUsername(content);
   if (!username) {

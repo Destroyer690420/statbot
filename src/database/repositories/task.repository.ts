@@ -50,6 +50,14 @@ export class TaskRepository {
     });
   }
 
+  /** Whether any task (past or present) has been created for this ticket channel. */
+  async hasTasksForChannel(channelId: string): Promise<boolean> {
+    const count = await getDb().task.count({
+      where: { channelId },
+    });
+    return count > 0;
+  }
+
   async findByChannel(channelId: string) {
     return getDb().task.findMany({
       where: {

@@ -610,6 +610,10 @@ export const TICKET_GUIDE_CHANNEL_IDS = [
 export const TICKET_GUIDE_MESSAGE =
   `To understand everything i would advise you to read ${TICKET_GUIDE_CHANNEL_IDS.map((id) => `<#${id}>`).join(', ')}. it will barely take 10 mins to read it all but you will understand everything after reading these. and once you are done you can ask me your doubts and after that we can get started, so lemme know once you are done reading we will start after that. ok?`;
 
+/** Sent when a passing worker replies "done" after reading the onboarding channels */
+export const TICKET_ONBOARDING_DONE_MESSAGE =
+  'If you have any doubts, please ask them. the admins will contact you soon.';
+
 /** Member join welcome sent in #invites when someone joins the guild */
 export const INVITES_CHANNEL_ID = '1520616800063328437';
 export const VERIFICATION_CHANNEL_ID = '1520483343018496104';

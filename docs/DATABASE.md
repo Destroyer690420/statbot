@@ -200,6 +200,7 @@ erDiagram
         string channelId PK
         timestamp welcomeSentAt "nullable; set on channelCreate welcome (enrollProfileCheck)"
         timestamp guideSentAt "nullable; set only when the worker PASSES the profile check"
+        timestamp guideDoneAt "nullable; set when passing worker replies 'done' after reading onboarding channels"
         timestamp redditProfileRequestedAt "nullable; one-off profile sweep, exactly-once"
         string profileCheckStatus "nullable; PENDING|PASSED|BANNED|LOW_KARMA|UNVERIFIABLE; NULL = not enrolled = never touched"
         string profileUsername "nullable; lowercased, last checked"

@@ -12,6 +12,8 @@ const mockFindByChannelId = jest.fn();
 const mockMarkProfileChecked = jest.fn();
 const mockMarkGuideSent = jest.fn();
 const mockIncrementProfileReask = jest.fn();
+const mockMarkGuideDone = jest.fn();
+const mockHasTasksForChannel = jest.fn();
 const mockLookup = jest.fn();
 
 jest.mock('../database/repositories', () => ({
@@ -19,7 +21,11 @@ jest.mock('../database/repositories', () => ({
     findByChannelId: (...args: unknown[]) => mockFindByChannelId(...args),
     markProfileChecked: (...args: unknown[]) => mockMarkProfileChecked(...args),
     markGuideSent: (...args: unknown[]) => mockMarkGuideSent(...args),
+    markGuideDone: (...args: unknown[]) => mockMarkGuideDone(...args),
     incrementProfileReask: (...args: unknown[]) => mockIncrementProfileReask(...args),
+  },
+  taskRepository: {
+    hasTasksForChannel: (...args: unknown[]) => mockHasTasksForChannel(...args),
   },
 }));
 
@@ -40,6 +46,7 @@ import { handleTicketProfileFlow } from '../services/ticket-profile-check.servic
 import {
   REDDIT_PROFILE_APPROVAL_ADMIN_ID,
   REDDIT_PROFILE_MAX_REASKS,
+  TICKET_ONBOARDING_DONE_MESSAGE,
   TICKET_GUIDE_CHANNEL_IDS,
 } from '../config/constants';
 
@@ -102,6 +109,8 @@ beforeEach(() => {
   dmSent.length = 0;
   mockFindByChannelId.mockResolvedValue({ profileCheckStatus: 'PENDING', profileReaskCount: 0, guideSentAt: null });
   mockLookup.mockResolvedValue({ kind: 'ok', profile: { username: 'some_worker', linkKarma: 30, commentKarma: 40 } });
+  mockMarkGuideDone.mockReset();
+  mockHasTasksForChannel.mockResolvedValue(false);
   fetchUser.mockImplementation(async (id: string) => ({
     send: jest.fn(async (payload: unknown) => {
       dmSent.push({ id, content: typeof payload === 'string' ? payload : JSON.stringify(payload) });
@@ -609,5 +618,123 @@ describe('resilience', () => {
     await expect(
       handleTicketProfileFlow({ client, channel: makeChannel(), authorId: WORKER, content: 'hi' }),
     ).resolves.toBe(false);
+  });
+});
+
+describe('onboarding reading confirmation ("done" reply)', () => {
+  it('sends the doubts/admin contact message and stamps guideDoneAt when worker replies "done"', async () => {
+    mockFindByChannelId.mockResolvedValue({
+      profileCheckStatus: 'PASSED',
+      guideSentAt: new Date(),
+      guideDoneAt: null,
+    });
+
+    const handled = await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: '"done"',
+    });
+
+    expect(handled).toBe(true);
+    expect(sent).toContain(TICKET_ONBOARDING_DONE_MESSAGE);
+    expect(mockMarkGuideDone).toHaveBeenCalledWith('chan-1');
+  });
+
+  it('accepts bare done, Done, DONE, done!, and curly-quoted “done”', async () => {
+    mockFindByChannelId.mockResolvedValue({
+      profileCheckStatus: 'PASSED',
+      guideSentAt: new Date(),
+      guideDoneAt: null,
+    });
+
+    for (const reply of ['done', 'Done', 'DONE', 'done!', '“done”', '"Done."']) {
+      sent.length = 0;
+      const handled = await handleTicketProfileFlow({
+        client,
+        channel: makeChannel(),
+        authorId: WORKER,
+        content: reply,
+      });
+
+      expect(handled).toBe(true);
+      expect(sent).toContain(TICKET_ONBOARDING_DONE_MESSAGE);
+    }
+  });
+
+  it('stays quiet once guideDoneAt is already recorded', async () => {
+    mockFindByChannelId.mockResolvedValue({
+      profileCheckStatus: 'PASSED',
+      guideSentAt: new Date(),
+      guideDoneAt: new Date(),
+    });
+
+    const handled = await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: 'done',
+    });
+
+    expect(handled).toBe(false);
+    expect(sent).toHaveLength(0);
+    expect(mockMarkGuideDone).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet if the ticket already has tasks assigned', async () => {
+    mockFindByChannelId.mockResolvedValue({
+      profileCheckStatus: 'PASSED',
+      guideSentAt: new Date(),
+      guideDoneAt: null,
+    });
+    mockHasTasksForChannel.mockResolvedValue(true);
+
+    const handled = await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: 'done',
+    });
+
+    expect(handled).toBe(false);
+    expect(sent).toHaveLength(0);
+    expect(mockMarkGuideDone).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet when a passed worker sends something other than done', async () => {
+    mockFindByChannelId.mockResolvedValue({
+      profileCheckStatus: 'PASSED',
+      guideSentAt: new Date(),
+      guideDoneAt: null,
+    });
+
+    const handled = await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: WORKER,
+      content: 'hello admin',
+    });
+
+    expect(handled).toBe(false);
+    expect(sent).toHaveLength(0);
+    expect(mockMarkGuideDone).not.toHaveBeenCalled();
+  });
+
+  it('ignores non-worker (admin) messages saying done', async () => {
+    mockFindByChannelId.mockResolvedValue({
+      profileCheckStatus: 'PASSED',
+      guideSentAt: new Date(),
+      guideDoneAt: null,
+    });
+
+    const handled = await handleTicketProfileFlow({
+      client,
+      channel: makeChannel(),
+      authorId: '999', // Admin
+      content: 'done',
+    });
+
+    expect(handled).toBe(false);
+    expect(sent).toHaveLength(0);
   });
 });

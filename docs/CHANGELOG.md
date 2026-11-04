@@ -2,6 +2,16 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-11-04
+### Changed (local, awaits deploy)
+- **Ticket onboarding: "done" reading confirmation response**
+  - When a passing worker (`profileCheckStatus === 'PASSED'`) finishes reading the 3 onboarding channels and replies with `"done"` (normalized with quotes, case, trailing punctuation, or `done reading`), the bot replies in the ticket:
+    `"If you have any doubts, please ask them. the admins will contact you soon."`
+  - Stamped once per ticket in `TicketOnboarding.guideDoneAt` (`onboardingRepository.markGuideDone`).
+  - Guards: only triggers for the ticket's worker; ignored if `guideDoneAt` is already set or if tasks have already been created in the channel (`taskRepository.hasTasksForChannel`).
+  - Idempotent migration added in `prisma/migrations/migration.sql` (`ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "guideDoneAt" TIMESTAMP(3)`), `prisma/schema.prisma` updated and Prisma client generated.
+  - Tests: full unit test coverage in `ticket-profile-check.test.ts`, `reddit-profile-check.test.ts`, `onboarding-repository.test.ts`; all 97 test suites / 1,308 tests pass.
+
 ## 2026-11-03
 ### Changed + deployed (2026-11-03 at `f63886f` — app rebuild, no migration)
 - **Pending Payment Only Protection & Stale Inactive Task Cleanup (>30d).**

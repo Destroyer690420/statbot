@@ -399,6 +399,8 @@ model TicketOnboarding {
   channelId     String    @id
   welcomeSentAt DateTime?
   guideSentAt   DateTime?
+  /// Set when the worker replies "done" after reading the onboarding channels.
+  guideDoneAt   DateTime?
   /// Set by the one-off Reddit profile sweep; the exactly-once guard.
   redditProfileRequestedAt DateTime?
   /// Reddit profile check: PENDING | PASSED | BANNED | LOW_KARMA | UNVERIFIABLE.

@@ -942,3 +942,11 @@ CREATE TABLE IF NOT EXISTS "TicketInactivity" (
 CREATE INDEX IF NOT EXISTS "TicketInactivity_status_idx" ON "TicketInactivity"("status");
 CREATE INDEX IF NOT EXISTS "TicketInactivity_lastActivityAt_idx" ON "TicketInactivity"("lastActivityAt");
 CREATE INDEX IF NOT EXISTS "TicketInactivity_workerId_idx" ON "TicketInactivity"("workerId");
+
+-- ============================================================
+-- Migration: Ticket onboarding reading confirmation ("done" reply)
+-- ============================================================
+-- Timestamp when a passing worker replies "done" after reading the
+-- onboarding channels (#beginners-corner, #rules, #announcements).
+-- Nullable, schema-only, safe to re-run.
+ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "guideDoneAt" TIMESTAMP(3);

@@ -54,9 +54,9 @@ export async function handleMessageCreate(message: Message): Promise<void> {
     // Ticket Reddit profile check: the worker's first reply is interpreted
     // rather than blindly triggering the onboarding guide. Only tickets
     // enrolled by channelCreate are considered, so pre-existing tickets are
-    // untouched. Consumes ONLY a profile link it checked - a re-ask returns
-    // false so a screenshot or submission in the same message still reaches
-    // the handlers below.
+    // untouched. Consumes a profile link it checked or a passing worker's "done"
+    // guide confirmation - a re-ask returns false so a screenshot or submission
+    // in the same message still reaches the handlers below.
     const onboardingHandled = await handleTicketProfileCheck(message).catch((err) => {
       logger.warn('Ticket profile check handler failed', {
         channelId: message.channel.id,

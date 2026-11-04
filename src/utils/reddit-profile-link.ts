@@ -397,3 +397,21 @@ export function formatUnverifiableDm(args: { channelName: string; workerId: stri
 export function formatUnverifiableMessage(reason: string): string {
   return `⚠️ i could not verify your reddit profile right now (${reason}). please send the link again in a minute.`;
 }
+
+/**
+ * Detects whether a worker's message is replying "done" to the onboarding guide.
+ * Normalizes surrounding quotes (straight `"`/`'` or curly `“`/`”`/`‘`/`’`),
+ * whitespace, trailing punctuation (. ! ?), and simple phrase variants.
+ */
+export function isDoneReply(content: string): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  const stripped = trimmed.replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, '').trim();
+  const cleaned = stripped.replace(/[.!?]+$/, '').trim().toLowerCase();
+  return (
+    cleaned === 'done' ||
+    cleaned === 'done reading' ||
+    cleaned === 'i am done' ||
+    cleaned === "i'm done"
+  );
+}

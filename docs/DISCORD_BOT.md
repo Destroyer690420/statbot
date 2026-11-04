@@ -129,6 +129,16 @@ Why a DM rather than in-ticket: the worker was seeing both the "passed / add thi
 
 **Message consumption is deliberately asymmetric.** A **profile link is consumed** (the flow returns `true` and the handlers below are skipped) — otherwise `handleInstructionReply` would accept the profile URL as the worker's submitted post. A **re-ask is not consumed** (returns `false`): a message with no profile link may still be a 20h insight screenshot or a task submission, and a ticket can hold a live task before the worker ever shares a profile, so claiming that message would silently drop an insight upload. The re-ask is a side effect, not a claim on the message.
 
+### 5.2 Onboarding reading confirmation ("done" reply)
+
+When a passing worker (`profileCheckStatus === 'PASSED'`) replies with `"done"` (normalized case-insensitively, handling straight/curly quotes `"done"`, `'done'`, `“done”`, trailing punctuation `done.`, `done!`, and variants like `done reading`):
+1. The bot responds in the ticket channel with `TICKET_ONBOARDING_DONE_MESSAGE`:
+   `"If you have any doubts, please ask them. the admins will contact you soon."`
+2. Stamps `TicketOnboarding.guideDoneAt = now` via `onboardingRepository.markGuideDone(channelId)`.
+3. Once stamped (or if the ticket already has tasks created), subsequent `"done"` replies or chatter are ignored (returns `false`), allowing admins to take over or other task handlers to process messages.
+4. Non-workers (admins/staff/bots) cannot trigger the acknowledgement.
+5. The message is consumed (returns `true`) so it is not processed as a task submission.
+
 **Reddit access is authenticated and reused, not new.** See §5.2.
 
 ### 5.2 Why the lookup needs the vaulted session
