@@ -35,6 +35,7 @@ const WorkerInviterHome = lazy(() => import('./pages/worker/WorkerInviterHome'))
 const WorkerTasks = lazy(() => import('./pages/worker/WorkerTasks'));
 const WorkerTaskDetail = lazy(() => import('./pages/worker/WorkerTaskDetail'));
 const WorkerWallet = lazy(() => import('./pages/worker/WorkerWallet'));
+const WorkerInviterWallet = lazy(() => import('./pages/worker/WorkerInviterWallet'));
 const WorkerInvites = lazy(() => import('./pages/worker/WorkerInvites'));
 const WorkerHowTo = lazy(() => import('./pages/worker/WorkerHowTo'));
 
@@ -48,6 +49,23 @@ function WorkerIndex() {
     return <WorkerInviterHome />;
   }
   return <WorkerHome />;
+}
+
+/**
+ * The Wallet route mirrors the Home split: an account with no tasks is paid
+ * through referrals, so it gets the inviter wallet (referral totals + QR)
+ * instead of the task wallet.
+ */
+function WorkerWalletRoute() {
+  const { capabilities } = useWorkerAuth();
+  if (
+    capabilities !== null
+    && !capabilities.hasTasks
+    && (capabilities.hasInvites || capabilities.hasTeam)
+  ) {
+    return <WorkerInviterWallet />;
+  }
+  return <WorkerWallet />;
 }
 
 function WorkerFallback() {
@@ -219,7 +237,7 @@ export default function App() {
                 } />
                 <Route path="wallet" element={
                   <Suspense fallback={<WorkerFallback />}>
-                    <WorkerWallet />
+                    <WorkerWalletRoute />
                   </Suspense>
                 } />
                 <Route path="invites" element={

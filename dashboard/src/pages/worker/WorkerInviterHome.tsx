@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, TrendingUp, Users } from 'lucide-react';
-import { getWorkerInvites, getWorkerQrCode, getWorkerTeam, workerErrorMessage } from '../../api/workerApi';
-import { formatISTDate, formatMoney } from '../../utils/workerFormat';
-import { PaymentQrCard } from '../../components/worker/PaymentQrCard';
+import { getWorkerInvites, getWorkerTeam, workerErrorMessage } from '../../api/workerApi';
+import { formatMoney } from '../../utils/workerFormat';
 import { useInviteDm } from '../../components/worker/useInviteDm';
+import { WorkerWalletSummaryCard } from '../../components/worker/WorkerWalletSummaryCard';
 import {
   WorkerCard,
   WorkerEmptyState,
@@ -38,14 +38,10 @@ function StatCard({ label, value, hint, icon }: { label: string; value: string; 
 }
 
 export default function WorkerInviterHome() {
-  const { capabilities, workerName } = useWorkerAuth();
+  const { capabilities } = useWorkerAuth();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['worker-invites'],
     queryFn: getWorkerInvites,
-  });
-  const qr = useQuery({
-    queryKey: ['worker-wallet-qr'],
-    queryFn: getWorkerQrCode,
   });
   const team = useQuery({
     queryKey: ['worker-team', 1, 1],
@@ -57,7 +53,6 @@ export default function WorkerInviterHome() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-5xl space-y-4">
-        <WorkerSkeleton className="h-20 w-full" />
         <WorkerSkeleton className="h-44 w-full" />
         <div className="grid gap-4 sm:grid-cols-3">
           {[0, 1, 2].map((i) => (
@@ -81,9 +76,6 @@ export default function WorkerInviterHome() {
   const pending = Number(summary?.directPending ?? 0) + Number(summary?.chainPending ?? 0);
   const lastBatch = summary?.lastBatch ?? null;
   const lastBatchAmount = Number(lastBatch?.amount ?? 0);
-  const lastBatchNumber = lastBatch?.batchNumber ?? null;
-  const lastBatchPaidAt = lastBatch?.paidAt ?? null;
-  const qrUploaded = Boolean(qr.data?.data?.qrCodeUrl);
 
   const unqualified = invitees
     .filter((i) => !i.qualified)
@@ -104,28 +96,7 @@ export default function WorkerInviterHome() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="font-display text-xl font-bold tracking-tight text-worker-text sm:text-2xl">
-          {workerName ? `Hi, ${workerName}` : 'Hi'}
-        </h1>
-        <p className="mt-1 text-sm text-worker-text-muted">Your invites at a glance.</p>
-      </div>
-
-      <WorkerCard className="relative overflow-hidden border-0 bg-wallet-gradient text-white">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">Awaiting payment</p>
-          <p className="mt-3 font-display text-4xl font-bold tabular-nums leading-none sm:text-5xl">{formatMoney(pending)}</p>
-          <p className="mt-3 text-sm text-white/80">
-            {lastBatchNumber === null
-              ? 'No payment yet'
-              : `Last payout: ${formatMoney(lastBatchAmount)} · Batch #${lastBatchNumber}${lastBatchPaidAt ? ` · ${formatISTDate(lastBatchPaidAt)}` : ''}`}
-          </p>
-          <p className="mt-1 text-xs text-white/70">
-            {qr.isLoading ? 'Checking payment QR…' : qrUploaded ? 'Payment QR added' : 'Add your payment QR below so you can be paid.'}
-          </p>
-        </div>
-      </WorkerCard>
+      <WorkerWalletSummaryCard awaiting={pending} lastPayment={lastBatchAmount} lifetimePayment={paid} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="People invited" value={String(invited)} hint={invited === 0 ? 'No invites yet' : 'People you brought in'} icon={<Users className="h-4 w-4" aria-hidden="true" />} />
@@ -200,8 +171,6 @@ export default function WorkerInviterHome() {
           </ul>
         )}
       </section>
-
-      {!qr.isLoading && !qrUploaded ? <PaymentQrCard hideWhenUploaded /> : null}
 
       {capabilities?.hasTeam ? (
         <Link to="/worker/invites" className="worker-card worker-card-interactive flex items-center justify-between gap-4 p-4 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent">
