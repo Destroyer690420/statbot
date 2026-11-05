@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Check, ExternalLink, Info, Lightbulb } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ExternalLink, Info, Lightbulb } from 'lucide-react';
 import { getWorkerStatus } from '../../api/workerApi';
 import { useWorkerAuth } from '../../hooks/useWorkerAuth';
 import {
@@ -13,13 +13,52 @@ import { WorkerCard } from '../../components/worker/WorkerUI';
 
 const NUMBERED_SECTIONS = new Set(['how-it-works', 'post-task', 'comment-task', 'deleted-post']);
 
-function GuideNav({ activeId, mobile = false }: { activeId: string; mobile?: boolean }) {
+function GuideNav({
+  activeId,
+  onNavigate,
+  mobile = false,
+}: {
+  activeId: string;
+  onNavigate?: (id: string) => void;
+  mobile?: boolean;
+}) {
+  if (mobile) {
+    // A horizontal chip strip overflowed on narrow screens and showed a
+    // scrollbar at the top of the guide. A native select stays one compact row
+    // and works with both touch and a mouse.
+    return (
+      <nav
+        className="sticky top-16 z-20 bg-worker-bg/95 py-2 backdrop-blur"
+        aria-label="Guide sections"
+      >
+        <div className="relative">
+          <label htmlFor="guide-section-jump" className="sr-only">
+            Jump to a guide section
+          </label>
+          <select
+            id="guide-section-jump"
+            value={activeId}
+            onChange={(event) => onNavigate?.(event.target.value)}
+            className="worker-input appearance-none pr-10 text-sm font-medium"
+          >
+            {WORKER_GUIDE_SECTIONS.map((section) => (
+              <option key={section.id} value={section.id}>
+                {section.title}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-worker-text-faint"
+            aria-hidden="true"
+          />
+        </div>
+      </nav>
+    );
+  }
+
   return (
-    <nav
-      className={mobile ? 'sticky top-16 z-20 -mx-1 overflow-x-auto bg-worker-bg/95 px-1 py-2 backdrop-blur' : ''}
-      aria-label="Guide sections"
-    >
-      <div className={`${mobile ? 'flex min-w-max gap-1 rounded-xl border border-worker-border bg-worker-surface p-1' : 'space-y-1'}`}>
+    <nav aria-label="Guide sections">
+      <div className="space-y-1">
         {WORKER_GUIDE_SECTIONS.map((section) => {
           const active = activeId === section.id;
           return (
@@ -27,7 +66,7 @@ function GuideNav({ activeId, mobile = false }: { activeId: string; mobile?: boo
               key={section.id}
               href={`#guide-${section.id}`}
               aria-current={active ? 'location' : undefined}
-              className={`${mobile ? 'min-h-[40px] whitespace-nowrap rounded-lg px-3 py-2 text-xs' : 'block rounded-lg px-3 py-2 text-sm'} transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent ${
+              className={`block rounded-lg px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent ${
                 active ? 'bg-worker-accent/10 font-semibold text-worker-accent' : 'text-worker-text-muted hover:bg-worker-surface-2 hover:text-worker-text'
               }`}
             >
@@ -45,6 +84,11 @@ export default function WorkerHowTo() {
   const { data } = useQuery({ queryKey: ['worker-status'], queryFn: getWorkerStatus });
   const guildId = data?.data?.guildId || '';
   const [activeId, setActiveId] = useState(WORKER_GUIDE_SECTIONS[0]?.id || '');
+
+  const jumpToSection = (id: string) => {
+    setActiveId(id);
+    document.getElementById(`guide-${id}`)?.scrollIntoView({ block: 'start' });
+  };
 
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
@@ -73,14 +117,14 @@ export default function WorkerHowTo() {
 
         <div className="min-w-0 max-w-3xl">
           <div className="lg:hidden">
-            <GuideNav activeId={activeId} mobile />
+            <GuideNav activeId={activeId} onNavigate={jumpToSection} mobile />
           </div>
 
           <div className="mt-4 space-y-4 lg:mt-0">
             {WORKER_GUIDE_SECTIONS.map((section) => {
               const numbered = NUMBERED_SECTIONS.has(section.id);
               return (
-                <WorkerCard as="section" key={section.id} id={`guide-${section.id}`} className="scroll-mt-28 p-5 sm:p-6">
+                <WorkerCard as="section" key={section.id} id={`guide-${section.id}`} className="scroll-mt-32 p-5 sm:p-6 lg:scroll-mt-28">
                   <div className="flex items-start gap-3">
                     {numbered ? (
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-worker-accent font-display text-sm font-bold text-white">
