@@ -3,6 +3,13 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-05
+### Deployed (2026-11-05 at `9955764` — dashboard-only rebuild, no migration)
+- **How-to section navigation no longer scrolls horizontally.** On screens under `lg`, `/worker/how-to` showed a horizontal scrollbar at the top of the chip strip (`overflow-x-auto` + `min-w-max`), and sections past the fold were hard to reach with a mouse.
+  - `GuideNav` now renders a sticky **jump-to-section `<select>`** below the top bar: one 44px row using `worker-input`, `appearance-none`, a chevron, and a visually hidden label.
+  - The select value follows the section in view via the existing IntersectionObserver; choosing an option calls `scrollIntoView`.
+  - Guide cards use `scroll-mt-32` on mobile and `scroll-mt-28` at `lg`, where the sticky desktop sidebar TOC is unchanged.
+  - Verified live: 3 services Up, public health `200` healthy DB+Redis, host HEAD `9955764`, backup `rtm-backup-20261105-145019-howto-nav.tar.gz`; dashboard root + `/worker` + served `WorkerHowTo--YYTZKeO.js` all `200`; chunk contains `guide-section-jump` and no `min-w-max`/`overflow-x-auto`; 17/17 dashboard tests, 97/97 suites / 1,318 backend tests, typecheck + dashboard build clean. No schema/migration/env change.
+
 ### Deployed (2026-11-05 at `48da21e` — dashboard-only rebuild, no migration)
 - **Inviter portal trimmed + inviter Wallet page.** Verified live: 3 services Up, public health `200` healthy DB+Redis, host HEAD `48da21e`, backup `rtm-backup-20261105-143835-inviter-wallet.tar.gz`; dashboard root + `/worker` + served `WorkerInvites-DYDitgwp.js`, `WorkerInviterWallet-Sy5Dx2KG.js` and `WorkerWalletSummaryCard-BjnhJJ9O.js` all `200`; invites chunk has 0 matches for Awaiting/Total/Payment and carries People/Direct; `Next to nudge` in `WorkerInviterHome-C7nff07g.js`; `Lifetime payment` in the shared summary chunk; old "Your invites at a glance" absent everywhere. Full suite 97/97 suites / 1,318 tests, typecheck + dashboard build clean. No schema/migration/env change.
   - **Inviter Home:** removed the greeting ("Hi, … / Your invites at a glance.") and the bespoke hero + QR block. Home now opens with the new shared `WorkerWalletSummaryCard` (`dashboard/src/components/worker/WorkerWalletSummaryCard.tsx`), the **same three-section gradient card as the ticket Home**: **Awaiting payment** (`directPending + chainPending`) on top, then a two-column footer with **Last payment** (most recent batch amount) and **Lifetime payment** (`paid`). Stat cards, "Next to nudge" and the team card remain.
