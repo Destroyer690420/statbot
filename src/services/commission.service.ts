@@ -17,6 +17,7 @@ import { reminderService } from './reminder.service';
 import { auditLogService } from './audit.service';
 import { toTask, toReferral, toCommissionBatch } from '../database/converters';
 import { logger } from '../utils/logger';
+import { isSpecialInviter } from '../config/constants';
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
@@ -287,14 +288,9 @@ class CommissionService {
     if (data.inviteeId !== undefined) updateData.inviteeId = data.inviteeId;
 
     // Inviter change re-derives type + indirect chain (same rule as creation:
-    // hardcoded special list; normal inviters walk the ancestor chain).
+    // special-inviter list; normal inviters walk the ancestor chain).
     if (data.inviterId !== undefined && data.inviterId !== current.inviterId) {
-      const SPECIAL_INVITER_IDS = [
-        '582595416294555649',
-        '1202294567706316911',
-        '1506900129792135211',
-      ];
-      const newType = SPECIAL_INVITER_IDS.includes(newInviterId) ? 'special' : 'normal';
+      const newType = isSpecialInviter(newInviterId) ? 'special' : 'normal';
       updateData.inviterType = newType;
       updateData.indirectSpecialInviterId =
         newType === 'normal' ? await resolveIndirectSpecialInviterId(newInviterId) : null;

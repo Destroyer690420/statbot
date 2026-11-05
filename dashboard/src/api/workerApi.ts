@@ -107,7 +107,13 @@ export async function getWorkerInvites() {
   return data;
 }
 
-/** Ask the server for a Discord DM link with an invited person (by opaque ref). */
+/** Special inviters only: their downline (team). 404 for everyone else. */
+export async function getWorkerTeam(params?: Record<string, string | number | undefined>) {
+  const { data } = await workerApi.get('/invites/team', { params });
+  return data;
+}
+
+/** Ask the server for the invited person's Discord profile URL (by opaque ref). */
 export async function getInviteeDmUrl(ref: string) {
   const { data } = await workerApi.post('/invites/dm', { ref });
   return data;

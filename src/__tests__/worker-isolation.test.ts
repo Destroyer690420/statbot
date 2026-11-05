@@ -29,6 +29,7 @@ import {
   makeMockMember,
 } from './worker-helpers';
 import { WORKER_FORBIDDEN_FIELDS } from '../utils/worker-view';
+import { notFoundHandler } from '../api/middleware/errorHandler';
 
 /**
  * End-to-end worker isolation over real HTTP (ephemeral port + global fetch):
@@ -49,6 +50,16 @@ const DOWNSTREAM = '600000000000000007';
 const P = '700000000000000008';
 const P_INVITEE1 = '700000000000000009';
 const P_INVITEE2 = '700000000000000010';
+/** Special inviters (hardcoded ids) — S has a downline, S2 has a different one. */
+const S = '582595416294555649';
+const S2 = '1202294567706316911';
+const LONELY_SPECIAL = '1506900129792135211';
+const S_INVITEE1 = '582595416294555650';
+const S_INVITEE2 = '582595416294555651';
+const S_CLOSED = '582595416294555652';
+const S_SUB_INVITER = '582595416294555653';
+const S2_INVITEE = '1202294567706316912';
+const S2_SUB_INVITER = '1202294567706316913';
 
 function buildState(failChannel: MockChannel): FixtureState {
   const d = (s: string) => new Date(s);
@@ -68,6 +79,15 @@ function buildState(failChannel: MockChannel): FixtureState {
       { id: 'tI21', type: 'POST', status: 'ARCHIVED', channelId: 'chan-inv1', channelName: 'ticket-0021', assignedUserId: INVITEE1, assignedUserName: 'Invited One', createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-05T00:00:00Z'), subreddit: 'InvSub1', title: 'invited one post', externalTaskId: '501' },
       { id: 'tI22', type: 'COMMENT', status: 'COMPLETED', channelId: 'chan-inv2', channelName: 'ticket-0022', assignedUserId: INVITEE2, assignedUserName: 'Invited Two', createdAt: d('2026-08-02T00:00:00Z'), updatedAt: d('2026-08-06T00:00:00Z'), subreddit: 'InvSub2', title: 'invited two comment', externalTaskId: '502' },
       { id: 'tI23', type: 'POST', status: 'COMPLETED', channelId: 'chan-inv2', channelName: 'ticket-0022', assignedUserId: INVITEE2, assignedUserName: 'Invited Two', createdAt: d('2026-08-03T00:00:00Z'), updatedAt: d('2026-08-07T00:00:00Z'), subreddit: 'InvSub2', title: 'invited two post two', externalTaskId: '503' },
+      // ——— Special inviter S's downline (team view only) ———
+      { id: 'tS1a', type: 'POST', status: 'COMPLETED', channelId: 'chan-steam1', channelName: 'ticket-0031', assignedUserId: S_INVITEE1, assignedUserName: 'Team Alpha', createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-05T00:00:00Z'), subreddit: 'TeamSub', title: 'team alpha post', externalTaskId: '601' },
+      { id: 'tS1b', type: 'COMMENT', status: 'ARCHIVED', channelId: 'chan-steam1', channelName: 'ticket-0031', assignedUserId: S_INVITEE1, assignedUserName: 'Team Alpha', createdAt: d('2026-08-02T00:00:00Z'), updatedAt: d('2026-08-06T00:00:00Z'), subreddit: 'TeamSub', title: 'team alpha comment', externalTaskId: '602' },
+      // Cancelled work never counts toward a threshold.
+      { id: 'tS1c', type: 'POST', status: 'COMPLETED', channelId: 'chan-steam1', channelName: 'ticket-0031', assignedUserId: S_INVITEE1, assignedUserName: 'Team Alpha', createdAt: d('2026-08-03T00:00:00Z'), updatedAt: d('2026-08-07T00:00:00Z'), cancelledReason: 'deleted', subreddit: 'TeamSub', title: 'team alpha cancelled', externalTaskId: '603' },
+      // Closed team row: has completed work but must stay invisible.
+      { id: 'tS3a', type: 'POST', status: 'COMPLETED', channelId: 'chan-steam3', channelName: 'ticket-0033', assignedUserId: S_CLOSED, assignedUserName: 'TeamClosedSecret', createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-05T00:00:00Z'), subreddit: 'TeamSub', title: 'closed team post', externalTaskId: '604' },
+      // Another special inviter's downline: never visible to S.
+      { id: 'tS2a', type: 'POST', status: 'COMPLETED', channelId: 'chan-s2team', channelName: 'ticket-0041', assignedUserId: S2_INVITEE, assignedUserName: 'OtherSpecialTeam', createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-05T00:00:00Z'), subreddit: 'TeamSub', title: 'other special team post', externalTaskId: '605' },
       // ——— Bob (worker B) ———
       { id: 'tB1', type: 'POST', status: 'PENDING', channelId: 'chan-bob', channelName: 'ticket-0002', assignedUserId: B, assignedUserName: 'Bobson McOther', createdAt: d('2026-09-01T00:00:00Z'), updatedAt: d('2026-09-02T00:00:00Z'), subreddit: 'ZzzSecretSubB', title: 'Bob secret title', externalTaskId: '201' },
       { id: 'tB2', type: 'POST', status: 'ARCHIVED', channelId: 'chan-bob', channelName: 'ticket-0002', assignedUserId: B, assignedUserName: 'Bobson McOther', createdAt: d('2026-08-10T00:00:00Z'), updatedAt: d('2026-08-15T00:00:00Z'), subreddit: 'ZzzSecretSubB', title: 'Bob old post', externalTaskId: '202' },
@@ -118,6 +138,11 @@ function buildState(failChannel: MockChannel): FixtureState {
       // —— P: a pure inviter. Referrals, commissions, and NO tasks at all. ——
       { id: 'REF-P1', inviterId: P, inviterName: 'Pure Inviter', inviteeId: P_INVITEE1, inviteeName: 'PureInviteOne', inviterType: 'normal', status: 'qualified', oneTimeCommissionPaid: true, oneTimeCommissionPaidAt: d('2026-08-11T00:00:00Z'), perTaskCommissionActive: false, ticketId: '<#chan-p1>', indirectSpecialInviterId: null, createdAt: d('2026-07-05T00:00:00Z'), updatedAt: d('2026-08-11T00:00:00Z') },
       { id: 'REF-P2', inviterId: P, inviterName: 'Pure Inviter', inviteeId: P_INVITEE2, inviteeName: 'PureInviteTwo', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: null, indirectSpecialInviterId: null, createdAt: d('2026-08-02T00:00:00Z'), updatedAt: d('2026-08-02T00:00:00Z') },
+      // —— Special inviters' downlines (team view, keyed by indirectSpecialInviterId) ——
+      { id: 'REF-S1', inviterId: S_SUB_INVITER, inviterName: 'Team Sub One', inviteeId: S_INVITEE1, inviteeName: 'Team Alpha', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: '<#chan-steam1>', indirectSpecialInviterId: S, createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-01T00:00:00Z') },
+      { id: 'REF-S2', inviterId: S_SUB_INVITER, inviterName: 'Team Sub Two', inviteeId: S_INVITEE2, inviteeName: 'Team Beta', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: 'ticket-0032', indirectSpecialInviterId: S, createdAt: d('2026-08-02T00:00:00Z'), updatedAt: d('2026-08-02T00:00:00Z') },
+      { id: 'REF-S3', inviterId: S_SUB_INVITER, inviterName: 'Team Sub One', inviteeId: S_CLOSED, inviteeName: 'TeamClosedSecret', inviterType: 'normal', status: 'closed', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: '<#chan-steam3>', indirectSpecialInviterId: S, createdAt: d('2026-07-01T00:00:00Z'), updatedAt: d('2026-07-01T00:00:00Z') },
+      { id: 'REF-S2-1', inviterId: S2_SUB_INVITER, inviterName: 'Other Sub', inviteeId: S2_INVITEE, inviteeName: 'OtherSpecialTeam', inviterType: 'normal', status: 'pending', oneTimeCommissionPaid: false, oneTimeCommissionPaidAt: null, perTaskCommissionActive: false, ticketId: '<#chan-s2team>', indirectSpecialInviterId: S2, createdAt: d('2026-08-01T00:00:00Z'), updatedAt: d('2026-08-01T00:00:00Z') },
     ],
     commissionItems: [
       { id: 'ci-a1', batchId: 'cb-1', referralId: 'REF-A1', inviterId: A, invitedWorkerId: INVITEE1, sourceTaskId: null, commissionKind: 'one_time', amount: 100, createdAt: d('2026-08-10T00:00:00Z'), batchNumber: 4, batchPaidAt: d('2026-08-10T00:00:00Z') },
@@ -197,6 +222,7 @@ describe('worker isolation (HTTP)', () => {
     const app = express();
     app.use(express.json());
     app.use('/api/v1/worker', routes(client));
+    app.use(notFoundHandler);
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => resolve()) as unknown as { close: (cb?: () => void) => void };
     });
@@ -425,7 +451,7 @@ describe('worker isolation (HTTP)', () => {
       expect(me.body.data.rates).toEqual({ post: 60, comment: 30 });
       expect(me.body.data.scope).toBe('ticket');
       // Alice does tasks and invites.
-      expect(me.body.data.capabilities).toEqual({ hasTasks: true, hasInvites: true });
+      expect(me.body.data.capabilities).toEqual({ hasTasks: true, hasInvites: true, hasTeam: false });
 
       const wallet = await api('/wallet', undefined, tokenA);
       expect(wallet.body.data.lifetimePaid).toBe(60);
@@ -572,7 +598,7 @@ describe('worker isolation (HTTP)', () => {
       // No ticket at all — that is the whole point of this login.
       expect(me.body.data.ticket).toBeNull();
       expect(me.body.data.scope).toBe('inviter');
-      expect(me.body.data.capabilities).toEqual({ hasTasks: false, hasInvites: true });
+      expect(me.body.data.capabilities).toEqual({ hasTasks: false, hasInvites: true, hasTeam: false });
 
       const invites = await api('/invites', undefined, inviterToken);
       expect(invites.status).toBe(200);
@@ -623,6 +649,143 @@ describe('worker isolation (HTTP)', () => {
       const after = await api('/invites', undefined, inviterToken);
       expect(after.status).toBe(401);
       inviterToken = '';
+    });
+  });
+
+  describe('special inviter team (downline)', () => {
+    const specialToken = () => svc.signWorkerToken({ workerId: S, channelId: '', name: 'Special One', scope: 'inviter' });
+
+    test('is a route only for special inviters — normal inviters get the generic 404', async () => {
+      const res = await api('/invites/team', undefined, tokenA);
+      const unknown = await api('/well-and-truly-missing', undefined, tokenA);
+      expect(res.status).toBe(404);
+      expect(unknown.status).toBe(404);
+      expect(res.body.success).toBe(false);
+      // Same handler, same wording — only the echoed path differs.
+      expect(res.body.message).toBe(
+        String(unknown.body.message).replace('/well-and-truly-missing', '/invites/team'),
+      );
+      // Anonymous callers never reach the check at all.
+      const anon = await api('/invites/team');
+      expect(anon.status).toBe(401);
+    });
+
+    test('hasTeam is true only for a special inviter with a non-closed downline', async () => {
+      const special = await api('/me', undefined, specialToken());
+      expect(special.body.data.capabilities).toEqual({ hasTasks: false, hasInvites: false, hasTeam: true });
+
+      const lonelyToken = svc.signWorkerToken({ workerId: LONELY_SPECIAL, channelId: '', name: 'Lonely', scope: 'inviter' });
+      const lonely = await api('/me', undefined, lonelyToken);
+      expect(lonely.body.data.capabilities.hasTeam).toBe(false);
+
+      // Normal inviters never get team capabilities.
+      expect((await api('/me', undefined, tokenA)).body.data.capabilities.hasTeam).toBe(false);
+      const pureToken = svc.signWorkerToken({ workerId: P, channelId: '', name: 'Pure Inviter', scope: 'inviter' });
+      expect((await api('/me', undefined, pureToken)).body.data.capabilities.hasTeam).toBe(false);
+    });
+
+    test('lists only the caller\'s downline: closed rows excluded, no ids, no money', async () => {
+      const res = await api('/invites/team?page=1&limit=20', undefined, specialToken());
+      expect(res.status).toBe(200);
+      const { rows, total, page, limit } = res.body.data;
+      expect(total).toBe(2);
+      expect(page).toBe(1);
+      expect(limit).toBe(20);
+      expect(rows).toHaveLength(2);
+
+      // Progress is capped at the special threshold (1), and the qualified row
+      // sorts first; the cancelled task never counts.
+      expect(rows[0]).toMatchObject({
+        name: 'Team Alpha',
+        invitedBy: 'Team Sub One',
+        ticket: 'ticket-0031',
+        tasks: 1,
+        threshold: 1,
+        qualified: true,
+      });
+      expect(rows[1]).toMatchObject({
+        name: 'Team Beta',
+        invitedBy: 'Team Sub Two',
+        ticket: 'ticket-0032',
+        tasks: 0,
+        threshold: 1,
+        qualified: false,
+      });
+      for (const row of rows) {
+        expect(row.dmRef).toMatch(/^[0-9a-f]{16}$/);
+        expect(Object.keys(row).sort()).toEqual([
+          'dmRef', 'invitedBy', 'name', 'qualified', 'tasks', 'threshold', 'ticket',
+        ]);
+      }
+
+      const json = JSON.stringify(res.body);
+      for (const marker of [S, S2, S_INVITEE1, S_INVITEE2, S_CLOSED, S_SUB_INVITER, S2_INVITEE, 'REF-S1', 'REF-S2', 'REF-S3', 'TeamClosedSecret', 'OtherSpecialTeam']) {
+        expect(json).not.toContain(marker);
+      }
+      const keys = collectKeys(res.body);
+      for (const field of WORKER_FORBIDDEN_FIELDS) {
+        expect(keys).not.toContain(field);
+      }
+    });
+
+    test('search and pagination stay inside the caller\'s own team', async () => {
+      const search = await api('/invites/team?page=1&limit=20&q=alpha', undefined, specialToken());
+      expect(search.body.data.total).toBe(1);
+      expect(search.body.data.rows.map((r: { name: string }) => r.name)).toEqual(['Team Alpha']);
+
+      const page2 = await api('/invites/team?page=2&limit=1', undefined, specialToken());
+      expect(page2.body.data.total).toBe(2);
+      expect(page2.body.data.rows.map((r: { name: string }) => r.name)).toEqual(['Team Beta']);
+
+      // Another special inviter sees their own downline only.
+      const s2Token = svc.signWorkerToken({ workerId: S2, channelId: '', name: 'Special Two', scope: 'inviter' });
+      const other = await api('/invites/team', undefined, s2Token);
+      expect(other.body.data.total).toBe(1);
+      expect(other.body.data.rows.map((r: { name: string }) => r.name)).toEqual(['OtherSpecialTeam']);
+
+      // limit is validated (≤50), not silently widened.
+      const capped = await api('/invites/team?limit=500', undefined, specialToken());
+      expect(capped.status).toBe(400);
+      // ...and the cap is never observable to a non-special caller: they get
+      // the same 404 even for a query that would fail validation.
+      const hidden = await api('/invites/team?limit=500', undefined, tokenA);
+      expect(hidden.status).toBe(404);
+    });
+
+    test('a team dmRef opens the profile URL without any Discord API call', async () => {
+      const list = await api('/invites/team', undefined, specialToken());
+      const ref = list.body.data.rows[0].dmRef as string;
+
+      const originalFetch = global.fetch;
+      const urls: string[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      global.fetch = (async (input: any, init?: any) => {
+        urls.push(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+        return originalFetch(input, init);
+      }) as typeof fetch;
+      try {
+        const dm = await api('/invites/dm', { method: 'POST', body: JSON.stringify({ ref }) }, specialToken());
+        expect(dm.status).toBe(200);
+        expect(dm.body.data).toEqual({ profileUrl: `https://discord.com/users/${S_INVITEE1}` });
+        expect(Object.keys(dm.body.data)).toEqual(['profileUrl']);
+      } finally {
+        global.fetch = originalFetch;
+      }
+      expect(urls.some((u) => u.includes('discord.com/api'))).toBe(false);
+    });
+
+    test('a team ref never resolves for a different special inviter or a normal inviter', async () => {
+      const list = await api('/invites/team', undefined, specialToken());
+      const ref = list.body.data.rows[0].dmRef as string;
+
+      const s2Token = svc.signWorkerToken({ workerId: S2, channelId: '', name: 'Special Two', scope: 'inviter' });
+      const crossSpecial = await api('/invites/dm', { method: 'POST', body: JSON.stringify({ ref }) }, s2Token);
+      expect(crossSpecial.status).toBe(404);
+
+      const crossNormal = await api('/invites/dm', { method: 'POST', body: JSON.stringify({ ref }) }, tokenA);
+      expect(crossNormal.status).toBe(404);
+      expect(JSON.stringify(crossSpecial.body)).not.toContain(S_INVITEE1);
+      expect(JSON.stringify(crossNormal.body)).not.toContain(S_INVITEE1);
     });
   });
 

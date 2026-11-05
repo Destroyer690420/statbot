@@ -34,7 +34,8 @@ import {
   getTaskForWorker,
   getWalletForWorker,
 } from '../../services/worker.service';
-import { getInvitesForWorker, resolveInviteeDmRef } from '../../services/worker-referrals.service';
+import { getInvitesForWorker, getTeamForWorker, resolveInviteeDmRef } from '../../services/worker-referrals.service';
+import { isSpecialInviter } from '../../config/constants';
 import { getWorkerQrInfo, saveWorkerQrCode } from '../../services/worker-payment-qr.service';
 import { QrValidationError } from '../../utils/payment-qr';
 
@@ -777,11 +778,56 @@ export default function createWorkerRoutes(discordClient: any): Router {
     }
   });
 
+  const teamQuerySchema = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+    q: z.string().max(100).optional(),
+  });
+
   /**
-   * Resolve a `dmRef` into a Discord DM link for the person that worker
-   * invited. Discord has no way to open a DM from a URL alone, so the real
-   * channel id is fetched server-side — which also means the invitee's Discord
-   * id never reaches the browser.
+   * Team is a special-inviter surface only. Checked BEFORE query validation so
+   * a normal inviter gets the same 404 the router would give for an unknown
+   * path — the endpoint must not even acknowledge that it exists.
+   */
+  const requireSpecialInviter = (req: WorkerAuthRequest, res: Response, next: () => void): void => {
+    if (!isSpecialInviter(req.worker?.sub)) {
+      res.status(404).json({ success: false, message: `Route GET ${req.originalUrl} not found.` });
+      return;
+    }
+    next();
+  };
+
+  router.get(
+    '/invites/team',
+    workerAuthMiddleware,
+    requireSpecialInviter,
+    validateQuery(teamQuerySchema),
+    async (req: WorkerAuthRequest, res: Response): Promise<void> => {
+      try {
+        const workerId = req.worker!.sub;
+        const q = req.query as unknown as { page: number; limit: number; q?: string };
+        const data = await getTeamForWorker(workerId, { page: q.page, limit: q.limit, q: q.q });
+        if (!data) {
+          res.status(404).json({ success: false, message: `Route GET ${req.originalUrl} not found.` });
+          return;
+        }
+        res.json({ success: true, data });
+      } catch (error) {
+        logger.error('GET /worker/invites/team failed', { error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
+
+  /**
+   * Resolve a `dmRef` into the clicked person's Discord profile URL.
+   * Everyone in the server can open that profile and press Message, so no
+   * Discord API call is needed — the previous bot-DM-channel link could only
+   * open for the bot and the invitee, never for the inviter.
+   *
+   * The invitee id appears only inside this returned URL, only for the
+   * caller's own direct + team rows. `inviteeId` stays forbidden in every
+   * list payload.
    */
   router.post('/invites/dm', workerAuthMiddleware, dmLimiter, async (req: WorkerAuthRequest, res: Response): Promise<void> => {
     try {
@@ -795,28 +841,7 @@ export default function createWorkerRoutes(discordClient: any): Router {
         res.status(404).json({ success: false, message: 'That person is not in your invites.' });
         return;
       }
-      if (!env.DISCORD_TOKEN) {
-        res.status(503).json({ success: false, message: 'Direct messages are unavailable right now.' });
-        return;
-      }
-      // Discord creates the DM channel if it does not exist yet, and returns the
-      // same id on every later call, so the link works even for a first DM.
-      const res2 = await fetch('https://discord.com/api/v10/users/@me/channels', {
-        method: 'POST',
-        headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient_id: inviteeId }),
-      });
-      if (!res2.ok) {
-        logger.warn('POST /worker/invites/dm Discord refused', { status: res2.status });
-        res.status(502).json({ success: false, message: 'Could not open a DM with that person.' });
-        return;
-      }
-      const channel = (await res2.json()) as { id?: string };
-      if (!channel?.id) {
-        res.status(502).json({ success: false, message: 'Could not open a DM with that person.' });
-        return;
-      }
-      res.json({ success: true, data: { dmUrl: `https://discord.com/channels/@me/${channel.id}` } });
+      res.json({ success: true, data: { profileUrl: `https://discord.com/users/${inviteeId}` } });
     } catch (error) {
       logger.error('POST /worker/invites/dm failed', { error });
       res.status(500).json({ success: false, message: 'Internal server error.' });

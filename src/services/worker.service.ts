@@ -5,6 +5,7 @@ import { payoutService } from './payout.service';
 import { settingsService } from './settings.service';
 import { logger } from '../utils/logger';
 import { env } from '../config/env';
+import { isSpecialInviter } from '../config/constants';
 import { displayTaskId } from '../utils/task-display';
 import {
   TaskLike,
@@ -158,12 +159,13 @@ export async function getMeData(workerId: string, ticketChannelId: string): Prom
   /** Null for an inviter-scope login: an inviter has no ticket. */
   ticket: { channelId: string; channelName: string | null; discordUrl: string } | null;
   scope: 'ticket' | 'inviter';
-  capabilities: { hasTasks: boolean; hasInvites: boolean };
+  capabilities: { hasTasks: boolean; hasInvites: boolean; hasTeam: boolean };
   weekLabel: string;
   rates: { post: number; comment: number };
 }> {
   const hasTicket = Boolean(ticketChannelId);
-  const [bundle, identity, nameRow, taskCount, inviteCount] = await Promise.all([
+  const special = isSpecialInviter(workerId);
+  const [bundle, identity, nameRow, taskCount, inviteCount, teamCount] = await Promise.all([
     loadWorkerBundle(workerId),
     hasTicket ? resolveWorkerIdentityForChannel(ticketChannelId) : Promise.resolve(null),
     getDb().task.findFirst({
@@ -173,6 +175,12 @@ export async function getMeData(workerId: string, ticketChannelId: string): Prom
     }),
     getDb().task.count({ where: { assignedUserId: workerId } }),
     referralRepository.countActiveByInviterId(workerId),
+    // Only special inviters can have a team; query for them alone.
+    special
+      ? referralRepository
+          .findByIndirectSpecialInviterId(workerId)
+          .then((rows) => rows.filter((r: any) => r.status !== 'closed').length)
+      : Promise.resolve(0),
   ]);
   const current = payoutService.getCurrentPayoutWeek();
   return {
@@ -187,7 +195,7 @@ export async function getMeData(workerId: string, ticketChannelId: string): Prom
       : null,
     scope: hasTicket ? 'ticket' : 'inviter',
     // Drives the role-aware panel: a pure inviter has invites but no tasks.
-    capabilities: { hasTasks: taskCount > 0, hasInvites: inviteCount > 0 },
+    capabilities: { hasTasks: taskCount > 0, hasInvites: inviteCount > 0, hasTeam: special && teamCount > 0 },
     weekLabel: payoutService.getWeekLabel(current.weekStart, current.weekEnd),
     rates: { post: bundle.rates.postRate, comment: bundle.rates.commentRate },
   };

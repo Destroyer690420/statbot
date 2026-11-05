@@ -22,7 +22,7 @@ interface WorkerAuthContextType {
   /** `inviter` = ticket-less login (no ticket, no tasks, invites only). */
   scope: 'ticket' | 'inviter' | null;
   /** Drives the role-aware panel: which tabs this account can actually use. */
-  capabilities: { hasTasks: boolean; hasInvites: boolean } | null;
+  capabilities: { hasTasks: boolean; hasInvites: boolean; hasTeam: boolean } | null;
   login: (channelId: string, code: string) => Promise<{ workerName: string; ticketName: string }>;
   loginAsInviter: (username: string, code: string) => Promise<{ workerName: string }>;
   logout: () => Promise<void>;
@@ -37,7 +37,7 @@ export function WorkerAuthProvider({ children }: { children: ReactNode }) {
   const [workerName, setWorkerName] = useState<string | null>(null);
   const [ticket, setTicket] = useState<WorkerTicket | null>(null);
   const [scope, setScope] = useState<'ticket' | 'inviter' | null>(null);
-  const [capabilities, setCapabilities] = useState<{ hasTasks: boolean; hasInvites: boolean } | null>(null);
+  const [capabilities, setCapabilities] = useState<{ hasTasks: boolean; hasInvites: boolean; hasTeam: boolean } | null>(null);
   const navigate = useNavigate();
 
   const refreshMe = useCallback(async () => {

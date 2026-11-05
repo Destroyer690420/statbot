@@ -584,14 +584,14 @@ export function buildInviterLoginMessage(code: string): string {
 // ─── Invitee DM refs ─────────────────────────────────────────────────
 
 /**
- * Opaque, per-inviter handle for "open a DM with this person I invited".
+ * Opaque, per-inviter handle for "open this invited person's profile".
  *
- * The browser must never see an invitee's Discord id (it is a
- * `WORKER_FORBIDDEN_FIELDS` entry), and Discord has no way to open a DM from a
- * URL alone — the real DM channel id has to come from the API. So each row
- * carries an HMAC of `(workerId, inviteeId)` instead: it cannot be reversed,
- * cannot be replayed by another worker, and is cheap to verify by recomputing
- * it over the caller's own referrals.
+ * `inviteeId` must never appear as a field in a list payload (it is a
+ * `WORKER_FORBIDDEN_FIELDS` entry), so each row carries an HMAC of
+ * `(workerId, inviteeId)` instead: it cannot be reversed, cannot be replayed
+ * by another worker, and is cheap to verify by recomputing it over the
+ * caller's own direct + team referrals. The id itself reaches the browser only
+ * inside the clicked person's profile URL, never as a field.
  */
 export function signInviteeDmRef(workerId: string, inviteeId: string): string {
   const secret = getWorkerSecret();

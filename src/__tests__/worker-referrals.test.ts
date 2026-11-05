@@ -28,10 +28,13 @@ jest.mock('../services/worker-auth.service', () => ({
   dmRefMatches: (a: string, b: string) => a === b,
 }));
 
-import { getInvitesForWorker, resolveInviteeDmRef } from '../services/worker-referrals.service';
+import { getInvitesForWorker, getTeamForWorker, resolveInviteeDmRef } from '../services/worker-referrals.service';
 
 const ME = '100000000000000001';
 const OTHER = '200000000000000002';
+/** Real special-inviter ids from `SPECIAL_INVITER_IDS`. */
+const SPECIAL_A = '582595416294555649';
+const SPECIAL_B = '1202294567706316911';
 
 const RATES = {
   normalInviteBonus: 100,
@@ -106,9 +109,13 @@ describe('getInvitesForWorker', () => {
 
     mockDb = {
       referral: {
-        findMany: jest.fn(async (args: any = {}) =>
-          referrals.filter((r) => r.inviterId === args.where?.inviterId),
-        ),
+        findMany: jest.fn(async (args: any = {}) => {
+          const where = args.where ?? {};
+          if ('indirectSpecialInviterId' in where) {
+            return referrals.filter((r) => r.indirectSpecialInviterId === where.indirectSpecialInviterId);
+          }
+          return referrals.filter((r) => r.inviterId === where.inviterId);
+        }),
       },
       commissionItem: {
         findMany: jest.fn(async (args: any = {}) =>
@@ -418,5 +425,115 @@ describe('getInvitesForWorker', () => {
     const json = JSON.stringify(dto);
     expect(json).not.toContain(String(OTHER));
     expect(json).not.toContain('999');
+  });
+
+  describe('team (special inviters only)', () => {
+    const ALPHA = '500000000000000021';
+    const BETA = '500000000000000022';
+    const CLOSED = '500000000000000023';
+    const THEIRS = '500000000000000024';
+    const SUB_A = '800000000000000001';
+    const SUB_B = '800000000000000002';
+
+    beforeEach(() => {
+      referrals = [
+        referral({
+          id: 'TEAM-1', inviterId: SUB_A, inviterName: 'Sub A', inviteeId: ALPHA, inviteeName: 'Alpha',
+          ticketId: '<#1234567890123456789>', indirectSpecialInviterId: SPECIAL_A,
+        }),
+        referral({
+          id: 'TEAM-2', inviterId: SUB_B, inviterName: 'Sub B', inviteeId: BETA, inviteeName: 'Beta',
+          ticketId: 'ticket-0032', indirectSpecialInviterId: SPECIAL_A,
+        }),
+        referral({
+          id: 'TEAM-CLOSED', inviterId: SUB_A, inviterName: 'Sub A', inviteeId: CLOSED, inviteeName: 'ClosedPerson',
+          status: 'closed', indirectSpecialInviterId: SPECIAL_A,
+        }),
+        referral({
+          id: 'TEAM-OTHER', inviterId: SUB_B, inviterName: 'Sub B', inviteeId: THEIRS, inviteeName: 'OtherSpecialPerson',
+          indirectSpecialInviterId: SPECIAL_B,
+        }),
+      ];
+      taskChannelNames = { '1234567890123456789': 'ticket-0031' };
+      taskRows = [
+        completedTask({ id: 'ta1', assignedUserId: ALPHA, channelId: '1234567890123456789' }),
+        completedTask({ id: 'ta2', assignedUserId: ALPHA, channelId: '1234567890123456789', status: 'ARCHIVED' }),
+        // Cancelled work and closed rows never count.
+        completedTask({ id: 'ta3', assignedUserId: ALPHA, channelId: '1234567890123456789', cancelledReason: 'deleted' }),
+        completedTask({ id: 'tc1', assignedUserId: CLOSED, channelId: 'chan-closed' }),
+        completedTask({ id: 'to1', assignedUserId: THEIRS, channelId: 'chan-theirs' }),
+      ];
+    });
+
+    it('is not available to a normal inviter', async () => {
+      expect(await getTeamForWorker(ME, { page: 1, limit: 20 })).toBeNull();
+      expect(await getTeamForWorker(OTHER, { page: 1, limit: 20 })).toBeNull();
+      expect(mockGetCommissionRates).not.toHaveBeenCalled();
+    });
+
+    it('lists only the caller\'s downline, skips closed rows and caps progress', async () => {
+      const dto = await getTeamForWorker(SPECIAL_A, { page: 1, limit: 20 });
+
+      expect(dto).not.toBeNull();
+      expect(dto!.total).toBe(2);
+      expect(dto!.qualified).toBe(1);
+      expect(dto!.rows).toEqual([
+        {
+          name: 'Alpha', invitedBy: 'Sub A', ticket: 'ticket-0031',
+          tasks: 1, threshold: 1, qualified: true, dmRef: `ref-${SPECIAL_A}-${ALPHA}`,
+        },
+        {
+          name: 'Beta', invitedBy: 'Sub B', ticket: 'ticket-0032',
+          tasks: 0, threshold: 1, qualified: false, dmRef: `ref-${SPECIAL_A}-${BETA}`,
+        },
+      ]);
+
+      const json = JSON.stringify(dto);
+      // (This suite stubs the signer with a readable `ref-<worker>-<invitee>`,
+      // so the opaque ref itself is excluded from these assertions; the HTTP
+      // suite proves the real HMAC hides every id.)
+      for (const marker of ['TEAM-1', 'TEAM-2', 'TEAM-OTHER', 'TEAM-CLOSED', SUB_A, SUB_B, 'ClosedPerson', 'OtherSpecialPerson']) {
+        expect(json).not.toContain(marker);
+      }
+      for (const row of dto!.rows) {
+        expect(Object.keys(row).sort()).toEqual([
+          'dmRef', 'invitedBy', 'name', 'qualified', 'tasks', 'threshold', 'ticket',
+        ]);
+      }
+    });
+
+    it('keeps search and pagination inside the caller\'s team', async () => {
+      const search = await getTeamForWorker(SPECIAL_A, { page: 1, limit: 20, q: 'bet' });
+      expect(search!.total).toBe(1);
+      expect(search!.rows.map((r) => r.name)).toEqual(['Beta']);
+
+      const page2 = await getTeamForWorker(SPECIAL_A, { page: 2, limit: 1 });
+      expect(page2!.total).toBe(2);
+      expect(page2!.rows.map((r) => r.name)).toEqual(['Beta']);
+
+      const other = await getTeamForWorker(SPECIAL_B, { page: 1, limit: 20 });
+      expect(other!.total).toBe(1);
+      expect(other!.rows.map((r) => r.name)).toEqual(['OtherSpecialPerson']);
+    });
+
+    it('resolves a team ref only for the special inviter who owns the downline', async () => {
+      const dto = await getTeamForWorker(SPECIAL_A, { page: 1, limit: 20 });
+      const ref = dto!.rows[0].dmRef;
+
+      expect(await resolveInviteeDmRef(SPECIAL_A, ref)).toBe(ALPHA);
+      // Another special inviter's downline is not reachable with this ref...
+      expect(await resolveInviteeDmRef(SPECIAL_B, ref)).toBeNull();
+      // ...and neither is a normal inviter's.
+      expect(await resolveInviteeDmRef(ME, ref)).toBeNull();
+      expect(await resolveInviteeDmRef(OTHER, ref)).toBeNull();
+
+      // A closed row has no live handle.
+      const closedRef = `ref-${SPECIAL_A}-${CLOSED}`;
+      expect(await resolveInviteeDmRef(SPECIAL_A, closedRef)).toBeNull();
+
+      // Direct refs keep resolving exactly as before.
+      referrals.push(referral({ id: 'MINE', inviterId: SPECIAL_A, inviteeId: '500000000000000031' }));
+      expect(await resolveInviteeDmRef(SPECIAL_A, `ref-${SPECIAL_A}-500000000000000031`)).toBe('500000000000000031');
+    });
   });
 });

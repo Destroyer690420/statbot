@@ -4,15 +4,10 @@ import { toInviteDetection } from '../database/converters';
 import { generateInviteDetectionId } from '../utils/id-generator';
 import { auditLogService } from './audit.service';
 import { logger } from '../utils/logger';
-
-const SPECIAL_INVITER_IDS = [
-  '582595416294555649',
-  '1202294567706316911',
-  '1506900129792135211',
-];
+import { isSpecialInviter } from '../config/constants';
 
 function resolveInviterType(inviterId: string | null): 'normal' | 'special' {
-  return inviterId && SPECIAL_INVITER_IDS.includes(inviterId) ? 'special' : 'normal';
+  return isSpecialInviter(inviterId) ? 'special' : 'normal';
 }
 
 /** Audit actor for automatic approvals (no human involved). */

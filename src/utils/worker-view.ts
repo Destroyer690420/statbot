@@ -978,6 +978,60 @@ export function buildInvitesSummary(input: {
   };
 }
 
+// ─── Team (special inviters only) ─────────────────────────────────────
+
+export interface WorkerTeamRowInput {
+  name: string;
+  invitedBy: string;
+  ticketName: string | null;
+  tasks: number;
+  threshold: number;
+  dmRef: string;
+}
+
+export interface WorkerTeamRowDto {
+  name: string;
+  invitedBy: string;
+  ticket: string | null;
+  tasks: number;
+  threshold: number;
+  qualified: boolean;
+  dmRef: string;
+}
+
+export interface WorkerTeamDto {
+  rows: WorkerTeamRowDto[];
+  /** Everyone in the caller's team matching the search, not just this page. */
+  total: number;
+  /** Qualified count across the whole (search-filtered) team — Home's summary. */
+  qualified: number;
+  page: number;
+  limit: number;
+}
+
+/**
+ * Totalling is done by the service after filtering for `q` (so `total` counts
+ * every match, not just the page); this builder only caps progress at the
+ * threshold and applies the progress-then-name ordering within the page.
+ */
+export function buildTeamRows(rows: WorkerTeamRowInput[]): WorkerTeamRowDto[] {
+  return rows
+    .map((r) => {
+      const threshold = Math.max(1, Math.trunc(Number(r.threshold) || 1));
+      const tasks = Math.min(Math.max(0, Math.trunc(Number(r.tasks) || 0)), threshold);
+      return {
+        name: r.name,
+        invitedBy: r.invitedBy,
+        ticket: r.ticketName,
+        tasks,
+        threshold,
+        qualified: tasks >= threshold,
+        dmRef: r.dmRef ?? '',
+      };
+    })
+    .sort((a, b) => b.tasks - a.tasks || a.name.localeCompare(b.name));
+}
+
 // ─── Formatting ──────────────────────────────────────────────────────
 
 export function formatMoney(amount: number): string {
@@ -1011,7 +1065,14 @@ export function relativeCountdown(now: Date, dueAt: Date): string {
   return text;
 }
 
-/** Field names that must NEVER appear in any worker response (incl. nested). */
+/**
+ * Field names that must NEVER appear in any worker response (incl. nested).
+ *
+ * `inviteeId` is forbidden in every list payload (direct + team). It reaches
+ * the browser only inside a clicked person's profile URL
+ * (`https://discord.com/users/<id>`, returned by `POST /invites/dm` for the
+ * caller's own downline) — the only place it is exposed, and never as a field.
+ */
 export const WORKER_FORBIDDEN_FIELDS = [
   'payment',
   'deadline',

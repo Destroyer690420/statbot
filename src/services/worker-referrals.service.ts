@@ -3,7 +3,8 @@ import { toReferral } from '../database/converters';
 import { commissionRepository, referralRepository } from '../database/repositories';
 import { commissionService } from './commission.service';
 import { signInviteeDmRef, dmRefMatches } from './worker-auth.service';
-import { buildInvitesSummary, WorkerInviteInput, WorkerInvitesDto } from '../utils/worker-view';
+import { buildInvitesSummary, buildTeamRows, WorkerInviteInput, WorkerInvitesDto, WorkerTeamDto } from '../utils/worker-view';
+import { isSpecialInviter } from '../config/constants';
 import { TaskStatus } from '../types';
 import { logger } from '../utils/logger';
 
@@ -12,11 +13,15 @@ import { logger } from '../utils/logger';
  * is no parameter a caller could use to read somebody else's invites.
  *
  * Privacy rules enforced here:
- * - only referrals this worker personally created are listed;
- * - multi-level (`per_task_indirect`) earnings are reported as one anonymous
- *   total, never attributed to the downstream workers who generated them;
+ * - only referrals this worker personally created are listed on the direct
+ *   view; special inviters additionally see their own `indirectSpecialInviterId`
+ *   referrals on the team view — never anyone else's;
+ * - per-person team money is never shown: multi-level (`per_task_indirect`)
+ *   earnings stay one anonymous total on the summary (`teamPaid`);
  * - no Discord ids, referral ids, commission kinds, or rates cross the boundary
- *   — the DTO carries display names, ticket numbers, and money only.
+ *   — the DTOs carry display names, ticket numbers, and money only. The invitee
+ *   id appears only inside a clicked person's profile URL (see `POST
+ *   /invites/dm`), never as a payload field.
  */
 
 const SNOWFLAKE = /^\d{17,20}$/;
@@ -134,7 +139,7 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
   }
 
   // Pending money the next payout will create. `chainPending` is the
-  // multi-level share and is non-zero only for the three special inviters, so
+  // multi-level share and is non-zero only for special inviters, so
   // a normal inviter's total is exactly their own direct pending and the UI has
   // nothing chain-related to show them.
   let directPending = 0;
@@ -174,9 +179,9 @@ export async function getInvitesForWorker(workerId: string): Promise<WorkerInvit
 
 /**
  * Resolve a `dmRef` back to the invitee it was issued for — but only among the
- * calling worker's own referrals, so a ref can never reach a stranger. Returns
- * the invitee id for the caller to hand to Discord; the id is never returned to
- * the browser.
+ * calling worker's own direct and (for special inviters) team referrals, so a
+ * ref can never reach a stranger. Returns the invitee id for the caller to
+ * build a profile URL; the id is never returned to the browser as a field.
  */
 export async function resolveInviteeDmRef(workerId: string, ref: string): Promise<string | null> {
   if (!ref) return null;
@@ -188,5 +193,72 @@ export async function resolveInviteeDmRef(workerId: string, ref: string): Promis
       return referral.inviteeId;
     }
   }
+  if (isSpecialInviter(workerId)) {
+    const team = (await referralRepository.findByIndirectSpecialInviterId(workerId))
+      .map(toReferral)
+      .filter((r) => r.status !== 'closed');
+    for (const referral of team) {
+      if (dmRefMatches(signInviteeDmRef(workerId, referral.inviteeId), ref)) {
+        return referral.inviteeId;
+      }
+    }
+  }
   return null;
+}
+
+/**
+ * Totalling is done after the `q` name filter, so `total` counts every match,
+ * not just the page; the pure builder caps progress and orders the page.
+ */
+export async function getTeamForWorker(
+  workerId: string,
+  args: { page: number; limit: number; q?: string },
+): Promise<WorkerTeamDto | null> {
+  if (!isSpecialInviter(workerId)) return null;
+
+  const all = (await referralRepository.findByIndirectSpecialInviterId(workerId))
+    .map(toReferral)
+    .filter((r) => r.status !== 'closed');
+
+  const needle = (args.q || '').trim().toLowerCase();
+  const filtered = needle
+    ? all.filter((r) => (r.inviteeName?.trim() || '').toLowerCase().includes(needle))
+    : all;
+  const total = filtered.length;
+
+  const page = Math.max(1, Math.trunc(args.page || 1));
+  const limit = Math.min(50, Math.max(1, Math.trunc(args.limit || 20)));
+  const start = (page - 1) * limit;
+  const sliced = filtered.slice(start, start + limit);
+
+  const rates = filtered.length > 0 ? await commissionService.getCommissionRates() : null;
+  const threshold = rates?.specialInviteTaskThreshold ?? DEFAULT_INVITE_THRESHOLD;
+
+  // Task counts cover the whole filtered team (one batched query) so Home can
+  // show an exact qualified count without a second round-trip; ticket names are
+  // only resolved for the rows actually returned.
+  const [namesByChannel, completedByInvitee] = await Promise.all([
+    resolveTicketNames(sliced.map((r) => r.ticketId)),
+    countCompletedTasksByInvitee(Array.from(new Set(filtered.map((r) => r.inviteeId)))),
+  ]);
+
+  const qualified = filtered.filter(
+    (r) => (completedByInvitee.get(r.inviteeId) ?? 0) >= threshold,
+  ).length;
+
+  const rows = buildTeamRows(
+    sliced.map((referral) => {
+      const channelId = parseTicketChannelId(referral.ticketId);
+      return {
+        name: referral.inviteeName?.trim() || 'Invited worker',
+        invitedBy: referral.inviterName?.trim() || '',
+        ticketName: parseTicketName(referral.ticketId) ?? (channelId ? namesByChannel.get(channelId) ?? null : null),
+        tasks: completedByInvitee.get(referral.inviteeId) ?? 0,
+        threshold,
+        dmRef: signInviteeDmRef(workerId, referral.inviteeId),
+      };
+    }),
+  );
+
+  return { rows, total, qualified, page, limit };
 }

@@ -7,7 +7,7 @@ import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 import { PayoutLayout } from './pages/payout/PayoutLayout';
 import { NotFound } from './pages/NotFound';
-import { WorkerAuthProvider } from './hooks/useWorkerAuth';
+import { WorkerAuthProvider, useWorkerAuth } from './hooks/useWorkerAuth';
 import { WorkerProtectedRoute } from './components/WorkerProtectedRoute';
 import { WorkerLayout } from './components/WorkerLayout';
 
@@ -31,11 +31,24 @@ const OwnerEarnings = lazy(() => import('./pages/OwnerEarnings').then((m) => ({ 
 
 const WorkerLogin = lazy(() => import('./pages/worker/WorkerLogin'));
 const WorkerHome = lazy(() => import('./pages/worker/WorkerHome'));
+const WorkerInviterHome = lazy(() => import('./pages/worker/WorkerInviterHome'));
 const WorkerTasks = lazy(() => import('./pages/worker/WorkerTasks'));
 const WorkerTaskDetail = lazy(() => import('./pages/worker/WorkerTaskDetail'));
 const WorkerWallet = lazy(() => import('./pages/worker/WorkerWallet'));
 const WorkerInvites = lazy(() => import('./pages/worker/WorkerInvites'));
 const WorkerHowTo = lazy(() => import('./pages/worker/WorkerHowTo'));
+
+function WorkerIndex() {
+  const { capabilities } = useWorkerAuth();
+  if (
+    capabilities !== null
+    && !capabilities.hasTasks
+    && (capabilities.hasInvites || capabilities.hasTeam)
+  ) {
+    return <WorkerInviterHome />;
+  }
+  return <WorkerHome />;
+}
 
 function WorkerFallback() {
   return (
@@ -191,7 +204,7 @@ export default function App() {
               }>
                 <Route index element={
                   <Suspense fallback={<WorkerFallback />}>
-                    <WorkerHome />
+                    <WorkerIndex />
                   </Suspense>
                 } />
                 <Route path="tasks" element={

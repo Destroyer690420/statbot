@@ -8,12 +8,12 @@ import { WorkerCard, WorkerErrorState, WorkerSkeleton } from './WorkerUI';
 const QR_ACCEPT = 'image/png,image/jpeg,image/webp';
 const QR_MAX_BYTES = 3 * 1024 * 1024;
 
-export function PaymentQrCard() {
+export function PaymentQrCard({ hideWhenUploaded = false }: { hideWhenUploaded?: boolean } = {}) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState(false);
-  const qrQuery = useQuery({ queryKey: ['worker-wallet-qr'], queryFn: getWorkerQrCode });
+  const qrQuery = useQuery({ queryKey: ['worker-wallet-qr'], queryFn: getWorkerQrCode, refetchOnWindowFocus: true });
 
   const openPicker = () => {
     setError(null);
@@ -66,6 +66,8 @@ export function PaymentQrCard() {
 
   const qrCodeUrl: string | null = qrQuery.data?.data?.qrCodeUrl ?? null;
   const updatedAt: string | null = qrQuery.data?.data?.updatedAt ?? null;
+
+  if (hideWhenUploaded && qrCodeUrl) return null;
 
   return (
     <>

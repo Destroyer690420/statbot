@@ -1,3 +1,18 @@
+/**
+ * Discord ids of the special inviters. Single source of truth — consumed by
+ * the invite auto-detection, the commission engine's type derivation, the
+ * `/referral add` command, and the worker portal's team surface.
+ */
+export const SPECIAL_INVITER_IDS = [
+  '582595416294555649',
+  '1202294567706316911',
+  '1506900129792135211',
+] as const;
+
+export function isSpecialInviter(id: string | null | undefined): boolean {
+  return Boolean(id) && (SPECIAL_INVITER_IDS as readonly string[]).includes(id as string);
+}
+
 /** Reminder delay constants (in milliseconds) */
 export const REMINDER_DELAYS = {
   POST_20H: 20 * 60 * 60 * 1000,   // 20 hours

@@ -2,12 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { commissionService } from '../../services/commission.service';
 import { isAdmin } from '../../utils/permissions';
 import { successEmbed, errorEmbed } from '../embeds';
-
-const SPECIAL_INVITER_IDS = [
-  '582595416294555649',
-  '1202294567706316911',
-  '1506900129792135211',
-];
+import { isSpecialInviter } from '../../config/constants';
 
 async function resolveTicketName(
   interaction: ChatInputCommandInteraction,
@@ -60,7 +55,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (subcommand === 'add') {
     const inviter = interaction.options.getUser('inviter', true);
     const invitee = interaction.options.getUser('invitee', true);
-    const type = SPECIAL_INVITER_IDS.includes(inviter.id) ? 'special' : 'normal';
+    const type = isSpecialInviter(inviter.id) ? 'special' : 'normal';
 
     if (inviter.id === invitee.id) {
       await interaction.reply({ embeds: [errorEmbed('Inviter and invitee cannot be the same.')], ephemeral: true });

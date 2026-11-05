@@ -12,7 +12,7 @@
 | **Invitee** | The referred worker (`invitee:`), identified by Discord user ID. |
 | **Referral** | One `Referral` row linking inviter ↔ invitee (unique on `(inviteeId, inviterId)`). |
 | **Normal inviter** | Default type. One-time bonus ₹100 after the invitee completes **2** tasks (threshold configurable). |
-| **Special inviter** | One of the **hardcoded** Discord IDs in `src/bot/commands/referral.ts`: `582595416294555649`, `1202294567706316911`, `1506900129792135211`. One-time bonus ₹50 after **1** task + **per-task commissions** ₹20/post, ₹10/comment. |
+| **Special inviter** | One of the **hardcoded** Discord IDs in `SPECIAL_INVITER_IDS` (`src/config/constants.ts`): `582595416294555649`, `1202294567706316911`, `1506900129792135211`; use `isSpecialInviter(id)` rather than a local list. One-time bonus ₹50 after **1** task + **per-task commissions** ₹20/post, ₹10/comment. |
 | **Indirect special inviter** | A special inviter ANYWHERE up the referral ancestor chain of a normal inviter. Stored on the normal referral as `indirectSpecialInviterId`; earns per-task commissions (`per_task_indirect`) on every descendant worker's completed tasks — no one-time bonus. |
 
 ### Multi-level chain rule (fixed 2026-08-21)
@@ -47,8 +47,8 @@ Rates read via `settingsRepository` (same table pattern as payout rates). The AP
 
 ## 3. Referral CRUD
 
-- **Create**: `/referral add` (bot, admin; ticket string like `ticket-0036` or `<#id>` resolved to a channel name; inviter type decided by the hardcoded list) or `POST /commissions/referrals` (dashboard, admin; `ticketId` accepted by the service but **not** in the zod schema). New referral: `status='pending'`, `oneTimeCommissionPaid=false`, `perTaskCommissionActive=false`, plus multi-level `indirectSpecialInviterId` detection (see §1). The bot reply shows `↳ Indirect link:` when set.
-- **Update**: `PATCH /commissions/referrals/:id` (dashboard edit modal — names, ticket, **inviter/invitee IDs**). ID changes are snowflake-validated and keep the `(invitee, inviter)` pair unique (keep-first); an inviter change re-derives special/normal type from the hardcoded list and recomputes `indirectSpecialInviterId` via the full chain walk. Audits `REFERRAL_UPDATED`.
+- **Create**: `/referral add` (bot, admin; ticket string like `ticket-0036` or `<#id>` resolved to a channel name; inviter type decided by `isSpecialInviter`) or `POST /commissions/referrals` (dashboard, admin; `ticketId` accepted by the service but **not** in the zod schema). New referral: `status='pending'`, `oneTimeCommissionPaid=false`, `perTaskCommissionActive=false`, plus multi-level `indirectSpecialInviterId` detection (see §1). The bot reply shows `↳ Indirect link:` when set.
+- **Update**: `PATCH /commissions/referrals/:id` (dashboard edit modal — names, ticket, **inviter/invitee IDs**). ID changes are snowflake-validated and keep the `(invitee, inviter)` pair unique (keep-first); an inviter change re-derives special/normal type via `isSpecialInviter` and recomputes `indirectSpecialInviterId` via the full chain walk. Audits `REFERRAL_UPDATED`.
 - **Auto-detect (auto-approved)**: Discord joins are staged in `InviteDetection` rows (see §3b) — rows with a known inviter are **approved immediately** by the bot (`recordJoin()` → `approve(..., 'system')`, no manual step), creating the real referral via `commissionService.createReferral` (same guards + indirect walk). Joins with an unknown inviter are skipped entirely (logged + audited, no row) — there is no manual queue anywhere (the dashboard Pending Invites section was removed 2026-09-10).
 
 ## 3b. Invite auto-detection (join → ticket → auto-approve)
@@ -56,7 +56,7 @@ Rates read via `settingsRepository` (same table pattern as payout rates). The AP
 - **Inviter detection** (`src/services/invite-tracker.service.ts`): Discord never reports the inviter on `guildMemberAdd`, so the bot snapshots invite uses per guild (on `ready`, refreshed after every join) and diffs the fresh fetch against the snapshot (`findIncreasedInvite` — largest `uses` increase wins). Requires the `GuildInvites` gateway intent (`src/bot/index.ts`) + bot role **Manage Guild** (to list invites). Misses resolve to `inviter = null` (vanity-URL / OAuth / Discovery joins, burst-join ambiguity, restart gaps) — those joins are skipped (log + `INVITE_DETECTED` audit, no row, no referral).
 - **Staging** (`src/services/invite-detection.service.ts`, `InviteDetection` table): `guildMemberAdd` (bots skipped, after the `#invites` welcome) calls `recordJoin()` — keep-first: existing pending row for the invitee wins, and an existing `Referral` for the same `(invitee, inviter)` pair skips creation. Ticket starts empty (= "No ticket yet"). **When the inviter is known, `recordJoin()` auto-approves on the spot** (referral created, row marked `approved`, audited as `INVITE_APPROVED` by `system`); auto-approve failures only warn and leave the row pending. Never throws.
 - **Ticket linking** (`src/bot/events/channelCreate.ts` → `linkTicket()`): reuses the ticket-creator resolution (audit log + single-member fallback); the invitee's **first** ticket only is linked (`ticketChannelId` + `ticketName`, never overwritten). If the row was already approved, an unticketed live `Referral` for that invitee is backfilled with `<#channelId>`.
-- **Detection API (no dashboard UI)** (`POST /commissions/invite-detections/:id/approve|reject`, `PATCH /commissions/invite-detections/:id`, dashboard-admin only): kept for the one-off sweep script and emergencies; the Referrals page no longer shows a Pending Invites section. Ticket is optional on approve — commission counts by `inviteeId` first (`getTasksForReferral`). Inviter type comes from the same hardcoded special list. Audits `INVITE_DETECTED` / `INVITE_APPROVED` / `INVITE_REJECTED`.
+- **Detection API (no dashboard UI)** (`POST /commissions/invite-detections/:id/approve|reject`, `PATCH /commissions/invite-detections/:id`, dashboard-admin only): kept for the one-off sweep script and emergencies; the Referrals page no longer shows a Pending Invites section. Ticket is optional on approve — commission counts by `inviteeId` first (`getTasksForReferral`). Inviter type comes from the same `isSpecialInviter` check. Audits `INVITE_DETECTED` / `INVITE_APPROVED` / `INVITE_REJECTED`.
 - **Backfill** (`scripts/backfill-invite-detections.ts [--since YYYY-MM-DD] [--dry-run]`, host-run with `DATABASE_URL` localhost-substituted): stages joins since the cutoff with inviter unknown (not reconstructible — audit logs don't record joins) + first-ticket resolution via the solo-worker channel scan. Keep-first (existing pending rows and referrals win); members who already left can't be enumerated. Repair companion: `scripts/repair-invite-detected-audits.ts` inserts missing `INVITE_DETECTED` audits.
 - **Duplicate guard**: `findByInviteeAndInviter` → `"A referral already exists for invitee <@…>."`; inviter==invitee rejected in the bot command.
 - **Update/Delete**: `PATCH /commissions/referrals/:id` (names, ticketId), `DELETE /commissions/referrals/:id`. Audits `REFERRAL_UPDATED` / `REFERRAL_REMOVED`.
@@ -131,11 +131,11 @@ A worker sees their own invite list and what they earned from it on the worker p
 | `summary.invited` / `withTicket` / `qualified` | derived from the listed rows; `status === 'closed'` referrals are never listed, `qualified` counts rows that reached their threshold |
 | `summary.directPaid` | sum of that inviter's `CommissionItem` rows (`one_time` + `per_task`) on referrals they own — an item's existence *is* the paid record, because commission batches stamp `paidAt` at creation |
 | `summary.directPending` | sum of what `commissionService.getPayableItems` would create next on their own referrals (threshold met, no item yet) |
-| `summary.chainPending` | the same for `commissionService.getIndirectPayableItems` — multi-level share, non-zero **only for the three special inviters** |
+| `summary.chainPending` | the same for `commissionService.getIndirectPayableItems` — multi-level share, non-zero **only for special inviters** |
 | `summary.teamPaid` | their `per_task_indirect` earnings already disbursed, as one anonymous total |
 | `summary.paid` | `directPaid + teamPaid` |
 | `summary.lastBatch` | `{ amount, batchNumber, paidAt }` of the most recent batch that paid them; every kind in that batch counts, older batches do not. Nulls when never paid |
-| `invitees[].name` / `.ticket` / `.tasks` / `.threshold` / `.qualified` / `.earned` | display name, ticket **number**, completed tasks **capped at the threshold**, whether the bonus is unlocked, and money already disbursed for that person |
+| `invitees[].name` / `.ticket` / `.tasks` / `.threshold` / `.qualified` / `.earned` / `.dmRef` | display name, ticket **number**, completed tasks **capped at the threshold**, whether the bonus is unlocked, money already disbursed for that person, and the opaque click-to-DM handle |
 
 - **`directPending + chainPending` is the figure that matches the admin panel.** `getBreakdown()` adds indirect items for special inviters, so omitting the chain share made the worker panel under-report a special inviter by a lot (observed 2026-09-26: ₹210 direct vs ₹440 chain = ₹650, exactly the admin's `totalCommission`). Normal inviters have no chain pending, so their number was always complete and is unchanged.
 - **Nothing about special inviters is exposed to anyone else.** `chainPending` is structurally zero for normal inviters, and every chain-related line in the UI is gated on `teamPaid > 0 || chainPending > 0`, which only a special inviter can satisfy. A normal inviter's panel contains no chain wording at all.
@@ -146,13 +146,31 @@ A worker sees their own invite list and what they earned from it on the worker p
 - **Withheld by design**: invitee Discord ids, referral/commission ids, `commissionKind`, `inviterType`, commission rates, and the identity/ticket/task behind `teamPaid`. Enforced by `WORKER_FORBIDDEN_FIELDS` + `worker-isolation.test.ts`.
 - **Not covered here**: multi-level **pending** is computed for everyone (it is a single `getIndirectPayableItems` call that returns fast when the inviter has no indirect referrals), so a large chain costs the same walk the admin breakdown already performs on demand.
 
+### 7b-i. Team view (special inviters only, added 2026-11-05)
+
+Special inviters see their **downline** — people invited by their own direct invitees — on the Invites tab's `Team` segment and via `GET /worker/invites/team`.
+
+| Field | Meaning |
+|---|---|
+| `rows[].name` / `.invitedBy` / `.ticket` | the downline worker's display name, the direct invitee who brought them in, and the ticket **number** (null when unresolvable) |
+| `rows[].tasks` / `.threshold` / `.qualified` | completed tasks capped at `specialInviteTaskThreshold`, that threshold, and `tasks >= threshold` |
+| `rows[].dmRef` | opaque HMAC handle for the click-to-DM profile link (same scheme as the direct rows) |
+| `total` / `qualified` | rows matching the name search (whole team, not just the page) and how many of those are qualified |
+| `page` / `limit` | pagination; `limit` ≤ 50 (default 20), `q` searches invitee names **inside the caller's own team** |
+
+- **Scope**: rows come only from `findByIndirectSpecialInviterId(caller.sub)` and `status !== 'closed'`. Another special inviter's downline is never included — this is the same `indirectSpecialInviterId` rule the commission engine uses.
+- **Withheld by design**: no money at all (no `earned`, no per-person commission), no Discord ids, no ticket ids, no referral ids. The team is a progress list, not a payout ledger; `teamPaid`/`chainPending` stay one anonymous total on the direct view.
+- **Non-special callers get a 404 indistinguishable from an unknown route**, and that check runs before query validation, so the endpoint cannot be probed.
+- `me.capabilities.hasTeam` is true only for a special inviter with at least one non-closed downline referral; the team queries are only issued when it is true, so normal inviters never see team UI or make team requests.
+- **DM link**: `POST /worker/invites/dm` resolves direct **and** own-team refs and returns `{ profileUrl: "https://discord.com/users/<id>" }`. The inviter opens that person's profile and presses Message; no Discord API call is made. The invitee id appears only inside the clicked URL, never as a payload field.
+
 ## 8. Owner-Earnings Integration
 
 `owner-earnings.service` treats active referrals as a **cost** on a creation basis: every task created in the window counts revenue (₹250/₹100) + worker cost (live `PayoutSettings`) except `CANCELLED` / any non-null `cancelledReason` (deleted posts = zero everywhere, retroactively). Per-task commission (₹20/₹10, direct-special or `indirectSpecialInviterId`) accrues on the task's creation day only when the invitee's all-time payable-completed count meets the **special** threshold; each one-time bonus (normal ₹100 / special ₹50) is deducted exactly once on the creation day of the threshold-reaching task (ordered by completion time), with Sunday payment only flipping `awaiting → paid`. See `docs/FRONTEND.md` §OwnerEarnings.
 
 ## 9. Edge Cases & Known Behaviors
 
-1. **Hardcoded special inviter list** in the bot command only — the API accepts any `inviterType` in the body. List changes require a code edit + restart (runtime list; `npm run deploy-commands` NOT needed).
+1. **Hardcoded special inviter list** lives in `SPECIAL_INVITER_IDS` (`src/config/constants.ts`) and is read through `isSpecialInviter` by invite detection, commissions, the bot command and the worker portal — the API still accepts any `inviterType` in the body. List changes require a code edit to that one constant + restart (runtime list; `npm run deploy-commands` NOT needed).
 2. `getTasksForReferral` falls back to **channel-name tasks** (`ticketId`) when the invitee-user lookup returns none — historical referrals whose invitee left.
 3. Deleting a **paid** referral is blocked at DB level (CommissionItem FK RESTRICT → error surfaces as 400/500); unpaid referral deletion works.
 4. Threshold uses **all-time** counts regardless of the week params (weekStart/weekEnd are ignored by most commission read methods — only `getInviterDetail` filters).
@@ -171,7 +189,9 @@ A worker sees their own invite list and what they earned from it on the worker p
 ## 11. Relevant Files
 
 - `src/services/commission.service.ts` (logic incl. `resolveIndirectSpecialInviterId`), `src/services/owner-earnings.service.ts`
-- `src/bot/commands/referral.ts` (hardcoded special IDs)
+- `src/bot/commands/referral.ts` (uses `isSpecialInviter`)
+- `src/config/constants.ts` (**`SPECIAL_INVITER_IDS` + `isSpecialInviter`** — the single source of truth; imported by invite-detection, commission, the bot command, and the worker portal)
+- `src/services/worker-referrals.service.ts` (`getInvitesForWorker`, `getTeamForWorker`, `resolveInviteeDmRef`)
 - `src/api/routes/commissions.ts`
 - `src/database/repositories/{referral,commission,settings}.repository.ts`
 - `scripts/backfill-indirect-referrers.ts` (chain data repair)
