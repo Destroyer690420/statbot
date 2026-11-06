@@ -13,6 +13,7 @@ import { scanTasks, acceptTask } from '../../services/automation/poller.service'
 import { runCycle } from '../../services/automation/cycle.service';
 import { CLAIM_TTL_MS } from '../../services/automation/cycle.service';
 import { NO_ELIGIBLE_REASON, createBurstFlow } from '../../services/automation/burst.service';
+import { taskAnnouncementService } from '../../services/automation/task-announcement.service';
 import * as blastApprovalService from '../../services/automation/blast-approval.service';
 import * as scanRequestService from '../../services/automation/scan-request.service';
 import { parsePooledTasks, pickNextTask } from '../../services/automation/eligibility';
@@ -1205,6 +1206,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         } catch {
           // best-effort bookkeeping; the claim verdict itself is recorded
         }
+        await taskAnnouncementService.checkAndAnnounceBatchClaimed(discordClient, claim.cycleId);
         await automationRepository.logTask({
           cycleId: claim.cycleId,
           externalTaskId: claim.externalTaskId,
@@ -1331,6 +1333,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         if (!retried) {
           // Winner gets no post from this round: remove their availability
           // message so the ticket doesn't promise what never arrives.
+          await taskAnnouncementService.checkAndAnnounceBatchClaimed(discordClient, claim.cycleId);
           try {
             const bursts = await automationRepository.listBurstsByCycle(claim.cycleId).catch(() => []);
             const round = bursts.find((b) => b.status === 'OPEN') ?? bursts[0];

@@ -253,7 +253,7 @@ async function main(): Promise<void> {
       const { handleBurstReply, closeBurstForBlast } = await import('./services/automation/burst.service');
       outreachService.setBlastHooks({
         onReply: (blastId, channelId, workerId) => handleBurstReply(blastId, channelId, workerId),
-        onClosed: (blastId) => closeBurstForBlast(blastId),
+        onClosed: (blastId) => closeBurstForBlast(blastId, discordClient),
       });
     } catch (error) {
       logger.error('Burst hooks failed to register', { error });

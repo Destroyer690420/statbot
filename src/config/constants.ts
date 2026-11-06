@@ -648,6 +648,21 @@ Once your ticket is open, a manager will guide you through your first task.`;
 /** Payment proof channel where workers may share payment screenshots */
 export const PAYMENT_PROOF_CHANNEL_ID = '1520613959315488930';
 
+/**
+ * Channel where task batch availability and completion announcements are posted.
+ */
+export const TASKS_ANNOUNCEMENT_CHANNEL_ID = process.env.TASKS_ANNOUNCEMENT_CHANNEL_ID || '1568124361486110760';
+
+export function formatBatchAvailableAnnouncement(count: number): string {
+  const noun = count === 1 ? 'post' : 'posts';
+  return '@everyone, ' + count + ' ' + noun + ' available reply in your tickets asap to claim the ' + noun + '.';
+}
+
+export function formatBatchClaimedAnnouncement(count: number): string {
+  const noun = count === 1 ? 'post has' : 'posts have';
+  return 'all ' + count + ' ' + noun + ' been claimed';
+}
+
 /** Embed colors */
 export const COLORS = {
   SUCCESS: 0x00d26a,

@@ -11,6 +11,7 @@ import { checkAndAutoBlockNsfw } from './subreddit-nsfw.service';
 import { normalizeSubreddit } from './subreddit';
 import { diffNewTasks, isBurstActive, isMergeAllowed, parsePooledTasks, pickNextTask, serializePooledTasks } from './eligibility';
 import { outreachService, DAILY_POST_CAP } from '../outreach.service';
+import { taskAnnouncementService } from './task-announcement.service';
 
 export interface BurstTaskInput {
   subTaskId: string;
@@ -405,6 +406,7 @@ export async function createBurstFlow(
     });
   await automationRepository.updateCycle(cycleId, { workersContacted: sent.filter((s) => s.ok).length });
   logger.info('Burst blast opened', { cycleId, blastId: blast.id, slots: eligible.length });
+  await taskAnnouncementService.announceBatchAvailable(discordClient, burst.cycleId, eligible.length);
   return {
     cycleId,
     eligible,
@@ -493,6 +495,7 @@ async function mergeIntoHourBurst(
     ];
     await automationRepository.setBurstDetails(burst.id, serializePooledTasks(details)).catch(() => undefined);
     const updated = await outreachRepository.bumpBlastSlots(blast.id, added.length).catch(() => null);
+    taskAnnouncementService.updateBatchCount(burst.cycleId, added.length);
     const cycle = await automationRepository.getCycle(burst.cycleId).catch(() => null);
     if (cycle) {
       // Cast: the local generated client predates the `quarantined` column
@@ -628,7 +631,7 @@ export async function handleBurstReply(blastId: string, channelId: string, worke
 }
 
 /** Closes the burst row when its blast closes with no remaining work. */
-export async function closeBurstForBlast(blastId: string): Promise<void> {
+export async function closeBurstForBlast(blastId: string, discordClient?: Client): Promise<void> {
   try {
     const burst = await automationRepository.getBurstByBlast(blastId).catch(() => null);
     if (!burst || burst.status !== 'OPEN') return;
@@ -637,6 +640,9 @@ export async function closeBurstForBlast(blastId: string): Promise<void> {
       .updateCycle(burst.cycleId, { status: 'DONE', endedAt: new Date() })
       .catch(() => undefined);
     logger.info('Burst closed', { blastId, cycleId: burst.cycleId });
+    if (discordClient) {
+      await taskAnnouncementService.checkAndAnnounceBatchClaimed(discordClient, burst.cycleId);
+    }
   } catch (error) {
     logger.warn('closeBurstForBlast failed', { blastId, error });
   }

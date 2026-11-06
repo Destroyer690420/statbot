@@ -137,7 +137,7 @@ export interface BlastHooks {
   /** A blast reply won a slot (after dedupe + cap checks). */
   onReply?: (blastId: string, channelId: string, workerId: string, discordClient?: Client) => Promise<unknown>;
   /** A blast just closed (filled or superseded). */
-  onClosed?: (blastId: string) => Promise<unknown>;
+  onClosed?: (blastId: string, discordClient?: Client) => Promise<unknown>;
 }
 
 class OutreachService {
@@ -363,7 +363,7 @@ class OutreachService {
       const filled = await outreachRepository.countReplies(previous.id).catch(() => 0);
       await outreachRepository.closeBlast(previous.id, filled).catch(() => undefined);
       try {
-        await this.hooksFor(previous.id).onClosed?.(previous.id);
+        await this.hooksFor(previous.id).onClosed?.(previous.id, discordClient);
       } catch (error) {
         logger.warn('Blast closed hook failed', { blastId: previous.id, error });
       } finally {
@@ -408,7 +408,7 @@ class OutreachService {
     const filled = await outreachRepository.countReplies(previous.id).catch(() => 0);
     await outreachRepository.closeBlast(previous.id, filled).catch(() => undefined);
     try {
-      await this.hooksFor(previous.id).onClosed?.(previous.id);
+      await this.hooksFor(previous.id).onClosed?.(previous.id, discordClient);
     } catch (error) {
       logger.warn('Blast restart close hook failed', { blastId: previous.id, error });
     } finally {
@@ -902,7 +902,7 @@ class OutreachService {
   ): Promise<{ deleted: number; failed: number }> {
     await outreachRepository.closeBlast(blastId, filled);
     try {
-      await this.hooksFor(blastId).onClosed?.(blastId);
+      await this.hooksFor(blastId).onClosed?.(blastId, discordClient);
     } catch (error) {
       logger.warn('Blast closed hook failed', { blastId, error });
     } finally {

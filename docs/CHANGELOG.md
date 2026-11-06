@@ -2,6 +2,24 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-11-06
+### Added (Local — task batch availability and claimed announcements)
+- **Task batch availability & claimed announcements in channel 1568124361486110760**:
+  - When a scan/batch starts with N eligible tasks (N > 0), the bot broadcasts an announcement in channel `1568124361486110760` tagging `@everyone`:
+    `"@everyone, {N} posts available reply in your tickets asap to claim the posts."` (singular: `"@everyone, 1 post available reply in your tickets asap to claim the post."`).
+  - As soon as all tasks in that batch have been claimed and sent to workers, the bot broadcasts a simple follow-up completion message in channel `1568124361486110760`:
+    `"all {N} posts have been claimed"` (singular: `"all 1 post has been claimed"`).
+  - Implementation:
+    - Added constants and formatters in `src/config/constants.ts`: `TASKS_ANNOUNCEMENT_CHANNEL_ID`, `formatBatchAvailableAnnouncement`, `formatBatchClaimedAnnouncement`.
+    - Created dedicated service `src/services/automation/task-announcement.service.ts` with `announceBatchAvailable`, `checkAndAnnounceBatchClaimed`, `updateBatchCount`, and `resetAnnouncementState`.
+    - Wired `announceBatchAvailable` into `createBurstFlow` in `src/services/automation/burst.service.ts` when a live burst blast opens.
+    - Wired `updateBatchCount` into `mergeIntoHourBurst` when new tasks are merged into an open burst.
+    - Wired `checkAndAnnounceBatchClaimed` into `POST /api/v1/automation/claims/:id/result` upon successful claim and push, and into `closeBurstForBlast` when a burst/blast closes.
+    - Updated `outreachService` hooks to pass `discordClient` to `onClosed`.
+    - Strictly idempotent per `cycleId`: each announcement is sent at most once per cycle.
+    - Non-fatal error handling: discord fetch/send failures are caught and logged without affecting the core blast or claim flow.
+    - Unit tests: 14/14 tests in `src/__tests__/task-announcement.test.ts` pass; 98/98 test suites / 1,332 tests pass overall. Backend build and typecheck clean. No schema or database migration required.
+
 ## 2026-11-05
 ### Deployed (2026-11-05 at `9955764` — dashboard-only rebuild, no migration)
 - **How-to section navigation no longer scrolls horizontally.** On screens under `lg`, `/worker/how-to` showed a horizontal scrollbar at the top of the chip strip (`overflow-x-auto` + `min-w-max`), and sections past the fold were hard to reach with a mouse.
