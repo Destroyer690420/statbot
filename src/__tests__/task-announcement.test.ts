@@ -33,7 +33,9 @@ import { auditLogService } from '../services/audit.service';
 
 describe('Task Announcement Service', () => {
   let mockSend: jest.Mock;
-  let mockChannel: { id: string; send: jest.Mock };
+  let mockEdit: jest.Mock;
+  let mockFetchedMsg: { id: string; edit: jest.Mock };
+  let mockChannel: { id: string; send: jest.Mock; messages: { fetch: jest.Mock } };
   let mockClient: Partial<Client>;
 
   beforeEach(() => {
@@ -41,9 +43,14 @@ describe('Task Announcement Service', () => {
     resetAnnouncementState();
 
     mockSend = jest.fn().mockResolvedValue({ id: 'msg-1' });
+    mockEdit = jest.fn().mockResolvedValue({});
+    mockFetchedMsg = { id: 'msg-1', edit: mockEdit };
     mockChannel = {
       id: TASKS_ANNOUNCEMENT_CHANNEL_ID,
       send: mockSend,
+      messages: {
+        fetch: jest.fn().mockResolvedValue(mockFetchedMsg),
+      },
     };
     mockClient = {
       channels: {
@@ -55,22 +62,22 @@ describe('Task Announcement Service', () => {
   describe('Announcement text formatting', () => {
     it('formats batch available message for multiple posts', () => {
       expect(formatBatchAvailableAnnouncement(3)).toBe(
-        '@everyone, 3 posts available reply in your tickets asap to claim the posts.',
+        '@everyone 🚀 **3 posts available!** Reply in your tickets ASAP to claim.',
       );
     });
 
     it('formats batch available message for a single post', () => {
       expect(formatBatchAvailableAnnouncement(1)).toBe(
-        '@everyone, 1 post available reply in your tickets asap to claim the post.',
+        '@everyone 🚀 **1 post available!** Reply in your tickets ASAP to claim.',
       );
     });
 
     it('formats batch claimed message for multiple posts', () => {
-      expect(formatBatchClaimedAnnouncement(3)).toBe('all 3 posts have been claimed');
+      expect(formatBatchClaimedAnnouncement(3)).toBe('🏁 **All 3 posts have been claimed!**');
     });
 
     it('formats batch claimed message for a single post', () => {
-      expect(formatBatchClaimedAnnouncement(1)).toBe('all 1 post has been claimed');
+      expect(formatBatchClaimedAnnouncement(1)).toBe('🏁 **All 1 post has been claimed!**');
     });
   });
 
@@ -82,14 +89,17 @@ describe('Task Announcement Service', () => {
       expect(mockSend).not.toHaveBeenCalled();
     });
 
-    it('sends available announcement to announcement channel with @everyone mention', async () => {
+    it('sends available announcement to announcement channel with @everyone mention and embed', async () => {
       const ok = await announceBatchAvailable(mockClient as Client, 'cycle-1', 3);
       expect(ok).toBe(true);
       expect(mockClient.channels?.fetch).toHaveBeenCalledWith(TASKS_ANNOUNCEMENT_CHANNEL_ID);
-      expect(mockSend).toHaveBeenCalledWith({
-        content: '@everyone, 3 posts available reply in your tickets asap to claim the posts.',
-        allowedMentions: { parse: ['everyone'] },
-      });
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '@everyone 🚀 **3 posts available!** Reply in your tickets ASAP to claim.',
+          embeds: expect.any(Array),
+          allowedMentions: { parse: ['everyone'] },
+        }),
+      );
       expect(auditLogService.log).toHaveBeenCalled();
     });
 
@@ -149,9 +159,13 @@ describe('Task Announcement Service', () => {
 
       const ok = await checkAndAnnounceBatchClaimed(mockClient as Client, 'cycle-1');
       expect(ok).toBe(true);
-      expect(mockSend).toHaveBeenCalledWith({
-        content: 'all 3 posts have been claimed',
-      });
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '🏁 **All 3 posts have been claimed!**',
+          embeds: expect.any(Array),
+        }),
+      );
+      expect(mockEdit).toHaveBeenCalled();
       expect(auditLogService.log).toHaveBeenCalled();
     });
 
@@ -191,9 +205,12 @@ describe('Task Announcement Service', () => {
 
       const ok = await checkAndAnnounceBatchClaimed(mockClient as Client, 'cycle-1');
       expect(ok).toBe(true);
-      expect(mockSend).toHaveBeenCalledWith({
-        content: 'all 3 posts have been claimed',
-      });
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '🏁 **All 3 posts have been claimed!**',
+          embeds: expect.any(Array),
+        }),
+      );
     });
 
     it('respects updated batch count after tasks are merged into burst', async () => {
@@ -222,9 +239,12 @@ describe('Task Announcement Service', () => {
 
       const ok = await checkAndAnnounceBatchClaimed(mockClient as Client, 'cycle-1');
       expect(ok).toBe(true);
-      expect(mockSend).toHaveBeenCalledWith({
-        content: 'all 3 posts have been claimed',
-      });
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '🏁 **All 3 posts have been claimed!**',
+          embeds: expect.any(Array),
+        }),
+      );
     });
   });
 });

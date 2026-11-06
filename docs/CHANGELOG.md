@@ -3,6 +3,14 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-06
+### Task batch announcement visual redesign (rich embeds + notification content)
+- **Beautiful Discord embeds for task batch announcements in channel `1568124361486110760`**:
+  - Transformed plain-text task announcements into high-visibility, polished Discord embed cards with emojis, clear hierarchy, status pills, and action callouts:
+    - **Drop announcement**: `@everyone 🚀 **{N} post(s) available!** Reply in your tickets ASAP to claim.` + Emerald green (`0x2ecc71`) card titled `"🚀 New Task Drop Available!"`, displaying quantity, status (`🟢 Open for Claims`), action directions, and auto-dispatch footer with timestamp.
+    - **Claimed completion**: `🏁 **All {N} post(s) have been claimed!**` + Slate gray (`0x576574`) card titled `"🏁 All Tasks Claimed!"`, displaying claimed ratio (`{N} / {N}`), status (`🔴 Closed`), and reminder to keep notifications on.
+    - **Original message update**: Stored the initial message ID for each cycle. When all tasks in a batch are claimed, the original announcement embed automatically updates to `"🚀 Task Drop — Completed"` with `🔴 Closed (All Claimed)` so scrolling workers immediately see the drop is no longer available.
+  - `@everyone` mention retained in message `content` to ensure mobile and desktop push notifications are reliably triggered.
+  - Tests updated in `src/__tests__/task-announcement.test.ts` (14/14 passing). All 98 test suites (1,332 tests) passing.
 ### Deployed (2026-11-06 at `3459223` — app rebuild, no migration)
 - **Task batch availability & claimed announcements in channel 1568124361486110760**:
   - When a scan/batch starts with N eligible tasks (N > 0), the bot broadcasts an announcement in channel `1568124361486110760` tagging `@everyone`:

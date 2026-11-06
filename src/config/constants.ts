@@ -655,12 +655,12 @@ export const TASKS_ANNOUNCEMENT_CHANNEL_ID = process.env.TASKS_ANNOUNCEMENT_CHAN
 
 export function formatBatchAvailableAnnouncement(count: number): string {
   const noun = count === 1 ? 'post' : 'posts';
-  return '@everyone, ' + count + ' ' + noun + ' available reply in your tickets asap to claim the ' + noun + '.';
+  return '@everyone 🚀 **' + count + ' ' + noun + ' available!** Reply in your tickets ASAP to claim.';
 }
 
 export function formatBatchClaimedAnnouncement(count: number): string {
   const noun = count === 1 ? 'post has' : 'posts have';
-  return 'all ' + count + ' ' + noun + ' been claimed';
+  return '🏁 **All ' + count + ' ' + noun + ' been claimed!**';
 }
 
 /** Embed colors */

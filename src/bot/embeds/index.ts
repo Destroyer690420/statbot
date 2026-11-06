@@ -567,3 +567,71 @@ export function blastDigestEmbed(digest: BlastDigest, banner: string | null = nu
   }
   return embed;
 }
+
+/**
+ * Embed for task batch availability announcement in the tasks announcement channel.
+ */
+export function batchAvailableEmbed(count: number): EmbedBuilder {
+  const noun = count === 1 ? 'post' : 'posts';
+  const verb = count === 1 ? 'is' : 'are';
+  return new EmbedBuilder()
+    .setTitle('🚀 New Task Drop Available!')
+    .setColor(COLORS.SUCCESS)
+    .setDescription(
+      `**${count} ${noun}** ${verb} available right now!\n\n` +
+      `> ⚡ **How to Claim:**\n` +
+      `> Reply directly in your **ticket channel** to claim your task.\n\n` +
+      `*First come, first served — tasks are assigned automatically to the fastest replies.*`,
+    )
+    .addFields(
+      { name: '📦 Available', value: `**${count} ${count === 1 ? 'Post' : 'Posts'}**`, inline: true },
+      { name: '⚡ Status', value: '🟢 **Open for Claims**', inline: true },
+      { name: '🎟️ Action', value: 'Reply in your ticket', inline: true },
+    )
+    .setFooter({ text: 'Reddit Task Manager • Auto Dispatch' })
+    .setTimestamp();
+}
+
+/**
+ * Embed for task batch claimed completion announcement.
+ */
+export function batchClaimedEmbed(count: number): EmbedBuilder {
+  const noun = count === 1 ? 'post' : 'posts';
+  const verb = count === 1 ? 'has' : 'have';
+  return new EmbedBuilder()
+    .setTitle('🏁 All Tasks Claimed!')
+    .setColor(0x576574)
+    .setDescription(
+      `All **${count} ${noun}** in this batch ${verb} now been claimed!\n\n` +
+      `> 🔒 **Batch Status:** Completed & Dispatched\n\n` +
+      `*Stay alert in this channel for the next task drop!*`,
+    )
+    .addFields(
+      { name: '📦 Claimed', value: `**${count} / ${count}** ${count === 1 ? 'Post' : 'Posts'}`, inline: true },
+      { name: '⚡ Status', value: '🔴 **Closed**', inline: true },
+      { name: '⏰ Next Drop', value: 'Keep notifications ON', inline: true },
+    )
+    .setFooter({ text: 'Reddit Task Manager • Batch Complete' })
+    .setTimestamp();
+}
+
+/**
+ * Embed for updating the original task drop message when all tasks are claimed.
+ */
+export function batchAvailableClosedEmbed(count: number): EmbedBuilder {
+  const noun = count === 1 ? 'post' : 'posts';
+  return new EmbedBuilder()
+    .setTitle('🚀 Task Drop — Completed')
+    .setColor(0x576574)
+    .setDescription(
+      `~~**${count} ${noun}** were available.~~\n\n` +
+      `> 🔒 **Status:** All tasks have been claimed.\n\n` +
+      `*Check the latest message below for details.*`,
+    )
+    .addFields(
+      { name: '📦 Total', value: `**${count} ${count === 1 ? 'Post' : 'Posts'}**`, inline: true },
+      { name: '⚡ Status', value: '🔴 **Closed (All Claimed)**', inline: true },
+    )
+    .setFooter({ text: 'Reddit Task Manager • Batch Complete' })
+    .setTimestamp();
+}
