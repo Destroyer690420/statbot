@@ -3,7 +3,8 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-06
-### Configurable daily post limit per ticket & Daily Outreach UI cleanup
+### Deployed (2026-11-06 at `8fd2bb6` — app + dashboard rebuild + DB migration)
+- **Configurable daily post limit per ticket & Daily Outreach UI cleanup**
 - **Configurable daily post limit per ticket**:
   - Workers with multiple Reddit IDs can take 2 posts per ID (e.g. 2 IDs = 4 posts).
   - Added `dailyPostLimit Int @default(2)` to `TicketOutreach` model and SQL migration.
