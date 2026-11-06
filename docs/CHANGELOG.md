@@ -3,6 +3,11 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-06
+### Task claimed completion message simplified to plain text
+- **Simplified batch claimed announcement**:
+  - When all posts in a batch are claimed, the bot sends only the single clean message `"🏁 All 1 post has been claimed!"` (or `"🏁 All {N} posts have been claimed!"`) with no embed card attached and no card updates.
+  - Drop announcements keep the green task-drop embed card and notifications.
+  - Tests updated in `src/__tests__/task-announcement.test.ts` (14/14 passing).
 ### Task batch announcement visual redesign (rich embeds + notification content)
 - **Beautiful Discord embeds for task batch announcements in channel `1568124361486110760`**:
   - Transformed plain-text task announcements into high-visibility, polished Discord embed cards with emojis, clear hierarchy, status pills, and action callouts:

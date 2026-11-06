@@ -660,7 +660,7 @@ export function formatBatchAvailableAnnouncement(count: number): string {
 
 export function formatBatchClaimedAnnouncement(count: number): string {
   const noun = count === 1 ? 'post has' : 'posts have';
-  return '🏁 **All ' + count + ' ' + noun + ' been claimed!**';
+  return '🏁 All ' + count + ' ' + noun + ' been claimed!';
 }
 
 /** Embed colors */

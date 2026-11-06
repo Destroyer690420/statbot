@@ -8,16 +8,11 @@ import {
   formatBatchAvailableAnnouncement,
   formatBatchClaimedAnnouncement,
 } from '../../config/constants';
-import {
-  batchAvailableEmbed,
-  batchClaimedEmbed,
-  batchAvailableClosedEmbed,
-} from '../../bot/embeds';
+import { batchAvailableEmbed } from '../../bot/embeds';
 
 const announcedAvailableCycles = new Set<string>();
 const announcedClaimedCycles = new Set<string>();
 const batchCountByCycle = new Map<string, number>();
-const batchMessageIdByCycle = new Map<string, string>();
 
 /**
  * Announces the availability of a new task batch to the tasks announcement channel
@@ -47,15 +42,11 @@ export async function announceBatchAvailable(
 
     const message = formatBatchAvailableAnnouncement(count);
     const embed = batchAvailableEmbed(count);
-    const sent = await (channel as any).send({
+    await (channel as any).send({
       content: message,
       embeds: [embed],
       allowedMentions: { parse: ['everyone'] },
     });
-
-    if (sent && sent.id) {
-      batchMessageIdByCycle.set(cycleId, sent.id);
-    }
 
     announcedAvailableCycles.add(cycleId);
     batchCountByCycle.set(cycleId, count);
@@ -125,26 +116,9 @@ export async function checkAndAnnounceBatchClaimed(
       return false;
     }
 
-    // Optionally update the original batch announcement embed to reflect it is closed
-    const origMsgId = batchMessageIdByCycle.get(cycleId);
-    if (origMsgId && 'messages' in channel && typeof (channel as any).messages?.fetch === 'function') {
-      try {
-        const origMsg = await (channel as any).messages.fetch(origMsgId);
-        if (origMsg && typeof origMsg.edit === 'function') {
-          await origMsg.edit({
-            embeds: [batchAvailableClosedEmbed(totalTasks)],
-          });
-        }
-      } catch (err) {
-        logger.debug('Could not edit original drop message to closed status', { cycleId, origMsgId, error: err });
-      }
-    }
-
     const message = formatBatchClaimedAnnouncement(totalTasks);
-    const embed = batchClaimedEmbed(totalTasks);
     await (channel as any).send({
       content: message,
-      embeds: [embed],
     });
 
     announcedClaimedCycles.add(cycleId);
@@ -191,7 +165,6 @@ export function resetAnnouncementState(): void {
   announcedAvailableCycles.clear();
   announcedClaimedCycles.clear();
   batchCountByCycle.clear();
-  batchMessageIdByCycle.clear();
 }
 
 export const taskAnnouncementService = {

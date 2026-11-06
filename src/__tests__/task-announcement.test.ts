@@ -73,11 +73,11 @@ describe('Task Announcement Service', () => {
     });
 
     it('formats batch claimed message for multiple posts', () => {
-      expect(formatBatchClaimedAnnouncement(3)).toBe('🏁 **All 3 posts have been claimed!**');
+      expect(formatBatchClaimedAnnouncement(3)).toBe('🏁 All 3 posts have been claimed!');
     });
 
     it('formats batch claimed message for a single post', () => {
-      expect(formatBatchClaimedAnnouncement(1)).toBe('🏁 **All 1 post has been claimed!**');
+      expect(formatBatchClaimedAnnouncement(1)).toBe('🏁 All 1 post has been claimed!');
     });
   });
 
@@ -159,13 +159,9 @@ describe('Task Announcement Service', () => {
 
       const ok = await checkAndAnnounceBatchClaimed(mockClient as Client, 'cycle-1');
       expect(ok).toBe(true);
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: '🏁 **All 3 posts have been claimed!**',
-          embeds: expect.any(Array),
-        }),
-      );
-      expect(mockEdit).toHaveBeenCalled();
+      expect(mockSend).toHaveBeenCalledWith({
+        content: '🏁 All 3 posts have been claimed!',
+      });
       expect(auditLogService.log).toHaveBeenCalled();
     });
 
@@ -205,12 +201,9 @@ describe('Task Announcement Service', () => {
 
       const ok = await checkAndAnnounceBatchClaimed(mockClient as Client, 'cycle-1');
       expect(ok).toBe(true);
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: '🏁 **All 3 posts have been claimed!**',
-          embeds: expect.any(Array),
-        }),
-      );
+      expect(mockSend).toHaveBeenCalledWith({
+        content: '🏁 All 3 posts have been claimed!',
+      });
     });
 
     it('respects updated batch count after tasks are merged into burst', async () => {
@@ -239,12 +232,9 @@ describe('Task Announcement Service', () => {
 
       const ok = await checkAndAnnounceBatchClaimed(mockClient as Client, 'cycle-1');
       expect(ok).toBe(true);
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: '🏁 **All 3 posts have been claimed!**',
-          embeds: expect.any(Array),
-        }),
-      );
+      expect(mockSend).toHaveBeenCalledWith({
+        content: '🏁 All 3 posts have been claimed!',
+      });
     });
   });
 });
