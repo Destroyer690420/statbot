@@ -3,7 +3,7 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-06
-### Added (Local — task batch availability and claimed announcements)
+### Deployed (2026-11-06 at `3459223` — app rebuild, no migration)
 - **Task batch availability & claimed announcements in channel 1568124361486110760**:
   - When a scan/batch starts with N eligible tasks (N > 0), the bot broadcasts an announcement in channel `1568124361486110760` tagging `@everyone`:
     `"@everyone, {N} posts available reply in your tickets asap to claim the posts."` (singular: `"@everyone, 1 post available reply in your tickets asap to claim the post."`).
