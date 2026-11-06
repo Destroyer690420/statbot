@@ -340,12 +340,13 @@ model CommissionRates {
 }
 
 model TicketOutreach {
-  id            String    @id @default(cuid())
-  channelId     String    @unique
-  selected      Boolean   @default(false)
-  messageSentAt DateTime?
-  availableAt   DateTime?
-  updatedAt     DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  channelId      String    @unique
+  selected       Boolean   @default(false)
+  dailyPostLimit Int       @default(2)
+  messageSentAt  DateTime?
+  availableAt    DateTime?
+  updatedAt      DateTime  @updatedAt
 }
 
 model OutreachSettings {

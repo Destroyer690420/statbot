@@ -12,6 +12,7 @@ export interface OutreachRowInput {
   portalAccessed: boolean;
   portalLastSeenAt: string | null;
   tasksToday: { channelId: string; type: string }[];
+  dailyPostLimit?: number;
 }
 
 export interface OutreachRow {
@@ -25,6 +26,7 @@ export interface OutreachRow {
   available: boolean;
   post: number;
   comment: number;
+  dailyPostLimit: number;
   portalAccessed: boolean;
   portalLastSeenAt: string | null;
 }
@@ -38,7 +40,8 @@ export interface OutreachRow {
  * Counting runs in a single pass over the supplied tasks instead of one filter
  * per ticket: O(inputs + tasks) rather than O(inputs x tasks). Per-channel
  * post/comment counts are identical.
- */export function buildOutreachRows(inputs: OutreachRowInput[]): OutreachRow[] {
+ */
+export function buildOutreachRows(inputs: OutreachRowInput[]): OutreachRow[] {
   // Counting is memoized per `tasksToday` array reference rather than
   // recomputed per ticket. Callers pass the same array to every row, so this
   // collapses N x M scanning into a single pass while keeping per-input
@@ -76,6 +79,7 @@ export interface OutreachRow {
       available: t.availableAt !== null && t.messageSentAt !== null,
       post: counts.post,
       comment: counts.comment,
+      dailyPostLimit: t.dailyPostLimit ?? 2,
       portalAccessed: t.portalAccessed,
       portalLastSeenAt: t.portalLastSeenAt,
     };

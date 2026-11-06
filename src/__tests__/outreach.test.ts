@@ -157,6 +157,17 @@ describe('buildOutreachRows', () => {
     const rows = buildOutreachRows([base]);
     expect(rows[0].messageSentAt).toBe('2026-08-17T19:00:00.000Z');
   });
+
+  it('preserves custom dailyPostLimit or defaults to 2', () => {
+    const rows = buildOutreachRows([
+      base,
+      { ...base, channelId: 'c2', channelName: 't2', dailyPostLimit: 4 },
+    ]);
+    const first = rows.find((r) => r.channelId === 'c1')!;
+    const second = rows.find((r) => r.channelId === 'c2')!;
+    expect(first.dailyPostLimit).toBe(2);
+    expect(second.dailyPostLimit).toBe(4);
+  });
 });
 
 describe('formatOutreachMessage', () => {

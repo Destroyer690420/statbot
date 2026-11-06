@@ -38,7 +38,7 @@ export async function selectCandidates(
       if (awaiting) continue; // 1 active post per worker
 
       const acceptedToday = await countAcceptedToday(member.id, dayStart, dayEnd);
-      if (acceptedToday >= AUTOMATION.DAILY_POST_CAP) continue;
+      if (acceptedToday >= (row.dailyPostLimit ?? AUTOMATION.DAILY_POST_CAP)) continue;
 
       out.push({ channelId: channel.id, channelName: channel.name, workerId: member.id });
     } catch (error) {

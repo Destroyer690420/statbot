@@ -5,7 +5,7 @@ import { outreachService } from '../../services/outreach.service';
 import { authMiddleware, AuthRequest, requireDashboardAdmin } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { getDb } from '../../database/db';
-import { ticketInactivityRepository } from '../../database/repositories';
+import { outreachRepository, ticketInactivityRepository } from '../../database/repositories';
 import { auditLogService } from '../../services/audit.service';
 import { AuditAction } from '../../types';
 import { logger } from '../../utils/logger';
@@ -206,6 +206,27 @@ export default function createOutreachRoutes(discordClient: Client): Router {
       res.status(500).json({ success: false, message: 'Failed to delete ticket channel.' });
     }
   });
+
+  /**
+   * PUT /api/v1/outreach/tickets/:channelId/limit
+   * Updates the daily post limit for a ticket channel (e.g. workers with multiple IDs).
+   */
+  router.put(
+    '/tickets/:channelId/limit',
+    validateBody(z.object({ limit: z.number().int().min(1).max(50) })),
+    async (req: Request, res: Response): Promise<void> => {
+      if (!requireDashboardAdmin(req, res)) return;
+      const channelId = req.params.channelId as string;
+      const limit = req.body.limit;
+      try {
+        const updated = await outreachRepository.updateTicketLimit(channelId, limit);
+        res.json({ success: true, data: { channelId, dailyPostLimit: updated.dailyPostLimit } });
+      } catch (error) {
+        logger.error('PUT /outreach/tickets/:channelId/limit failed', { channelId, limit, error });
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    },
+  );
 
   return router;
 }

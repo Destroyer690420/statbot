@@ -212,6 +212,11 @@ export async function deleteOutreachTicket(channelId: string) {
   return data;
 }
 
+export async function updateOutreachTicketLimit(channelId: string, limit: number) {
+  const { data } = await api.put(`/outreach/tickets/${channelId}/limit`, { limit });
+  return data;
+}
+
 export async function getPayoutWeek() {
   const { data } = await api.get('/payouts/week');
   return data;

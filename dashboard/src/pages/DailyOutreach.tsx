@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getOutreach, saveOutreachSelection, sendOutreachMessage, deleteOutreachTicket } from '../api/client';
-import { Loader2, RefreshCw, Check, X, Users, Send, Save, Search, Trash2 } from 'lucide-react';
+import { getOutreach, saveOutreachSelection, sendOutreachMessage, deleteOutreachTicket, updateOutreachTicketLimit } from '../api/client';
+import { Loader2, RefreshCw, X, Users, Send, Save, Search, Trash2 } from 'lucide-react';
 
 interface OutreachTicket {
   channelId: string;
@@ -12,34 +12,9 @@ interface OutreachTicket {
   available: boolean;
   post: number;
   comment: number;
+  dailyPostLimit: number;
   portalAccessed: boolean;
   portalLastSeenAt: string | null;
-}
-
-function StatusIcon({ ok }: { ok: boolean }) {
-  return ok ? (
-    <Check className="w-5 h-5 text-success" />
-  ) : (
-    <X className="w-5 h-5 text-text-muted" />
-  );
-}
-
-function PortalIcon({ accessed, lastSeenAt }: { accessed: boolean; lastSeenAt: string | null }) {
-  const label = accessed
-    ? lastSeenAt
-      ? `Portal login: ${new Date(lastSeenAt).toLocaleString()}`
-      : 'Portal accessed'
-    : 'No portal login recorded';
-  return (
-    <span
-      className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${accessed ? 'bg-success-muted text-success' : 'bg-dark-800 text-text-muted'}`}
-      title={label}
-      role="img"
-      aria-label={label}
-    >
-      {accessed ? <Check className="w-4 h-4" aria-hidden="true" /> : <span aria-hidden="true">—</span>}
-    </span>
-  );
 }
 
 function CountCell({ count }: { count: number }) {
@@ -113,6 +88,40 @@ export function DailyOutreach() {
       setSelectOpen(false);
     },
   });
+
+  const limitMutation = useMutation({
+    mutationFn: ({ channelId, limit }: { channelId: string; limit: number }) =>
+      updateOutreachTicketLimit(channelId, limit),
+    onMutate: async ({ channelId, limit }) => {
+      await queryClient.cancelQueries({ queryKey: ['outreach'] });
+      const previous = queryClient.getQueryData(['outreach']);
+      queryClient.setQueryData(['outreach'], (old: any) => {
+        if (!old?.data?.tickets) return old;
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            tickets: old.data.tickets.map((t: OutreachTicket) =>
+              t.channelId === channelId ? { ...t, dailyPostLimit: limit } : t
+            ),
+          },
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['outreach'], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['outreach'] });
+    },
+  });
+
+  const handleLimitChange = (channelId: string, limit: number) => {
+    limitMutation.mutate({ channelId, limit });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (channelId: string) => deleteOutreachTicket(channelId),
@@ -236,10 +245,6 @@ export function DailyOutreach() {
         </div>
       </div>
 
-      <p className="text-xs text-dark-500">
-        Portal ✓ means the worker has completed at least one Worker Panel login from that ticket.
-      </p>
-
       {sendNote && (
         <p className={`text-sm ${sendNote.ok ? 'text-success' : 'text-danger'}`}>
           {sendNote.ok ? '' : ''}{sendNote.text}
@@ -307,23 +312,21 @@ export function DailyOutreach() {
               <tr className="border-b border-dark-700/50 bg-dark-800/50">
                 <th className="px-6 py-4 font-semibold text-dark-200">Ticket</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Worker</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Portal</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Available</th>
                 <th className="px-6 py-4 font-semibold text-dark-200">Post</th>
-                <th className="px-6 py-4 font-semibold text-dark-200">Comment</th>
+                <th className="px-6 py-4 font-semibold text-dark-200">Daily Limit</th>
                 <th className="px-6 py-4 font-semibold text-dark-200 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dark-700/50">
               {statusQuery.isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-10 text-center">
+                  <td colSpan={5} className="px-6 py-10 text-center">
                     <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : visibleTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-10 text-center text-dark-400">
+                  <td colSpan={5} className="px-6 py-10 text-center text-dark-400">
                     No tickets selected yet — open Select Tickets to add.
                   </td>
                 </tr>
@@ -348,12 +351,22 @@ export function DailyOutreach() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-dark-200">{t.workerName || '—'}</td>
-                    <td className="px-6 py-4">
-                      <PortalIcon accessed={t.portalAccessed} lastSeenAt={t.portalLastSeenAt} />
-                    </td>
-                    <td className="px-6 py-4"><StatusIcon ok={t.available} /></td>
                     <td className="px-6 py-4"><CountCell count={t.post} /></td>
-                    <td className="px-6 py-4"><CountCell count={t.comment} /></td>
+                    <td className="px-6 py-4">
+                      <select
+                        value={t.dailyPostLimit || 2}
+                        onChange={(e) => handleLimitChange(t.channelId, Number(e.target.value))}
+                        className="bg-dark-800 border border-dark-700 text-text-primary text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-primary-500 transition-colors cursor-pointer"
+                        disabled={limitMutation.isPending && (limitMutation.variables as any)?.channelId === t.channelId}
+                      >
+                        <option value={2}>2 posts (1 ID)</option>
+                        <option value={4}>4 posts (2 IDs)</option>
+                        <option value={6}>6 posts (3 IDs)</option>
+                        <option value={8}>8 posts (4 IDs)</option>
+                        <option value={10}>10 posts (5 IDs)</option>
+                        <option value={12}>12 posts (6 IDs)</option>
+                      </select>
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <button
                         type="button"
@@ -396,32 +409,35 @@ export function DailyOutreach() {
                   <p className="font-mono text-sm text-dark-100 truncate">#{t.channelName || t.channelId}</p>
                   <p className="text-xs text-dark-400 mt-0.5">{t.workerName || '—'}</p>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <span className="text-[10px] font-semibold text-dark-500 uppercase tracking-wider">Portal</span>
-                  <PortalIcon accessed={t.portalAccessed} lastSeenAt={t.portalLastSeenAt} />
-                  <button
-                    type="button"
-                    onClick={() => setDeletingTicket(t)}
-                    disabled={deleteMutation.isPending}
-                    className="p-1 text-dark-400 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors ml-1"
-                    title={`Delete #${t.channelName || t.channelId}`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeletingTicket(t)}
+                  disabled={deleteMutation.isPending}
+                  className="p-1 text-dark-400 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors ml-1"
+                  title={`Delete #${t.channelName || t.channelId}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              <div className="grid grid-cols-3 gap-1 px-4 py-2 border-t border-dark-700/30">
+              <div className="flex items-center justify-between px-4 py-2.5 border-t border-dark-700/30">
                 <div className="flex items-center gap-2">
-                  <StatusIcon ok={t.available} />
-                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Available</p>
-                </div>
-                <div className="flex items-center gap-2">
+                  <span className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Post:</span>
                   <CountCell count={t.post} />
-                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Post</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CountCell count={t.comment} />
-                  <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Comment</p>
+                  <span className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Limit:</span>
+                  <select
+                    value={t.dailyPostLimit || 2}
+                    onChange={(e) => handleLimitChange(t.channelId, Number(e.target.value))}
+                    className="bg-dark-800 border border-dark-700 text-text-primary text-xs rounded-lg px-2 py-1 cursor-pointer"
+                  >
+                    <option value={2}>2 posts (1 ID)</option>
+                    <option value={4}>4 posts (2 IDs)</option>
+                    <option value={6}>6 posts (3 IDs)</option>
+                    <option value={8}>8 posts (4 IDs)</option>
+                    <option value={10}>10 posts (5 IDs)</option>
+                    <option value={12}>12 posts (6 IDs)</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -487,7 +503,7 @@ export function DailyOutreach() {
                     </label>
                     <div className="ml-3 flex shrink-0 items-center gap-2">
                       <span className="text-xs text-dark-500">{t.workerName || '—'}</span>
-                      <PortalIcon accessed={t.portalAccessed} lastSeenAt={t.portalLastSeenAt} />
+                      
                       <button
                         type="button"
                         onClick={(e) => {

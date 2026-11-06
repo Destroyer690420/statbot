@@ -21,6 +21,14 @@ export class OutreachRepository {
     );
   }
 
+  async updateTicketLimit(channelId: string, limit: number) {
+    return getDb().ticketOutreach.upsert({
+      where: { channelId },
+      create: { channelId, dailyPostLimit: limit },
+      update: { dailyPostLimit: limit, updatedAt: new Date() },
+    });
+  }
+
   async setMessageSent(channelId: string, at: Date) {    return getDb().ticketOutreach.update({
       where: { channelId },
       data: { messageSentAt: at, updatedAt: new Date() },

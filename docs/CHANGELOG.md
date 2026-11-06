@@ -3,6 +3,17 @@
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
 ## 2026-11-06
+### Configurable daily post limit per ticket & Daily Outreach UI cleanup
+- **Configurable daily post limit per ticket**:
+  - Workers with multiple Reddit IDs can take 2 posts per ID (e.g. 2 IDs = 4 posts).
+  - Added `dailyPostLimit Int @default(2)` to `TicketOutreach` model and SQL migration.
+  - Added `PUT /api/v1/outreach/tickets/:channelId/limit` endpoint with `{ limit: 1..50 }` payload.
+  - Daily blast selection, worker reply acceptance, burst claiming, and pre-flight checks all respect each ticket's configured `dailyPostLimit` instead of hardcoded 2.
+- **Daily Outreach table cleanup**:
+  - Removed `Portal`, `Available`, and `Comment` columns and helper text.
+  - Kept `Ticket`, `Worker`, `Post`, and `Action` columns.
+  - Added `Daily Limit` dropdown selector (`2 posts (1 ID)`, `4 posts (2 IDs)`, etc.) with instant optimistic auto-save.
+
 ### Task claimed completion message simplified to plain text
 - **Simplified batch claimed announcement**:
   - When all posts in a batch are claimed, the bot sends only the single clean message `"🏁 All 1 post has been claimed!"` (or `"🏁 All {N} posts have been claimed!"`) with no embed card attached and no card updates.

@@ -192,6 +192,7 @@ erDiagram
         string id PK
         string channelId UNIQUE "Discord channel ID"
         boolean selected "persists across days"
+        int dailyPostLimit "default 2; max posts per day for this ticket"
         timestamp messageSentAt "nullable; last daily send"
         timestamp availableAt "nullable; first worker reply of cycle"
         timestamp updatedAt

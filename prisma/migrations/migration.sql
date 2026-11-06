@@ -950,3 +950,11 @@ CREATE INDEX IF NOT EXISTS "TicketInactivity_workerId_idx" ON "TicketInactivity"
 -- onboarding channels (#beginners-corner, #rules, #announcements).
 -- Nullable, schema-only, safe to re-run.
 ALTER TABLE "TicketOnboarding" ADD COLUMN IF NOT EXISTS "guideDoneAt" TIMESTAMP(3);
+
+-- ============================================================
+-- Migration: Configurable daily post limit per ticket
+-- ============================================================
+-- Allows tickets where workers have multiple Reddit IDs to receive and complete
+-- more than 2 posts per day (e.g. 2 IDs = 4 posts). Defaults to 2.
+-- Schema-only, idempotent, safe to re-run.
+ALTER TABLE "TicketOutreach" ADD COLUMN IF NOT EXISTS "dailyPostLimit" INTEGER NOT NULL DEFAULT 2;
