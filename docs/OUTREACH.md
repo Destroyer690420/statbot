@@ -4,6 +4,7 @@ Verified 2026-08-18 — **deployed** (`4f1b84c` live on `161.118.164.85`; tables
 Blast campaigns added 2026-09-09 — **deployed** (`d3153f3` live; `OutreachBlast`/`OutreachBlastMessage`/`OutreachReply` tables applied, verified).
 Worker Portal access column added 2026-09-25 — **deployed** at `675c618` (code `0122775`): `WorkerPortalAccess` table applied to production (empty, no backfill) + admin Daily Outreach indicator live.
 Default message copy changed 2026-10-24 (post-only, no comment) — **deployed** at `1f88575`; no stored `OutreachSettings` override existed, so the new default is live.
+Per-ticket `dailyPostLimit` enforcement fixed end-to-end 2026-11-08 — **deployed at `de34626`** (backend-only app rebuild, no migration): `GET /outreach` returns the stored limit (the dropdown no longer snaps back to 2) and blast send, blast reply acceptance, burst claim intake, the failed-claim retry path and `/automation/rehearse` all honour the ticket's limit instead of hardcoded 2.
 
 ## 1. What It Is
 
