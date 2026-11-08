@@ -130,7 +130,7 @@ class BlastLiveness {
   }
 }
 
-/** Posts assigned per worker per IST day before outreach skips them. */
+/** Default posts assigned per worker per IST day when a ticket has no override. */
 export const DAILY_POST_CAP = 2;
 
 export interface BlastHooks {
@@ -257,6 +257,10 @@ class OutreachService {
         portalAccessed: portal !== undefined,
         portalLastSeenAt: portal ? portal.lastSeenAt.toISOString() : null,
         tasksToday,
+        // The dashboard's Daily Limit selector reads this back. Omitting it
+        // made `buildOutreachRows` fall back to 2 on every refresh, so a saved
+        // 4-post limit visually reverted to "2 posts (1 ID)".
+        dailyPostLimit: row?.dailyPostLimit ?? DAILY_POST_CAP,
       });
     }
 
@@ -491,6 +495,13 @@ class OutreachService {
     const freshRows = await outreachRepository.findAll();
     const selected = freshRows.filter((r) => r.selected);
 
+    // Per-ticket daily post allowance. A worker with multiple Reddit IDs gets
+    // a higher limit (2 IDs → 4 posts/day, 3 IDs → 6, …), so the cap is read
+    // from each ticket's own row instead of the legacy 2-post constant.
+    const dailyLimitByChannel = new Map<string, number>(
+      freshRows.map((r) => [r.channelId, r.dailyPostLimit ?? DAILY_POST_CAP]),
+    );
+
     const sent: SendResult[] = [];
     const skipped: SkippedTicket[] = [];
 
@@ -611,11 +622,12 @@ class OutreachService {
         return;
       }
       const assignedToday = assignedByWorker.get(target.workerId) ?? 0;
-      if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+      const dailyLimit = dailyLimitByChannel.get(target.channelId) ?? DAILY_POST_CAP;
+      if (isAtDailyCap(assignedToday, dailyLimit)) {
         skipped.push({
           channelId: target.channelId,
           channelName: target.name,
-          reason: `worker at daily cap (${assignedToday}/${DAILY_POST_CAP})`,
+          reason: `worker at daily cap (${assignedToday}/${dailyLimit})`,
         });
         return;
       }
@@ -790,8 +802,11 @@ class OutreachService {
       if (!blast || !discordClient) return;
 
       // Daily cap re-checked at reply time: capped workers never consume slots.
+      // The cap comes from this ticket's configured limit (multiple Reddit IDs
+      // = more posts/day), not the legacy 2-post constant.
       const assignedToday = await this.countPostsAssignedToday(userId, dayStart, dayEnd);
-      if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+      const dailyLimit = row.dailyPostLimit ?? DAILY_POST_CAP;
+      if (isAtDailyCap(assignedToday, dailyLimit)) {
         logger.info('Blast reply ignored: worker at daily cap', { channelId, userId, blastId: blast.id });
         return;
       }

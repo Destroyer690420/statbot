@@ -2,6 +2,21 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-11-08
+
+### Fixed (local, NOT deployed) — per-ticket daily post limit reverted to 2 and was not enforced
+
+- **Root cause 1 (UI reset):** `OutreachService.getStatus` never put `TicketOutreach.dailyPostLimit` into the `OutreachRowInput` it passes to `buildOutreachRows`, so the builder always fell back to `2`. The `PUT /outreach/tickets/:channelId/limit` endpoint saved the value correctly, but the next `GET /outreach` (including the 30s poll and the mutation's `onSettled` refetch) returned `dailyPostLimit: 2`, making the dropdown snap back to `2 posts (1 ID)`.
+- **Root cause 2 (not enforced):** only `selectCandidates` used the ticket limit. Blast sends, blast reply acceptance, burst claim intake, the automation retry path and the `/automation/rehearse` pre-flight still compared against the hardcoded `DAILY_POST_CAP = 2`, so a 4-post ticket was skipped/ignored after 2 posts.
+- **Fix:**
+  - `getStatus` now returns `dailyPostLimit` (stored value, fallback 2).
+  - `sendBlastMessages` reads a per-channel limit map from the same `findAll()` snapshot and skips at that limit; skip reason now reports the real limit (`worker at daily cap (4/4)`).
+  - `onWorkerMessage` (reply acceptance) uses the ticket row's limit.
+  - `handleBurstReply` (burst claim intake) loads the ticket row and uses its limit.
+  - `POST /automation/rehearse` pre-flight and the failed-claim retry path load the ticket row and use its limit.
+- Tests: added per-limit send/reply/status regressions in `src/__tests__/blast-send-equivalence.test.ts`; fixed the stale `legacyBuildOutreachRows` mirror in `src/__tests__/perf-batch-a.test.ts` (it predated `dailyPostLimit`). Full suite green: 98/98 suites, 1,338/1,338 tests; `npm run typecheck` clean.
+- **This corrects the 2026-11-06 entry's claim that blast selection, reply acceptance, burst claiming and pre-flight checks all respected `dailyPostLimit` — only candidate selection did.** No schema/migration/env change; needs an app rebuild (backend only) to go live.
+
 ## 2026-11-06
 ### Deployed (2026-11-06 at `8fd2bb6` — app + dashboard rebuild + DB migration)
 - **Configurable daily post limit per ticket & Daily Outreach UI cleanup**

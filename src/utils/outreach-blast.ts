@@ -17,7 +17,7 @@ export function isBlastFull(slotsFilled: number, slotsTotal: number): boolean {
   return slotsFilled >= slotsTotal;
 }
 
-/** True when the worker hit the daily cap (cap 2 → 2+ assigned today skips). */
+/** True when the worker hit its daily cap (per-ticket limit, default 2). */
 export function isAtDailyCap(assignedToday: number, cap: number): boolean {
   return assignedToday >= cap;
 }

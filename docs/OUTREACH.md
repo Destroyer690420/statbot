@@ -69,13 +69,14 @@ Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE
 | `messageSentAt` | stored (null → Send Message enabled) |
 | `available` | `availableAt != null` AND set in the current cycle (i.e. after today's send) |
 | `post` / `comment` | **counts** of tasks of that type with `createdAt` inside today's IST window (any status — the manager decides what counts). `0` → cross, `>0` → count number |
+| `dailyPostLimit` | stored per-ticket daily post allowance (`TicketOutreach.dailyPostLimit`, default 2). 2 posts per Reddit ID: 1 ID → 2, 2 IDs → 4, 3 IDs → 6, … |
 | `portalAccessed` | `true` when `WorkerPortalAccess` has a row for this ticket (ever completed a successful portal login from it); independent of the daily outreach cycle |
 | `portalLastSeenAt` | ISO timestamp of that ticket's most recent successful portal login; never resets at midnight |
 | `stale` | cycle needs reset (see §2) — GET re-applies the reset lazily |
 
 ## 5. Backend
 
-- **Service** `src/services/outreach.service.ts`: `getStatus(client)` (+ open-blast state), `saveSelection(selections)`, `sendBlast(client, slotsTotal, senderId)` (new blast per send; skips capped/worker-less tickets, records message IDs; audit `OUTREACH_MESSAGE_SENT`), `onWorkerMessage(channelId, authorId, client)` (daily Available + first-n blast replies, close + bulk delete on fill, cap re-check at reply), `countPostsAssignedToday` (2-post IST cap basis), `getMessage` / `updateMessage` (OutreachSettings).
+- **Service** `src/services/outreach.service.ts`: `getStatus(client)` (+ open-blast state; returns each ticket's stored `dailyPostLimit`), `saveSelection(selections)`, `sendBlast(client, slotsTotal, senderId)` (new blast per send; skips tickets whose worker reached that ticket's `dailyPostLimit` or that have no worker, records message IDs; audit `OUTREACH_MESSAGE_SENT`), `onWorkerMessage(channelId, authorId, client)` (daily Available + first-n blast replies, close + bulk delete on fill, per-ticket limit re-check at reply), `countPostsAssignedToday` (per-ticket `dailyPostLimit` basis, default 2), `getMessage` / `updateMessage` (OutreachSettings).
 - **Repositories** `src/database/repositories/outreach.repository.ts` (Prisma, upserts/transactions; blast/message/reply CRUD) and `worker-portal-access.repository.ts` (per-ticket `recordSuccessfulLogin` upsert + `findAll`).
 - **Routes** `src/api/routes/outreach.ts` (factory `createOutreachRoutes(discordClient)`; all `requireDashboardAdmin` — middleware extracted to `src/api/middleware/auth.ts`, shared with discord routes):
   - `GET /api/v1/outreach` → `{ istDate, message, tickets[], blast }`
@@ -88,13 +89,13 @@ Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE
 ## 6. Dashboard (`dashboard/src/pages/DailyOutreach.tsx`)
 
 - Route `/outreach`; sidebar item **Daily Outreach** (`Users` icon) between Accepted and Archives; title branch in `Layout.tsx`.
-- Table (desktop) + cards (mobile, Tasks pattern); columns Ticket | Worker | **Portal** | Available | Post | Comment. **Rows = selected tickets only** (`tickets.filter(t => t.selected)` — the API returns all tickets with their `selected` flag; the modal needs the full list to add new ones). Portal is a green tick when `portalAccessed`, muted dash otherwise; tooltip shows the last successful login time. Mobile cards and the Select Tickets modal show the same Portal indicator.
+- Table (desktop) + cards (mobile, Tasks pattern); columns Ticket | Worker | **Post** | **Daily Limit** | Action. **Rows = selected tickets only** (`tickets.filter(t => t.selected)` — the API returns all tickets with their `selected` flag; the modal needs the full list to add new ones). **Daily Limit** is an optimistic-save dropdown (`2 posts (1 ID)`, `4 posts (2 IDs)`, `6 posts (3 IDs)`, … up to 12) backed by `PUT /outreach/tickets/:channelId/limit`; the saved value is returned by `GET /outreach` so it survives refreshes.
 - Toolbar: `Select Tickets` (checkbox modal — first checkboxes in the app, `accent-primary-500`; lists all tickets with current state; draft until **Save Selection** → `PUT /outreach/selection`), `Send Message` (slots prompt modal → `POST /outreach/send {slots}`; inline ✅/❌ result + skipped note), Refresh.
 - Blast banner (when a blast is OPEN): `x/y replied`, auto-updates every 30s.
 - Burst-reply highlight: tickets that replied in the current burst render green (Tasks-section tint language) and sort to the top, desktop + mobile; greens reset on the next burst (`blastReplied` from `GET /outreach`).
 - Auto-refresh every 30s (`refetchInterval`); subtitle shows today's IST date.
 - Settings page: **Daily Outreach Message** card (textarea, ≤2000 chars, Save → `PUT /outreach/settings`; supports the `{user}` tag placeholder — hint shown under the box).
-- Client fns in `dashboard/src/api/client.ts`: `getOutreach`, `getOutreachSettings`, `updateOutreachSettings`, `saveOutreachSelection`, `sendOutreachMessage`.
+- Client fns in `dashboard/src/api/client.ts`: `getOutreach`, `getOutreachSettings`, `updateOutreachSettings`, `saveOutreachSelection`, `sendOutreachMessage`, `deleteOutreachTicket`, `updateOutreachTicketLimit`.
 
 ## 6b. Worker tagging in the sent message
 
@@ -106,21 +107,22 @@ Migration: `CREATE TABLE IF NOT EXISTS` for the outreach tables + `CREATE UNIQUE
 
 `src/__tests__/outreach.test.ts` (pure functions only — importing the service would pull env/DB): IST boundary math, `isStaleDailyCycle`, `buildOutreachRows` (selection, availability gating, per-ticket portal access, post/comment derivation, no-tickets case), `formatOutreachMessage` (placeholder replaced, all occurrences, prepend fallback, null worker). `src/__tests__/worker-portal-access.test.ts` covers repository upsert/select behavior.
 `src/__tests__/outreach-blast.test.ts`: slot-winner math (`isSlotWinner`), close condition (`isBlastFull`), cap boundary (`isAtDailyCap`).
+`src/__tests__/blast-send-equivalence.test.ts`: send/skip classification, stop-the-send, hook routing, keeper cleanup, **per-ticket `dailyPostLimit` enforcement** (a 4-post ticket is still messaged at 2 posts today, skipped at 4 with reason `worker at daily cap (4/4)`, and the reply path accepts at 2 / ignores at 4), plus `getStatus` returning the saved limit instead of always 2. `src/__tests__/perf-batch-a.test.ts` pins `buildOutreachRows` equivalence including `dailyPostLimit`.
 
 ## 8. Limitations / Notes
 
 - Availability = **any** worker message after the send (not strictly a reply to the broadcast).
 - Blast shortfall stays open: if fewer than `slotsTotal` reply, late replies still count until the next Send (which supersedes) or day end.
-- A worker hitting the 2-post cap after replying stops consuming slots; capped repliers never count.
+- A worker hitting their ticket's `dailyPostLimit` (default 2) after replying stops consuming slots; capped repliers never count.
 - `selected` is remembered forever unless changed; the manager must actively uncheck. The Discord button only ever sets it to `true` — removing a ticket is still a dashboard action.
 - Portal access is per ticket, updates only on successful ticket-OTP login, and has no historical backfill; the tick means "has logged in from this ticket", never "currently online".
 
 ## 9. Blast campaigns (2026-09-09)
 
 - Each **Send Message** asks posts-available `n` and opens an `OutreachBlast` (`slotsTotal=n`, `OPEN`); a newer send auto-closes any open blast (its messages stay — only the new blast auto-cleans).
-- Sends skip tickets with no worker and workers already at 2 assigned Posts today IST; skips are reported inline.
-- First-n repliers win (one slot per channel; cap re-checked at reply time). On fill the blast closes and the bot deletes **its own** outreach message from all other contacted tickets (best-effort; hand-deleted messages are skipped, winners keep theirs).
-- Repeatable anytime; cap resets 00:00 IST. Tables: `OutreachBlast`, `OutreachBlastMessage` (message IDs for deletion), `OutreachReply` (unique per blast+channel). Pure helpers in `src/utils/outreach-blast.ts`.
+- Sends skip tickets with no worker and workers already at their ticket's `dailyPostLimit` for assigned Posts today IST (default 2; a ticket set to 2 IDs = 4 posts keeps receiving outreach until 4); skips are reported inline.
+- First-n repliers win (one slot per channel; per-ticket limit re-checked at reply time). On fill the blast closes and the bot deletes **its own** outreach message from all other contacted tickets (best-effort; hand-deleted messages are skipped, winners keep theirs).
+- Repeatable anytime; limit resets 00:00 IST. Tables: `OutreachBlast`, `OutreachBlastMessage` (message IDs for deletion), `OutreachReply` (unique per blast+channel). Pure helpers in `src/utils/outreach-blast.ts`.
 
 ## 10. Daily 7am IST ban scan (2026-10-14 — DEPLOYED live at `79420af`; app rebuild only, no migration)
 

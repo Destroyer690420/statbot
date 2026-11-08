@@ -602,9 +602,13 @@ export async function handleBurstReply(blastId: string, channelId: string, worke
       }
 
       // Cap re-checked at claim time (a worker may have filled up since).
+      // The limit is per ticket: workers with extra Reddit IDs may take more
+      // posts per day (2 IDs → 4, 3 IDs → 6, …).
       const { dayStart, dayEnd } = getIstDayBoundaries();
       const assignedToday = await outreachService.countPostsAssignedToday(workerId, dayStart, dayEnd).catch(() => 0);
-      if (assignedToday >= DAILY_POST_CAP) {
+      const outreachRow = await outreachRepository.findByChannelId(channelId).catch(() => null);
+      const dailyLimit = outreachRow?.dailyPostLimit ?? DAILY_POST_CAP;
+      if (assignedToday >= dailyLimit) {
         logger.info('Burst reply skipped: worker at daily cap', { blastId, channelId, workerId });
         return null;
       }

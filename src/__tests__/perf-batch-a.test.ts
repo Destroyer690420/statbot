@@ -27,6 +27,7 @@ function legacyBuildOutreachRows(inputs: OutreachRowInput[]) {
       available: t.availableAt !== null && t.messageSentAt !== null,
       post: today.filter((x) => x.type === 'POST').length,
       comment: today.filter((x) => x.type === 'COMMENT').length,
+      dailyPostLimit: t.dailyPostLimit ?? 2,
       portalAccessed: t.portalAccessed,
       portalLastSeenAt: t.portalLastSeenAt,
     };
@@ -72,7 +73,7 @@ describe('buildOutreachRows single-pass equivalence', () => {
 
     const inputs: OutreachRowInput[] = [
       makeInput('c3', 'ticket-0003', tasksToday, { taskStatus: 'active', selected: true, availableAt: 'x' }),
-      makeInput('c1', 'ticket-0001', tasksToday, { messageSentAt: 'y', availableAt: 'x', portalAccessed: true, portalLastSeenAt: 'z' }),
+      makeInput('c1', 'ticket-0001', tasksToday, { messageSentAt: 'y', availableAt: 'x', portalAccessed: true, portalLastSeenAt: 'z', dailyPostLimit: 4 }),
       makeInput('c9', 'ticket-0009', tasksToday), // no tasks today
       makeInput('c2', 'ticket-0002', tasksToday, { taskStatus: 'awaiting-submission' }),
       makeInput('c4', null, tasksToday), // null channelName

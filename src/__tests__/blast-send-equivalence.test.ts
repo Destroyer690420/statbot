@@ -32,6 +32,7 @@ jest.mock('../database/repositories', () => ({
     getMessage: jest.fn(),
     resetCycle: jest.fn(),
     getBlast: jest.fn(),
+    latestBlast: jest.fn(),
     recordBlastMessage: jest.fn(),
     setMessageSent: jest.fn(),
     listReplyChannelIds: jest.fn(),
@@ -47,6 +48,7 @@ jest.mock('../database/repositories', () => ({
     countGoPartTimePostsByWorkerInRange: jest.fn(),
     findByCreatedAt: jest.fn(),
     findAwaitingSubmissionInChannel: jest.fn(),
+    findChannelTaskStatusSets: jest.fn(),
   },
   workerPortalAccessRepository: { findAll: jest.fn() },
 }));
@@ -61,6 +63,7 @@ type OutreachService = typeof import('../services/outreach.service')['outreachSe
 let outreachRepository: any;
 let taskRepository: any;
 let automationRepository: any;
+let workerPortalAccessRepository: any;
 let service: OutreachService;
 
 /**
@@ -103,11 +106,18 @@ beforeEach(async () => {
   outreachRepository = repos.outreachRepository;
   taskRepository = repos.taskRepository;
   automationRepository = (repos as any).automationRepository;
+  workerPortalAccessRepository = (repos as any).workerPortalAccessRepository;
   service = (await import('../services/outreach.service')).outreachService;
 
   jest.clearAllMocks();
   (automationRepository.getBurstByBlast as jest.Mock).mockResolvedValue(null);
   (automationRepository.listCycleClaims as jest.Mock).mockResolvedValue([]);
+  (workerPortalAccessRepository.findAll as jest.Mock).mockResolvedValue([]);
+  (taskRepository.findChannelTaskStatusSets as jest.Mock).mockResolvedValue({
+    awaiting: new Set<string>(),
+    active: new Set<string>(),
+  });
+  (outreachRepository.latestBlast as jest.Mock).mockResolvedValue(null);
   (outreachRepository.setBlastSlotsTotal as jest.Mock).mockResolvedValue({});
   (outreachRepository.getMessage as jest.Mock).mockResolvedValue({ message: 'hello {user}' });
   (outreachRepository.resetCycle as jest.Mock).mockResolvedValue(undefined);
@@ -406,6 +416,91 @@ describe('sendBlastMessages - daily cap is read ONCE for the whole blast', () =>
       'manager',
     );
     expect(sent.filter((s) => s.ok)).toHaveLength(1);
+  });
+});
+
+describe('sendBlastMessages - configurable per-ticket daily post limit', () => {
+  it('still messages a ticket at 2 posts today when its configured limit is 4', async () => {
+    (outreachRepository.findAll as jest.Mock).mockResolvedValue([
+      outreachRow('c1', { dailyPostLimit: 4 }),
+    ]);
+    (taskRepository.countGoPartTimePostsByWorkerInRange as jest.Mock).mockResolvedValue(
+      new Map([['w1', 2]]),
+    );
+    const channels = new Map<string, TextChannel>([
+      ['c1', makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w1', user: { bot: false } }] })],
+    ]);
+
+    const { sent, skipped } = await service.sendBlastMessages(
+      makeClient(channels),
+      BLAST,
+      'manager',
+    );
+
+    expect(sent.filter((s) => s.ok).map((s) => s.channelId)).toEqual(['c1']);
+    expect(skipped).toEqual([]);
+  });
+
+  it('skips at the configured limit and reports that limit, not the legacy 2', async () => {
+    (outreachRepository.findAll as jest.Mock).mockResolvedValue([
+      outreachRow('c1', { dailyPostLimit: 4 }),
+    ]);
+    (taskRepository.countGoPartTimePostsByWorkerInRange as jest.Mock).mockResolvedValue(
+      new Map([['w1', 4]]),
+    );
+    const channels = new Map<string, TextChannel>([
+      ['c1', makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w1', user: { bot: false } }] })],
+    ]);
+
+    const { sent, skipped } = await service.sendBlastMessages(
+      makeClient(channels),
+      BLAST,
+      'manager',
+    );
+
+    expect(sent).toEqual([]);
+    expect(skipped).toEqual([
+      { channelId: 'c1', channelName: 't1', reason: 'worker at daily cap (4/4)' },
+    ]);
+  });
+});
+
+describe('getStatus - per-ticket daily post limit is returned to the dashboard', () => {
+  it('returns the saved limit instead of always defaulting to 2', async () => {
+    (outreachRepository.findAll as jest.Mock).mockResolvedValue([
+      outreachRow('c1', { dailyPostLimit: 4 }),
+      outreachRow('c2'),
+    ]);
+    (outreachRepository.getOpenBlast as jest.Mock).mockResolvedValue(null);
+    (outreachRepository.latestBlast as jest.Mock).mockResolvedValue(null);
+    (outreachRepository.listReplyChannelIds as jest.Mock).mockResolvedValue([]);
+    (taskRepository.findByCreatedAt as jest.Mock).mockResolvedValue([]);
+
+    const c1 = makeChannel({
+      id: 'c1',
+      name: 'ticket-0001',
+      members: [{ id: 'w1', user: { bot: false, username: 'worker1' } } as any],
+    });
+    const c2 = makeChannel({
+      id: 'c2',
+      name: 'ticket-0002',
+      members: [{ id: 'w2', user: { bot: false, username: 'worker2' } } as any],
+    });
+    const guild = {
+      channels: { cache: new CollectionCtor([['c1', c1], ['c2', c2]]) },
+      members: { fetch: jest.fn().mockResolvedValue(undefined) },
+    };
+    const client = {
+      channels: { fetch: jest.fn(async (id: string) => (id === 'c1' ? c1 : c2)) },
+      guilds: { cache: { values: () => [guild].values() } },
+    } as any;
+
+    const status = await service.getStatus(client);
+    const first = status.tickets.find((t) => t.channelId === 'c1')!;
+    const second = status.tickets.find((t) => t.channelId === 'c2')!;
+
+    expect(first.dailyPostLimit).toBe(4);
+    expect(second.dailyPostLimit).toBe(2);
   });
 });
 
@@ -730,6 +825,57 @@ describe('per-blast hook overrides (escalation routing)', () => {
     await service.onWorkerMessage('c1', 'w9', replyClient());
 
     expect(defaultReply).toHaveBeenCalledWith('blast-e1', 'c1', 'w9', expect.anything());
+  });
+});
+
+describe('processWorkerMessage - per-ticket daily post limit', () => {
+  function replySetup(dailyPostLimit?: number) {
+    (outreachRepository.findByChannelId as jest.Mock).mockResolvedValue({
+      channelId: 'c1',
+      selected: true,
+      messageSentAt: new Date(),
+      availableAt: new Date(),
+      dailyPostLimit,
+    });
+    (outreachRepository.getOpenBlast as jest.Mock).mockResolvedValue({
+      id: 'blast-limit',
+      status: 'OPEN',
+      slotsTotal: 2,
+      slotsFilled: 0,
+    });
+    (outreachRepository.hasWorkerReplied as jest.Mock).mockResolvedValue(false);
+    (outreachRepository.recordReply as jest.Mock).mockResolvedValue({ row: {}, duplicate: false });
+    (outreachRepository.countReplies as jest.Mock).mockResolvedValue(1);
+    (outreachRepository.listReplyChannelIds as jest.Mock).mockResolvedValue(['c1']);
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([]);
+    (taskRepository.findAwaitingSubmissionInChannel as jest.Mock).mockResolvedValue(null);
+  }
+
+  const client = () =>
+    makeClient(
+      new Map([['c1', makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w9', user: { bot: false } }] })]]),
+    );
+
+  it('accepts a reply at 2 posts today when the ticket limit is 4', async () => {
+    replySetup(4);
+    (taskRepository.countGoPartTimePostsByWorkerInRange as jest.Mock).mockResolvedValue(
+      new Map([['w9', 2]]),
+    );
+
+    await service.onWorkerMessage('c1', 'w9', client());
+
+    expect(outreachRepository.recordReply).toHaveBeenCalledWith('blast-limit', 'c1', 'w9');
+  });
+
+  it('ignores a reply once the configured limit is reached', async () => {
+    replySetup(4);
+    (taskRepository.countGoPartTimePostsByWorkerInRange as jest.Mock).mockResolvedValue(
+      new Map([['w9', 4]]),
+    );
+
+    await service.onWorkerMessage('c1', 'w9', client());
+
+    expect(outreachRepository.recordReply).not.toHaveBeenCalled();
   });
 });
 

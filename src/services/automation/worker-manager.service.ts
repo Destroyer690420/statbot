@@ -12,8 +12,9 @@ export interface Candidate {
 }
 
 /**
- * Stage-1 pool = outreach-selected tickets. Stage-2 pings only workers with
- * <2 accepted posts today (IST) and no awaiting-submission task (1 active post).
+ * Stage-1 pool = outreach-selected tickets. Stage-2 pings only workers below
+ * their ticket's daily post limit (default 2, higher for multi-ID tickets) and
+ * with no awaiting-submission task (1 active post).
  */
 export async function selectCandidates(
   discordClient: Client,

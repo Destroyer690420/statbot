@@ -730,10 +730,12 @@ export default function createAutomationRoutes(discordClient: Client): Router {
 
       const { dayStart, dayEnd } = getIstDayBoundaries();
       const assignedToday = await outreachService.countPostsAssignedToday(worker.id, dayStart, dayEnd);
-      if (isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+      const outreachRow = await outreachRepository.findByChannelId(channel.id).catch(() => null);
+      const dailyLimit = outreachRow?.dailyPostLimit ?? DAILY_POST_CAP;
+      if (isAtDailyCap(assignedToday, dailyLimit)) {
         res.status(400).json({
           success: false,
-          message: `Worker at daily cap (${assignedToday}/${DAILY_POST_CAP}).`,
+          message: `Worker at daily cap (${assignedToday}/${dailyLimit}).`,
         });
         return;
       }
@@ -1302,7 +1304,11 @@ export default function createAutomationRoutes(discordClient: Client): Router {
               const assignedToday = await outreachService
                 .countPostsAssignedToday(workerId, dayStart, dayEnd)
                 .catch(() => DAILY_POST_CAP);
-              if (!busy && !isAtDailyCap(assignedToday, DAILY_POST_CAP)) {
+              const outreachRow = await outreachRepository
+                .findByChannelId(claim.channelId)
+                .catch(() => null);
+              const dailyLimit = outreachRow?.dailyPostLimit ?? DAILY_POST_CAP;
+              if (!busy && !isAtDailyCap(assignedToday, dailyLimit)) {
                 const follow = await automationRepository.createClaim({
                   cycleId: claim.cycleId,
                   externalTaskId: next,
