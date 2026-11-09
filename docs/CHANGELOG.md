@@ -4,14 +4,14 @@
 
 ## 2026-11-09
 
-### Local (NOT deployed) — manual "Request insight" button on the Tasks page
+### Deployed (2026-11-09 at `388fe4e` — app + dashboard rebuild, no migration) — manual "Request insight" button on the Tasks page
 
 - Owner can ask a worker for the insight screenshot even after the task is complete/archived: a new `MessageSquare` action on the Tasks desktop table (and the mobile card footer) sends one message into that task's ticket.
 - Message adapts to the task type and includes the link: `Hey <@worker>, can you please send the insights screenshot of this post|comment, its quite urgent.` followed by the submitted Reddit link on its own line (falls back through `submittedRedditUrl → redditUrl → postLink → commentLink`; omitted when no link is known).
 - **Strictly read-only** (owner-requested): no task status, reminder, BullMQ job, audit row or other persisted state changes.
 - Backend: `POST /api/v1/tasks/:id/request-insight` (JWT) → `src/services/insight-request.service.ts` (fetches the task, resolves its ticket `TextChannel`, sends with `allowedMentions` limited to the assigned worker). Pure message/link helpers in `src/utils/insight-request.ts` with 7 tests in `src/__tests__/insight-request.test.ts`.
 - Dashboard: `requestInsight()` in `dashboard/src/api/client.ts`; button shows a spinner while sending and a green check for 2.5s on success, with an inline error alert on failure.
-- Gates: `npm run typecheck` clean, full suite **99/99 suites / 1,345/1,345 tests** (new suite 7/7), `cd dashboard && npm run build` clean. No schema/migration/env change. Awaiting an app + dashboard rebuild/deploy.
+- Gates: `npm run typecheck` clean, full suite **99/99 suites / 1,345/1,345 tests** (new suite 7/7), `cd dashboard && npm run build` clean. No schema/migration/env change. **Deployed 2026-11-09 at `388fe4e`** (`161.118.164.85`; app + dashboard rebuild — redis untouched, NO migration, no env change; backup `rtm-backup-20261109-065208-request-insight.tar.gz`; verified: 3 services Up, public health `200` healthy DB+Redis, boot "All systems online!", live-dist gates (`insight-request.service.js` + `insight-request.js` present, `request-insight` route in `dist/api/routes/tasks.js`), served `Tasks-BSUrtM2O.js` contains "Request insight screenshot", endpoint `401` unauthenticated, dashboard root `200`; host + local bundles removed). Rollback = restore the backup tarball or rebundle `de34626` + rebuild app + dashboard.
 
 ## 2026-11-08
 
