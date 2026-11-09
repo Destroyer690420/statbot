@@ -8,7 +8,7 @@
 
 - Owner request: the message now shows `Task: Post #<externalId>` (or the internal task id for manual tasks) on its own line, so the owner can immediately tell which task the request belongs to.
 - Order: worker ask → task id → submitted link (when known) → `please tag <@admin> once you have sent the insight`.
-- App-only change (`src/utils/insight-request.ts` + `src/services/insight-request.service.ts`, using the existing backend `displayTaskId`); dashboard untouched. Tests updated (7/7); typecheck clean.
+- App-only change (`src/utils/insight-request.ts` + `src/services/insight-request.service.ts`, using the existing backend `displayTaskId`); dashboard untouched. Tests updated (7/7); full suite 99/99 suites / 1,345 tests; typecheck clean.
 - **Deployed 2026-11-09 at `2565f21`** (`161.118.164.85`; app-only rebuild — redis + dashboard untouched, NO migration, no env change; backup `rtm-backup-20261109-073215-insight-task-id.tar.gz`; verified: 3 services Up, public health `200` healthy DB+Redis, boot "All systems online!", live `dist/utils/insight-request.js` contains the `Task: ${taskId}` template, `displayTaskId` wired in `dist/services/insight-request.service.js`, endpoint `401` unauthenticated; host + local bundles removed). Rollback = restore the backup tarball or rebundle `4b54ac2` + rebuild app.
 
 ### Deployed (2026-11-09 at `4b54ac2` — app-only rebuild, no migration) — admin tag added to the insight-request message
