@@ -4,11 +4,12 @@
 
 ## 2026-11-09
 
-### Event 2 — admin tag added to the insight-request message (app-only redeploy)
+### Deployed (2026-11-09 at `4b54ac2` — app-only rebuild, no migration) — admin tag added to the insight-request message
 
 - Owner request: the manual insight request now also says `please tag <@admin> once you have sent the insight`, using `OWNER_USER_ID` (admin mac) as a real mention. `allowedMentions` now permits both the worker and the admin, nobody else.
 - Message order: worker ask → post/comment link (when known) → admin-tag line.
-- App-only change (`src/utils/insight-request.ts` + `src/services/insight-request.service.ts`); dashboard untouched. New tests assert the admin-tag line in all cases (7/7).
+- App-only change (`src/utils/insight-request.ts` + `src/services/insight-request.service.ts`); dashboard untouched. New tests assert the admin-tag line in all cases (7/7); full suite 99/99 suites / 1,345 tests; typecheck clean.
+- **Deployed 2026-11-09 at `4b54ac2`** (`161.118.164.85`; app-only rebuild — redis + dashboard untouched, NO migration, no env change; backup `rtm-backup-20261109-071457-insight-admin-tag.tar.gz`; verified: 3 services Up, public health `200` healthy DB+Redis, boot "All systems online!", live `dist/utils/insight-request.js` contains the `please tag <@...> once you have sent the insight` template, endpoint `401` unauthenticated; host + local bundles removed). Rollback = restore the backup tarball or rebundle `388fe4e` + rebuild app.
 
 ### Deployed (2026-11-09 at `388fe4e` — app + dashboard rebuild, no migration) — manual "Request insight" button on the Tasks page
 
