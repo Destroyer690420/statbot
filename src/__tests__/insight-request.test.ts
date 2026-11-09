@@ -4,13 +4,15 @@ import { TaskType } from '../types';
 describe('manual insight request message', () => {
   const workerId = '123456789';
   const adminId = '987654321';
+  const taskId = 'Post #1423160';
 
   const ask = (type: TaskType, link?: string | null) =>
-    formatInsightRequestMessage({ workerId, adminId, type, link });
+    formatInsightRequestMessage({ workerId, adminId, taskId, type, link });
 
-  it('asks for post insights, mentions the worker and tags the admin', () => {
+  it('asks for post insights, mentions the worker, shows the task id and tags the admin', () => {
     expect(ask(TaskType.POST)).toBe(
       `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.\n` +
+        `Task: ${taskId}\n` +
         `please tag <@${adminId}> once you have sent the insight`,
     );
   });
@@ -18,14 +20,16 @@ describe('manual insight request message', () => {
   it('says "comment" for comment tasks', () => {
     expect(ask(TaskType.COMMENT)).toBe(
       `Hey <@${workerId}>, can you please send the insights screenshot of this comment, its quite urgent.\n` +
+        `Task: ${taskId}\n` +
         `please tag <@${adminId}> once you have sent the insight`,
     );
   });
 
-  it('appends the submitted link between the ask and the admin tag', () => {
+  it('puts the task id before the submitted link', () => {
     const link = 'https://www.reddit.com/r/test/comments/abc123/example/';
     expect(ask(TaskType.POST, link)).toBe(
       `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.\n` +
+        `Task: ${taskId}\n` +
         `${link}\n` +
         `please tag <@${adminId}> once you have sent the insight`,
     );
@@ -34,6 +38,7 @@ describe('manual insight request message', () => {
   it('ignores blank links instead of leaving an empty line', () => {
     expect(ask(TaskType.POST, '   ')).toBe(
       `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.\n` +
+        `Task: ${taskId}\n` +
         `please tag <@${adminId}> once you have sent the insight`,
     );
   });

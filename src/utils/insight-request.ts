@@ -11,6 +11,8 @@ export interface InsightRequestParams {
   workerId: string;
   /** Discord id of the admin to tag once the screenshot is sent (admin mac). */
   adminId: string;
+  /** User-facing task id (e.g. "Post #1423160" or the internal id). */
+  taskId: string;
   /** Task type decides whether the message says "post" or "comment". */
   type: TaskType;
   /** The worker's submitted link (fallback: the task's Reddit link). */
@@ -22,15 +24,22 @@ export interface InsightRequestParams {
  *
  * - Post tasks:  "... insights screenshot of this post ..."
  * - Comment tasks: "... insights screenshot of this comment ..."
+ * - The user-facing task id is shown on its own line so the owner can find it.
  * - The post/comment link is appended on its own line when known.
  * - A final line asks the worker to tag the admin once the insight is sent.
  */
-export function formatInsightRequestMessage({ workerId, adminId, type, link }: InsightRequestParams): string {
+export function formatInsightRequestMessage({
+  workerId,
+  adminId,
+  taskId,
+  type,
+  link,
+}: InsightRequestParams): string {
   const noun = type === TaskType.COMMENT ? 'comment' : 'post';
   const base = `Hey <@${workerId}>, can you please send the insights screenshot of this ${noun}, its quite urgent.`;
   const trimmed = link?.trim();
-  const withLink = trimmed ? `${base}\n${trimmed}` : base;
-  return `${withLink}\nplease tag <@${adminId}> once you have sent the insight`;
+  const details = trimmed ? `Task: ${taskId}\n${trimmed}` : `Task: ${taskId}`;
+  return `${base}\n${details}\nplease tag <@${adminId}> once you have sent the insight`;
 }
 
 /** Picks the most relevant link to include with an insight request. */

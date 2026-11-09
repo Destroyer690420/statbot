@@ -1,6 +1,7 @@
 import { Client, TextChannel } from 'discord.js';
 import { taskService } from './task.service';
 import { formatInsightRequestMessage, pickInsightRequestLink } from '../utils/insight-request';
+import { displayTaskId } from '../utils/task-display';
 import { OWNER_USER_ID } from '../config/constants';
 import { logger } from '../utils/logger';
 
@@ -27,6 +28,7 @@ export class InsightRequestService {
     const content = formatInsightRequestMessage({
       workerId: task.assignedUserId,
       adminId: OWNER_USER_ID,
+      taskId: displayTaskId(task.id, task.type, task.externalTaskId),
       type: task.type,
       link: pickInsightRequestLink(task),
     });

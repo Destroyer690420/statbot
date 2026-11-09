@@ -4,6 +4,12 @@
 
 ## 2026-11-09
 
+### Event 3 — task id added to the insight-request message (app-only redeploy)
+
+- Owner request: the message now shows `Task: Post #<externalId>` (or the internal task id for manual tasks) on its own line, so the owner can immediately tell which task the request belongs to.
+- Order: worker ask → task id → submitted link (when known) → `please tag <@admin> once you have sent the insight`.
+- App-only change (`src/utils/insight-request.ts` + `src/services/insight-request.service.ts`, using the existing backend `displayTaskId`); dashboard untouched. Tests updated (7/7).
+
 ### Deployed (2026-11-09 at `4b54ac2` — app-only rebuild, no migration) — admin tag added to the insight-request message
 
 - Owner request: the manual insight request now also says `please tag <@admin> once you have sent the insight`, using `OWNER_USER_ID` (admin mac) as a real mention. `allowedMentions` now permits both the worker and the admin, nobody else.
