@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { getTasks, deleteTask, updateTask, downloadCsv, getTask } from '../api/client';
+import { getTasks, deleteTask, updateTask, downloadCsv, getTask, requestInsight } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
-import { Search, Filter, Trash2, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download, ImageDown } from 'lucide-react';
+import { Search, Filter, Trash2, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download, ImageDown, MessageSquare, Check } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
@@ -12,11 +12,26 @@ export function Tasks() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [requestingId, setRequestingId] = useState<string | null>(null);
+  const [sentId, setSentId] = useState<string | null>(null);
 
   const { data: tasksData, isLoading, refetch } = useQuery({
     queryKey: ['tasks', statusFilter],
     queryFn: () => getTasks(statusFilter ? { status: statusFilter } : undefined),
   });
+
+  const handleRequestInsight = async (taskId: string) => {
+    setRequestingId(taskId);
+    try {
+      await requestInsight(taskId);
+      setSentId(taskId);
+      setTimeout(() => setSentId((prev) => (prev === taskId ? null : prev)), 2500);
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to send insight request.');
+    } finally {
+      setRequestingId(null);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this task? This cannot be undone.')) {
@@ -247,6 +262,24 @@ export function Tasks() {
                         {task.submittedRedditUrl && (
                           <CopyButton value={task.submittedRedditUrl} title="Copy submitted link" />
                         )}
+                        <button
+                          onClick={() => handleRequestInsight(task.id)}
+                          disabled={requestingId === task.id}
+                          className={`p-2 rounded-lg transition-colors disabled:cursor-wait ${
+                            sentId === task.id
+                              ? 'text-success bg-success-muted'
+                              : 'text-dark-400 hover:text-success hover:bg-success-muted'
+                          }`}
+                          title="Request insight screenshot"
+                        >
+                          {requestingId === task.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : sentId === task.id ? (
+                            <Check className="w-4 h-4" />
+                          ) : (
+                            <MessageSquare className="w-4 h-4" />
+                          )}
+                        </button>
                         <Link
                           to={`/tasks/${encodeURIComponent(task.id)}`}
                           className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"
@@ -372,6 +405,24 @@ export function Tasks() {
                     {task.submittedRedditUrl && (
                       <CopyButton value={task.submittedRedditUrl} title="Copy submitted link" className="p-1.5" />
                     )}
+                    <button
+                      onClick={() => handleRequestInsight(task.id)}
+                      disabled={requestingId === task.id}
+                      className={`p-1.5 rounded-lg transition-colors disabled:cursor-wait ${
+                        sentId === task.id
+                          ? 'text-success bg-success-muted'
+                          : 'text-dark-400 hover:text-success hover:bg-success-muted'
+                      }`}
+                      title="Request insight screenshot"
+                    >
+                      {requestingId === task.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : sentId === task.id ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        <MessageSquare className="w-4 h-4" />
+                      )}
+                    </button>
                     <Link
                       to={`/tasks/${encodeURIComponent(task.id)}`}
                       className="p-1.5 text-dark-400 hover:text-primary-400 hover:bg-primary-400/10 rounded-lg transition-colors"

@@ -4,6 +4,7 @@ import { Client } from 'discord.js';
 import { taskService } from '../../services/task.service';
 import { reminderService } from '../../services/reminder.service';
 import { goparttimeService } from '../../services/goparttime.service';
+import { insightRequestService } from '../../services/insight-request.service';
 import {
   fetchLiveSnapshot,
   RedditSessionRequiredError,
@@ -246,6 +247,23 @@ export default function createTaskRoutes(discordClient: Client): Router {
       }
       const message = error instanceof Error ? error.message : 'Internal server error.';
       res.status(502).json({ success: false, status: 'FETCH_ERROR', message });
+    }
+  });
+
+  /**
+   * POST /api/v1/tasks/:id/request-insight
+   * Sends a one-off "please send the insights screenshot" message into the
+   * task's ticket, tagging the worker and including the post/comment link.
+   * Read-only: no task status, reminder, job or DB state is changed.
+   */
+  router.post('/:id/request-insight', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const result = await insightRequestService.requestInsight(String(req.params.id), discordClient);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal server error.';
+      const status = message.includes('not found') ? 404 : 400;
+      res.status(status).json({ success: false, message });
     }
   });
 

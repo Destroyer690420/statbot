@@ -90,6 +90,11 @@ export async function retrySubmission(id: string) {
   return data;
 }
 
+export async function requestInsight(id: string) {
+  const { data } = await api.post(`/tasks/${encodeURIComponent(id)}/request-insight`);
+  return data;
+}
+
 export async function getLiveReddit(id: string) {
   const { data } = await api.get(`/tasks/${encodeURIComponent(id)}/live-reddit`);
   return data;

@@ -70,6 +70,7 @@ Query params shared: `status`, `type`, `assignedUserId`, `channelId`, `redditUrl
 | POST | `/api/v1/tasks/:id/done` | Activate ACCEPTED task → PENDING + schedule reminders | — | `{ success, data: task }` | 404; 400 not SENT/not ACCEPTED |
 | POST | `/api/v1/tasks/:id/reassign` | Move ACCEPTED task to another ticket (delete old delivery, re-deliver) | `{ ticket }` | `{ success, data: task }` | 404; 400 not ACCEPTED/bad channel/multiple workers/same ticket |
 | POST | `/api/v1/tasks/:id/retry-assignment` | Re-deliver FAILED assignment (sends only missing tail) | — | `{ success, data: task }` | 400 not FAILED or already submitted |
+| POST | `/api/v1/tasks/:id/request-insight` | **Read-only manual nudge**: sends `Hey <@worker>, can you please send the insights screenshot of this post/comment, its quite urgent.` + the submitted link into the task's ticket. No task, reminder, job or DB state changes | — | `{ success, data: { channelId, messageId } }` | 404 task/channel not found; 400 send failure |
 | POST | `/api/v1/tasks/restore-unpaid-archived` | All ARCHIVED-but-unpaid → COMPLETED | — | `{ success, data: { restored } }` | 500 |
 | PATCH | `/api/v1/tasks/:id` | Update status/notes or manage `cancelledReason` | `updateTaskSchema` | `{ success, data: task }` | 404; 400 illegal transition |
 | DELETE | `/api/v1/tasks/:id` | Delete task + reminders (cancels jobs first) | — | `{ success, data: { deleted } }` | 404; 500 (RESTRICT if payout items exist) |
