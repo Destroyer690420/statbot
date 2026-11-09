@@ -55,7 +55,7 @@ State transitions (see `docs/TASK_SYSTEM.md` for the diagram):
 
 - `TaskDetails` shows screenshots from each reminder's `insightImageUrl` (with download link).
 - `Tasks` page "Download Image" fetches the latest screenshot of the task's reminders.
-- `Tasks` page **Request insight** button (DEPLOYED 2026-11-09 at `388fe4e`): sends a manual nudge into the task's ticket via `POST /api/v1/tasks/:id/request-insight` — `Hey <@worker>, can you please send the insights screenshot of this post/comment, its quite urgent.` plus the submitted link. It works for any status (including COMPLETED/ARCHIVED) and is **strictly read-only**: no task status, reminder, BullMQ job, audit row or other DB state is written.
+- `Tasks` page **Request insight** button (DEPLOYED 2026-11-09 at `388fe4e`): sends a manual nudge into the task's ticket via `POST /api/v1/tasks/:id/request-insight` — `Hey <@worker>, can you please send the insights screenshot of this post/comment, its quite urgent.` plus the submitted link, then `please tag <@admin-mac> once you have sent the insight`. It works for any status (including COMPLETED/ARCHIVED) and is **strictly read-only**: no task status, reminder, BullMQ job, audit row or other DB state is written.
 - Audit log keeps `INSIGHT_RECEIVED` entries with details.
 
 ## 7b. GoPartTime Consumption (Submit View, userscript v1.4.0 — 2026-08-17)

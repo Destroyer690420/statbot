@@ -3,29 +3,38 @@ import { TaskType } from '../types';
 
 describe('manual insight request message', () => {
   const workerId = '123456789';
+  const adminId = '987654321';
 
-  it('asks for post insights and mentions the worker', () => {
-    expect(formatInsightRequestMessage({ workerId, type: TaskType.POST })).toBe(
-      `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.`,
+  const ask = (type: TaskType, link?: string | null) =>
+    formatInsightRequestMessage({ workerId, adminId, type, link });
+
+  it('asks for post insights, mentions the worker and tags the admin', () => {
+    expect(ask(TaskType.POST)).toBe(
+      `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.\n` +
+        `please tag <@${adminId}> once you have sent the insight`,
     );
   });
 
   it('says "comment" for comment tasks', () => {
-    expect(formatInsightRequestMessage({ workerId, type: TaskType.COMMENT })).toBe(
-      `Hey <@${workerId}>, can you please send the insights screenshot of this comment, its quite urgent.`,
+    expect(ask(TaskType.COMMENT)).toBe(
+      `Hey <@${workerId}>, can you please send the insights screenshot of this comment, its quite urgent.\n` +
+        `please tag <@${adminId}> once you have sent the insight`,
     );
   });
 
-  it('appends the submitted link on its own line', () => {
+  it('appends the submitted link between the ask and the admin tag', () => {
     const link = 'https://www.reddit.com/r/test/comments/abc123/example/';
-    expect(formatInsightRequestMessage({ workerId, type: TaskType.POST, link })).toBe(
-      `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.\n${link}`,
+    expect(ask(TaskType.POST, link)).toBe(
+      `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.\n` +
+        `${link}\n` +
+        `please tag <@${adminId}> once you have sent the insight`,
     );
   });
 
   it('ignores blank links instead of leaving an empty line', () => {
-    expect(formatInsightRequestMessage({ workerId, type: TaskType.POST, link: '   ' })).toBe(
-      `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.`,
+    expect(ask(TaskType.POST, '   ')).toBe(
+      `Hey <@${workerId}>, can you please send the insights screenshot of this post, its quite urgent.\n` +
+        `please tag <@${adminId}> once you have sent the insight`,
     );
   });
 });

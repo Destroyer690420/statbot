@@ -1,6 +1,7 @@
 import { Client, TextChannel } from 'discord.js';
 import { taskService } from './task.service';
 import { formatInsightRequestMessage, pickInsightRequestLink } from '../utils/insight-request';
+import { OWNER_USER_ID } from '../config/constants';
 import { logger } from '../utils/logger';
 
 /**
@@ -25,14 +26,15 @@ export class InsightRequestService {
 
     const content = formatInsightRequestMessage({
       workerId: task.assignedUserId,
+      adminId: OWNER_USER_ID,
       type: task.type,
       link: pickInsightRequestLink(task),
     });
 
     const message = await channel.send({
       content,
-      // Only ping the task's worker — never anyone else in the ticket.
-      allowedMentions: { users: [task.assignedUserId], roles: [], parse: [] },
+      // Only ping the task's worker and the admin — never anyone else.
+      allowedMentions: { users: [task.assignedUserId, OWNER_USER_ID], roles: [], parse: [] },
     });
 
     logger.info('Insight request sent from dashboard', {

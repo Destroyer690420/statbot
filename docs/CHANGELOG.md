@@ -4,6 +4,12 @@
 
 ## 2026-11-09
 
+### Event 2 — admin tag added to the insight-request message (app-only redeploy)
+
+- Owner request: the manual insight request now also says `please tag <@admin> once you have sent the insight`, using `OWNER_USER_ID` (admin mac) as a real mention. `allowedMentions` now permits both the worker and the admin, nobody else.
+- Message order: worker ask → post/comment link (when known) → admin-tag line.
+- App-only change (`src/utils/insight-request.ts` + `src/services/insight-request.service.ts`); dashboard untouched. New tests assert the admin-tag line in all cases (7/7).
+
 ### Deployed (2026-11-09 at `388fe4e` — app + dashboard rebuild, no migration) — manual "Request insight" button on the Tasks page
 
 - Owner can ask a worker for the insight screenshot even after the task is complete/archived: a new `MessageSquare` action on the Tasks desktop table (and the mobile card footer) sends one message into that task's ticket.
