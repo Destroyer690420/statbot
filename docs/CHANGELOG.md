@@ -4,6 +4,14 @@
 
 ## 2026-11-10
 
+### Payments-channel receipt now shows the +30% total for special inviters (backend, built locally — NOT deployed)
+
+- Owner request: the receipt the bot posts in `#payments` showed only the original commission for special inviters, while the amount actually paid is commission + 30%. The receipt must show the paid total, and nothing must change for anyone else.
+- New `src/utils/special-inviter-payout.ts`: `SPECIAL_INVITER_BONUS_RATE = 0.3` + `computeSpecialInviterPayout(amount, inviterId)` — keyed on `isSpecialInviter` / `SPECIAL_INVITER_IDS` (the single source of truth, so no duplicate id list), paise-rounded, normal inviters returned unchanged.
+- `src/api/routes/commissions.ts` applies it only when building payment proofs: `POST /commissions/pay-inviter/:inviterId` (awaited receipt) and `POST /commissions/pay-all` (background receipts per inviter) now pass `totalAmount` to `sendPaymentProof`. The ledger is untouched — `CommissionItem`, `CommissionBatch`, CSVs, the worker portal and `payInviter`/`payAll` amounts still hold the actual commission, and the extra 30% is still not persisted.
+- Worker receipts (`payouts.ts` → `sendPaymentProof`) and normal-inviter receipts are byte-for-byte unchanged; the receipt template itself was not modified.
+- Gates: new `src/__tests__/special-inviter-payout.test.ts` (6 cases: all three special ids, normal id, empty/null id, paise rounding, zero/NaN) plus the existing `payment-proof`, `payout-notification` and `payout-receipt` suites — 4 suites / 27 tests green; `npm run typecheck` clean. **Not deployed**; needs an app-only rebuild, no migration, no env change.
+
 ### Clickable ticket numbers open the ticket in Discord (dashboard + small additive API field)
 
 - Owner request: clicking any ticket number should open that ticket directly in Discord. Confirmed scope: **Accepted Tasks** and **Tasks** only, desktop table + mobile cards; Discord URL in a **new tab**; link whenever `channelId` exists (no per-row validation); identical at rest, subtle underline/link color on hover.

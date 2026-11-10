@@ -9,6 +9,7 @@ import {
   sendPaymentProofs,
 } from '../../services/payout-notification.service';
 import { summarizeCommissionItemsByInviter } from '../../utils/payment-proof';
+import { computeSpecialInviterPayout } from '../../utils/special-inviter-payout';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { isAdmin } from '../../utils/permissions';
@@ -239,7 +240,9 @@ router.delete('/referrals/:referralId', async (req: Request, res: Response): Pro
 
 /**
  * POST /api/v1/commissions/pay-inviter/:inviterId
- * Best-effort: posts a payment-proof card in the payments channel.
+ * Best-effort: posts a payment-proof card in the payments channel. The receipt
+ * shows the amount actually paid, so a special inviter's card carries
+ * commission + 30% (the ledger keeps the actual amount).
  */
 router.post('/pay-inviter/:inviterId', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
@@ -256,9 +259,13 @@ router.post('/pay-inviter/:inviterId', async (req: Request, res: Response): Prom
     try {
       const summary = summarizeCommissionItemsByInviter(result.items)[0];
       if (summary) {
+        // The receipt shows what was actually paid. Special inviters get the
+        // extra 30% on top of their commission; the ledger, the batch total and
+        // the CSV keep the actual amount.
+        const { totalAmount } = computeSpecialInviterPayout(summary.totalAmount, summary.inviterId);
         proofNotification = await sendPaymentProof(discordClient, {
           payeeId: summary.inviterId,
-          amount: summary.totalAmount,
+          amount: totalAmount,
           paidAt: result.batch.createdAt,
         });
       }
@@ -280,7 +287,8 @@ router.post('/pay-inviter/:inviterId', async (req: Request, res: Response): Prom
 /**
  * POST /api/v1/commissions/pay-all
  * Best-effort: posts one payment-proof card per inviter in the payments channel
- * (in the background so the HTTP response is not held open).
+ * (in the background so the HTTP response is not held open). Special inviters'
+ * cards show commission + 30%; every other receipt is unchanged.
  */
 router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
   if (!requireDashboardAdmin(req, res)) return;
@@ -291,7 +299,8 @@ router.post('/pay-all', async (req: Request, res: Response): Promise<void> => {
 
     const proofs = summarizeCommissionItemsByInviter(result.items).map((inviter) => ({
       payeeId: inviter.inviterId,
-      amount: inviter.totalAmount,
+      // Same rule as Pay Inviter: special inviters' receipts show the +30% total.
+      amount: computeSpecialInviterPayout(inviter.totalAmount, inviter.inviterId).totalAmount,
       paidAt: result.batch.createdAt,
     }));
 
