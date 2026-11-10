@@ -4,6 +4,27 @@
 
 ## 2026-11-10
 
+### Deployed (2026-11-10 at `889956c` — app + dashboard rebuild, no migration) — Exclude posts containing "Costway" without blocking subreddit
+
+- Owner request: "if any post content cotains this word 'Costway' then dont accept that post ... skip those posts dont block the subreddit, just skip the post. never accept a post containing 'Costway' under any circumstance, just the costway case-insensitively".
+- Rules and behavior:
+  - Post-only exclusion: unlike sex/vape/dojo/crypto terms which auto-block the subreddit, hits on "Costway" skip or reject the individual task without auto-blocking the subreddit.
+  - Case-insensitive whole-word match (`\bcostway\b`).
+  - Strict enforcement: applies regardless of whether the subreddit has been seen before (`seenBefore`).
+- Implementation:
+  - `src/config/constants.ts`: added `BLOCK_KEYWORDS_POST_ONLY = ['costway'] as const`.
+  - `src/utils/content-screen.ts`: added `postSkip` list to `ScreenLists`, `defaultLists()`, and exported `checkPostSkipKeyword(text, keywords)`.
+  - `src/services/automation/validator.service.ts`: added checks in `validateDetectedTask` and `evaluateForBurst` that reject tasks containing post-skip keywords with reason `'BLOCKED'`.
+  - `scripts/goparttime-auto.user.js` and `dashboard/public/goparttime-auto.user.js` (bumped to v1.6.8, byte-identical):
+    - Added `CONTENT_SCREEN_POST_ONLY = ['costway']`.
+    - In `filterEligible`: skips candidate at scan time if title contains post-only keywords.
+    - In `processNextClaim`: added Step 3a before accept that checks drawer title + content text. If matched, closes drawer, calls `reportClaim` with non-blocking reason, and aborts accept.
+- Verification & Deploy:
+  - 101/101 test suites, 1,361 tests passed (`npm test`).
+  - `npm run typecheck` and `npm --prefix dashboard run build` clean.
+  - Deployed to production (`161.118.164.85`), backup created (`rtm-backup-20261110-150054-costway.tar.gz`), app + dashboard containers rebuilt and started.
+  - Verified healthy on production via HTTPS, and userscript served at v1.6.8 with `CONTENT_SCREEN_POST_ONLY`.
+
 ### Deployed (2026-11-10 at `9a58d33` — dashboard-only rebuild, no migration) — Static desktop sidebar on worker portal
 
 - User request: "for the pc devices make the side bar static on the worker portal. so it always stays there".
