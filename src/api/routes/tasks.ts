@@ -15,6 +15,7 @@ import { scheduleAllReminders, scheduleReminderJob, cancelTaskJobs } from '../..
 import { Task, TaskType, TaskStatus, TaskFilters } from '../../types';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
+import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 
 export default function createTaskRoutes(discordClient: Client): Router {
@@ -70,7 +71,9 @@ export default function createTaskRoutes(discordClient: Client): Router {
       const limit = parseInt(req.query.limit as string) || 1000;
       const tasks = await taskService.search(filters, limit);
 
-      res.json({ success: true, data: tasks, total: tasks.length });
+      // `guildId` lets the dashboard build Discord ticket links
+      // (https://discord.com/channels/<guild>/<channel>) without a second call.
+      res.json({ success: true, data: tasks, total: tasks.length, guildId: env.GUILD_ID });
     } catch (error) {
       logger.error('GET /tasks failed', { error });
       res.status(500).json({ success: false, message: 'Internal server error.' });

@@ -6,6 +6,7 @@ import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
 import { FormatBadge } from '../components/FormatBadge';
 import { FormatDiffModal } from '../components/FormatDiffModal';
+import { TicketLink } from '../components/TicketLink';
 import { Loader2, CheckCircle2, Repeat, Trash2, Eye, ExternalLink, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const PAGE_SIZE = 15;
@@ -49,6 +50,7 @@ export function AcceptedTasks() {
   });
 
   const tasks = tasksData?.data || [];
+  const guildId = tasksData?.guildId as string | undefined;
   const totalPages = Math.max(1, Math.ceil(tasks.length / PAGE_SIZE));
   const paginatedTasks = tasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const tickets = ticketsQuery.data?.data || [];
@@ -106,9 +108,12 @@ export function AcceptedTasks() {
                       {task.externalTaskId ? `${task.type.replace('_', ' ')} · ${task.externalTaskId}` : task.type.replace('_', ' ')}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50">
-                        {task.channelName ? `#${task.channelName}` : task.channelId}
-                      </span>
+                      <TicketLink
+                        guildId={guildId}
+                        channelId={task.channelId}
+                        channelName={task.channelName}
+                        className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50"
+                      />
                     </td>
                     <td className="px-6 py-4">
                       {task.submittedRedditUrl ? (
@@ -207,7 +212,7 @@ export function AcceptedTasks() {
                 <div>
                   <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Ticket</p>
                   <p className="text-dark-200 text-xs font-mono font-medium truncate">
-                    {task.channelName ? `#${task.channelName}` : task.channelId}
+                    <TicketLink guildId={guildId} channelId={task.channelId} channelName={task.channelName} />
                   </p>
                 </div>
                 <div>

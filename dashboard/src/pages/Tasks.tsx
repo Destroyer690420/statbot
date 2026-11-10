@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { getTasks, deleteTask, updateTask, downloadCsv, getTask, requestInsight } from '../api/client';
 import { displayTaskId } from '../utils/taskDisplay';
 import { CopyButton } from '../components/CopyButton';
+import { TicketLink } from '../components/TicketLink';
 import { Search, Filter, Trash2, ExternalLink, Loader2, ChevronLeft, ChevronRight, Eye, Download, ImageDown, MessageSquare, Check } from 'lucide-react';
 
 const PAGE_SIZE = 15;
@@ -75,6 +76,7 @@ export function Tasks() {
   };
 
   const tasks = tasksData?.data || [];
+  const guildId = tasksData?.guildId as string | undefined;
 
   // Needle is lowercased once, and the filter is memoized: previously the
   // needle was re-lowercased 5x per row (5000 calls per keystroke at 1000 rows)
@@ -246,9 +248,12 @@ export function Tasks() {
                       {new Date(task.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50">
-                        {task.channelName ? `#${task.channelName}` : task.channelId}
-                      </span>
+                      <TicketLink
+                        guildId={guildId}
+                        channelId={task.channelId}
+                        channelName={task.channelName}
+                        className="font-mono text-sm text-dark-200 bg-dark-800/50 px-2 py-1 rounded-md border border-dark-700/50"
+                      />
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -355,7 +360,7 @@ export function Tasks() {
                   <div>
                     <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wider">Ticket</p>
                     <p className="text-dark-200 text-xs font-mono font-medium truncate">
-                      {task.channelName ? `#${task.channelName}` : task.channelId}
+                      <TicketLink guildId={guildId} channelId={task.channelId} channelName={task.channelName} />
                     </p>
                   </div>
                 </div>

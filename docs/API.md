@@ -59,7 +59,7 @@ Query params shared: `status`, `type`, `assignedUserId`, `channelId`, `redditUrl
 
 | Method | Path | Purpose | Body/Params | Response | Errors |
 |---|---|---|---|---|---|
-| GET | `/api/v1/tasks` | List/search tasks (excludes ACCEPTED unless `status` filter given; newest first) | query | `{ success, data: Task[], total }` | 500 |
+| GET | `/api/v1/tasks` | List/search tasks (excludes ACCEPTED unless `status` filter given; newest first) | query | `{ success, data: Task[], total, guildId }` (`guildId` is the configured `GUILD_ID`, used by the dashboard to build Discord ticket links) | 500 |
 | GET | `/api/v1/tasks/:id` | Task + reminders | path | `{ success, data: { ...task, reminders } }` | 404 |
 | POST | `/api/v1/tasks` | Create manual task (creates reminders + schedules BullMQ jobs) | `createTaskSchema`: `redditUrl`, `type` (POST/COMMENT), `channelId`, `assignedUserId`, `guildId`, `createdById` required; `channelName?`, `assignedUserName?`, `notes? ≤500` | 201 `{ success, data: { ...task, reminders } }` | 400 invalid URL/ID/notes/dup URL; **409 dup task ID** |
 | POST | `/api/v1/tasks/assign-from-goparttime` | JWT twin of `/goparttime/assign` (dashboard) | `goPartTimePayloadSchema` | 201 `{ success, data: result.task, failed }` | **409** `'Task for task <id> already exists.'`; 400; 500 |

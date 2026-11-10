@@ -4,6 +4,13 @@
 
 ## 2026-11-10
 
+### Clickable ticket numbers open the ticket in Discord (dashboard + small additive API field)
+
+- Owner request: clicking any ticket number should open that ticket directly in Discord. Confirmed scope: **Accepted Tasks** and **Tasks** only, desktop table + mobile cards; Discord URL in a **new tab**; link whenever `channelId` exists (no per-row validation); identical at rest, subtle underline/link color on hover.
+- `GET /api/v1/tasks` now returns a top-level `guildId` (`env.GUILD_ID`) alongside `data`/`total` — additive, no schema or env change — so the dashboard can build `https://discord.com/channels/<guildId>/<channelId>` from the list response without a second call.
+- New `dashboard/src/components/TicketLink.tsx`: renders `#channelName` (else the channel ID) as a link when both IDs exist, plain text otherwise; `target="_blank"` + `rel="noopener noreferrer"`. Wired into `AcceptedTasks.tsx` and `Tasks.tsx` at all four ticket spots.
+- Gates: `npm run typecheck` clean, `cd dashboard && npm run build` clean, full suite **100/100 suites / 1,351/1,351 tests**.
+
 ### `/insights-guide` slash command — posts the insight-screenshot rules + example image (app-only deploy)
 
 - Owner request: a command that, when used in a ticket, sends `when submitting insights please remember that in the insights screenshot the subreddit, title and view count of the post must be visible.` + blank line + `and if you have an Iphone and the post is too long then the last few paragraphs of the post and the view count must be visible.`, with the supplied example screenshot attached.
