@@ -40,6 +40,7 @@ jest.mock('../bot/commands/referral', () => ({ execute: jest.fn() }));
 jest.mock('../bot/commands/mystats', () => ({ execute: jest.fn() }));
 jest.mock('../bot/commands/myinvites', () => ({ execute: jest.fn() }));
 jest.mock('../bot/commands/logincode', () => ({ execute: jest.fn() }));
+jest.mock('../bot/commands/insights-guide', () => ({ execute: jest.fn() }));
 
 jest.mock('../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },

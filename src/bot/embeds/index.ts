@@ -386,6 +386,10 @@ export function helpEmbed(): EmbedBuilder {
         value: 'Send a reminder immediately.\n`/send-now task_id reminder`',
       },
       {
+        name: '🖼️ /insights-guide',
+        value: 'Post the insights screenshot requirements + example image in this ticket.\n🔒',
+      },
+      {
         name: '🗑️ /delete',
         value: 'Delete a task and its reminders.\n`/delete task_id`',
       },

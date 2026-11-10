@@ -2,6 +2,15 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-11-10
+
+### `/insights-guide` slash command — posts the insight-screenshot rules + example image (app-only deploy)
+
+- Owner request: a command that, when used in a ticket, sends `when submitting insights please remember that in the insights screenshot the subreddit, title and view count of the post must be visible.` + blank line + `and if you have an Iphone and the post is too long then the last few paragraphs of the post and the view count must be visible.`, with the supplied example screenshot attached.
+- New `src/bot/commands/insights-guide.ts`: admin/manager gate (`isAdminOrManager`), posts into the current text channel, attaches `assets/images/insights-example.png` (434×768; the Dockerfile's existing `COPY assets/ ./assets/` ships it), and confirms ephemerally. **Read-only** — no task, reminder, audit or DB writes; `allowedMentions: { parse: [] }`.
+- Registered in `src/bot/events/interactionCreate.ts` and `src/bot/deploy-commands.ts` (**16** guild commands); `/help` gained a row. The command must be re-deployed with `node dist/bot/deploy-commands.js` after the app image is rebuilt.
+- Tests: new `src/__tests__/insights-guide.test.ts` (exact wording, bundled PNG is valid, successful post, permission/channel/send-failure guards) + the routing test's command mock; `npm run typecheck` clean; full suite **100/100 suites / 1,351/1,351 tests** (`npm run lint` is broken repo-wide by the missing ESLint 9 flat config, pre-existing).
+
 ## 2026-11-09
 
 ### Deployed (2026-11-09 at `2565f21` — app-only rebuild, no migration) — task id added to the insight-request message

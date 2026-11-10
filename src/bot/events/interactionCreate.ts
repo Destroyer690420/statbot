@@ -19,6 +19,7 @@ import * as referralCmd from '../commands/referral';
 import * as mystatsCmd from '../commands/mystats';
 import * as myinvitesCmd from '../commands/myinvites';
 import * as logincodeCmd from '../commands/logincode';
+import * as insightsGuideCmd from '../commands/insights-guide';
 import { handleBlastButton } from '../../services/automation/blast-approval.service';
 import { handleOutreachAddButton } from '../../services/outreach-selection.service';
 import { inactiveTicketService } from '../../services/inactive-ticket.service';
@@ -39,6 +40,7 @@ commands.set('referral', referralCmd);
 commands.set('mystats', mystatsCmd);
   commands.set('myinvites', myinvitesCmd);
   commands.set('logincode', logincodeCmd);
+  commands.set('insights-guide', insightsGuideCmd);
 
 /**
  * Handle interactionCreate event — route slash commands and DM buttons.

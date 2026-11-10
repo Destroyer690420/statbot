@@ -27,7 +27,7 @@
 
 Permission checks are **per-command** (top of `execute()`), not centralized. `getAllAdminIds()` = admins ∪ managers (used for overdue pings and GoPartTime worker detection).
 
-## 3. Slash Commands (15)
+## 3. Slash Commands (16)
 
 | Command | Permission | Summary |
 |---|---|---|
@@ -41,6 +41,7 @@ Permission checks are **per-command** (top of `execute()`), not centralized. `ge
 | `/stats` | Admin/Manager | 13 stat fields from `analyticsService.getStats(guildId)` (Total, Pending, Completed, Cancelled, Overdue, Completion Rate, Avg Completion Time, Tasks Today, Today's Posts/Comments/Deleted, Total Deleted, Tasks This Week). |
 | `/reschedule` | Admin/Manager | `task_id`, `reminder` (20h/70h choice matched by **substring** `type.includes('20H'|'70H')`), `hours` (1–168). Cancels old job, `dueAt = now + hours`, resets sent flags, reschedules. Note: a `70h` choice on a Comment task (which only has `COMMENT_20H`) → "Reminder not found for this task." |
 | `/send-now` | Admin/Manager | `task_id`, `reminder` (20h/70h). Cancels main + retry jobs, sets `dueAt = now`, fires immediately (delay 0). Requires task non-terminal and reminder not completed. |
+| `/insights-guide` | Admin/Manager | **Ephemeral confirmation.** Posts the insight-screenshot requirements + the bundled example image (`assets/images/insights-example.png`, 434×768) into the current ticket channel. Message: "when submitting insights please remember that in the insights screenshot the subreddit, title and view count of the post must be visible" + the iPhone/long-post rule. No task, reminder, audit or DB state changes; `allowedMentions: { parse: [] }`. |
 | `/help` | Anyone | Ephemeral help embed for all commands ("🔒 = Admin only"). |
 | `/referral add` | Admin | `inviter` (user, required), `invitee` (user, required), `ticket` (string, required, e.g. `ticket-0036` or `#channelId`). Rejects `inviter.id === invitee.id`. Inviter type from **hardcoded list** `SPECIAL_INVITER_IDS = ['582595416294555649','1202294567706316911','1506900129792135211']` → `special`, else `normal`. Resolves ticket name via `guild.channels.fetch`. Calls `commissionService.createReferral`. |
 | `/mystats` | Anyone (own) + Admin/Manager lookup | Self-service worker stats, **public reply** (for ticket use). Section: This Week only (payout-week Sun–Sat IST: done posts/comments, paid ₹, pending ~₹). Paid = payout item in a paid batch (actual amounts); pending = COMPLETED tasks (all insights received) with no paid item, estimated at current rates; cancelled excluded. Optional `user` param — admins/managers only. `memberStatsService.getWorkerStats` (pure math in `utils/member-stats.ts`). Empty state when no tasks. |
