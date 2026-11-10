@@ -4,7 +4,7 @@
 
 ## 2026-11-10
 
-### Static desktop sidebar on worker portal (dashboard update)
+### Deployed (2026-11-10 at `9a58d33` — dashboard-only rebuild, no migration) — Static desktop sidebar on worker portal
 
 - User request: "for the pc devices make the side bar static on the worker portal. so it always stays there".
 - `dashboard/src/components/WorkerLayout.tsx`:
