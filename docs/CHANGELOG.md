@@ -4,7 +4,8 @@
 
 ## 2026-11-10
 
-### Payments-channel receipt now shows the +30% total for special inviters (backend, built locally — NOT deployed)
+### Deployed (2026-11-10 at `cc28d7c` — app-only rebuild, no migration)
+- **Payments-channel receipt now shows the +30% total for special inviters**
 
 - Owner request: the receipt the bot posts in `#payments` showed only the original commission for special inviters, while the amount actually paid is commission + 30%. The receipt must show the paid total, and nothing must change for anyone else.
 - New `src/utils/special-inviter-payout.ts`: `SPECIAL_INVITER_BONUS_RATE = 0.3` + `computeSpecialInviterPayout(amount, inviterId)` — keyed on `isSpecialInviter` / `SPECIAL_INVITER_IDS` (the single source of truth, so no duplicate id list), paise-rounded, normal inviters returned unchanged.
