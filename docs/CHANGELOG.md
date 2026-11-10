@@ -4,6 +4,17 @@
 
 ## 2026-11-10
 
+### Static desktop sidebar on worker portal (dashboard update)
+
+- User request: "for the pc devices make the side bar static on the worker portal. so it always stays there".
+- `dashboard/src/components/WorkerLayout.tsx`:
+  - Extracted `WorkerSidebarContent` component rendering the brand header ("Reddit Tasks" + logo), tab navigation links (`WorkerNavLink`), and pinned logout footer.
+  - On desktop/PC viewports (`≥1024px` / `lg:`): renders a permanent static sidebar (`lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:h-screen border-r border-worker-border bg-worker-surface`) that stays fixed while the page content scrolls.
+  - The header's hamburger menu button is hidden on desktop (`lg:hidden`).
+  - Top bar title aligns with the main content area (`max-w-6xl`).
+  - On mobile/tablet viewports (`<1024px` / `< lg`): keeps the existing responsive behavior (top bar hamburger button + off-canvas slide-out drawer, with escape and backdrop dismiss).
+- Gates: `npm --prefix dashboard test` (17/17 tests), `npm --prefix dashboard run build` (clean), `npm run typecheck` (clean).
+
 ### Deployed (2026-11-10 at `cc28d7c` — app-only rebuild, no migration)
 - **Payments-channel receipt now shows the +30% total for special inviters**
 

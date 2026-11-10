@@ -58,7 +58,7 @@ function WorkerNavLink({
   label: string;
   icon: typeof Home;
   end: boolean;
-  onNavigate: () => void;
+  onNavigate?: () => void;
 }) {
   return (
     <NavLink
@@ -80,6 +80,51 @@ function WorkerNavLink({
         </>
       )}
     </NavLink>
+  );
+}
+
+function WorkerSidebarContent({
+  tabs,
+  onNavigate,
+  onLogout,
+}: {
+  tabs: readonly {
+    to: string;
+    label: string;
+    icon: typeof Home;
+    end: boolean;
+  }[];
+  onNavigate?: () => void;
+  onLogout: () => void;
+}) {
+  return (
+    <>
+      <div className="flex h-16 items-center gap-2.5 border-b border-worker-border px-5">
+        <img
+          src="https://statbot.duckdns.org/logo.png"
+          alt=""
+          className="h-7 w-7 shrink-0 rounded-full object-contain"
+        />
+        <p className="min-w-0 truncate font-display text-[15px] font-semibold text-worker-text">Reddit Tasks</p>
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-3" aria-label="Worker navigation">
+        {tabs.map((tab) => (
+          <WorkerNavLink key={tab.to} {...tab} onNavigate={onNavigate} />
+        ))}
+      </nav>
+
+      <div className="border-t border-worker-border p-3">
+        <button
+          type="button"
+          onClick={onLogout}
+          className="flex min-h-[42px] w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-worker-danger transition-colors duration-150 hover:bg-worker-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent"
+        >
+          <LogOut className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+          Logout
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -136,31 +181,40 @@ export function WorkerLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-worker-bg text-worker-text">
-      <header className="sticky top-0 z-30 border-b border-worker-border bg-worker-bg/95 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:px-6 lg:px-8">
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            className="worker-icon-button -ml-2"
-            aria-label="Open menu"
-            aria-expanded={menuOpen}
-            aria-controls="worker-menu"
-          >
-            <Menu className="h-5 w-5" aria-hidden="true" />
-          </button>
-          <p className="min-w-0 truncate font-display text-lg font-bold tracking-tight text-worker-text">{pageTitle}</p>
-        </div>
-      </header>
+    <div className="min-h-screen bg-worker-bg text-worker-text lg:flex">
+      {/* Desktop static sidebar: permanent on desktop viewports (lg and up) */}
+      <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:h-screen border-r border-worker-border bg-worker-surface">
+        <WorkerSidebarContent tabs={tabs} onLogout={handleLogout} />
+      </aside>
 
-      <main className="mx-auto w-full max-w-6xl px-4 pb-12 pt-4 sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
-        <div key={location.pathname} className="worker-route-fade">
-          <Outlet />
-        </div>
-      </main>
+      {/* Main content area */}
+      <div className="flex flex-1 min-w-0 flex-col">
+        <header className="sticky top-0 z-30 border-b border-worker-border bg-worker-bg/95 backdrop-blur">
+          <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:px-6 lg:px-8">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              className="worker-icon-button -ml-2 lg:hidden"
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              aria-controls="worker-menu"
+            >
+              <Menu className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <p className="min-w-0 truncate font-display text-lg font-bold tracking-tight text-worker-text">{pageTitle}</p>
+          </div>
+        </header>
 
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 pt-4 sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
+          <div key={location.pathname} className="worker-route-fade">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
+      {/* Mobile drawer: only rendered on screens below lg */}
       {menuOpen ? (
-        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Worker menu">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Worker menu">
           <div
             className="worker-backdrop absolute inset-0 bg-black/60"
             onClick={() => setMenuOpen(false)}
@@ -172,31 +226,11 @@ export function WorkerLayout() {
             tabIndex={-1}
             className="worker-drawer absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-worker-border bg-worker-surface outline-none"
           >
-            <div className="flex h-16 items-center gap-2.5 px-5">
-              <img
-                src="https://statbot.duckdns.org/logo.png"
-                alt=""
-                className="h-7 w-7 shrink-0 rounded-full object-contain"
-              />
-              <p className="min-w-0 truncate font-display text-[15px] font-semibold text-worker-text">Reddit Tasks</p>
-            </div>
-
-            <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2" aria-label="Worker navigation">
-              {tabs.map((tab) => (
-                <WorkerNavLink key={tab.to} {...tab} onNavigate={() => setMenuOpen(false)} />
-              ))}
-            </nav>
-
-            <div className="border-t border-worker-border p-3">
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex min-h-[42px] w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-worker-danger transition-colors duration-150 hover:bg-worker-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent"
-              >
-                <LogOut className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-                Logout
-              </button>
-            </div>
+            <WorkerSidebarContent
+              tabs={tabs}
+              onNavigate={() => setMenuOpen(false)}
+              onLogout={handleLogout}
+            />
           </aside>
         </div>
       ) : null}

@@ -136,10 +136,12 @@ Read-only self-service portal, visually redesigned on 2026-09-25 without changin
 
 ### Responsive shell
 
-- All viewports (2026-11-02): one sticky **top bar** with the hamburger on the **left**, opening a **left-side slide-out drawer** (288px, capped at 85vw). The old 220px desktop sidebar and the 5-item mobile bottom nav were removed, so the navigation is identical at every width. **2026-11-03:** the top-bar title is page-aware (`Home` on `/worker`, `Tasks`, `Wallet`, `Invites`, `How-to`, `Task details` on `/worker/tasks/:id`; trailing slashes normalized) instead of a fixed "Reddit Tasks" — the drawer header keeps the brand, and the drawer slides in from the left.
+- **Navigation layout (2026-11-10)**:
+  - `≥1024px` (`lg` / PC / desktop): permanent **static left sidebar** (`w-64`, 256px, `sticky top-0 h-screen`, `bg-worker-surface border-r border-worker-border`) containing the brand header ("Reddit Tasks" + logo), navigation tab links (`WorkerNavLink`), and pinned logout footer. The top bar hamburger button is hidden (`lg:hidden`). Top bar displays the page-aware title (`Home` on `/worker`, `Tasks`, `Wallet`, `Invites`, `How-to`, `Task details` on `/worker/tasks/:id`) aligned with the main content container (`max-w-6xl`).
+  - `<1024px` (`< lg` / mobile & tablet): sticky **top bar** with hamburger button on the left, opening the left-side slide-out drawer (`288px`, capped at 85vw) with backdrop dismiss, Escape key dismiss, and route-change auto-close.
 - `<768px`: 16px page gutters, Home shows the four **stacked full-width KPI cards**, then the wallet card, then Action needed; Tasks keeps only the status tabs (the Completed payment sub-filter was removed 2026-11-03).
-- `768–1023px`: same top bar + drawer; content grids expand to two columns where appropriate.
-- `≥1024px`: same top bar + drawer; Home/Tasks use `max-w-6xl`/`max-w-5xl`, detail/How-to use `max-w-3xl`; Tasks grid is two columns and becomes three at `≥1440px`.
+- `768–1023px`: mobile shell (top bar + drawer); content grids expand to two columns where appropriate.
+- `≥1024px`: static desktop sidebar + top bar; Home/Tasks use `max-w-6xl`/`max-w-5xl`, detail/How-to use `max-w-3xl`; Tasks grid is two columns and becomes three at `≥1440px`.
 - New route cross-fade, tab transitions, skeleton pulses, and overdue status dot honor `prefers-reduced-motion`.
 
 | Path | Page | Notes |
