@@ -313,3 +313,19 @@ describe('downstream consumers tolerate more than 20 tasks', () => {
     expect(buildReleaseInputs(many)).toHaveLength(200);
   });
 });
+
+describe('Post-only keyword screening (Costway)', () => {
+  it('marks task with Costway in title as BLOCKED in both validators without blocking subreddit', async () => {
+    const task = detected({ title: 'Best Costway furniture deals 2026', subreddit: 'GoodSub' });
+    const single = await validateDetectedTask(task, { skipDuplicate: true });
+    const batched = evaluateForBurst(task, new Set());
+
+    expect(single.eligible).toBe(false);
+    expect(single.reason).toBe('BLOCKED');
+    expect(single.detail).toContain('costway');
+
+    expect(batched.eligible).toBe(false);
+    expect(batched.reason).toBe('BLOCKED');
+    expect(batched.detail).toContain('costway');
+  });
+});

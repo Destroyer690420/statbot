@@ -1,7 +1,7 @@
 import { automationRepository, taskRepository } from '../../database/repositories';
 import { GOPARTTIME_SOURCE } from '../../config/constants';
 import { normalizeSubreddit } from './subreddit';
-import { buildSeenSet, tier0Screen, screenSubredditName, ScreenLists } from '../../utils/content-screen';
+import { buildSeenSet, tier0Screen, screenSubredditName, ScreenLists, checkPostSkipKeyword } from '../../utils/content-screen';
 import type { ContentScreenSignal, DetectedGoPartTimeTask, ValidationResult } from '../../types';
 
 /**
@@ -83,6 +83,11 @@ export async function validateDetectedTask(
     return { eligible: false, reason: 'SKIPPED_COMMENT', detail: `Task ${task.subTaskId} type=${task.type}` };
   }
 
+  const postSkipValidate = checkPostSkipKeyword(task.title, opts.screenLists?.postSkip);
+  if (postSkipValidate) {
+    return { eligible: false, reason: 'BLOCKED', detail: `Task ${task.subTaskId} title contains blocked keyword "${postSkipValidate}"` };
+  }
+
   if (!opts.skipDuplicate) {
     const existing = await taskRepository.findBySourceExternal(GOPARTTIME_SOURCE, task.subTaskId);
     if (existing) {
@@ -149,6 +154,11 @@ export function evaluateForBurst(
 ): ValidationResult {
   if (task.type !== 'post') {
     return { eligible: false, reason: 'SKIPPED_COMMENT', detail: `Task ${task.subTaskId} type=${task.type}` };
+  }
+
+  const postSkipBurst = checkPostSkipKeyword(task.title, screenLists?.postSkip);
+  if (postSkipBurst) {
+    return { eligible: false, reason: 'BLOCKED', detail: `Task ${task.subTaskId} title contains blocked keyword "${postSkipBurst}"` };
   }
 
   const normalized = normalizeSubreddit(task.subreddit);

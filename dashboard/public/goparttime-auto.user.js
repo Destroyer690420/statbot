@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.6.7
+// @version      1.6.8
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,11 @@
 // ==/UserScript==
 
 /**
+   * v1.6.8 - Post-only content screen: posts whose title or content contains
+   * "Costway" are skipped and never accepted under any circumstance, without
+   * auto-blocking the subreddit (owner directive 2026-11-10).
+   * Otherwise identical to v1.6.7 below.
+   *
    * v1.6.7 - Crypto screen: whole-word investing/crypto/bitcoin (+
    * cryptocurrency, ethereum, btc, defi, nft, web3) in title/content
    * auto-blocks the post's subreddit (signal `crypto`, same abort +
@@ -995,6 +1000,9 @@
     'investing', 'crypto', 'bitcoin',
     'cryptocurrency', 'ethereum', 'btc', 'defi', 'nft', 'web3'
   ];
+  var CONTENT_SCREEN_POST_ONLY = [ // mirrors BLOCK_KEYWORDS_POST_ONLY
+    'costway'
+  ];
   var CONTENT_SCREEN_COMMON_WORDS = [ // mirrors CONTENT_SCREEN.COMMON_ENGLISH_WORDS
     'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for',
     'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at', 'this', 'but', 'his',
@@ -1145,6 +1153,7 @@
       const n = normalizeSub(t.subreddit);
       if (!n) continue;
       if (blocked[n]) continue;
+      if (screenMatchKeyword(t.title || '', CONTENT_SCREEN_POST_ONLY)) continue;
       var reviewHit = null;
       try { reviewHit = screenTitleSignal(t.title || ''); } catch (e) { reviewHit = null; }
       out.push({
@@ -2450,6 +2459,24 @@
         return;
       }
     } catch (e) { /* fall through to accept on check failure */ }
+
+    // 3a. Post-only keyword screen (owner directive: skip post, never block subreddit, under any circumstance)
+    try {
+      var postContentText = ((detail.title || '') + ' ' + stripDrawerText(detail.contentHtml || '')).trim();
+      var postSkipHit = screenMatchKeyword(postContentText, CONTENT_SCREEN_POST_ONLY);
+      if (postSkipHit) {
+        closeOpenDrawer();
+        await reportClaim(
+          settings,
+          claim,
+          false,
+          'Task contains blocked keyword "' + postSkipHit + '" — skipped without blocking subreddit.'
+        );
+        setStatus(false, 'claim #' + subTaskId + ' skipped: contains "' + postSkipHit + '"');
+        console.log('[Auto Watcher] Task #' + subTaskId + ' contains post-only keyword "' + postSkipHit + '" — skipped without blocking r/' + (normalizeSub(detail.subreddit) || '?'));
+        return;
+      }
+    } catch (e) { /* fall through on check failure */ }
 
     // 3b. Tier-1 content screen (auto-decide new subreddits).
     // Scope: subreddit still unblocked AND still unseen-before-this-cycle

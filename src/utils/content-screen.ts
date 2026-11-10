@@ -22,6 +22,7 @@ import {
   BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
   BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE,
   BLOCK_KEYWORDS_CRYPTO_HIGH_CONFIDENCE,
+  BLOCK_KEYWORDS_POST_ONLY,
   BLOCK_KEYWORDS_PLACE_SUBSTRING,
   BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
   BLOCK_KEYWORDS_UNI_SUBSTRING,
@@ -53,6 +54,8 @@ export interface ScreenLists {
   dojoHigh?: readonly string[];
   /** Owner crypto terms (optional in test fixtures — defaults to prod). */
   cryptoHigh?: readonly string[];
+  /** Post-only skip terms (never accept the post, do NOT block the sub). */
+  postSkip?: readonly string[];
   /** US place-name terms, NAME screening only (optional — defaults to prod). */
   placeSubstring?: readonly string[];
   placeExactOnly?: readonly string[];
@@ -72,6 +75,7 @@ function defaultLists(): ScreenLists {
     vapeAmbiguous: BLOCK_KEYWORDS_VAPE_AMBIGUOUS,
     dojoHigh: BLOCK_KEYWORDS_DOJO_HIGH_CONFIDENCE,
     cryptoHigh: BLOCK_KEYWORDS_CRYPTO_HIGH_CONFIDENCE,
+    postSkip: BLOCK_KEYWORDS_POST_ONLY,
     placeSubstring: BLOCK_KEYWORDS_PLACE_SUBSTRING,
     placeExactOnly: BLOCK_KEYWORDS_PLACE_EXACT_ONLY,
     uniSubstring: BLOCK_KEYWORDS_UNI_SUBSTRING,
@@ -377,4 +381,17 @@ export function tier0Screen(
   const normalized = normalizeSubreddit(task.subreddit);
   if (!normalized || seenSubs.has(normalized)) return null;
   return screenTitle(task.title, lists);
+}
+
+/**
+ * Screen text for post-only skip keywords (e.g. "Costway").
+ * Returns matched term (in list spelling) or null.
+ * Whole-word, case-insensitive.
+ */
+export function checkPostSkipKeyword(
+  text: string | null | undefined,
+  keywords: readonly string[] = BLOCK_KEYWORDS_POST_ONLY,
+): string | null {
+  if (!text) return null;
+  return matchKeyword(text, keywords);
 }

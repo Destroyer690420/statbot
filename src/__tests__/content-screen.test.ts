@@ -13,6 +13,7 @@ import {
   tier0Screen,
   buildSeenSet,
   autoBlockReason,
+  checkPostSkipKeyword,
 } from '../utils/content-screen';
 
 const LISTS = {
@@ -372,5 +373,20 @@ describe('buildSeenSet / autoBlockReason', () => {
     expect(autoBlockReason('ph')).toBe('auto-content:ph');
     expect(autoBlockReason('crypto')).toBe('auto-content:crypto');
     expect(autoBlockReason('non-en')).toBe('auto-content:non-en');
+  });
+});
+
+describe('checkPostSkipKeyword', () => {
+  it('matches Costway case-insensitively on word boundaries', () => {
+    expect(checkPostSkipKeyword('Check out this Costway desk')).toBe('costway');
+    expect(checkPostSkipKeyword('great deals on costway today')).toBe('costway');
+    expect(checkPostSkipKeyword('BEST COSTWAY SALE')).toBe('costway');
+  });
+
+  it('does not match substrings or clean text', () => {
+    expect(checkPostSkipKeyword('accostwayward path')).toBeNull();
+    expect(checkPostSkipKeyword('a nice wooden desk for my room')).toBeNull();
+    expect(checkPostSkipKeyword(null)).toBeNull();
+    expect(checkPostSkipKeyword('')).toBeNull();
   });
 });

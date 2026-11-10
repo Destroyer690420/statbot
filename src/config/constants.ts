@@ -295,6 +295,14 @@ export const BLOCK_KEYWORDS_CRYPTO_HIGH_CONFIDENCE = [
 ] as const;
 
 /**
+ * Keywords that skip the specific task/post on match, but NEVER block the subreddit.
+ * (e.g. brand-specific exclusions requested by owner: "Costway").
+ */
+export const BLOCK_KEYWORDS_POST_ONLY = [
+  'costway',
+] as const;
+
+/**
  * US place-name + university terms for SUBREDDIT-NAME screening only (added
  * 2026-10-15, owner directive: city/state-named subs get posts removed by
  * Reddit filters and get worker accounts banned).
