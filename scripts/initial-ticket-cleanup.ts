@@ -79,13 +79,13 @@ async function main(): Promise<void> {
     console.log('             INITIAL CLEANUP AUDIT SUMMARY            ');
     console.log('======================================================');
     console.log(`• Total tickets scanned:                   ${result.scanned}`);
-    console.log(`• Tickets inactive for 30+ days:           ${result.inactive30Plus}`);
+    console.log(`• Tickets inactive for 15+ days:           ${result.deletionDue}`);
     console.log(`• Tickets deleted successfully:            ${result.deleted}`);
     console.log(`• Tickets protected (pending payments):    ${result.protectedCount}`);
     console.log(`• Tickets skipped due to backup failures:  ${result.skippedBackupFailed}`);
     console.log(`• Tickets that remain active:              ${result.active}`);
-    console.log(`• Day 15 warning candidates:               ${result.inactive15Plus}`);
-    console.log(`• Day 25 warning candidates:               ${result.inactive25Plus}`);
+    console.log(`• Day 7 warning candidates:                ${result.firstWarningDue}`);
+    console.log(`• Day 10 warning candidates:               ${result.finalWarningDue}`);
     console.log('======================================================\n');
 
     if (result.protectedTickets.length > 0) {

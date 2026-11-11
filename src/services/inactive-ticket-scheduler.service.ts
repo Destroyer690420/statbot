@@ -7,7 +7,7 @@ let isSweepRunning = false;
 
 /**
  * Executes a single automated monitoring sweep for inactive tickets.
- * Handles warnings (Day 15/25), backups, and Day 30+ deletions.
+ * Handles warnings (Day 7/10) and Day 15+ deletions.
  */
 export async function runAutomatedInactivitySweep(client: Client): Promise<void> {
   if (isSweepRunning) {
@@ -29,9 +29,9 @@ export async function runAutomatedInactivitySweep(client: Client): Promise<void>
     logger.info('Automated inactive ticket monitoring sweep completed', {
       scanned: result.scanned,
       active: result.active,
-      warned15: result.warned15,
-      warned25: result.warned25,
-      inactive30Plus: result.inactive30Plus,
+      firstWarningsSent: result.firstWarningsSent,
+      finalWarningsSent: result.finalWarningsSent,
+      deletionDue: result.deletionDue,
       deleted: result.deleted,
       protected: result.protectedCount,
       skippedBackupFailed: result.skippedBackupFailed,

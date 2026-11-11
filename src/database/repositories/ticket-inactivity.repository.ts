@@ -68,7 +68,9 @@ export class TicketInactivityRepository {
   /**
    * Called whenever the worker sends a message in the ticket:
    * resets the inactivity counter and warning states to zero so the full
-   * 15/25/30-day lifecycle can begin again cleanly.
+   * 7/10/15-day lifecycle can begin again cleanly.
+   * (Status labels WARNED_15 / WARNED_25 are legacy phase names: phase 1 and
+   * phase 2 of the lifecycle — they are not day numbers.)
    */
   async recordWorkerMessage(
     channelId: string,

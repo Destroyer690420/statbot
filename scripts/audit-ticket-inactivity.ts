@@ -7,6 +7,11 @@ import { commissionService } from '../src/services/commission.service';
 import { settingsService } from '../src/services/settings.service';
 import { env } from '../src/config/env';
 import { logger } from '../src/utils/logger';
+import {
+  TICKET_INACTIVITY_WARNING_1_DAYS,
+  TICKET_INACTIVITY_FINAL_WARNING_DAYS,
+  TICKET_INACTIVITY_DELETE_DAYS,
+} from '../src/config/constants';
 
 export interface TicketAuditResult {
   channelId: string;
@@ -17,9 +22,9 @@ export interface TicketAuditResult {
   lastActivityAt: Date;
   hasWorkerMessages: boolean;
   inactivityDays: number;
-  isInactive30Plus: boolean;
-  isInactive25Plus: boolean;
-  isInactive15Plus: boolean;
+  isDeletionDue: boolean;
+  isFinalWarningDue: boolean;
+  isFirstWarningDue: boolean;
   isProtected: boolean;
   protectionReasons: string[];
   tasksCount: number;
@@ -141,9 +146,9 @@ export async function auditSingleTicket(
 
   const inactivityMs = Math.max(0, now.getTime() - lastActivityAt.getTime());
   const inactivityDays = inactivityMs / (1000 * 60 * 60 * 24);
-  const isInactive30Plus = inactivityDays >= 30;
-  const isInactive25Plus = inactivityDays >= 25;
-  const isInactive15Plus = inactivityDays >= 15;
+  const isDeletionDue = inactivityDays >= TICKET_INACTIVITY_DELETE_DAYS;
+  const isFinalWarningDue = inactivityDays >= TICKET_INACTIVITY_FINAL_WARNING_DAYS;
+  const isFirstWarningDue = inactivityDays >= TICKET_INACTIVITY_WARNING_1_DAYS;
 
   // 3. Check data protections
   const protectionReasons: string[] = [];
@@ -162,10 +167,10 @@ export async function auditSingleTicket(
     ].includes(t.status)) {
       const taskCreatedAt = (t as any).createdAt ? new Date((t as any).createdAt) : channel.createdAt;
       const taskAgeDays = (now.getTime() - taskCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
-      if (taskAgeDays < 30) {
+      if (taskAgeDays < TICKET_INACTIVITY_DELETE_DAYS) {
         hasRecentInProgressTask = true;
       }
-      // Tasks pending >= 30 days do NOT protect the ticket
+      // Tasks pending >= TICKET_INACTIVITY_DELETE_DAYS do NOT protect the ticket
     }
 
     // Completed or archived but not yet paid (Pending Payment)
@@ -202,7 +207,7 @@ export async function auditSingleTicket(
   }
 
   const isProtected = protectionReasons.length > 0;
-  const eligibleForDeletion = isInactive30Plus && !isProtected && !hasRecentInProgressTask;
+  const eligibleForDeletion = isDeletionDue && !isProtected && !hasRecentInProgressTask;
 
   return {
     channelId: channel.id,
@@ -213,9 +218,9 @@ export async function auditSingleTicket(
     lastActivityAt,
     hasWorkerMessages,
     inactivityDays: Math.floor(inactivityDays * 10) / 10,
-    isInactive30Plus,
-    isInactive25Plus,
-    isInactive15Plus,
+    isDeletionDue,
+    isFinalWarningDue,
+    isFirstWarningDue,
     isProtected,
     protectionReasons,
     tasksCount: tasks.length,
@@ -225,9 +230,9 @@ export async function auditSingleTicket(
 
 export async function runInactivityAudit(client: Client, concurrency = 8): Promise<{
   scanned: number;
-  inactive30Plus: number;
-  inactive25Plus: number;
-  inactive15Plus: number;
+  deletionDue: number;
+  finalWarningDue: number;
+  firstWarningDue: number;
   active: number;
   protectedCount: number;
   eligibleForDeletion: number;
@@ -259,18 +264,18 @@ export async function runInactivityAudit(client: Client, concurrency = 8): Promi
     },
   );
 
-  const inactive30Plus = results.filter((r) => r.isInactive30Plus).length;
-  const inactive25Plus = results.filter((r) => r.isInactive25Plus && !r.isInactive30Plus).length;
-  const inactive15Plus = results.filter((r) => r.isInactive15Plus && !r.isInactive25Plus).length;
-  const active = results.filter((r) => !r.isInactive30Plus && !r.isProtected).length;
+  const deletionDue = results.filter((r) => r.isDeletionDue).length;
+  const finalWarningDue = results.filter((r) => r.isFinalWarningDue && !r.isDeletionDue).length;
+  const firstWarningDue = results.filter((r) => r.isFirstWarningDue && !r.isFinalWarningDue).length;
+  const active = results.filter((r) => !r.isDeletionDue && !r.isProtected).length;
   const protectedCount = results.filter((r) => r.isProtected).length;
   const eligibleForDeletion = results.filter((r) => r.eligibleForDeletion).length;
 
   return {
     scanned: results.length,
-    inactive30Plus,
-    inactive25Plus,
-    inactive15Plus,
+    deletionDue,
+    finalWarningDue,
+    firstWarningDue,
     active,
     protectedCount,
     eligibleForDeletion,
@@ -298,11 +303,11 @@ async function main(): Promise<void> {
     console.log('              TICKET INACTIVITY AUDIT REPORT          ');
     console.log('======================================================');
     console.log(`Total tickets scanned:                   ${report.scanned}`);
-    console.log(`Active tickets (<15 days):              ${report.scanned - report.inactive30Plus - report.inactive25Plus - report.inactive15Plus}`);
-    console.log(`Day 15-24 Warning eligible:             ${report.inactive15Plus}`);
-    console.log(`Day 25-29 Final Warning eligible:       ${report.inactive25Plus}`);
-    console.log(`Tickets inactive 30+ days:               ${report.inactive30Plus}`);
-    console.log(`  - Protected (pending payments/tasks):  ${report.results.filter((r) => r.isInactive30Plus && r.isProtected).length}`);
+    console.log(`Active tickets (<${TICKET_INACTIVITY_WARNING_1_DAYS} days):             ${report.scanned - report.deletionDue - report.finalWarningDue - report.firstWarningDue}`);
+    console.log(`Day ${TICKET_INACTIVITY_WARNING_1_DAYS}-${TICKET_INACTIVITY_FINAL_WARNING_DAYS - 1} First Warning eligible:            ${report.firstWarningDue}`);
+    console.log(`Day ${TICKET_INACTIVITY_FINAL_WARNING_DAYS}-${TICKET_INACTIVITY_DELETE_DAYS - 1} Final Warning eligible:        ${report.finalWarningDue}`);
+    console.log(`Tickets inactive ${TICKET_INACTIVITY_DELETE_DAYS}+ days:              ${report.deletionDue}`);
+    console.log(`  - Protected (pending payments/tasks):  ${report.results.filter((r) => r.isDeletionDue && r.isProtected).length}`);
     console.log(`  - Eligible for deletion:               ${report.eligibleForDeletion}`);
     console.log('======================================================\n');
 
@@ -312,9 +317,9 @@ async function main(): Promise<void> {
       console.log(`  - ${s.channelName} (${s.channelId}): worker ${s.workerUsername || s.workerId || 'unknown'} inactive ${s.inactivityDays}d (hasMsgs: ${s.hasWorkerMessages}, tasks: ${s.tasksCount})`);
     }
 
-    const sampleProtected = report.results.filter((r) => r.isInactive30Plus && r.isProtected);
+    const sampleProtected = report.results.filter((r) => r.isDeletionDue && r.isProtected);
     if (sampleProtected.length > 0) {
-      console.log('\nProtected 30+ days tickets:');
+      console.log(`\nProtected ${TICKET_INACTIVITY_DELETE_DAYS}+ days tickets:`);
       for (const p of sampleProtected) {
         console.log(`  - ${p.channelName} (${p.channelId}): ${p.protectionReasons.join('; ')}`);
       }

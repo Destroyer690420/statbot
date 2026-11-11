@@ -85,7 +85,7 @@ describe('InactiveTicketService', () => {
 
     it('uses the latest worker message timestamp as lastActivityAt', async () => {
       const channelCreatedAt = new Date('2026-08-01T00:00:00Z');
-      const workerMsgTime = new Date('2026-10-15T12:00:00Z'); // 19 days ago relative to 2026-11-03
+      const workerMsgTime = new Date('2026-10-26T12:00:00Z'); // 8 days ago relative to 2026-11-03
       const staffMsgTime = new Date('2026-11-02T12:00:00Z');  // 1 day ago (should be ignored!)
 
       const mockWorker = { id: 'worker-1', user: { bot: false, tag: 'worker#1234' }, displayName: 'worker1' };
@@ -116,11 +116,34 @@ describe('InactiveTicketService', () => {
       expect(audit.workerId).toBe('worker-1');
       expect(audit.hasWorkerMessages).toBe(true);
       expect(audit.lastActivityAt.toISOString()).toBe(workerMsgTime.toISOString());
-      expect(audit.inactivityDays).toBe(19);
-      expect(audit.isInactive15Plus).toBe(true);
-      expect(audit.isInactive25Plus).toBe(false);
-      expect(audit.isInactive30Plus).toBe(false);
+      expect(audit.inactivityDays).toBe(8);
+      expect(audit.isFirstWarningDue).toBe(true);
+      expect(audit.isFinalWarningDue).toBe(false);
+      expect(audit.isDeletionDue).toBe(false);
       expect(audit.eligibleForDeletion).toBe(false);
+    });
+
+    it('flags deletion once the ticket crosses the 15-day window', async () => {
+      const channelCreatedAt = new Date('2026-10-19T12:00:00Z'); // exactly 15 days before now
+
+      const channel: any = {
+        id: 'ch-boundary',
+        name: 'ticket-0001b',
+        createdAt: channelCreatedAt,
+        members: new Map(),
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map()),
+        },
+      };
+
+      const now = new Date('2026-11-03T12:00:00Z');
+      const audit = await service.auditChannel(channel, staffSet, paidTaskIds, now);
+
+      expect(audit.inactivityDays).toBe(15);
+      expect(audit.isFirstWarningDue).toBe(true);
+      expect(audit.isFinalWarningDue).toBe(true);
+      expect(audit.isDeletionDue).toBe(true);
+      expect(audit.eligibleForDeletion).toBe(true);
     });
 
     it('uses channel creation date as starting point if worker never sent a message', async () => {
@@ -151,12 +174,12 @@ describe('InactiveTicketService', () => {
       expect(audit.hasWorkerMessages).toBe(false);
       expect(audit.lastActivityAt.toISOString()).toBe(channelCreatedAt.toISOString());
       expect(audit.inactivityDays).toBe(63.5);
-      expect(audit.isInactive30Plus).toBe(true);
+      expect(audit.isDeletionDue).toBe(true);
       expect(audit.isProtected).toBe(false);
       expect(audit.eligibleForDeletion).toBe(true);
     });
 
-    it('does NOT protect tickets whose in-progress tasks are older than 30 days', async () => {
+    it('does NOT protect tickets whose in-progress tasks are older than the 15-day deletion window', async () => {
       const channelCreatedAt = new Date('2026-08-01T00:00:00Z'); // 90 days ago
       const taskCreatedAt = new Date('2026-08-15T00:00:00Z');    // ~80 days ago
 
@@ -177,12 +200,12 @@ describe('InactiveTicketService', () => {
       const now = new Date('2026-11-03T12:00:00Z');
       const audit = await service.auditChannel(channel, staffSet, paidTaskIds, now);
 
-      expect(audit.isInactive30Plus).toBe(true);
+      expect(audit.isDeletionDue).toBe(true);
       expect(audit.isProtected).toBe(false);
       expect(audit.eligibleForDeletion).toBe(true);
     });
 
-    it('retains (does NOT delete) tickets with recent in-progress tasks (< 30 days old)', async () => {
+    it('retains (does NOT delete) tickets with recent in-progress tasks (< 15 days old)', async () => {
       const channelCreatedAt = new Date('2026-08-01T00:00:00Z');
       const taskCreatedAt = new Date('2026-10-30T00:00:00Z'); // 4 days ago
 
@@ -203,9 +226,9 @@ describe('InactiveTicketService', () => {
       const now = new Date('2026-11-03T12:00:00Z');
       const audit = await service.auditChannel(channel, staffSet, paidTaskIds, now);
 
-      expect(audit.isInactive30Plus).toBe(true);
+      expect(audit.isDeletionDue).toBe(true);
       expect(audit.isProtected).toBe(false); // Only pending payments protect
-      expect(audit.eligibleForDeletion).toBe(false); // Retained because task is < 30 days old
+      expect(audit.eligibleForDeletion).toBe(false); // Retained because task is < 15 days old
     });
 
     it('protects tickets with unpaid completed tasks', async () => {
@@ -228,7 +251,7 @@ describe('InactiveTicketService', () => {
       const now = new Date('2026-11-03T12:00:00Z');
       const audit = await service.auditChannel(channel, staffSet, paidTaskIds, now);
 
-      expect(audit.isInactive30Plus).toBe(true);
+      expect(audit.isDeletionDue).toBe(true);
       expect(audit.isProtected).toBe(true);
       expect(audit.protectionReasons[0]).toContain('Pending payment on task TASK-UNPAID');
       expect(audit.eligibleForDeletion).toBe(false);
@@ -255,7 +278,7 @@ describe('InactiveTicketService', () => {
       const now = new Date('2026-11-03T12:00:00Z');
       const audit = await service.auditChannel(channel, staffSet, paidSet, now);
 
-      expect(audit.isInactive30Plus).toBe(true);
+      expect(audit.isDeletionDue).toBe(true);
       expect(audit.isProtected).toBe(false);
       expect(audit.eligibleForDeletion).toBe(true);
     });
@@ -304,8 +327,8 @@ describe('InactiveTicketService', () => {
   });
 
   describe('runLifecycleSweep', () => {
-    it('deletes 30+ days inactive tickets directly without disk backup and notifies admin mac', async () => {
-      const channelCreatedAt = new Date('2026-09-01T00:00:00Z'); // 63 days ago
+    it('deletes 15+ days inactive tickets directly without disk backup and notifies admin mac', async () => {
+      const channelCreatedAt = new Date(Date.now() - 16 * 24 * 60 * 60 * 1000); // 16 days ago
 
       const mockDelete = jest.fn().mockResolvedValue(undefined);
       const mockChannel: any = {
@@ -394,19 +417,19 @@ describe('InactiveTicketService', () => {
       expect(sendPayload.files.length).toBe(1);
     });
 
-    it('sends warnings at Day 15 and Day 25 without deleting', async () => {
-      // 18 days ago (Day 15-24 warning range)
-      const channelCreatedAt15 = new Date(Date.now() - 18 * 24 * 60 * 60 * 1000);
+    it('sends the first warning at Day 7 without deleting', async () => {
+      // 8 days ago (Day 7-9 first warning range)
+      const channelCreatedAt8 = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
 
       const mockChannelSend = jest.fn().mockResolvedValue(undefined);
       const mockWorkerSend = jest.fn().mockResolvedValue(undefined);
 
-      const mockChannel15: any = {
-        id: 'ch-warn15',
-        name: 'ticket-0015',
-        createdAt: channelCreatedAt15,
+      const mockChannel7: any = {
+        id: 'ch-warn7',
+        name: 'ticket-0007',
+        createdAt: channelCreatedAt8,
         members: new Map([
-          ['worker-15', { id: 'worker-15', user: { bot: false, tag: 'w15#1' }, displayName: 'w15' }],
+          ['worker-07', { id: 'worker-07', user: { bot: false, tag: 'w7#1' }, displayName: 'w7' }],
         ]),
         messages: {
           fetch: jest.fn().mockResolvedValue(new Map()),
@@ -420,7 +443,7 @@ describe('InactiveTicketService', () => {
           fetch: jest.fn().mockResolvedValue({
             channels: {
               fetch: jest.fn().mockResolvedValue(undefined),
-              cache: new Map([['ch-warn15', mockChannel15]]),
+              cache: new Map([['ch-warn7', mockChannel7]]),
             },
             members: {
               fetch: jest.fn().mockResolvedValue(undefined),
@@ -438,10 +461,63 @@ describe('InactiveTicketService', () => {
         deleteEligible: true,
       });
 
-      expect(mockChannelSend).toHaveBeenCalledWith(expect.stringContaining('15 days'));
-      expect(mockWorkerSend).toHaveBeenCalledWith(expect.stringContaining('15 days'));
-      expect(mockChannel15.delete).not.toHaveBeenCalled();
-      expect(result.warned15).toBe(1);
+      expect(mockChannelSend).toHaveBeenCalledWith(expect.stringContaining('7 days'));
+      expect(mockWorkerSend).toHaveBeenCalledWith(expect.stringContaining('7 days'));
+      expect(mockChannel7.delete).not.toHaveBeenCalled();
+      expect(result.firstWarningsSent).toBe(1);
+      expect(result.finalWarningsSent).toBe(0);
+    });
+
+    it('sends the final warning at Day 10 stating deletion in 5 days, without deleting', async () => {
+      // 12 days ago (Day 10-14 final warning range)
+      const channelCreatedAt12 = new Date(Date.now() - 12 * 24 * 60 * 60 * 1000);
+
+      const mockChannelSend = jest.fn().mockResolvedValue(undefined);
+      const mockWorkerSend = jest.fn().mockResolvedValue(undefined);
+
+      const mockChannel12: any = {
+        id: 'ch-warn12',
+        name: 'ticket-0012',
+        createdAt: channelCreatedAt12,
+        members: new Map([
+          ['worker-12', { id: 'worker-12', user: { bot: false, tag: 'w12#1' }, displayName: 'w12' }],
+        ]),
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map()),
+        },
+        send: mockChannelSend,
+        delete: jest.fn(),
+      };
+
+      const mockClient: any = {
+        guilds: {
+          fetch: jest.fn().mockResolvedValue({
+            channels: {
+              fetch: jest.fn().mockResolvedValue(undefined),
+              cache: new Map([['ch-warn12', mockChannel12]]),
+            },
+            members: {
+              fetch: jest.fn().mockResolvedValue(undefined),
+            },
+          }),
+        },
+        users: {
+          fetch: jest.fn().mockResolvedValue({ send: mockWorkerSend }),
+        },
+      };
+
+      const result = await service.runLifecycleSweep(mockClient, {
+        dryRun: false,
+        sendWarnings: true,
+        deleteEligible: true,
+      });
+
+      expect(mockChannelSend).toHaveBeenCalledWith(expect.stringContaining('10 consecutive days'));
+      expect(mockChannelSend).toHaveBeenCalledWith(expect.stringContaining('deleted in 5 days'));
+      expect(mockWorkerSend).toHaveBeenCalledWith(expect.stringContaining('10 consecutive days'));
+      expect(mockChannel12.delete).not.toHaveBeenCalled();
+      expect(result.finalWarningsSent).toBe(1);
+      expect(result.deleted).toBe(0);
     });
   });
 });

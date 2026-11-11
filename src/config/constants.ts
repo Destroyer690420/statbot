@@ -685,8 +685,8 @@ export const COLORS = {
 /**
  * Inactive Ticket Management Configuration
  */
-export const TICKET_INACTIVITY_WARNING_1_DAYS = 15;
-export const TICKET_INACTIVITY_FINAL_WARNING_DAYS = 25;
-export const TICKET_INACTIVITY_DELETE_DAYS = 30;
+export const TICKET_INACTIVITY_WARNING_1_DAYS = 7;
+export const TICKET_INACTIVITY_FINAL_WARNING_DAYS = 10;
+export const TICKET_INACTIVITY_DELETE_DAYS = 15;
 export const TICKET_BACKUP_BASE_DIR = 'uploads/ticket-backups';
 export const TICKET_MONITORING_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours

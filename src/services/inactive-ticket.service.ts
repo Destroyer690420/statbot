@@ -24,9 +24,9 @@ export interface TicketInactivityAudit {
   lastActivityAt: Date;
   hasWorkerMessages: boolean;
   inactivityDays: number;
-  isInactive15Plus: boolean;
-  isInactive25Plus: boolean;
-  isInactive30Plus: boolean;
+  isFirstWarningDue: boolean;
+  isFinalWarningDue: boolean;
+  isDeletionDue: boolean;
   isProtected: boolean;
   protectionReasons: string[];
   tasksCount: number;
@@ -36,14 +36,14 @@ export interface TicketInactivityAudit {
 export interface InactivitySweepResult {
   scanned: number;
   active: number;
-  inactive15Plus: number;
-  inactive25Plus: number;
-  inactive30Plus: number;
+  firstWarningDue: number;
+  finalWarningDue: number;
+  deletionDue: number;
   deleted: number;
   protectedCount: number;
   skippedBackupFailed: number;
-  warned15: number;
-  warned25: number;
+  firstWarningsSent: number;
+  finalWarningsSent: number;
   deletedTickets: Array<{
     channelId: string;
     channelName: string;
@@ -166,7 +166,7 @@ export class InactiveTicketService {
         }
       }
 
-      // If we found a worker message within 30 days, we know it's active
+      // If we found a worker message inside the deletion window, we know it's active
       if (lastActivityAt && (now.getTime() - lastActivityAt.getTime()) < TICKET_INACTIVITY_DELETE_DAYS * 24 * 60 * 60 * 1000) {
         break;
       }
@@ -184,12 +184,12 @@ export class InactiveTicketService {
 
     const inactivityMs = Math.max(0, now.getTime() - lastActivityAt.getTime());
     const inactivityDays = inactivityMs / (1000 * 60 * 60 * 24);
-    const isInactive15Plus = inactivityDays >= TICKET_INACTIVITY_WARNING_1_DAYS;
-    const isInactive25Plus = inactivityDays >= TICKET_INACTIVITY_FINAL_WARNING_DAYS;
-    const isInactive30Plus = inactivityDays >= TICKET_INACTIVITY_DELETE_DAYS;
+    const isFirstWarningDue = inactivityDays >= TICKET_INACTIVITY_WARNING_1_DAYS;
+    const isFinalWarningDue = inactivityDays >= TICKET_INACTIVITY_FINAL_WARNING_DAYS;
+    const isDeletionDue = inactivityDays >= TICKET_INACTIVITY_DELETE_DAYS;
 
     // 3. Critical Data Protection Rules: ONLY pending payments protect a ticket.
-    // Tasks pending for >= 30 days do NOT protect; stale tasks will be cancelled upon deletion.
+    // In-progress tasks older than the deletion window do NOT protect; stale tasks will be cancelled upon deletion.
     const protectionReasons: string[] = [];
     let hasRecentInProgressTask = false;
 
@@ -205,10 +205,10 @@ export class InactiveTicketService {
       ].includes(t.status)) {
         const taskCreatedAt = (t as any).createdAt ? new Date((t as any).createdAt) : channel.createdAt;
         const taskAgeDays = (now.getTime() - taskCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
-        if (taskAgeDays < 30) {
+        if (taskAgeDays < TICKET_INACTIVITY_DELETE_DAYS) {
           hasRecentInProgressTask = true;
         }
-        // Tasks pending >= 30 days do NOT protect the ticket
+        // Tasks pending >= TICKET_INACTIVITY_DELETE_DAYS do NOT protect the ticket
       }
 
       // Unpaid completed or archived tasks (Pending Payment)
@@ -245,7 +245,7 @@ export class InactiveTicketService {
     }
 
     const isProtected = protectionReasons.length > 0;
-    const eligibleForDeletion = isInactive30Plus && !isProtected && !hasRecentInProgressTask;
+    const eligibleForDeletion = isDeletionDue && !isProtected && !hasRecentInProgressTask;
 
     return {
       channelId: channel.id,
@@ -255,9 +255,9 @@ export class InactiveTicketService {
       lastActivityAt,
       hasWorkerMessages,
       inactivityDays: Math.floor(inactivityDays * 10) / 10,
-      isInactive15Plus,
-      isInactive25Plus,
-      isInactive30Plus,
+      isFirstWarningDue,
+      isFinalWarningDue,
+      isDeletionDue,
       isProtected,
       protectionReasons,
       tasksCount: tasks.length,
@@ -306,8 +306,8 @@ export class InactiveTicketService {
   }
 
   /**
-   * Main lifecycle sweep: audits all ticket channels, sends warnings at Day 15/25,
-   * performs verified backups and deletes channels at Day 30+ (notifying admin mac).
+   * Main lifecycle sweep: audits all ticket channels, sends warnings at Day 7/10,
+   * and deletes channels at Day 15+ (notifying admin mac).
    */
   async runLifecycleSweep(
     client: Client,
@@ -344,8 +344,8 @@ export class InactiveTicketService {
 
     const deletedTickets: InactivitySweepResult['deletedTickets'] = [];
     const protectedTickets: InactivitySweepResult['protectedTickets'] = [];
-    let warned15 = 0;
-    let warned25 = 0;
+    let firstWarningsSent = 0;
+    let finalWarningsSent = 0;
     let skippedBackupFailed = 0;
 
     const audits = await mapWithConcurrency(
@@ -359,13 +359,13 @@ export class InactiveTicketService {
         }
 
         // Persist activity baseline in DB
-        const computedStatus = (audit.isInactive30Plus && audit.isProtected)
+        const computedStatus = (audit.isDeletionDue && audit.isProtected)
           ? 'PROTECTED'
-          : (audit.isInactive30Plus
+          : (audit.isDeletionDue
             ? 'WARNED_25'
-            : (audit.isInactive25Plus
+            : (audit.isFinalWarningDue
               ? 'WARNED_25'
-              : (audit.isInactive15Plus ? 'WARNED_15' : 'ACTIVE')));
+              : (audit.isFirstWarningDue ? 'WARNED_15' : 'ACTIVE')));
 
         await ticketInactivityRepository.upsertActivity(channel.id, {
           channelName: channel.name,
@@ -374,7 +374,7 @@ export class InactiveTicketService {
           lastActivityAt: audit.lastActivityAt,
           hasWorkerMessages: audit.hasWorkerMessages,
           status: computedStatus,
-          protectionReason: (audit.isInactive30Plus && audit.isProtected) ? audit.protectionReasons.join('; ') : null,
+          protectionReason: (audit.isDeletionDue && audit.isProtected) ? audit.protectionReasons.join('; ') : null,
         }).catch((err) => logger.warn('DB upsertActivity error', { channelId: channel.id, error: err }));
 
         return { channel, audit };
@@ -383,7 +383,7 @@ export class InactiveTicketService {
 
     // Process actions sequentially to strictly respect Discord rate limits
     for (const { channel, audit } of audits) {
-      if (audit.isInactive30Plus && audit.isProtected) {
+      if (audit.isDeletionDue && audit.isProtected) {
         protectedTickets.push({
           channelId: channel.id,
           channelName: channel.name,
@@ -403,8 +403,8 @@ export class InactiveTicketService {
         continue;
       }
 
-      // ─── Day 30+ Deletion Flow ──────────────────────────────────────────
-      if (audit.isInactive30Plus) {
+      // ─── Day 15+ Deletion Flow ──────────────────────────────────────────
+      if (audit.isDeletionDue) {
         if (!deleteEligible || dryRun) {
           deletedTickets.push({
             channelId: channel.id,
@@ -426,7 +426,7 @@ export class InactiveTicketService {
           },
           data: {
             status: 'CANCELLED',
-            cancelledReason: 'ticket_inactivity_30d',
+            cancelledReason: 'ticket_inactivity_15d',
           },
         }).catch((err: unknown) => {
           logger.warn('Failed to cancel stale tasks for deleted ticket', { channelId: channel.id, error: err });
@@ -434,7 +434,7 @@ export class InactiveTicketService {
 
         // Delete Discord ticket channel directly (payment & task history safely preserved in PostgreSQL)
         try {
-          await channel.delete(`Inactive for ${audit.inactivityDays} days (30+ days inactive).`);
+          await channel.delete(`Inactive for ${audit.inactivityDays} days (${TICKET_INACTIVITY_DELETE_DAYS}+ days inactive).`);
           logger.info(`Deleted inactive ticket channel #${channel.name}`, { channelId: channel.id });
         } catch (delErr) {
           logger.error(`Failed to delete Discord channel #${channel.name}`, { channelId: channel.id, error: delErr });
@@ -481,8 +481,8 @@ export class InactiveTicketService {
         continue;
       }
 
-      // ─── Day 25 Final Warning Flow ───────────────────────────────────────
-      if (audit.isInactive25Plus) {
+      // ─── Day 10 Final Warning Flow ───────────────────────────────────────
+      if (audit.isFinalWarningDue) {
         if (!sendWarnings || dryRun) continue;
 
         const record = await ticketInactivityRepository.findByChannelId(channel.id);
@@ -493,16 +493,16 @@ export class InactiveTicketService {
             AuditAction.TICKET_WARNED,
             null,
             audit.workerId,
-            `Final 25-day inactivity warning sent for ticket #${channel.name} (${channel.id})`,
+            `Final ${TICKET_INACTIVITY_FINAL_WARNING_DAYS}-day inactivity warning sent for ticket #${channel.name} (${channel.id})`,
           ).catch(() => undefined);
-          warned25 += 1;
+          finalWarningsSent += 1;
           await new Promise((r) => setTimeout(r, 400));
         }
         continue;
       }
 
-      // ─── Day 15 First Warning Flow ───────────────────────────────────────
-      if (audit.isInactive15Plus) {
+      // ─── Day 7 First Warning Flow ────────────────────────────────────────
+      if (audit.isFirstWarningDue) {
         if (!sendWarnings || dryRun) continue;
 
         const record = await ticketInactivityRepository.findByChannelId(channel.id);
@@ -513,47 +513,47 @@ export class InactiveTicketService {
             AuditAction.TICKET_WARNED,
             null,
             audit.workerId,
-            `First 15-day inactivity warning sent for ticket #${channel.name} (${channel.id})`,
+            `First ${TICKET_INACTIVITY_WARNING_1_DAYS}-day inactivity warning sent for ticket #${channel.name} (${channel.id})`,
           ).catch(() => undefined);
-          warned15 += 1;
+          firstWarningsSent += 1;
           await new Promise((r) => setTimeout(r, 400));
         }
       }
     }
 
-    const inactive30Plus = audits.filter(({ audit }) => audit.isInactive30Plus).length;
-    const inactive25Plus = audits.filter(({ audit }) => audit.isInactive25Plus && !audit.isInactive30Plus).length;
-    const inactive15Plus = audits.filter(({ audit }) => audit.isInactive15Plus && !audit.isInactive25Plus).length;
-    const active = audits.filter(({ audit }) => !audit.isInactive30Plus).length;
+    const deletionDue = audits.filter(({ audit }) => audit.isDeletionDue).length;
+    const finalWarningDue = audits.filter(({ audit }) => audit.isFinalWarningDue && !audit.isDeletionDue).length;
+    const firstWarningDue = audits.filter(({ audit }) => audit.isFirstWarningDue && !audit.isFinalWarningDue).length;
+    const active = audits.filter(({ audit }) => !audit.isDeletionDue).length;
 
     return {
       scanned: audits.length,
       active,
-      inactive15Plus,
-      inactive25Plus,
-      inactive30Plus,
+      firstWarningDue,
+      finalWarningDue,
+      deletionDue,
       deleted: deletedTickets.length,
       protectedCount: protectedTickets.length,
       skippedBackupFailed,
-      warned15,
-      warned25,
+      firstWarningsSent,
+      finalWarningsSent,
       deletedTickets,
       protectedTickets,
     };
   }
 
   /**
-   * Day 15 Warning: sends DM to worker and in-ticket notification.
+   * Day 7 Warning: sends DM to worker and in-ticket notification.
    */
   private async sendFirstWarning(client: Client, channel: TextChannel, workerId: string | null): Promise<void> {
     const ticketMention = `<#${channel.id}>`;
     const inTicketMessage = workerId
-      ? `Hey <@${workerId}>, this is a courtesy notice that this ticket has been inactive for 15 days. Tickets with no activity may eventually be deleted. Please reply here if you're still working or wish to keep your ticket active!`
-      : `This is a courtesy notice that this ticket has been inactive for 15 days. Tickets with no activity may eventually be deleted. Please reply here if you wish to keep this ticket active!`;
+      ? `Hey <@${workerId}>, this is a courtesy notice that this ticket has been inactive for ${TICKET_INACTIVITY_WARNING_1_DAYS} days. Tickets with no activity may eventually be deleted. Please reply here if you're still working or wish to keep your ticket active!`
+      : `This is a courtesy notice that this ticket has been inactive for ${TICKET_INACTIVITY_WARNING_1_DAYS} days. Tickets with no activity may eventually be deleted. Please reply here if you wish to keep this ticket active!`;
 
     // 1. Post in ticket
     await channel.send(inTicketMessage).catch((err) => {
-      logger.warn('Failed sending Day 15 warning in ticket', { channelId: channel.id, error: err });
+      logger.warn('Failed sending Day 7 warning in ticket', { channelId: channel.id, error: err });
     });
 
     // 2. DM worker if known
@@ -561,26 +561,27 @@ export class InactiveTicketService {
       try {
         const user = await client.users.fetch(workerId);
         await user.send(
-          `⚠️ **Inactivity Notice**: Your ticket in **Reddit Tasks** (${ticketMention}) has had no activity for 15 days. If you remain inactive, your ticket may be deleted. If you wish to keep your ticket open, please send a message in your ticket channel: ${ticketMention}`,
+          `⚠️ **Inactivity Notice**: Your ticket in **Reddit Tasks** (${ticketMention}) has had no activity for ${TICKET_INACTIVITY_WARNING_1_DAYS} days. If you remain inactive, your ticket may be deleted. If you wish to keep your ticket open, please send a message in your ticket channel: ${ticketMention}`,
         );
       } catch (dmErr) {
-        logger.info('Could not DM worker for Day 15 warning (DMs likely closed)', { workerId, error: dmErr });
+        logger.info('Could not DM worker for Day 7 warning (DMs likely closed)', { workerId, error: dmErr });
       }
     }
   }
 
   /**
-   * Day 25 Final Warning: sends final DM and prominent ticket notification.
+   * Day 10 Final Warning: sends final DM and prominent ticket notification.
    */
   private async sendFinalWarning(client: Client, channel: TextChannel, workerId: string | null): Promise<void> {
     const ticketMention = `<#${channel.id}>`;
+    const daysLeft = TICKET_INACTIVITY_DELETE_DAYS - TICKET_INACTIVITY_FINAL_WARNING_DAYS;
     const inTicketMessage = workerId
-      ? `🚨 **Final Inactivity Warning**: Hey <@${workerId}>, this ticket has been inactive for 25 consecutive days. It will be **permanently deleted in 5 days** if there is no response. Reply to this message to keep this ticket open!`
-      : `🚨 **Final Inactivity Warning**: This ticket has been inactive for 25 consecutive days. It will be **permanently deleted in 5 days** if there is no response. Reply here to keep this ticket open!`;
+      ? `🚨 **Final Inactivity Warning**: Hey <@${workerId}>, this ticket has been inactive for ${TICKET_INACTIVITY_FINAL_WARNING_DAYS} consecutive days. It will be **permanently deleted in ${daysLeft} days** if there is no response. Reply to this message to keep this ticket open!`
+      : `🚨 **Final Inactivity Warning**: This ticket has been inactive for ${TICKET_INACTIVITY_FINAL_WARNING_DAYS} consecutive days. It will be **permanently deleted in ${daysLeft} days** if there is no response. Reply here to keep this ticket open!`;
 
     // 1. Post in ticket
     await channel.send(inTicketMessage).catch((err) => {
-      logger.warn('Failed sending Day 25 final warning in ticket', { channelId: channel.id, error: err });
+      logger.warn('Failed sending Day 10 final warning in ticket', { channelId: channel.id, error: err });
     });
 
     // 2. DM worker if known
@@ -588,10 +589,10 @@ export class InactiveTicketService {
       try {
         const user = await client.users.fetch(workerId);
         await user.send(
-          `🚨 **Final Warning**: Your ticket in **Reddit Tasks** (${ticketMention}) has been inactive for 25 consecutive days. Your ticket will be **deleted in 5 days** if you do not respond. Please send a message in your ticket ${ticketMention} to keep it active.`,
+          `🚨 **Final Warning**: Your ticket in **Reddit Tasks** (${ticketMention}) has been inactive for ${TICKET_INACTIVITY_FINAL_WARNING_DAYS} consecutive days. Your ticket will be **deleted in ${daysLeft} days** if you do not respond. Please send a message in your ticket ${ticketMention} to keep it active.`,
         );
       } catch (dmErr) {
-        logger.info('Could not DM worker for Day 25 final warning (DMs likely closed)', { workerId, error: dmErr });
+        logger.info('Could not DM worker for Day 10 final warning (DMs likely closed)', { workerId, error: dmErr });
       }
     }
   }
@@ -658,7 +659,7 @@ export class InactiveTicketService {
       `🔒 **Protected Tickets Report**`,
       `═══════════════════════════════════════`,
       `**Total Protected Tickets:** \`${totalProtected}\``,
-      `These tickets are inactive (30+ days) but protected from deletion to safeguard data:`,
+      `These tickets are inactive (${TICKET_INACTIVITY_DELETE_DAYS}+ days) but protected from deletion to safeguard data:`,
       `• **Pending Payments:** ${pendingPaymentCount}`,
       `• **Active / In-Progress Tasks:** ${inProgressCount}`,
       `• **Pending Referral Commissions:** ${referralCommissionCount}`,
@@ -746,7 +747,7 @@ export class InactiveTicketService {
       `📊 **Initial Ticket Cleanup Report**`,
       `═══════════════════════════════════════`,
       `• **Total tickets scanned:** ${summary.scanned}`,
-      `• **Tickets inactive for 30+ days:** ${summary.inactive30Plus}`,
+      `• **Tickets inactive for ${TICKET_INACTIVITY_DELETE_DAYS}+ days:** ${summary.deletionDue}`,
       `• **Tickets deleted successfully:** ${summary.deleted}`,
       `• **Tickets protected (pending payments/tasks/disputes):** ${summary.protectedCount}`,
       `• **Tickets skipped due to backup failures:** ${summary.skippedBackupFailed}`,

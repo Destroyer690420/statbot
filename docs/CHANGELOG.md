@@ -2,6 +2,26 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-11-11
+
+### Local — NOT deployed (backend-only): inactive-ticket lifecycle shortened to 7/10/15 days
+
+- Owner request: reduce ticket deletion from 30 days to 15 days; first warning at Day 7, final warning at Day 10; delete every ticket with no worker activity for 15 days.
+- Thresholds (`src/config/constants.ts`):
+  - `TICKET_INACTIVITY_WARNING_1_DAYS`: `15` → `7`
+  - `TICKET_INACTIVITY_FINAL_WARNING_DAYS`: `25` → `10`
+  - `TICKET_INACTIVITY_DELETE_DAYS`: `30` → `15`
+  - `TICKET_MONITORING_SWEEP_INTERVAL_MS` unchanged (6 hours).
+- `src/services/inactive-ticket.service.ts`:
+  - Audit flags renamed to match what they mean: `isFirstWarningDue` / `isFinalWarningDue` / `isDeletionDue`; sweep counters renamed to `firstWarningDue` / `finalWarningDue` / `deletionDue` / `firstWarningsSent` / `finalWarningsSent`.
+  - Warning texts interpolate the constants: "inactive for 7 days" (first) and "inactive for 10 consecutive days … permanently deleted in 5 days" (final).
+  - In-progress-task protection window now follows `TICKET_INACTIVITY_DELETE_DAYS` (task < 15 days old protects the ticket; 15+ days does not).
+  - Deletion cancels leftover in-progress tasks with `cancelledReason = 'ticket_inactivity_15d'` (was `ticket_inactivity_30d`); channel delete reason and admin/report strings say 15+ days.
+- Unchanged behavior: only worker messages reset the clock; pending unpaid payments and payable referral commissions still protect a ticket; `TicketInactivity.status` enum values remain `WARNED_15` / `WARNED_25` (legacy phase labels, no day semantics — no migration).
+- Scripts aligned with the new thresholds/field names: `scripts/audit-ticket-inactivity.ts` (now imports the constants instead of hardcoding 30/25/15), `scripts/initial-ticket-cleanup.ts`, `scripts/initial-ticket-cleanup.js`.
+- Tests: `src/__tests__/inactive-ticket.test.ts` reworked (8-day first warning, 12-day final warning, exact 15-day deletion boundary, 16-day deletion sweep) — 13/13 pass. Full suite 100/101 suites, 1,362/1,363 tests — the only failure is the network-dependent `image-processor.test.ts` "HTTP 404" case (flaky local test server, passes in isolation). `npm run typecheck` + `npm run build` clean. `npm run lint` is broken repository-wide (ESLint 9 with no `eslint.config.js`), unrelated to this change.
+- **Deployment: none.** Needs an app-only rebuild; no migration, no env change, dashboard untouched.
+
 ## 2026-11-10
 
 ### Deployed (2026-11-10 at `889956c` — app + dashboard rebuild, no migration) — Exclude posts containing "Costway" without blocking subreddit
