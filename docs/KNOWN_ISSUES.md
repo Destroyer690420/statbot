@@ -28,6 +28,12 @@
 - **Fixed locally**: a **burst** round only defers escalation for `LINK_ESCALATION_BURST_GRACE_MS` (6 min, the :10–:16 reply window); after that escalation supersedes it. Manual and `link-escalation` rounds are never implicitly superseded, and adoption is restricted to `createdBy='link-escalation'` so a burst's replies cannot be stolen. A **2-min recovery sweep** (`LINK_ESCALATION_SWEEP_INTERVAL_MS`, boot-registered in `src/index.ts`, cleared on shutdown) re-pools posts delivered within `NUDGE_BACKFILL_MAX_AGE_MS` (24h), so a deferred/lost trigger recovers in ~2 min. `escalateDueTasks` is serialized so the sweep and a +15 job cannot open competing rounds; an already-tracked round with no new posts is a no-op. Boot rehydration sends posts already past +15 min straight to escalation (no duplicate +10 warning). App-only — no schema/migration/env change. `src/__tests__/link-escalation.test.ts` has 13 cases (fresh burst defers, stale burst superseded, manual never superseded, own-round no-op, join-with-new-task). See `docs/GOPARTTIME.md` §"Post-link nudge + escalation re-blast", Decision 50.
 - **Still open (not a bug)**: the fix is tested locally but **production still runs the old build**, so the deferred-forever behaviour persists until an app rebuild/deploy. Verify on deploy: boot log `Link-escalation recovery sweep scheduled (every 2 minutes)`, and escalations should no longer end only with `deferred`.
 
+### 0e. "Unknown Channel" blast errors for tickets deleted by the inactivity sweep (expected, has a remedy)
+- **Symptom**: after the 2026-11-11 7/10/15 deploy, the hourly outreach blast logs `Outreach blast channel resolve failed {"error":"Unknown Channel"}` for some channels (17 such lines in the first 30 min after the :40 round).
+- **Cause**: **not a bug in the sweep.** Deleting ticket channels leaves their `TicketOutreach` rows behind (pre-existing, deliberate behaviour — outreach rows are only removed through the Dead Tickets cleanup or the per-ticket delete button). Every blast still tries those selected rows, Discord answers `Unknown Channel`, and the blast continues with the remaining tickets.
+- **Remedy**: Settings → **Dead Tickets** → scan → delete all (`GET`/`DELETE /api/v1/outreach/dead-tickets`, admin JWT). This removes rows whose channel no longer resolves and stops the log noise.
+- **Note**: any operator-initiated mass channel cleanup (initial cleanup at `5a7da7e`, the 89-ticket sweep on 2026-11-11) should be followed by a Dead Tickets scan.
+
 ---
 
 ## Verified 2026-08-17
