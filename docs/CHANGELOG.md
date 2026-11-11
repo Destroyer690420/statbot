@@ -4,7 +4,7 @@
 
 ## 2026-11-11
 
-### Local — NOT deployed (backend-only): inactive-ticket lifecycle shortened to 7/10/15 days
+### Deployed (2026-11-11 at `acd42e3` — app-only rebuild, no migration) — inactive-ticket lifecycle shortened to 7/10/15 days
 
 - Owner request: reduce ticket deletion from 30 days to 15 days; first warning at Day 7, final warning at Day 10; delete every ticket with no worker activity for 15 days.
 - Thresholds (`src/config/constants.ts`):
@@ -20,6 +20,8 @@
 - Unchanged behavior: only worker messages reset the clock; pending unpaid payments and payable referral commissions still protect a ticket; `TicketInactivity.status` enum values remain `WARNED_15` / `WARNED_25` (legacy phase labels, no day semantics — no migration).
 - Scripts aligned with the new thresholds/field names: `scripts/audit-ticket-inactivity.ts` (now imports the constants instead of hardcoding 30/25/15), `scripts/initial-ticket-cleanup.ts`, `scripts/initial-ticket-cleanup.js`.
 - Tests: `src/__tests__/inactive-ticket.test.ts` reworked (8-day first warning, 12-day final warning, exact 15-day deletion boundary, 16-day deletion sweep) — 13/13 pass. Full suite 100/101 suites, 1,362/1,363 tests — the only failure is the network-dependent `image-processor.test.ts` "HTTP 404" case (flaky local test server, passes in isolation). `npm run typecheck` + `npm run build` clean. `npm run lint` is broken repository-wide (ESLint 9 with no `eslint.config.js`), unrelated to this change.
+- **Deployed 2026-11-11 at `acd42e3`** (`161.118.164.85`; app-only rebuild — dashboard and redis untouched, NO migration, no env change; backup `rtm-backup-20261111-151229-inactive15d.tar.gz`; shipped as a HEAD git bundle then `git reset --hard` to the bundled ref). Verified: 3 services Up, public health `200` healthy DB+Redis, boot "All systems online!" + "Starting inactive ticket monitoring scheduler (sweep every 6h)", live `dist/config/constants.js` reports 7/10/15, `isDeletionDue` present (11 refs) / `isInactive30Plus` absent (0), `ticket_inactivity_15d` present, warning texts interpolate the constants; host bundle removed. Rollback = restore the backup tarball or rebundle `e249e09` + rebuild app.
+- Because the sweep also runs 15 minutes after boot, the shortened lifecycle took effect immediately after this deploy (no manual trigger needed). **First post-boot sweep (2026-11-11 10:04 UTC):** `{"scanned":264,"active":168,"firstWarningsSent":54,"finalWarningsSent":21,"deletionDue":96,"deleted":89,"protected":7,"skippedBackupFailed":0}` — 0 deletion errors, `GET /health` still `200` healthy (DB + Redis), 3 services Up; **75** stale tasks were closed with `cancelledReason = 'ticket_inactivity_15d'` (distinct from the 112 historical `ticket_inactivity_30d` rows). Post-sweep `TicketInactivity` states: `ACTIVE` 121, `WARNED_15` 51, `WARNED_25` 19, `PROTECTED` 8, `DELETED` 359.
 - **Deployment: none.** Needs an app-only rebuild; no migration, no env change, dashboard untouched.
 
 ## 2026-11-10
