@@ -127,7 +127,7 @@ export default function WorkerLogin() {
     setIsError(false);
     try {
       await login(selected.channelId, normalized);
-      navigate('/worker/tasks', { replace: true });
+      navigate('/worker', { replace: true });
     } catch (err: unknown) {
       setMessage(workerErrorMessage(err, 'Verification failed. Try again.'));
       setIsError(true);

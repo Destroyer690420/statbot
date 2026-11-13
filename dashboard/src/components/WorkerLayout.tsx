@@ -1,29 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, Home, ListTodo, LogOut, Menu, UserPlus, Wallet } from 'lucide-react';
+import { BookOpen, Home, ListTodo, LogOut, Menu, Radio, UserPlus, Wallet } from 'lucide-react';
 import { useWorkerAuth } from '../hooks/useWorkerAuth';
 
-const TABS = [
-  { to: '/worker', label: 'Home', icon: Home, end: true, needs: 'home' },
-  { to: '/worker/tasks', label: 'Tasks', icon: ListTodo, end: false, needs: 'tasks' },
+const BASE_TABS = [
+  { to: '/worker', label: 'Live Tasks', icon: Radio, end: true, needs: 'home' },
+  { to: '/worker/tasks', label: 'My Tasks', icon: ListTodo, end: false, needs: 'tasks' },
   { to: '/worker/wallet', label: 'Wallet', icon: Wallet, end: false, needs: 'wallet' },
   { to: '/worker/invites', label: 'Invites', icon: UserPlus, end: false, needs: 'invites' },
   { to: '/worker/how-to', label: 'How-to', icon: BookOpen, end: false, needs: null },
 ] as const;
 
 const PAGE_TITLES: Record<string, string> = {
-  '/worker': 'Home',
-  '/worker/tasks': 'Tasks',
+  '/worker': 'Live Tasks',
+  '/worker/tasks': 'My Tasks',
   '/worker/wallet': 'Wallet',
   '/worker/invites': 'Invites',
   '/worker/how-to': 'How-to',
 };
 
-function pageTitleFor(pathname: string): string {
+function pageTitleFor(pathname: string, isInviter: boolean): string {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  if (path === '/worker') return isInviter ? 'Home' : 'Live Tasks';
   if (PAGE_TITLES[path]) return PAGE_TITLES[path];
   if (path.startsWith('/worker/tasks/')) return 'Task details';
-  return 'Home';
+  return isInviter ? 'Home' : 'Live Tasks';
 }
 
 function useNoIndex() {
@@ -135,25 +136,29 @@ export function WorkerLayout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
-  const pageTitle = pageTitleFor(location.pathname);
+  const isInviter = capabilities !== null && !capabilities.hasTasks && (capabilities.hasInvites || capabilities.hasTeam);
+  const pageTitle = pageTitleFor(location.pathname, isInviter);
 
   // While capabilities are loading, show everything to avoid a nav flicker.
   // Once resolved: a pure inviter (no tasks) would lose the index-tab unless
   // Home is reachable without `needs: 'tasks'` — so Home needs 'home':
   // everyone sees it at /worker, with the index route rendering the inviter
-  // Home for pure inviters and WorkerHome for everyone else. Wallet is shared
-  // by both worlds (the wallet route picks the task or inviter wallet), so it
-  // shows for anyone with tasks, invites or a team. For a pure inviter the
-  // visible order is Home, Wallet, Invites, How-to.
-  const tabs = capabilities === null
-    ? TABS
-    : TABS.filter((tab) => {
+  // Home for pure inviters and Live Tasks for ticket workers.
+  const tabs = (capabilities === null
+    ? BASE_TABS
+    : BASE_TABS.filter((tab) => {
         if ((tab as { needs: string }).needs === 'home') return true;
         if (tab.needs === 'tasks') return capabilities.hasTasks;
         if (tab.needs === 'wallet') return capabilities.hasTasks || capabilities.hasInvites || capabilities.hasTeam;
         if (tab.needs === 'invites') return capabilities.hasInvites || capabilities.hasTeam;
         return true;
-      });
+      })
+  ).map((tab) => {
+    if (tab.to === '/worker' && isInviter) {
+      return { ...tab, label: 'Home', icon: Home };
+    }
+    return tab;
+  });
 
   useEffect(() => {
     setMenuOpen(false);
