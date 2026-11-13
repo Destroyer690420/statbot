@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Eye, ListTodo, Wallet } from 'lucide-react';
-import { getWorkerHome, workerErrorMessage } from '../../api/workerApi';
+import { getAvailableTasks, getWorkerHome, workerErrorMessage } from '../../api/workerApi';
 import { formatMoney } from '../../utils/workerFormat';
 import { WorkerCard, WorkerErrorState, WorkerSkeleton } from '../../components/worker/WorkerUI';
 import { WorkerTaskCard } from '../../components/worker/WorkerTaskCard';
@@ -66,6 +66,13 @@ export default function WorkerHome() {
     refetchInterval: 60000,
   });
 
+  const { data: availableData } = useQuery({
+    queryKey: ['worker-available-tasks'],
+    queryFn: getAvailableTasks,
+    refetchInterval: 3500,
+  });
+  const availableCount = availableData?.data?.tasks?.length ?? 0;
+
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 30000);
     return () => clearInterval(timer);
@@ -93,6 +100,30 @@ export default function WorkerHome() {
   ];
   return (
     <div className="mx-auto min-w-0 w-full max-w-3xl space-y-5">
+      <Link
+        to="/worker/tasks?tab=available"
+        className="worker-card worker-card-interactive flex items-center justify-between gap-3 p-4 border-worker-accent/40 bg-worker-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-worker-accent"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="relative flex h-3 w-3 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-worker-accent opacity-75" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-worker-accent" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-display text-sm font-semibold text-worker-text">Live Task Feed</p>
+            <p className="text-xs text-worker-text-muted">
+              {availableCount > 0
+                ? `${availableCount} eligible post${availableCount === 1 ? '' : 's'} ready to claim`
+                : 'Scanning continuously for new posts...'}
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-worker-accent shrink-0">
+          Claim Posts
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </Link>
+
       <section aria-label="Task overview">
         <div className="grid min-w-0 grid-cols-1 gap-3">
           {cards.map((card) => <StatCard key={card.label} card={card} />)}

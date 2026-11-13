@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.6.8
+// @version      1.7.0
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,9 @@
 // ==/UserScript==
 
 /**
+   * v1.7.0 - Continuous live task scanning: monitor interval tightened to 3.5s
+   * so available posts are refreshed in real-time for on-demand worker claims.
+   *
    * v1.6.8 - Post-only content screen: posts whose title or content contains
    * "Costway" are skipped and never accepted under any circumstance, without
    * auto-blocking the subreddit (owner directive 2026-11-10).
@@ -320,9 +323,9 @@
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
   };
-  const MONITOR_MS = 60 * 1000;
+  const MONITOR_MS = 3500;
   const CLAIM_MS = 30 * 1000;
-  const JITTER_MS = 10 * 1000;
+  const JITTER_MS = 1000;
   // Burst window (drop minutes): tight loops while tasks rain, idle otherwise.
   const BURST_MONITOR_MS = 2500;
   const BURST_MONITOR_JITTER_MS = 1500;

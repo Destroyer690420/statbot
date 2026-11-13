@@ -15,6 +15,7 @@ import { AuditAction, ContentScreenSignal } from '../../types';
 import { CONTENT_SCREEN } from '../../config/constants';
 import { normalizeSubreddit } from './subreddit';
 import { autoBlockReason } from '../../utils/content-screen';
+import { availableTasksService } from './available-tasks.service';
 
 export interface AutoBlockReport {
   subreddit: string;
@@ -94,7 +95,13 @@ export async function handleAutoBlockReport(
       notice: null,
     };
   }
-  await automationRepository.addBlocked(normalized, reason, actorId);  try {
+  await automationRepository.addBlocked(normalized, reason, actorId);
+  try {
+    availableTasksService.removeSubreddit(normalized);
+  } catch {
+    // best-effort cache eviction
+  }
+  try {
     await auditLogService.log(AuditAction.AUTOMATION_BLOCKED, null, actorId, `r/${normalized} auto-blocked (${reason}${where})`);
   } catch {
     // best-effort audit; the block itself is recorded

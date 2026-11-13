@@ -2,6 +2,51 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-11-13
+
+### Implemented (LOCAL, NOT deployed, app + dashboard + userscript rebuild, no migration) — On-Demand Worker Task Claiming from Live Feed with Continuous Scanning & Brand Isolation
+
+- **Owner Request**:
+  1. Workers shouldn't have to wait only for xx:10 minute hourly pings; they should be able to see available posts in real-time and choose what to do anytime on the worker panel.
+  2. Continuous scan of GoPartTime /tasks every few seconds to keep track of available and vanished posts.
+  3. Lazy Acceptance: NEVER claim posts on GoPartTime without a confirmed worker taker (clicking claim on web or replying "yes" in Discord ticket).
+  4. Brand & Privacy Isolation:
+     - Never mention "GoPartTime" anywhere on the worker website or in error messages.
+     - Never show earnings/rates or deadlines on available post cards.
+     - Neutral claim conflict error: `"Someone else just claimed this post! Please select another one."`
+     - Vanished post error: `"Post not available"` (never `"on GoPartTime"`).
+  5. Two-Stage Card Display:
+     - Initial view shows only subreddit name (e.g. `r/AskReddit`), Post badge, and a "See Details" button.
+     - Clicking "See Details" reveals title and content preview.
+  6. Zero-Task Ticket Login:
+     - Workers who have a ticket channel can log in even if they have 0 completed tasks.
+  7. Outreach & Daily Cap Enforcement:
+     - Ticket must be enrolled and selected in daily outreach (`TicketOutreach.selected === true`).
+     - Must be under ticket daily post limit (`dailyPostLimit`, default 2).
+     - Must not have an active post awaiting submission.
+- **Backend Implementation**:
+  - `src/services/automation/available-tasks.service.ts`: maintains in-memory live eligible tasks cache, validates post-only, non-blocked subreddits, excludes Costway keywords, screens Tier-0/1 content, auto-evicts vanished tasks, dynamically purges blocked subreddits, checks worker eligibility, and executes atomic claims.
+  - `src/api/routes/worker.ts`:
+    - `detectWorkerFromChannel`: resolves worker from channel permissions when 0 tasks exist in DB, unlocking zero-task ticket login.
+    - `GET /api/v1/worker/available-tasks`: returns live eligible posts (with brand/rates/deadlines stripped) + worker claim eligibility status.
+    - `POST /api/v1/worker/available-tasks/:subTaskId/claim`: atomic mutex claim returning 409 (`"Someone else just claimed this post! Please select another one."`) or 410 (`"Post not available"`).
+    - `GET /api/v1/worker/claims/:claimId/status`: short-polling claim resolution status with neutral failure reasons.
+  - `src/services/worker.service.ts`: `capabilities.hasTasks = hasTicket || taskCount > 0`.
+  - `src/api/routes/automation.ts`: mounted `POST /api/v1/automation/live-tasks` for continuous watcher snapshot ingestion.
+  - `src/services/automation/content-block.service.ts`: purges live available tasks when a subreddit is auto-blocked.
+- **Userscript Update**:
+  - `scripts/goparttime-auto.user.js` and `dashboard/public/goparttime-auto.user.js` updated to v1.7.0 (byte-identical): tightened `MONITOR_MS` from 60000ms to 3500ms (`JITTER_MS = 1000ms`) for continuous scanning.
+- **Dashboard Implementation**:
+  - `dashboard/src/components/worker/WorkerAvailableTasks.tsx`: live feed header with pulsing scanner dot, daily progress badge (`Today: X / Y posts`), outreach & daily cap warning alerts, two-stage card display (collapsed: subreddit badge + "See Details" button; expanded: title + content preview), mutex claim button, and claim polling with direct "Open Discord Ticket" link (`https://discord.com/channels/<guildId>/<channelId>`).
+  - `dashboard/src/pages/worker/WorkerTasks.tsx`: 4-tab bar (`Available (N) | To-do | Completed | Failed`) with `Available` as default view.
+  - `dashboard/src/pages/worker/WorkerHome.tsx`: Live Task Feed link banner highlighting available posts.
+  - `dashboard/src/pages/worker/WorkerLogin.tsx`: navigates ticket workers directly to `/worker/tasks` on login.
+- **Verification**:
+  - Backend typecheck (`npm run typecheck`) clean with 0 errors.
+  - Dashboard build (`npm run build`) clean with 0 errors.
+  - Unit tests: `available-tasks.test.ts` (10/10), `worker-brand-leak.test.ts` (5/5), `content-block.test.ts` (10/10), `worker-auth.test.ts` (25/25) all pass.
+  - Brand leak check: 0 occurrences of "GoPartTime" or "goparttime" across all worker-facing dashboard components and pages.
+
 ## 2026-11-11
 
 ### Deployed (2026-11-11 at `acd42e3` — app-only rebuild, no migration) — inactive-ticket lifecycle shortened to 7/10/15 days

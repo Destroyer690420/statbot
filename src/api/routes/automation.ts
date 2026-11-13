@@ -32,6 +32,7 @@ import { logger } from '../../utils/logger';
 import { buildClaimTimingsLog, claimTimingsSchema, ClaimTimings } from '../../utils/claim-timings';
 import { shouldLogVersionChange } from '../../utils/companion-version';
 import { burstSchema, sightingTaskSchema } from './automation.schemas';
+import { availableTasksService } from '../../services/automation/available-tasks.service';
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
@@ -343,6 +344,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       }
       const userId = (req as unknown as { userId: string }).userId;
       const row = await automationRepository.addBlocked(normalized, req.body.reason || null, userId);
+      availableTasksService.removeSubreddit(normalized);
       res.json({ success: true, data: row });
     } catch (error) {
       res.status(500).json({ success: false, message: 'Internal server error.' });
@@ -851,10 +853,25 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       if (req.body.tasks.length === 0 && req.body.debug) {
         logger.info('Companion sighting: zero tasks parsed', { debug: req.body.debug });
       }
+      void availableTasksService.setLiveTasks(req.body.tasks).catch(() => undefined);
       res.json({ success: true, data: { received: req.body.tasks.length } });
     } catch (error) {
       logger.warn('POST /automation/sightings failed', { error });
       res.status(400).json({ success: false, message: 'Invalid sightings payload.' });
+    }
+  });
+
+  /** POST /api/v1/automation/live-tasks — continuous live tasks snapshot from watcher */
+  router.post('/live-tasks', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const companionId = req.body?.companionId || null;
+      await automationRepository.heartbeat(companionId, req.body?.version || null);
+      const tasks = Array.isArray(req.body?.tasks) ? req.body.tasks : [];
+      const result = await availableTasksService.setLiveTasks(tasks);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.warn('POST /automation/live-tasks failed', { error });
+      res.status(400).json({ success: false, message: 'Invalid live-tasks payload.' });
     }
   });
 
@@ -902,6 +919,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
           title: t.title || null,
         }),
       );
+      void availableTasksService.setLiveTasks(tasks).catch(() => undefined);
       // On-demand scan reports (DM `scan` / scheduled hourly) are identified
       // BEFORE the flow runs. First report wins, atomically: takeRequest
       // returns the request only for the first caller, which gets its OWN
@@ -1106,6 +1124,9 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       } catch {
         // leave nulls — the browser skips Tier-1 without these hints
       }
+      if (!claimSubreddit && claim.externalTaskId) {
+        claimSubreddit = availableTasksService.getSubreddit(claim.externalTaskId);
+      }
       res.json({
         success: true,
         data: {
@@ -1185,6 +1206,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
         } catch {
           // best-effort
         }
+        availableTasksService.releaseClaim(claim.externalTaskId);
         res.status(410).json({ success: false, message: 'Claim expired.' });
         return;
       }
@@ -1227,6 +1249,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       } else {
         const reason = req.body.failureReason || 'Companion reported failure';
         await automationRepository.resolveClaim(claim.id, 'FAILED', reason);
+        availableTasksService.releaseClaim(claim.externalTaskId);
         logClaimTimings(claim, false, req.body.timings);
         recordScreenReport(req.body.screenReport, claim.externalTaskId);
         try {

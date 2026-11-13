@@ -82,6 +82,21 @@ export async function getWorkerTasks(params?: Record<string, string | number>) {
   return data;
 }
 
+export async function getAvailableTasks() {
+  const { data } = await workerApi.get('/available-tasks');
+  return data;
+}
+
+export async function claimAvailableTask(subTaskId: string) {
+  const { data } = await workerApi.post(`/available-tasks/${encodeURIComponent(subTaskId)}/claim`);
+  return data;
+}
+
+export async function getClaimStatus(claimId: string) {
+  const { data } = await workerApi.get(`/claims/${encodeURIComponent(claimId)}/status`);
+  return data;
+}
+
 export async function getWorkerTask(id: string) {
   const { data } = await workerApi.get(`/tasks/${encodeURIComponent(id)}`);
   return data;

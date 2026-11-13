@@ -47,6 +47,32 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
    — the script NEVER submits, enters counts, or confirms; the Discord reply flow stays the only completion path
 ```
 
+
+### Continuous Scanning & On-Demand Worker Claiming (v1.7.0, 2026-11-13)
+```
+1. Manager's browser runs Tampermonkey companion (goparttime-auto.user.js v1.7.0) with continuous scanning (MONITOR_MS = 3500ms).
+2. Live open /tasks snapshot is POSTed to /api/v1/automation/live-tasks.
+3. Backend availableTasksService filters:
+   - Only post tasks (no comments)
+   - Readable subreddits, not in BlockedSubreddit table
+   - Content screens: no "Costway" keyword, Tier-0/1 keyword checks
+   - Vanished posts are evicted instantly.
+4. Workers log in via their ticket (even with 0 completed tasks) and see live posts at /worker/tasks?tab=available.
+5. Two-Stage Card Display:
+   - Initial view shows only subreddit name (e.g. r/AskReddit), Post badge, and "See Details" button.
+   - Clicking "See Details" reveals title and content preview.
+   - Never displays earnings, deadlines, or GoPartTime branding anywhere.
+6. Worker clicks "Claim Post":
+   - Ticket must be enrolled and selected in daily outreach (TicketOutreach.selected === true).
+   - Ticket must be below daily post limit (dailyPostLimit, default 2).
+   - Ticket must not have an active post awaiting submission.
+   - Mutex lock prevents double-claiming.
+   - Creates pending AutomationClaim for the companion watcher to accept in-page.
+   - If claimed by another user: returns "Someone else just claimed this post! Please select another one."
+   - If post vanished: returns "Post not available".
+7. On acceptance: post details are delivered into the worker's Discord ticket channel, and the UI links directly to the ticket.
+```
+
 ## 3. Payload Schema (`src/utils/goparttime-payload.ts`, shared by extension + API)
 
 `goPartTimePayloadSchema` (zod + superRefine):

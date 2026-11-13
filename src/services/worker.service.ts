@@ -185,7 +185,7 @@ export async function getMeData(workerId: string, ticketChannelId: string): Prom
   const current = payoutService.getCurrentPayoutWeek();
   return {
     workerId,
-    name: nameRow?.assignedUserName ?? null,
+    name: nameRow?.assignedUserName ?? identity?.workerName ?? null,
     ticket: hasTicket
       ? {
           channelId: ticketChannelId,
@@ -194,8 +194,8 @@ export async function getMeData(workerId: string, ticketChannelId: string): Prom
         }
       : null,
     scope: hasTicket ? 'ticket' : 'inviter',
-    // Drives the role-aware panel: a pure inviter has invites but no tasks.
-    capabilities: { hasTasks: taskCount > 0, hasInvites: inviteCount > 0, hasTeam: special && teamCount > 0 },
+    // Drives the role-aware panel: anyone with a ticket has task capability; pure inviters have invites but no tasks.
+    capabilities: { hasTasks: hasTicket || taskCount > 0, hasInvites: inviteCount > 0, hasTeam: special && teamCount > 0 },
     weekLabel: payoutService.getWeekLabel(current.weekStart, current.weekEnd),
     rates: { post: bundle.rates.postRate, comment: bundle.rates.commentRate },
   };

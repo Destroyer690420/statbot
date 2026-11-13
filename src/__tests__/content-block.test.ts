@@ -5,12 +5,16 @@
 import { handleAutoBlockReport } from '../services/automation/content-block.service';
 import { automationRepository } from '../database/repositories';
 import { auditLogService } from '../services/audit.service';
+import { availableTasksService } from '../services/automation/available-tasks.service';
 
 jest.mock('../database/repositories', () => ({
   automationRepository: { isBlocked: jest.fn(), addBlocked: jest.fn() },
 }));
 jest.mock('../services/audit.service', () => ({
   auditLogService: { log: jest.fn() },
+}));
+jest.mock('../services/automation/available-tasks.service', () => ({
+  availableTasksService: { removeSubreddit: jest.fn() },
 }));
 
 const blockedMock = automationRepository.isBlocked as jest.Mock;
@@ -34,6 +38,7 @@ describe('handleAutoBlockReport (enforce mode)', () => {
     expect(addMock).toHaveBeenCalledTimes(1);
     expect(addMock).toHaveBeenCalledWith('newsub', 'auto-content:vape', 'companion:auto-screen');
     expect(auditMock).toHaveBeenCalledTimes(1);
+    expect(availableTasksService.removeSubreddit).toHaveBeenCalledWith('newsub');
     expect(out.notice).toContain('r/newsub');
     expect(out.notice).toContain('dashboard');
   });

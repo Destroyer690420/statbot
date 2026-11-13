@@ -4,7 +4,8 @@ import rateLimit from 'express-rate-limit';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 import { getDb } from '../../database/db';
-import { workerPortalAccessRepository } from '../../database/repositories';
+import { workerPortalAccessRepository, automationRepository } from '../../database/repositories';
+import { availableTasksService } from '../../services/automation/available-tasks.service';
 import { validateQuery } from '../middleware/validate';
 import { workerAuthMiddleware, WorkerAuthRequest } from '../middleware/workerAuth';
 import {
@@ -36,6 +37,7 @@ import {
 } from '../../services/worker.service';
 import { getInvitesForWorker, getTeamForWorker, resolveInviteeDmRef } from '../../services/worker-referrals.service';
 import { isSpecialInviter } from '../../config/constants';
+import { getAllAdminIds } from '../../utils/permissions';
 import { getWorkerQrInfo, saveWorkerQrCode } from '../../services/worker-payment-qr.service';
 import { QrValidationError } from '../../utils/payment-qr';
 
@@ -67,7 +69,28 @@ async function resolveTicketChannel(discordClient: any, channelId: string): Prom
   }
 }
 
-/** A ticket qualifies only if it exists in the guild AND has at least one Task. Generic null otherwise. */
+async function detectWorkerFromChannel(channel: any): Promise<{ workerId: string; workerName: string | null } | null> {
+  try {
+    if (channel.guild?.members?.fetch) {
+      await channel.guild.members.fetch().catch(() => undefined);
+    }
+    const adminIds = getAllAdminIds();
+    const candidates = channel.members?.filter(
+      (m: any) => !m.user?.bot && !adminIds.includes(m.id),
+    );
+    if (!candidates || candidates.size === 0) return null;
+    const worker = candidates.first();
+    if (!worker) return null;
+    return {
+      workerId: worker.id,
+      workerName: worker.displayName || worker.user?.username || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** A ticket qualifies if it exists in the guild AND belongs to a worker (via tasks or channel membership). */
 async function resolveLoginTicket(
   discordClient: any,
   channelId: string,
@@ -75,12 +98,21 @@ async function resolveLoginTicket(
   const channel = await resolveTicketChannel(discordClient, channelId);
   if (!channel) return null;
   const identity = await resolveWorkerIdentityForChannel(channel.id).catch(() => null);
-  if (!identity) return null;
+  if (identity) {
+    return {
+      channel,
+      workerId: identity.workerId,
+      workerName: identity.workerName,
+      ticketName: channel.name ?? identity.channelName ?? channel.id,
+    };
+  }
+  const detected = await detectWorkerFromChannel(channel);
+  if (!detected) return null;
   return {
     channel,
-    workerId: identity.workerId,
-    workerName: identity.workerName,
-    ticketName: channel.name ?? identity.channelName ?? channel.id,
+    workerId: detected.workerId,
+    workerName: detected.workerName,
+    ticketName: channel.name ?? channel.id,
   };
 }
 
@@ -844,6 +876,119 @@ export default function createWorkerRoutes(discordClient: any): Router {
       res.json({ success: true, data: { profileUrl: `https://discord.com/users/${inviteeId}` } });
     } catch (error) {
       logger.error('POST /worker/invites/dm failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  // ─── Available Tasks for On-Demand Claiming ──────────────────
+
+  /** GET /api/v1/worker/available-tasks — list live eligible posts + worker eligibility */
+  router.get('/available-tasks', workerAuthMiddleware, async (req: WorkerAuthRequest, res: Response): Promise<void> => {
+    try {
+      const workerId = req.worker!.sub;
+      const channelId = req.worker!.tid || '';
+      const workerStatus = await availableTasksService.checkWorkerEligibility(workerId, channelId);
+
+      // Strip any platform brand, earnings, or deadlines
+      const tasks = availableTasksService.getAvailableTasks().map((t) => ({
+        id: t.subTaskId,
+        subreddit: t.subreddit,
+        title: t.title,
+        content: t.content,
+        type: t.type,
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          tasks,
+          workerStatus: {
+            ...workerStatus,
+            channelId,
+            guildId: env.GUILD_ID,
+          },
+        },
+      });
+    } catch (error) {
+      logger.error('GET /worker/available-tasks failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /** POST /api/v1/worker/available-tasks/:subTaskId/claim — atomic on-demand claim */
+  router.post('/available-tasks/:subTaskId/claim', workerAuthMiddleware, async (req: WorkerAuthRequest, res: Response): Promise<void> => {
+    try {
+      const workerId = req.worker!.sub;
+      const channelId = req.worker!.tid || '';
+      const subTaskId = String(req.params.subTaskId || '').trim();
+
+      if (!channelId) {
+        res.status(403).json({ success: false, message: 'A ticket channel is required to claim posts.' });
+        return;
+      }
+
+      const result = await availableTasksService.claimTask(subTaskId, workerId, channelId);
+
+      if (!result.ok) {
+        if (result.error === 'Someone else just claimed this post! Please select another one.') {
+          res.status(409).json({ success: false, message: result.error });
+          return;
+        }
+        if (result.error === 'Post not available') {
+          res.status(410).json({ success: false, message: result.error });
+          return;
+        }
+        res.status(400).json({ success: false, message: result.error || 'Failed to claim post.' });
+        return;
+      }
+
+      res.status(201).json({
+        success: true,
+        data: {
+          claimId: result.claimId,
+          channelId,
+          guildId: env.GUILD_ID,
+        },
+      });
+    } catch (error) {
+      logger.error('POST /worker/available-tasks/:subTaskId/claim failed', { error });
+      res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+  });
+
+  /** GET /api/v1/worker/claims/:claimId/status — poll claim resolution */
+  router.get('/claims/:claimId/status', workerAuthMiddleware, async (req: WorkerAuthRequest, res: Response): Promise<void> => {
+    try {
+      const claim = await automationRepository.findClaim(String(req.params.claimId));
+      if (!claim) {
+        res.status(404).json({ success: false, message: 'Claim not found.' });
+        return;
+      }
+      if (claim.workerId && claim.workerId !== req.worker!.sub) {
+        res.status(403).json({ success: false, message: 'Access denied.' });
+        return;
+      }
+
+      // Neutral failure reason without brand leaks
+      let cleanFailure: string | null = null;
+      if (claim.status === 'FAILED') {
+        cleanFailure = 'Someone else just claimed this post! Please select another one.';
+      } else if (claim.status === 'EXPIRED') {
+        cleanFailure = 'Claim timed out. Please try another post.';
+      }
+
+      res.json({
+        success: true,
+        data: {
+          id: claim.id,
+          status: claim.status,
+          channelId: claim.channelId,
+          guildId: env.GUILD_ID,
+          failureReason: cleanFailure,
+        },
+      });
+    } catch (error) {
+      logger.error('GET /worker/claims/:claimId/status failed', { error });
       res.status(500).json({ success: false, message: 'Internal server error.' });
     }
   });
