@@ -4,6 +4,36 @@
 
 ## 2026-11-13
 
+### Deployed (2026-11-13 at `a7d11ee` — dashboard rebuild, no migration) — Live Task Feed on Worker Root, Always-Visible Titles, and Transformed "Please Accept the Post" Card
+
+- **Owner Request**:
+  1. Remove the old home page (`WorkerHome.tsx`) and move the live task feed directly to the root index (`/worker`).
+  2. The task title should **always** be visible on every card in the feed.
+  3. Include a **"See Details"** button on each card that shows the post content preview before accepting.
+  4. As soon as the worker accepts the post, the claim card itself must transform to display **"Please accept the post"** with instructions and a direct button to **"Open Discord Ticket"** (`https://discord.com/channels/<guildId>/<channelId>`).
+- **Dashboard Changes**:
+  - `dashboard/src/components/worker/WorkerAvailableTasks.tsx`:
+    - Displays task title prominently below the subreddit badge on every card.
+    - Added "See Details" / "Hide Details" toggle button revealing post content drawer.
+    - "Accept Post" action button with loading state.
+    - Card transforms immediately on click to accepted state: "Please accept the post" heading, "The post details have been sent to your Discord ticket...", and "Open Discord Ticket" button.
+    - Maintained in-memory `acceptedTasks` map to keep transformed cards visible even after server evicts claimed tasks from live pool.
+  - `dashboard/src/pages/worker/WorkerHome.tsx`:
+    - Replaced old home KPI cards/wallet preview; now renders `<WorkerAvailableTasks />` directly at `/worker`.
+  - `dashboard/src/components/WorkerLayout.tsx`:
+    - First navigation tab updated to `'Live Tasks'` for ticket workers (keeps `'Home'` for pure inviters).
+  - `dashboard/src/pages/worker/WorkerTasks.tsx`:
+    - Refactored to 3 status tabs (`To-do`, `Completed`, `Failed`) with `todo` default.
+    - Added quick banner link pointing to `/worker` ("Looking for new posts? Check the Live Task Feed").
+    - Redirects `?tab=available` to `/worker`.
+  - `dashboard/src/pages/worker/WorkerLogin.tsx`:
+    - Ticket login navigates directly to `/worker` (Live Tasks feed).
+- **Verification**:
+  - Verified live on `161.118.164.85`: container `rtm-dashboard` rebuilt and restarted (`Up`).
+  - Served chunk `WorkerHome-Cb49crKb.js` verified containing `"Please accept the post"` and `"See Details"`.
+  - Public health `200` healthy DB+Redis.
+  - Real worker claimed post #1492468 with companion drawer open in 2s, accept in 4s, and Discord delivery succeeded.
+
 ### Deployed (2026-11-13 at `722c943` — app + dashboard rebuild, no migration) — On-Demand Worker Task Claiming from Live Feed with Continuous Scanning & Brand Isolation
 
 - **Owner Request**:
