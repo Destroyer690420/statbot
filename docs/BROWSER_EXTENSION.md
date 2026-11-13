@@ -276,3 +276,27 @@ Deliberate non-features: no POST back to Statbot (no verdict persistence, no aud
 5. On success: render `counts` + `mismatches` + `notFound` + `skippedKnown` + DM status. On failure: show the server message and let the manager click again.
 
 **Rules/limits:** "deleted" is exactly Statbot's `cancelledReason` (set = expected failure) — there is no live Reddit check and no Feedback click. Each task ID is reported at most once across scans (`notifiedAt` guard server-side); a known ID is skipped entirely on later clicks, except a `MISMATCH` whose DM failed, which is retried. `NOT_COMPARABLE` tasks (CANCELLED without reason, or no stored Reddit link) are reported only as a count. v1.1.0 removed all multi-page state: no fetches, no reloads, no `sessionStorage` scan cache. Because only the open page is checked, the manager clicks once per page they care about.
+
+---
+
+## 12. Dedicated Tab 3 Script — Task Content Peeker (`goparttime-content.user.js` v1.0.0)
+
+> Source: `scripts/goparttime-content.user.js`; byte-identical `dashboard/public/goparttime-content.user.js`; served at `https://statbot.duckdns.org/goparttime-content.user.js`. Dedicated companion userscript running in an isolated 3rd browser tab (`https://goparttime.net/tasks?peeker=1`).
+
+**Purpose:** GoPartTime's Next.js Flight listing only emits `subTaskId`, `type`, `subreddit`, `title`, `karma_limit`, and `earnings`. The full post body (`div.prose`) is only loaded into DOM when a card's drawer is opened. This dedicated script opens the drawer, extracts the prose content and unescaped title, closes the drawer immediately without accepting, and sends the content to `POST /api/v1/automation/task-content` to enrich the live worker feed (`WorkerAvailableTasks.tsx`).
+
+| Field | Value |
+|---|---|
+| `@version` | 1.0.0 |
+| `@match` | `*://goparttime.net/tasks*`, `*://www.goparttime.net/tasks*` |
+| `@grant` | `GM_getValue`, `GM_setValue`, `GM_registerMenuCommand`, `GM_xmlhttpRequest` |
+| `@connect` | `statbot.duckdns.org`, `161.118.164.85`, `localhost`, `127.0.0.1` |
+| `@run-at` | `document-idle` |
+
+**Zero-Interference & Safety Architecture:**
+1. **Never Confirms / Accepts:** Contains zero code referencing "Confirm acceptance". It strictly clicks card "Accept task", reads `div.prose` text + HTML, and immediately triggers `Cancel` / `button[data-slot="drawer-close"]` / `Escape` key event. The task remains 100% available and untouched on GoPartTime.
+2. **Dedicated Tab 3 Isolation:**
+   - Tab 1 (`goparttime-auto.user.js` v1.7.1): Exits immediately if `?peeker=1` is in the URL.
+   - Tab 3 (`goparttime-content.user.js` v1.0.0): In standard `/tasks` tabs without `?peeker=1`, stays dormant and renders an "Open Content Peeker (Tab 3)" floating button. Only actively runs when on `?peeker=1`.
+3. **Session Cache & Refresh:** Extracted IDs are saved to `sessionStorage` (`rtm_peeker_extracted_ids`) so each task is opened at most once per session. When all visible cards are peeked, it sleeps and refreshes at `:10` or after 45s idle to discover fresh task drops.
+

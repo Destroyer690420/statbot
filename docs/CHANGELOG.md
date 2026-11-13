@@ -4,6 +4,33 @@
 
 ## 2026-11-13
 
+### Local / Committed (2026-11-13 at `d76d1e7` — app + userscripts, no migration) — Dedicated Tab 3 Task Content Peeker, /task-content API, and Title Unicode Unescaping
+
+- **Owner Request**:
+  1. In the worker live task feed under "See Details", post content showed `(No content)` because GoPartTime Next.js flight list omits the post body.
+  2. Fetch post content from GoPartTime without claiming/accepting and show it for every post.
+  3. Write a separate script running in a dedicated 3rd tab that will not interfere in any other operation.
+  4. Fix unicode escaping in titles (e.g. `C\u0026I Battery Storage` → `C&I Battery Storage`).
+- **Implementation**:
+  - `scripts/goparttime-content.user.js` & `dashboard/public/goparttime-content.user.js` (v1.0.0):
+    - Dedicated Tampermonkey script running on `https://goparttime.net/tasks?peeker=1`.
+    - Safety guarantee: contains zero code referencing "Confirm acceptance". Strictly clicks "Accept task", reads `div.prose` text + HTML, immediately closes the drawer with Cancel / Escape, and caches peeked IDs in `sessionStorage`.
+    - Streams extracted content to `POST /api/v1/automation/task-content`.
+    - In normal tabs without `?peeker=1`, displays an unobtrusive "Open Content Peeker (Tab 3)" launcher button.
+  - `scripts/goparttime-auto.user.js` & `dashboard/public/goparttime-auto.user.js` (v1.7.1):
+    - Added Tab 3 isolation guard: exits immediately if `?peeker=1` is in the URL so Tab 1 never runs in the peeker tab.
+    - Updated `extractTitleWindow` with `unescapeUnicode` decoding `\uXXXX` sequences.
+  - `src/services/automation/available-tasks.service.ts`:
+    - Added `cleanTitle()` helper to unescape unicode sequences and HTML entities.
+    - Added `updateTaskContent(subTaskId, content, title)` to enrich live in-memory tasks.
+    - Updated `setLiveTasks` to clean titles and enrich existing tasks with incoming content.
+  - `src/services/automation/parser.ts`:
+    - Updated `unescapeFlight` to decode general `\uXXXX` unicode escape sequences.
+  - `src/api/routes/automation.ts`:
+    - Added `POST /api/v1/automation/task-content` endpoint supporting single or batch task content payloads.
+  - `src/__tests__/available-tasks.test.ts`:
+    - Added test suite for `cleanTitle`, title cleaning in `setLiveTasks`, and `updateTaskContent` (14/14 tests pass).
+
 ### Deployed (2026-11-13 at `a7d11ee` — dashboard rebuild, no migration) — Live Task Feed on Worker Root, Always-Visible Titles, and Transformed "Please Accept the Post" Card
 
 - **Owner Request**:
