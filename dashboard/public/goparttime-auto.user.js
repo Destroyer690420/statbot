@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.7.1
+// @version      1.7.2
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -495,11 +495,15 @@
     try {
       if (typeof GM_setValue === 'function') {
         GM_setValue(key, value);
-        return;
       }
     } catch (e) { /* fall through */ }
     try {
       localStorage.setItem('gpt_' + key, value);
+      localStorage.setItem(key, value);
+      if (key === 'gpt_api_key' || key === 'apiKey') {
+        localStorage.setItem('gpt_api_key', value);
+        localStorage.setItem('rtm_companion_api_key', value);
+      }
     } catch (e) { /* ignore */ }
   }
 
@@ -598,10 +602,19 @@
   }
 
   function getSettings() {
-    return {
+    const settings = {
       apiUrl: (storageGet('gpt_api_url').trim() || DEFAULTS.apiUrl).replace(/\/api\/v1\/goparttime\/?$/, '/api/v1/automation').replace(/\/$/, ''),
       apiKey: storageGet('gpt_api_key').trim() || DEFAULTS.apiKey,
     };
+    // Sync key to localStorage so companion scripts (like Tab 3 Content Peeker) can access it
+    try {
+      if (settings.apiKey) {
+        localStorage.setItem('gpt_api_key', settings.apiKey);
+        localStorage.setItem('gpt_gpt_api_key', settings.apiKey);
+        localStorage.setItem('rtm_companion_api_key', settings.apiKey);
+      }
+    } catch (e) { /* ignore */ }
+    return settings;
   }
 
   function getCompanionId() {

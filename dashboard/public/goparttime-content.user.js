@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Task Content Peeker
 // @namespace    https://statbot.duckdns.org/
-// @version      1.1.0
+// @version      1.2.0
 // @updateURL    https://statbot.duckdns.org/goparttime-content.user.js
 // @downloadURL  https://statbot.duckdns.org/goparttime-content.user.js
 // @description  Dedicated Tab 3 ultra-fast executor on /tasks?peeker=1 to extract full post body content into StatBot at god speed without accepting. Never clicks Confirm.
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 /**
- * GoPartTime Task Content Peeker (Tab 3 Dedicated Script - GOD SPEED EDITION)
+ * GoPartTime Task Content Peeker (Tab 3 Dedicated Script - GOD SPEED EDITION v1.2.0)
  *
  * Runs exclusively in a dedicated browser tab opened at:
  *   https://goparttime.net/tasks?peeker=1
@@ -29,17 +29,18 @@
  * GoPartTime's Next.js Flight listing omits post body content (div.prose) from the main list.
  * The body is only loaded into the DOM when a card's drawer opens.
  *
- * ULTRA-FAST (GOD SPEED) PIPELINE:
- * - Continuous fast pipeline sweeps through cards sequentially in milliseconds (~100ms per card).
- * - Checks drawer readiness via 25ms tight polling.
- * - Non-blocking asynchronous streaming to StatBot backend.
+ * FEATURES in v1.2.0:
+ * - Direct in-page API key configuration (gear button + prominent warning banner if missing).
+ * - Multi-storage synchronization: inherits API key seamlessly from Tab 1 (Auto Watcher) via localStorage.
+ * - Handles 401 Unauthorized explicitly with visual diagnostics and instant click-to-fix prompt.
+ * - Fast sequential pipeline sweeps through cards (~100ms per card).
  * - Extracts prose content + title and immediately closes drawer without ever clicking "Confirm acceptance".
  */
 
 (function () {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -49,8 +50,31 @@
   const RELOAD_IDLE_MS = 35 * 1000;
   const DRAWER_TIMEOUT_MS = 1200;
 
+  let authErrorDetected = false;
+  let statusBox = null;
+  let latestUiState = {
+    countPeeked: 0,
+    countAvailable: 0,
+    statusText: 'Initializing...',
+    isPeeking: false,
+  };
+
   function isPeekerTab() {
     return window.location.search.includes('peeker=1') || window.location.hash.includes('peeker');
+  }
+
+  function storageSet(key, value) {
+    try {
+      if (typeof GM_setValue === 'function') GM_setValue(key, value);
+    } catch (e) { /* ignore */ }
+    try {
+      localStorage.setItem('gpt_' + key, value);
+      localStorage.setItem(key, value);
+      if (key === 'gpt_api_key' || key === 'apiKey' || key === 'api_key') {
+        localStorage.setItem('gpt_api_key', value);
+        localStorage.setItem('rtm_companion_api_key', value);
+      }
+    } catch (e) { /* ignore */ }
   }
 
   function storageGet(key) {
@@ -61,29 +85,91 @@
       }
     } catch (e) { /* fall through */ }
     try {
-      return localStorage.getItem('gpt_' + key) || localStorage.getItem(key) || '';
+      return (
+        localStorage.getItem('gpt_' + key) ||
+        localStorage.getItem(key) ||
+        localStorage.getItem('gpt_gpt_' + key) ||
+        sessionStorage.getItem('gpt_' + key) ||
+        sessionStorage.getItem(key) ||
+        ''
+      );
     } catch (e) {
       return '';
     }
   }
 
   function getSettings() {
-    let apiUrl = storageGet('gpt_api_url') || storageGet('rtm_peeker_api_url') || DEFAULTS.apiUrl;
-    let apiKey = storageGet('gpt_api_key') || storageGet('rtm_peeker_api_key') || DEFAULTS.apiKey;
+    let apiUrl =
+      storageGet('gpt_api_url') ||
+      storageGet('api_url') ||
+      storageGet('rtm_peeker_api_url') ||
+      DEFAULTS.apiUrl;
+    let apiKey =
+      storageGet('gpt_api_key') ||
+      storageGet('api_key') ||
+      storageGet('rtm_companion_api_key') ||
+      storageGet('rtm_peeker_api_key') ||
+      DEFAULTS.apiKey;
     return {
       apiUrl: (apiUrl.trim() || DEFAULTS.apiUrl).replace(/\/api\/v1\/goparttime\/?$/, '/api/v1/automation').replace(/\/+$/, ''),
       apiKey: apiKey.trim(),
     };
   }
 
+  function promptConfigureApiKey() {
+    const cur = getSettings();
+    const input = prompt(
+      'StatBot Content Peeker: Enter your GOPARTTIME_API_KEY (64-character secret key):',
+      cur.apiKey || ''
+    );
+    if (input === null) return;
+    const clean = input.trim();
+    storageSet('gpt_api_key', clean);
+    storageSet('api_key', clean);
+    storageSet('rtm_companion_api_key', clean);
+    authErrorDetected = false;
+    if (clean.length === 64) {
+      alert('✅ API Key saved successfully! The Content Peeker is now active.');
+    } else if (clean.length > 0) {
+      alert(`⚠️ API Key saved, but length is ${clean.length} characters (expected 64).`);
+    } else {
+      alert('⚠️ API Key cleared.');
+    }
+    renderUI(latestUiState);
+  }
+
+  if (typeof GM_registerMenuCommand === 'function') {
+    GM_registerMenuCommand('⚙️ Configure StatBot API Key', promptConfigureApiKey);
+  }
+
   // --- Asynchronous Non-blocking Network Request ---
-  function request(settings, method, path, body) {
+  function request(method, path, body) {
+    const settings = getSettings();
     const url = settings.apiUrl + path;
     const headers = {
       'Content-Type': 'application/json',
       Authorization: 'Bearer ' + settings.apiKey,
     };
     const payload = body ? JSON.stringify(body) : undefined;
+
+    const handleResult = (status, text) => {
+      if (status === 401) {
+        authErrorDetected = true;
+        console.error('[RTM Content Peeker] ❌ 401 Unauthorized! API key is missing or invalid. Click the banner gear or button to set key.');
+        renderUI({
+          ...latestUiState,
+          statusText: '401 Unauthorized (Invalid Key)',
+          isPeeking: false,
+        });
+        return { ok: false, error: 'unauthorized' };
+      }
+      authErrorDetected = false;
+      try {
+        return JSON.parse(text);
+      } catch (err) {
+        return { ok: status >= 200 && status < 300 };
+      }
+    };
 
     if (typeof GM_xmlhttpRequest === 'function') {
       return new Promise((resolve, reject) => {
@@ -93,13 +179,7 @@
           headers,
           data: payload,
           timeout: 10000,
-          onload: (res) => {
-            try {
-              resolve(JSON.parse(res.responseText));
-            } catch (err) {
-              resolve({ ok: res.status >= 200 && res.status < 300 });
-            }
-          },
+          onload: (res) => resolve(handleResult(res.status, res.responseText)),
           onerror: () => reject(new Error('Network error connecting to StatBot.')),
           ontimeout: () => reject(new Error('Network timeout connecting to StatBot.')),
         });
@@ -112,11 +192,8 @@
       body: payload,
       credentials: 'omit',
     }).then(async (res) => {
-      try {
-        return await res.json();
-      } catch (e) {
-        return { ok: res.ok };
-      }
+      const text = await res.text();
+      return handleResult(res.status, text);
     });
   }
 
@@ -257,9 +334,9 @@
   }
 
   // --- UI Pill & Status Banner ---
-  let statusBox = null;
-
   function renderUI(state) {
+    latestUiState = { ...latestUiState, ...state };
+
     if (!isPeekerTab()) {
       if (!statusBox) {
         statusBox = document.createElement('div');
@@ -286,16 +363,40 @@
       document.body.appendChild(statusBox);
     }
 
-    const { countPeeked, countAvailable, statusText, isPeeking } = state;
+    const { countPeeked, countAvailable, statusText, isPeeking } = latestUiState;
+    const settings = getSettings();
+    const hasKey = !!settings.apiKey;
+
+    let alertHtml = '';
+    if (authErrorDetected) {
+      alertHtml = `
+        <button id="rtm-peeker-cfg-btn" style="margin-top:8px;width:100%;background:#dc2626;color:#ffffff;border:1px solid #ef4444;border-radius:6px;padding:6px 8px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 0 10px rgba(239,68,68,0.5);">
+          <span>❌</span>
+          <span>401 Unauthorized — Click to Fix Key</span>
+        </button>
+      `;
+    } else if (!hasKey) {
+      alertHtml = `
+        <button id="rtm-peeker-cfg-btn" style="margin-top:8px;width:100%;background:#d97706;color:#ffffff;border:1px solid #f59e0b;border-radius:6px;padding:6px 8px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 0 10px rgba(245,158,11,0.5);">
+          <span>⚠️</span>
+          <span>No API Key — Click to Set</span>
+        </button>
+      `;
+    }
+
     statusBox.innerHTML = `
-      <div style="background:#090d16;color:#f8fafc;border:1px solid #3b82f6;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-size:12px;min-width:240px;">
-        <div style="display:flex;align-items:center;justify-content:between;gap:8px;margin-bottom:8px;border-bottom:1px solid #1e293b;padding-bottom:6px;">
+      <div style="background:#090d16;color:#f8fafc;border:1px solid ${authErrorDetected ? '#ef4444' : hasKey ? '#3b82f6' : '#f59e0b'};border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-size:12px;min-width:250px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;border-bottom:1px solid #1e293b;padding-bottom:6px;">
           <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:#38bdf8;">
             <span>⚡</span>
-            <span>Content Peeker (GOD SPEED)</span>
+            <span>Content Peeker</span>
           </div>
-          <span style="font-size:10px;background:#1e3a8a;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700;">v${VERSION}</span>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <button id="rtm-peeker-gear-btn" title="Configure API Key" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;line-height:1;">⚙️</button>
+            <span style="font-size:10px;background:#1e3a8a;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700;">v${VERSION}</span>
+          </div>
         </div>
+
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">
           <div style="background:#131d31;padding:4px 8px;border-radius:6px;">
             <div style="color:#94a3b8;font-size:10px;">Enriched</div>
@@ -306,15 +407,24 @@
             <div style="font-weight:700;color:#38bdf8;font-size:13px;">${countAvailable ?? 0}</div>
           </div>
         </div>
+
         <div style="display:flex;align-items:center;gap:6px;color:#cbd5e1;font-size:11px;">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${isPeeking ? '#eab308' : '#22c55e'};box-shadow:0 0 6px ${isPeeking ? '#eab308' : '#22c55e'};"></span>
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${authErrorDetected ? '#ef4444' : isPeeking ? '#eab308' : hasKey ? '#22c55e' : '#f59e0b'};box-shadow:0 0 6px ${authErrorDetected ? '#ef4444' : isPeeking ? '#eab308' : hasKey ? '#22c55e' : '#f59e0b'};"></span>
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;">${statusText || 'Idle'}</span>
         </div>
+
+        ${alertHtml}
+
         <div style="margin-top:8px;border-top:1px solid #1e293b;padding-top:6px;font-size:10px;color:#64748b;text-align:center;">
           🔒 Never accepts tasks (Read-only peeker)
         </div>
       </div>
     `;
+
+    const cfgBtn = statusBox.querySelector('#rtm-peeker-cfg-btn');
+    if (cfgBtn) cfgBtn.onclick = promptConfigureApiKey;
+    const gearBtn = statusBox.querySelector('#rtm-peeker-gear-btn');
+    if (gearBtn) gearBtn.onclick = promptConfigureApiKey;
   }
 
   // --- Main Peeker Loop (God Speed Engine) ---
@@ -324,12 +434,11 @@
       return;
     }
 
-    const settings = getSettings();
     const peekedIds = loadPeekedIds();
     let isSweeping = false;
     let lastActionAt = Date.now();
 
-    console.log(`[RTM Content Peeker] Initialized in Tab 3 (?peeker=1) — God Speed Edition v${VERSION}.`);
+    console.log(`[RTM Content Peeker] Initialized in Tab 3 (?peeker=1) — v${VERSION}.`);
     closeOpenDrawerFast();
 
     async function sweepCards() {
@@ -337,7 +446,18 @@
       isSweeping = true;
 
       try {
+        const settings = getSettings();
         const cards = Array.from(document.querySelectorAll('div[data-slot="card"]'));
+
+        if (!settings.apiKey) {
+          renderUI({
+            countPeeked: peekedIds.size,
+            countAvailable: cards.length,
+            statusText: 'Waiting for API key...',
+            isPeeking: false,
+          });
+          return;
+        }
 
         if (cards.length === 0) {
           renderUI({
@@ -411,7 +531,7 @@
               console.log(`[RTM Content Peeker] ⚡ Extracted #${detectedId} (${contentText.length} chars). Streaming to StatBot...`);
 
               // Non-blocking fire-and-forget streaming
-              request(settings, 'POST', '/task-content', {
+              request('POST', '/task-content', {
                 subTaskId: detectedId,
                 title,
                 content: contentText,

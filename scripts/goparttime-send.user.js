@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Discord Task Sender
 // @namespace    https://goparttime.net/
-// @version      1.6.2
+// @version      1.6.3
 // @description  Sends the open task to your Discord ticket via the Reddit Task Manager backend (desktop + mobile) and automates GoPartTime view-data submission with the stored Statbot insight screenshot.
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -89,13 +89,17 @@
     try {
       if (typeof GM_setValue === 'function') {
         GM_setValue(key, value);
-        return;
       }
     } catch (e) {
       /* fall through */
     }
     try {
       localStorage.setItem('gpt_' + key, value);
+      localStorage.setItem(key, value);
+      if (key === 'gpt_api_key' || key === 'apiKey') {
+        localStorage.setItem('gpt_api_key', value);
+        localStorage.setItem('rtm_companion_api_key', value);
+      }
     } catch (e) {
       /* ignore */
     }
@@ -104,10 +108,17 @@
   // ─── Settings ───────────────────────────────────────────────
 
   function getSettings() {
-    return {
+    const s = {
       apiUrl: storageGet('gpt_api_url').trim() || DEFAULTS.apiUrl,
       apiKey: storageGet('gpt_api_key').trim() || DEFAULTS.apiKey,
     };
+    try {
+      if (s.apiKey) {
+        localStorage.setItem('gpt_api_key', s.apiKey);
+        localStorage.setItem('rtm_companion_api_key', s.apiKey);
+      }
+    } catch (e) { /* ignore */ }
+    return s;
   }
 
   function openSettings() {
