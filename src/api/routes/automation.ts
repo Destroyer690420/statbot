@@ -188,6 +188,8 @@ export default function createAutomationRoutes(discordClient: Client): Router {
     if (
       p === '/sightings' ||
       p === '/burst' ||
+      p === '/live-tasks' ||
+      p === '/task-content' ||
       p === '/eligibility-bundle' ||
       p === '/claims/pending' ||
       /^\/claims\/[^/]+\/result$/.test(p)

@@ -63,16 +63,27 @@
     return window.location.search.includes('peeker=1') || window.location.hash.includes('peeker');
   }
 
-  function getSettings() {
-    let apiUrl = DEFAULTS.apiUrl;
-    let apiKey = DEFAULTS.apiKey;
+  function storageGet(key) {
     try {
       if (typeof GM_getValue === 'function') {
-        apiUrl = GM_getValue('rtm_peeker_api_url', apiUrl);
-        apiKey = GM_getValue('rtm_peeker_api_key', apiKey);
+        const val = GM_getValue(key, '');
+        if (val) return val;
       }
-    } catch (e) { /* ignore */ }
-    return { apiUrl: (apiUrl || DEFAULTS.apiUrl).replace(/\/+$/, ''), apiKey: apiKey || '' };
+    } catch (e) { /* fall through */ }
+    try {
+      return localStorage.getItem('gpt_' + key) || localStorage.getItem(key) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function getSettings() {
+    let apiUrl = storageGet('gpt_api_url') || storageGet('rtm_peeker_api_url') || DEFAULTS.apiUrl;
+    let apiKey = storageGet('gpt_api_key') || storageGet('rtm_peeker_api_key') || DEFAULTS.apiKey;
+    return {
+      apiUrl: (apiUrl.trim() || DEFAULTS.apiUrl).replace(/\/api\/v1\/goparttime\/?$/, '/api/v1/automation').replace(/\/+$/, ''),
+      apiKey: apiKey.trim(),
+    };
   }
 
   // --- Network Request Wrapper ---
