@@ -4,7 +4,7 @@
 
 ## 2026-11-13
 
-### Implemented (LOCAL, NOT deployed, app + dashboard + userscript rebuild, no migration) — On-Demand Worker Task Claiming from Live Feed with Continuous Scanning & Brand Isolation
+### Deployed (2026-11-13 at `722c943` — app + dashboard rebuild, no migration) — On-Demand Worker Task Claiming from Live Feed with Continuous Scanning & Brand Isolation
 
 - **Owner Request**:
   1. Workers shouldn't have to wait only for xx:10 minute hourly pings; they should be able to see available posts in real-time and choose what to do anytime on the worker panel.
