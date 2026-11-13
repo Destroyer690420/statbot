@@ -23,6 +23,21 @@ interface AvailableTaskItem {
   type: string;
 }
 
+function cleanDisplayString(raw?: string | null): string {
+  if (!raw) return '';
+  try {
+    return raw
+      .replace(/\\u([0-9a-fA-F]{4})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+  } catch {
+    return raw;
+  }
+}
+
 interface WorkerStatus {
   canClaim: boolean;
   reason?: string;
@@ -352,7 +367,7 @@ export function WorkerAvailableTasks() {
 
                       {/* Title: ALWAYS visible */}
                       <h3 className="mt-2.5 font-display text-sm font-semibold text-worker-text leading-snug">
-                        {task.title || '(No title)'}
+                        {cleanDisplayString(task.title) || '(No title)'}
                       </h3>
 
                       {/* Changed card state: Please accept the post */}
@@ -401,7 +416,7 @@ export function WorkerAvailableTasks() {
 
                     {/* Title: ALWAYS visible on every card */}
                     <h3 className="mt-2.5 font-display text-sm font-semibold text-worker-text leading-snug">
-                      {task.title || '(No title)'}
+                      {cleanDisplayString(task.title) || '(No title)'}
                     </h3>
 
                     {/* Post Content preview: revealed ONLY when "See Details" is clicked */}
@@ -411,7 +426,7 @@ export function WorkerAvailableTasks() {
                           Post Content
                         </p>
                         <div className="max-h-48 overflow-y-auto text-xs leading-relaxed text-worker-text-muted whitespace-pre-wrap">
-                          {task.content || '(No content)'}
+                          {cleanDisplayString(task.content) || '(No content)'}
                         </div>
                       </div>
                     ) : null}
