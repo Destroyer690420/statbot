@@ -108,9 +108,7 @@ export function extractTitle(window: string): string | null {
 /** Flight-escaped string -> plain text. Doubles collapse before singles. */
 export function unescapeFlight(s: string): string {
   return s
-    .replace(/\\u003c/gi, '<')
-    .replace(/\\u003e/gi, '>')
-    .replace(/\\u0026/gi, '&')
+    .replace(/\\u([0-9a-fA-F]{4})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/\\\\/g, '\\')
     .replace(/\\"/g, '"');
 }

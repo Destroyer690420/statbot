@@ -5,6 +5,23 @@ import { AUTOMATION, GOPARTTIME_SOURCE } from '../../config/constants';
 import { getIstDayBoundaries } from '../../utils/ist-time';
 import { logger } from '../../utils/logger';
 
+/**
+ * Decodes unicode escapes (\u0026, \u003c, etc.) and basic HTML entities
+ * often present in GoPartTime Next.js flight data.
+ */
+export function cleanTitle(raw?: string | null): string | null {
+  if (!raw) return null;
+  let str = String(raw).trim();
+  str = str.replace(/\\u([0-9a-fA-F]{4})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  str = str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  return str.trim() || null;
+}
+
 export interface LiveTaskInput {
   subTaskId: string | number;
   type: string;
@@ -60,10 +77,20 @@ export class AvailableTasksService {
       // If already claiming or held by a pending claim, skip
       if (this.inFlightClaims.has(subTaskId)) continue;
 
-      // If already in available list, update lastSeenAt
+      // If already in available list, update lastSeenAt and enrich content/title if present
       const existing = this.tasks.get(subTaskId);
       if (existing) {
         existing.lastSeenAt = now;
+        if (!existing.content && (input.content || input.contentHtml)) {
+          let clean = (input.content || '').trim();
+          if (!clean && input.contentHtml) {
+            clean = input.contentHtml.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' ').trim();
+          }
+          if (clean) existing.content = clean;
+        }
+        if (existing.title && (existing.title.includes('\\u') || existing.title.includes('&amp;'))) {
+          existing.title = cleanTitle(existing.title);
+        }
         continue;
       }
 
@@ -96,14 +123,14 @@ export class AvailableTasksService {
       // Clean preview text (strip html if provided)
       let cleanContent = (input.content || '').trim();
       if (!cleanContent && input.contentHtml) {
-        cleanContent = input.contentHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        cleanContent = input.contentHtml.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' ').trim();
       }
 
       this.tasks.set(subTaskId, {
         subTaskId,
         type: 'post',
         subreddit: normSub,
-        title: input.title ? String(input.title).trim() : null,
+        title: cleanTitle(input.title),
         content: cleanContent || null,
         firstSeenAt: now,
         lastSeenAt: now,
@@ -121,6 +148,29 @@ export class AvailableTasksService {
     }
 
     return { count: this.tasks.size, added, removed };
+  }
+
+  /**
+   * Enriches an existing available task with full post content (and unescaped title if available)
+   * extracted by the companion peeker without claiming.
+   */
+  updateTaskContent(subTaskId: string, content: string, title?: string | null): boolean {
+    const id = String(subTaskId || '').trim();
+    if (!id) return false;
+    const task = this.tasks.get(id);
+    if (!task) return false;
+
+    const cleanedContent = (content || '').trim();
+    if (cleanedContent) {
+      task.content = cleanedContent;
+    }
+    if (title) {
+      const cleanedT = cleanTitle(title);
+      if (cleanedT) task.title = cleanedT;
+    } else if (task.title) {
+      task.title = cleanTitle(task.title);
+    }
+    return true;
   }
 
   /**

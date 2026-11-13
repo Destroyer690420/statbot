@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Auto Watcher
 // @namespace    https://goparttime.net/
-// @version      1.7.0
+// @version      1.7.1
 // @description  Watches /tasks for new GoPartTime tasks, reports them to the StatBot backend, and performs in-page acceptance via the native drawer flow when the backend confirms a worker (hybrid automation - server never touches GoPartTime).
 // @author       Manager
 // @match        *://goparttime.net/*
@@ -18,6 +18,9 @@
 // ==/UserScript==
 
 /**
+   * v1.7.1 - Tab 3 Peeker isolation guard: skips execution in ?peeker=1 tabs.
+   * Unicode unescaping for post titles (decodes \u0026 -> & etc.).
+   *
    * v1.7.0 - Continuous live task scanning: monitor interval tightened to 3.5s
    * so available posts are refreshed in real-time for on-demand worker claims.
    *
@@ -318,7 +321,14 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.6.7';
+  // Dedicated peeker tab guard: Tab 3 (?peeker=1) runs the content peeker userscript.
+  // Tab 1 auto-watcher exits immediately in peeker tabs so the two tabs never interfere.
+  if (window.location.search.includes('peeker=1') || window.location.hash.includes('peeker')) {
+    console.log('[RTM Auto Watcher] Peeker parameter detected (?peeker=1). Exiting auto watcher in this tab to avoid interference.');
+    return;
+  }
+
+  const VERSION = '1.7.1';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -1262,10 +1272,25 @@
     return null;
   }
 
+  function unescapeUnicode(str) {
+    if (!str) return '';
+    try {
+      return str
+        .replace(/\\u([0-9a-fA-F]{4})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+    } catch (e) {
+      return str;
+    }
+  }
+
   function extractTitleWindow(window) {
     try {
       const tm = /\\{1,2}"title\\{1,2}":\s*\\{1,2}"((?:[^\\]|\\.)*?)\\{1,2}"/.exec(window);
-      if (tm) return tm[1].replace(/\\u003c/gi, '<').replace(/\\u003e/gi, '>').slice(0, 300) || null;
+      if (tm) return unescapeUnicode(tm[1]).slice(0, 300) || null;
     } catch (e) { /* keep null */ }
     return null;
   }

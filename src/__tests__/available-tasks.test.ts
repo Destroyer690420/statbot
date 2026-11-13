@@ -7,7 +7,7 @@ jest.mock('../utils/logger', () => ({
   },
 }));
 
-import { availableTasksService } from '../services/automation/available-tasks.service';
+import { availableTasksService, cleanTitle } from '../services/automation/available-tasks.service';
 import { automationRepository, outreachRepository, taskRepository } from '../database/repositories';
 
 jest.mock('../database/repositories', () => ({
@@ -220,6 +220,57 @@ describe('AvailableTasksService', () => {
       const res = await availableTasksService.claimTask('999999', 'w-1', 'ch-1');
       expect(res.ok).toBe(false);
       expect(res.error).toBe('Post not available');
+    });
+  });
+
+  describe('cleanTitle and content enrichment', () => {
+    it('unescapes unicode characters and entities in title', () => {
+      expect(cleanTitle('C\\u0026I Battery Storage')).toBe('C&I Battery Storage');
+      expect(cleanTitle('Who\\u003cSupplies\\u003e Systems?')).toBe('Who<Supplies> Systems?');
+      expect(cleanTitle('Tom &amp; Jerry')).toBe('Tom & Jerry');
+      expect(cleanTitle(null)).toBeNull();
+      expect(cleanTitle('')).toBeNull();
+    });
+
+    it('cleans titles automatically during setLiveTasks', async () => {
+      await availableTasksService.setLiveTasks([
+        {
+          subTaskId: '401',
+          type: 'post',
+          subreddit: 'energystorage',
+          title: 'C\\u0026I Battery Storage: Who Supplies Large-Scale Systems?',
+        },
+      ]);
+      const tasks = availableTasksService.getAvailableTasks();
+      expect(tasks[0].title).toBe('C&I Battery Storage: Who Supplies Large-Scale Systems?');
+    });
+
+    it('enriches task content and unescapes title via updateTaskContent', async () => {
+      await availableTasksService.setLiveTasks([
+        {
+          subTaskId: '402',
+          type: 'post',
+          subreddit: 'energystorage',
+          title: 'Initial Title',
+        },
+      ]);
+      expect(availableTasksService.getAvailableTasks()[0].content).toBeNull();
+
+      const updated = availableTasksService.updateTaskContent(
+        '402',
+        'Here is the extracted prose content from the drawer.',
+        'Updated \\u0026 Cleaned Title',
+      );
+      expect(updated).toBe(true);
+
+      const tasks = availableTasksService.getAvailableTasks();
+      expect(tasks[0].content).toBe('Here is the extracted prose content from the drawer.');
+      expect(tasks[0].title).toBe('Updated & Cleaned Title');
+    });
+
+    it('returns false when trying to update a non-existent task', () => {
+      const updated = availableTasksService.updateTaskContent('non-existent', 'Content');
+      expect(updated).toBe(false);
     });
   });
 });

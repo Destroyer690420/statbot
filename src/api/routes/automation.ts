@@ -875,6 +875,62 @@ export default function createAutomationRoutes(discordClient: Client): Router {
     }
   });
 
+  /** POST /api/v1/automation/task-content — enrich available tasks with extracted content from peeker */
+  router.post('/task-content', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const taskContentItemSchema = z.object({
+        subTaskId: z.union([z.string(), z.number()]).transform((v) => String(v).trim()),
+        content: z.string().optional().nullable(),
+        contentHtml: z.string().optional().nullable(),
+        title: z.string().optional().nullable(),
+      });
+      const taskContentPayloadSchema = z.object({
+        companionId: z.string().max(64).optional().nullable(),
+        version: z.string().max(16).optional().nullable(),
+        tasks: z.array(taskContentItemSchema).optional(),
+        subTaskId: z.union([z.string(), z.number()]).transform((v) => String(v).trim()).optional(),
+        content: z.string().optional().nullable(),
+        contentHtml: z.string().optional().nullable(),
+        title: z.string().optional().nullable(),
+      });
+
+      const parsed = taskContentPayloadSchema.parse(req.body);
+      const items: Array<{ subTaskId: string; content?: string | null; contentHtml?: string | null; title?: string | null }> = [];
+      if (parsed.tasks && Array.isArray(parsed.tasks)) {
+        items.push(...parsed.tasks);
+      }
+      if (parsed.subTaskId) {
+        items.push({
+          subTaskId: parsed.subTaskId,
+          content: parsed.content,
+          contentHtml: parsed.contentHtml,
+          title: parsed.title,
+        });
+      }
+
+      let updated = 0;
+      for (const item of items) {
+        let text = (item.content || '').trim();
+        if (!text && item.contentHtml) {
+          text = item.contentHtml
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n\n')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/[ \t]+/g, ' ')
+            .trim();
+        }
+        if (availableTasksService.updateTaskContent(item.subTaskId, text, item.title)) {
+          updated++;
+        }
+      }
+
+      res.json({ success: true, data: { updated } });
+    } catch (error) {
+      logger.warn('POST /automation/task-content failed', { error });
+      res.status(400).json({ success: false, message: 'Invalid task-content payload.' });
+    }
+  });
+
   /**
    * GET /api/v1/automation/eligibility-bundle — cached eligibility data for
    * the watcher's in-page filter (blocked subreddits). The server re-validates
