@@ -4,6 +4,22 @@
 
 ## 2026-11-13
 
+### Deployed (2026-11-13 at `4122bf6` / `ee5c3d6` — dashboard rebuild, no migration) — Fast Task Content Peeker (v1.1.0) and Worker Card Unicode Unescaping
+
+- **Owner Request**:
+  1. Content peeker scans very slow; needs to scan at maximum possible speed.
+  2. Titles and content containing unicode escape sequences (e.g. `\u0026`) should display cleanly decoded as `&`.
+- **Implementation**:
+  - `scripts/goparttime-content.user.js` & `dashboard/public/goparttime-content.user.js` (v1.1.0):
+    - Converted single-card interval to continuous fast sequential sweep loop (~100ms per card).
+    - Reduced drawer polling interval to 25ms.
+    - Switched `POST /task-content` to non-blocking background streaming without awaiting network responses.
+    - Immediately closes drawer with Cancel / Escape before streaming.
+    - Tags card DOM with `data-rtm-peeked` to skip React fiber lookup on subsequent sweeps.
+  - `dashboard/src/components/worker/WorkerAvailableTasks.tsx`:
+    - Added `cleanDisplayString()` helper to defensively unescape `\uXXXX` sequences and HTML entities in titles and content previews.
+  - Rebuilt dashboard container on production server (`161.118.164.85`); verified health and served assets.
+
 ### Local / Committed (2026-11-13 at `d76d1e7` — app + userscripts, no migration) — Dedicated Tab 3 Task Content Peeker, /task-content API, and Title Unicode Unescaping
 
 - **Owner Request**:
