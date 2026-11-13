@@ -4,6 +4,26 @@
 
 ## 2026-11-13
 
+### Deployed (2026-11-13 at `51bd6c7` — userscripts v1.2.0/v1.7.2/v1.6.3, no migration) — Userscript Cross-Tab API Key Synchronization & Content Peeker Direct Configuration
+
+- **Owner Report**:
+  - Live task feed under "See Details" still showed `(No content)` on worker cards.
+- **Root Cause Analysis**:
+  - In Tampermonkey, each userscript has an isolated `GM_getValue`/`GM_setValue` sandbox.
+  - In `goparttime-auto.user.js` and `goparttime-send.user.js`, `storageSet` returned early when `GM_setValue` was present, so `localStorage` was never written.
+  - As a result, `goparttime-content.user.js` in Tab 3 could not read the API key and sent `Authorization: Bearer ` (empty string), causing nginx and backend to reject all `POST /api/v1/automation/task-content` calls with HTTP 401 ("No extension token provided.").
+- **Implementation**:
+  - `scripts/goparttime-content.user.js` & `dashboard/public/goparttime-content.user.js` (v1.2.0):
+    - Added in-page API key configuration dialog (`promptConfigureApiKey`) with `⚙️` gear button and menu command.
+    - If key is missing or 401 is returned, status banner displays an alert button allowing the user to click and paste their `GOPARTTIME_API_KEY` directly.
+    - Dynamic credential fetching in `request()` to prevent sending stale empty tokens.
+  - `scripts/goparttime-auto.user.js` & `dashboard/public/goparttime-auto.user.js` (v1.7.2):
+    - Removed early return in `storageSet`; now saves to both `GM_setValue` and `localStorage`.
+    - Automatically syncs `apiKey` to `localStorage` on boot so Tab 3 inherits it immediately when Tab 1 runs.
+  - `scripts/goparttime-send.user.js` & `dashboard/public/goparttime-send.user.js` (v1.6.3):
+    - Updated `storageSet` and startup sync for cross-tab credential sharing.
+  - Copied scripts to `/usr/share/nginx/html/` on production server (`161.118.164.85`); verified public endpoints return HTTP 200.
+
 ### Deployed (2026-11-13 at `4122bf6` / `ee5c3d6` — dashboard rebuild, no migration) — Fast Task Content Peeker (v1.1.0) and Worker Card Unicode Unescaping
 
 - **Owner Request**:
