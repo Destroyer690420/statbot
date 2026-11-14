@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Task Content Peeker
 // @namespace    https://statbot.duckdns.org/
-// @version      1.3.0
+// @version      1.4.0
 // @updateURL    https://statbot.duckdns.org/goparttime-content.user.js
 // @downloadURL  https://statbot.duckdns.org/goparttime-content.user.js
 // @description  Dedicated Tab 3 ultra-fast executor on /tasks?peeker=1 to extract full post body content into StatBot at god speed without accepting. Never clicks Confirm.
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 /**
- * GoPartTime Task Content Peeker (Tab 3 Dedicated Script - GOD SPEED EDITION v1.3.0)
+ * GoPartTime Task Content Peeker (Tab 3 Dedicated Script - GOD SPEED EDITION v1.4.0)
  *
  * Runs exclusively in a dedicated browser tab opened at:
  *   https://goparttime.net/tasks?peeker=1
@@ -29,7 +29,12 @@
  * GoPartTime's Next.js Flight listing omits post body content (div.prose) from the main list.
  * The body is only loaded into the DOM when a card's drawer opens.
  *
- * FEATURES in v1.3.0:
+ * FEATURES in v1.4.0:
+ * - Refreshes the listing every 20s (deterministic, independent of activity), so
+ *   this tab always holds the current task drop and its freshest content. The
+ *   reload is deferred while a sweep or an upload is in flight.
+ * - Cards that yield no readable content are only tagged in the DOM (never
+ *   persisted), so the next refresh retries them instead of blacklisting them.
  * - Waits for the drawer's prose body to actually hydrate before reading it
  *   (v1.2.0 read an empty div.prose and permanently marked cards "peeked",
  *   which is why workers saw "(No content)").
@@ -45,14 +50,17 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
   };
 
   const SWEEP_INTERVAL_MS = 400;
-  const RELOAD_IDLE_MS = 35 * 1000;
+  // Deterministic full-page refresh so this tab always shows the current drop.
+  // Activity-based idle reloads left stale listings on screen for minutes.
+  const REFRESH_INTERVAL_MS = 20 * 1000;
+  const REFRESH_CHECK_MS = 1000;
   const DRAWER_TIMEOUT_MS = 1200;
   // The drawer mounts before its body finishes hydrating; reading div.prose the
   // instant the drawer appears is what produced empty "(No content)" posts.
@@ -493,7 +501,54 @@
     const peekedIds = loadPeekedIds();
     const peekAttempts = new Map();
     let isSweeping = false;
-    let lastActionAt = Date.now();
+    // Timestamp of the last full-page refresh — NOT of the last peek. Tying the
+    // cadence to activity is what let a busy drop keep a stale listing on
+    // screen for minutes.
+    let lastRefreshAt = Date.now();
+    let refreshScheduled = false;
+    let refreshBlockedSince = 0;
+
+    // A reload must never cut a sweep or an upload in half: the POST would be
+    // lost and a drawer would be left mounted over the listing. Only a truly
+    // open drawer blocks — closing/closing-animation states do not (they would
+    // otherwise push the refresh out to the 60s escape hatch).
+    function hasInFlightWork() {
+      if (isSweeping) return true;
+      if (document.querySelector('div[data-slot="card"][data-rtm-sending]')) return true;
+      const drawers = Array.from(document.querySelectorAll('div[role="dialog"]'));
+      return drawers.some(
+        (d) => d.getAttribute('data-state') === 'open' || (!d.getAttribute('data-state') && !!d.querySelector('div.prose'))
+      );
+    }
+
+    function refreshForLatest(reason, force) {
+      if (refreshScheduled) return;
+      if (!force) {
+        if (Date.now() - lastRefreshAt < REFRESH_INTERVAL_MS) return;
+        // Nothing can be enriched without a key; do not throw away the
+        // "No API Key — Click to Set" banner every 20 seconds.
+        if (!getSettings().apiKey) return;
+      }
+
+      if (hasInFlightWork()) {
+        if (!refreshBlockedSince) refreshBlockedSince = Date.now();
+        // A wedged sweep must not pin a stale listing forever.
+        if (Date.now() - refreshBlockedSince < 60 * 1000) return;
+        console.warn('[RTM Content Peeker] Refresh was blocked for 60s — forcing reload.');
+      }
+      refreshBlockedSince = 0;
+
+      refreshScheduled = true;
+      lastRefreshAt = Date.now();
+      latestUiState = {
+        countPeeked: peekedIds.size,
+        countAvailable: document.querySelectorAll('div[data-slot="card"]').length,
+        statusText: 'Refreshing for latest tasks...',
+        isPeeking: false,
+      };
+      console.log(`[RTM Content Peeker] Refresh (${reason}).`);
+      window.location.reload();
+    }
 
     console.log(`[RTM Content Peeker] Initialized in Tab 3 (?peeker=1) — v${VERSION}.`);
     closeOpenDrawerFast();
@@ -501,6 +556,9 @@
     async function sweepCards() {
       if (isSweeping) return;
       isSweeping = true;
+      // Refresh decisions are recorded during the sweep and acted on after
+      // isSweeping is cleared, otherwise hasInFlightWork() always says "busy".
+      let pendingRefresh = null;
 
       try {
         const settings = getSettings();
@@ -524,11 +582,7 @@
             isPeeking: false,
           });
 
-          if (Date.now() - lastActionAt > RELOAD_IDLE_MS) {
-            console.log('[RTM Content Peeker] Idle timeout on empty page. Refreshing...');
-            lastActionAt = Date.now();
-            window.location.reload();
-          }
+          pendingRefresh = ['empty listing', false];
           return;
         }
 
@@ -596,9 +650,11 @@
               const attempts = (peekAttempts.get(attemptKey) || 0) + 1;
               peekAttempts.set(attemptKey, attempts);
               if (attempts >= MAX_PEEK_ATTEMPTS) {
+                // DOM-tag only: persisting the id would blacklist the card for
+                // the rest of the session, and the next refresh must retry it
+                // (content may hydrate later or arrive with a fresh listing).
                 card.setAttribute('data-rtm-peeked', detectedId || attemptKey);
-                savePeekedId(peekedIds, detectedId || attemptKey);
-                console.warn(`[RTM Content Peeker] ⚠️ #${detectedId || attemptKey} produced no readable content after ${attempts} attempts — giving up.`);
+                console.warn(`[RTM Content Peeker] ⚠️ #${detectedId || attemptKey} produced no readable content after ${attempts} attempts — will retry after the next refresh.`);
               } else {
                 card.setAttribute('data-rtm-retry-at', String(Date.now() + 400));
               }
@@ -612,7 +668,6 @@
           // A failed/401 send is retried (with a cooldown) instead of being
           // lost until the tab is reopened.
           card.setAttribute('data-rtm-sending', '1');
-          lastActionAt = Date.now();
           console.log(`[RTM Content Peeker] ⚡ Extracted #${detectedId} (${content.text.length} chars). Streaming to StatBot...`);
           request('POST', '/task-content', {
             subTaskId: detectedId,
@@ -649,24 +704,29 @@
           isPeeking: false,
         });
 
-        // Periodic drop refresh
+        // Keep this tab on the current drop: refresh every 20s, plus the
+        // hourly :10 drop refresh. refreshForLatest() defers while an upload
+        // is still in flight, so nothing is ever lost to a reload.
         const d = new Date();
-        const isTenMinute = d.getMinutes() === 10 && d.getSeconds() < 25;
-        if (isTenMinute || Date.now() - lastActionAt > RELOAD_IDLE_MS) {
-          console.log('[RTM Content Peeker] Drop refresh triggered.');
-          lastActionAt = Date.now();
-          window.location.reload();
-        }
+        pendingRefresh =
+          d.getMinutes() === 10 && d.getSeconds() < 25
+            ? ['minute :10 drop', true]
+            : ['periodic', false];
       } catch (err) {
         console.error('[RTM Content Peeker] Sweep error:', err);
         closeOpenDrawerFast();
       } finally {
         isSweeping = false;
+        if (pendingRefresh) refreshForLatest(pendingRefresh[0], pendingRefresh[1]);
       }
     }
 
     // Run sweep every 400ms
     setInterval(sweepCards, SWEEP_INTERVAL_MS);
+
+    // Refresh clock, independent of peeking activity: this is what guarantees
+    // the tab never shows a stale listing, even when nothing is left to peek.
+    setInterval(() => refreshForLatest('periodic', false), REFRESH_CHECK_MS);
 
     // Initial immediate sweep
     sweepCards();
