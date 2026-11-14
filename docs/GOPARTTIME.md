@@ -51,18 +51,30 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
 ### Continuous Scanning & On-Demand Worker Claiming (v1.7.0, 2026-11-13)
 ```
 1. Manager's browser runs Tampermonkey companion (goparttime-auto.user.js v1.7.0) with continuous scanning (MONITOR_MS = 3500ms).
-2. Live open /tasks snapshot is POSTed to /api/v1/automation/live-tasks.
-3. Backend availableTasksService filters:
+2. Live open /tasks snapshots are POSTed to /api/v1/automation/sightings outside the drop
+   window and to /api/v1/automation/burst (settled report) during minutes :10–:16. Both
+   feed availableTasksService.setLiveTasks(); /live-tasks exists for companion builds
+   that stream snapshots continuously. Snapshots carry subTaskId/type/subreddit/title
+   only — GoPartTime's listing payload does not contain the post body.
+3. Post bodies are enrichment-only and come from the companion peeker
+   (goparttime-content.user.js v1.3.0, tab 3 at /tasks?peeker=1): it clicks each card's
+   "Accept task", waits up to 2s for div.prose to hydrate, reads text/HTML, closes the
+   drawer WITHOUT confirming, and POSTs /api/v1/automation/task-content.
+   The peeker runs ~1s ahead of the watcher's settled report, so the service caches
+   enrichment (6h TTL, bounded) and applies it the moment the task enters the pool
+   (and again if an empty scan evicts + a later scan re-adds it). This ordering is why
+   worker cards used to show "(No content)".
+4. Backend availableTasksService filters:
    - Only post tasks (no comments)
    - Readable subreddits, not in BlockedSubreddit table
    - Content screens: no "Costway" keyword, Tier-0/1 keyword checks
    - Vanished posts are evicted instantly.
-4. Workers log in via their ticket (even with 0 completed tasks) and see live posts at /worker/tasks?tab=available.
-5. Two-Stage Card Display:
-   - Initial view shows only subreddit name (e.g. r/AskReddit), Post badge, and "See Details" button.
-   - Clicking "See Details" reveals title and content preview.
+5. Workers log in via their ticket (even with 0 completed tasks) and see live posts at the worker root (/worker).
+6. Two-Stage Card Display:
+   - Post title is always visible on every card (subreddit badge + Post badge).
+   - Clicking "See Details" reveals the post content preview.
    - Never displays earnings, deadlines, or GoPartTime branding anywhere.
-6. Worker clicks "Claim Post":
+7. Worker clicks "Accept Post":
    - Ticket must be enrolled and selected in daily outreach (TicketOutreach.selected === true).
    - Ticket must be below daily post limit (dailyPostLimit, default 2).
    - Ticket must not have an active post awaiting submission.
@@ -70,7 +82,7 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
    - Creates pending AutomationClaim for the companion watcher to accept in-page.
    - If claimed by another user: returns "Someone else just claimed this post! Please select another one."
    - If post vanished: returns "Post not available".
-7. On acceptance: post details are delivered into the worker's Discord ticket channel, and the UI links directly to the ticket.
+8. On acceptance: post details are delivered into the worker's Discord ticket channel, and the UI links directly to the ticket.
 ```
 
 ## 3. Payload Schema (`src/utils/goparttime-payload.ts`, shared by extension + API)

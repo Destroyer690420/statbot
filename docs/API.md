@@ -125,6 +125,7 @@ PATCH semantics: `cancelledReason` non-null → `updateCancelledReason` + job ca
 | Method | Path | Purpose | Body | Errors |
 |---|---|---|---|---|
 | POST | `/automation/live-tasks` | Ingest continuous watcher `/tasks` scan into in-memory live available tasks (auto-evicts vanished tasks, filters blocked subs & Costway keyword) | `{ tasks: [...] }` | 400; 500 |
+| POST | `/automation/task-content` | Peeker enrichment: applies extracted post content/title to the live task, or **caches it** until the watcher reports the task (returns `{ updated, queued }`); cached enrichment survives pool eviction | `{ tasks?: [{ subTaskId, content?, contentHtml?, title? }] , subTaskId?, content?, contentHtml?, title? }` | 400 |
 | POST | `/automation/sightings` | Watcher task-list snapshot (upserts + heartbeat) | `{ companionId?, version?, tasks: [{ subTaskId, type: post\|comment, subreddit?, title? }] ≤100 }` | 400 |
 | GET | `/automation/eligibility-bundle` | Cached in-page filter data (blocked subreddits) | — | 500 |
 | POST | `/automation/burst` | Settled scan report → validate → open/merge hour blast (or explain via `reason`) | `{ companionId?, version?, tasks ≤20, force? }` — force bypasses the window gate only | 400 |

@@ -34,6 +34,12 @@
 - **Remedy**: Settings → **Dead Tickets** → scan → delete all (`GET`/`DELETE /api/v1/outreach/dead-tickets`, admin JWT). This removes rows whose channel no longer resolves and stops the log noise.
 - **Note**: any operator-initiated mass channel cleanup (initial cleanup at `5a7da7e`, the 89-ticket sweep on 2026-11-11) should be followed by a Dead Tickets scan.
 
+### 0f. Worker "See Details" always showed `(No content)` (fixed locally 2026-11-14 — NOT deployed)
+- **Was**: every card in the worker live feed at `/worker` rendered `(No content)` when expanded, so workers could not read the post body before claiming.
+- **Root cause**: two independent races. (1) `availableTasksService.updateTaskContent()` silently discarded peeker payloads for tasks not yet in the in-memory pool; the peeker extracts a drop ~1s after it lands while the watcher only reports it after a 1.5s settle, so content arrived first and was dropped — and the card had already been marked peeked. (2) `goparttime-content.user.js` v1.2.0 resolved the drawer as soon as `input[name="title"]` existed, read an empty `div.prose`, sent nothing, and still marked the card peeked forever.
+- **Fixed locally**: a bounded 6h/1000-entry enrichment cache in `available-tasks.service.ts` queues content/title until the task is reported and survives pool eviction; `updateTaskContent()` returns `{ applied, queued }`; `/automation/task-content` returns `{ updated, queued }`; peeker **v1.3.0** waits up to 2s for readable prose, only tags cards after the server accepts, retries failed/401 sends (5s cooldown) and empty drawers (3 attempts), and uses a version-scoped `sessionStorage` key. `npm run typecheck` clean; full suite 102/102 suites / 1,379 tests green.
+- **Deploy requirement**: app rebuild + dashboard rebuild (serves the v1.3.0 userscript) + a one-time Tampermonkey update of the Content Peeker. No migration, no env change.
+
 ---
 
 ## Verified 2026-08-17

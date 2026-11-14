@@ -49,9 +49,37 @@ export interface WorkerClaimStatus {
   hasActiveTask: boolean;
 }
 
+/**
+ * Content/title enrichment extracted by the companion peeker.
+ *
+ * Kept independently of the live pool for two reasons:
+ *  1. Ordering: the peeker peeks a drop's cards within ~1s of it landing, while
+ *     the watcher only reports the drop after its settle window (1.5s+), so
+ *     content almost always arrives BEFORE the task exists in the pool.
+ *     Dropping it there is what produced "(No content)" on every worker card.
+ *  2. Eviction: a transient empty/partial scan can evict a task; the cached
+ *     enrichment must survive so a re-added task keeps its content.
+ */
+interface EnrichmentEntry {
+  content: string | null;
+  title: string | null;
+  at: number;
+}
+
+const ENRICHMENT_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_ENRICHMENT_ENTRIES = 1000;
+
+export interface UpdateTaskContentResult {
+  /** Content was applied to a task that is currently in the live pool. */
+  applied: boolean;
+  /** Content was cached because the task is not in the pool (yet). */
+  queued: boolean;
+}
+
 export class AvailableTasksService {
   private tasks = new Map<string, AvailableTask>();
   private inFlightClaims = new Set<string>();
+  private enrichments = new Map<string, EnrichmentEntry>();
 
   /**
    * Updates the live pool of available tasks from a GoPartTime scan snapshot.
@@ -87,6 +115,13 @@ export class AvailableTasksService {
             clean = input.contentHtml.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' ').trim();
           }
           if (clean) existing.content = clean;
+        }
+        // Apply enrichment that was cached before this task entered the pool
+        // (peeker runs ahead of the watcher's settled report).
+        const cached = this.enrichments.get(subTaskId);
+        if (cached) {
+          if (!existing.content && cached.content) existing.content = cached.content;
+          if (!existing.title && cached.title) existing.title = cached.title;
         }
         if (existing.title && (existing.title.includes('\\u') || existing.title.includes('&amp;'))) {
           existing.title = cleanTitle(existing.title);
@@ -126,12 +161,15 @@ export class AvailableTasksService {
         cleanContent = input.contentHtml.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' ').trim();
       }
 
+      // Content the peeker extracted before this task was reported by the watcher.
+      const cached = this.enrichments.get(subTaskId);
+
       this.tasks.set(subTaskId, {
         subTaskId,
         type: 'post',
         subreddit: normSub,
-        title: cleanTitle(input.title),
-        content: cleanContent || null,
+        title: cleanTitle(input.title) ?? cached?.title ?? null,
+        content: cleanContent || cached?.content || null,
         firstSeenAt: now,
         lastSeenAt: now,
       });
@@ -147,30 +185,67 @@ export class AvailableTasksService {
       }
     }
 
+    // Enrichments outlive pool evictions (TTL/size bounded) so re-added tasks
+    // keep the content the peeker already extracted.
+    this.pruneEnrichments();
+
     return { count: this.tasks.size, added, removed };
   }
 
   /**
    * Enriches an existing available task with full post content (and unescaped title if available)
    * extracted by the companion peeker without claiming.
+   *
+   * The peeker sweeps a new drop faster than the watcher reports it, so content
+   * frequently arrives before the task is in the pool. In that case the
+   * enrichment is cached and applied the moment `setLiveTasks` adds the task.
    */
-  updateTaskContent(subTaskId: string, content: string, title?: string | null): boolean {
+  updateTaskContent(subTaskId: string, content: string, title?: string | null): UpdateTaskContentResult {
     const id = String(subTaskId || '').trim();
-    if (!id) return false;
-    const task = this.tasks.get(id);
-    if (!task) return false;
+    if (!id) return { applied: false, queued: false };
 
-    const cleanedContent = (content || '').trim();
+    const cleanedContent = (content || '').trim() || null;
+    const cleanedTitle = title ? cleanTitle(title) : null;
+    if (!cleanedContent && !cleanedTitle) return { applied: false, queued: false };
+
+    // Cache first: even an applied enrichment must survive a later eviction.
+    this.rememberEnrichment(id, cleanedContent, cleanedTitle);
+
+    const task = this.tasks.get(id);
+    if (!task) return { applied: false, queued: true };
+
     if (cleanedContent) {
       task.content = cleanedContent;
     }
-    if (title) {
-      const cleanedT = cleanTitle(title);
-      if (cleanedT) task.title = cleanedT;
+    if (cleanedTitle) {
+      task.title = cleanedTitle;
     } else if (task.title) {
       task.title = cleanTitle(task.title);
     }
-    return true;
+    return { applied: true, queued: false };
+  }
+
+  private rememberEnrichment(id: string, content: string | null, title: string | null): void {
+    const existing = this.enrichments.get(id);
+    this.enrichments.delete(id); // re-insert so Map order tracks recency
+    this.enrichments.set(id, {
+      content: content || existing?.content || null,
+      title: title || existing?.title || null,
+      at: Date.now(),
+    });
+    this.pruneEnrichments();
+  }
+
+  private pruneEnrichments(): void {
+    const cutoff = Date.now() - ENRICHMENT_TTL_MS;
+    for (const [id, entry] of this.enrichments) {
+      if (entry.at < cutoff) this.enrichments.delete(id);
+    }
+    while (this.enrichments.size > MAX_ENRICHMENT_ENTRIES) {
+      const oldest = this.enrichments.keys().next().value;
+      if (oldest === undefined) break;
+      this.enrichments.delete(oldest);
+    }
   }
 
   /**

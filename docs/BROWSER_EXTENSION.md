@@ -279,7 +279,7 @@ Deliberate non-features: no POST back to Statbot (no verdict persistence, no aud
 
 ---
 
-## 12. Dedicated Tab 3 Script — Task Content Peeker (`goparttime-content.user.js` v1.0.0)
+## 12. Dedicated Tab 3 Script — Task Content Peeker (`goparttime-content.user.js` v1.3.0)
 
 > Source: `scripts/goparttime-content.user.js`; byte-identical `dashboard/public/goparttime-content.user.js`; served at `https://statbot.duckdns.org/goparttime-content.user.js`. Dedicated companion userscript running in an isolated 3rd browser tab (`https://goparttime.net/tasks?peeker=1`).
 
@@ -287,7 +287,7 @@ Deliberate non-features: no POST back to Statbot (no verdict persistence, no aud
 
 | Field | Value |
 |---|---|
-| `@version` | 1.0.0 |
+| `@version` | 1.3.0 |
 | `@match` | `*://goparttime.net/tasks*`, `*://www.goparttime.net/tasks*` |
 | `@grant` | `GM_getValue`, `GM_setValue`, `GM_registerMenuCommand`, `GM_xmlhttpRequest` |
 | `@connect` | `statbot.duckdns.org`, `161.118.164.85`, `localhost`, `127.0.0.1` |
@@ -296,7 +296,9 @@ Deliberate non-features: no POST back to Statbot (no verdict persistence, no aud
 **Zero-Interference & Safety Architecture:**
 1. **Never Confirms / Accepts:** Contains zero code referencing "Confirm acceptance". It strictly clicks card "Accept task", reads `div.prose` text + HTML, and immediately triggers `Cancel` / `button[data-slot="drawer-close"]` / `Escape` key event. The task remains 100% available and untouched on GoPartTime.
 2. **Dedicated Tab 3 Isolation:**
-   - Tab 1 (`goparttime-auto.user.js` v1.7.1): Exits immediately if `?peeker=1` is in the URL.
-   - Tab 3 (`goparttime-content.user.js` v1.0.0): In standard `/tasks` tabs without `?peeker=1`, stays dormant and renders an "Open Content Peeker (Tab 3)" floating button. Only actively runs when on `?peeker=1`.
-3. **Session Cache & Refresh:** Extracted IDs are saved to `sessionStorage` (`rtm_peeker_extracted_ids`) so each task is opened at most once per session. When all visible cards are peeked, it sleeps and refreshes at `:10` or after 45s idle to discover fresh task drops.
+   - Tab 1 (`goparttime-auto.user.js` v1.7.2): Exits immediately if `?peeker=1` is in the URL.
+   - Tab 3 (`goparttime-content.user.js` v1.3.0): In standard `/tasks` tabs without `?peeker=1`, stays dormant and renders an "Open Content Peeker (Tab 3)" floating button. Only actively runs when on `?peeker=1`.
+3. **Content read only after hydration (v1.3.0):** The drawer mounts before its body hydrates. `waitForDrawerContent()` polls `div.prose` (or task images for image-only posts) for up to 2s and only then reads/closes. v1.2.0 read an empty `div.prose` the instant the drawer appeared and still marked the card peeked — the cause of `(No content)` in the worker feed.
+4. **Delivery is acknowledged:** A card is tagged `data-rtm-peeked` and written to `sessionStorage` **only after** `/task-content` returns `success`. Failed/401 uploads un-tag the card and retry after a 5s cooldown; an empty drawer is retried up to 3 times before being abandoned.
+5. **Session Cache & Refresh:** Extracted IDs are saved to `sessionStorage` (`rtm_peeker_extracted_ids_v130`) so each task is opened at most once per session (the key is version-scoped so a script upgrade re-peeks previously poisoned entries). When all visible cards are peeked, it sleeps and refreshes at `:10` or after 35s idle to discover fresh task drops.
 

@@ -911,6 +911,7 @@ export default function createAutomationRoutes(discordClient: Client): Router {
       }
 
       let updated = 0;
+      let queued = 0;
       for (const item of items) {
         let text = (item.content || '').trim();
         if (!text && item.contentHtml) {
@@ -921,12 +922,15 @@ export default function createAutomationRoutes(discordClient: Client): Router {
             .replace(/[ \t]+/g, ' ')
             .trim();
         }
-        if (availableTasksService.updateTaskContent(item.subTaskId, text, item.title)) {
+        const result = availableTasksService.updateTaskContent(item.subTaskId, text, item.title);
+        if (result.applied) {
           updated++;
+        } else if (result.queued) {
+          queued++;
         }
       }
 
-      res.json({ success: true, data: { updated } });
+      res.json({ success: true, data: { updated, queued } });
     } catch (error) {
       logger.warn('POST /automation/task-content failed', { error });
       res.status(400).json({ success: false, message: 'Invalid task-content payload.' });

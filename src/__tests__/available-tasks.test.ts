@@ -47,6 +47,7 @@ describe('AvailableTasksService', () => {
     jest.clearAllMocks();
     (availableTasksService as any).tasks.clear();
     (availableTasksService as any).inFlightClaims.clear();
+    (availableTasksService as any).enrichments.clear();
   });
 
   describe('setLiveTasks and filtering', () => {
@@ -256,21 +257,57 @@ describe('AvailableTasksService', () => {
       ]);
       expect(availableTasksService.getAvailableTasks()[0].content).toBeNull();
 
-      const updated = availableTasksService.updateTaskContent(
+      const res = availableTasksService.updateTaskContent(
         '402',
         'Here is the extracted prose content from the drawer.',
         'Updated \\u0026 Cleaned Title',
       );
-      expect(updated).toBe(true);
+      expect(res).toEqual({ applied: true, queued: false });
 
       const tasks = availableTasksService.getAvailableTasks();
       expect(tasks[0].content).toBe('Here is the extracted prose content from the drawer.');
       expect(tasks[0].title).toBe('Updated & Cleaned Title');
     });
 
-    it('returns false when trying to update a non-existent task', () => {
-      const updated = availableTasksService.updateTaskContent('non-existent', 'Content');
-      expect(updated).toBe(false);
+    it('caches content that arrives before the task is in the live pool', async () => {
+      // Peeker sweeps the drop BEFORE the watcher's settled report creates the
+      // pool entry — the exact race that produced "(No content)" on every card.
+      const queued = availableTasksService.updateTaskContent('403', 'Early content', 'Early Title');
+      expect(queued).toEqual({ applied: false, queued: true });
+
+      await availableTasksService.setLiveTasks([
+        { subTaskId: '403', type: 'post', subreddit: 'science', title: 'Later Title' },
+      ]);
+
+      const tasks = availableTasksService.getAvailableTasks();
+      expect(tasks[0].content).toBe('Early content');
+      // The watcher's title still wins when present.
+      expect(tasks[0].title).toBe('Later Title');
+    });
+
+    it('re-applies cached content when a task is evicted and re-added', async () => {
+      await availableTasksService.setLiveTasks([
+        { subTaskId: '404', type: 'post', subreddit: 'science', title: 'Persistent' },
+      ]);
+      expect(availableTasksService.updateTaskContent('404', 'Survives eviction', null))
+        .toEqual({ applied: true, queued: false });
+
+      // A transient empty scan evicts every task from the pool.
+      await availableTasksService.setLiveTasks([]);
+      expect(availableTasksService.getAvailableTasks().length).toBe(0);
+
+      // The next scan re-adds it; content must come back without re-peeking.
+      await availableTasksService.setLiveTasks([
+        { subTaskId: '404', type: 'post', subreddit: 'science', title: 'Persistent' },
+      ]);
+      expect(availableTasksService.getAvailableTasks()[0].content).toBe('Survives eviction');
+    });
+
+    it('ignores empty content and empty ids', () => {
+      expect(availableTasksService.updateTaskContent('non-existent', '   '))
+        .toEqual({ applied: false, queued: false });
+      expect(availableTasksService.updateTaskContent('', 'Content'))
+        .toEqual({ applied: false, queued: false });
     });
   });
 });

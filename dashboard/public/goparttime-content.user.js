@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GoPartTime Task Content Peeker
 // @namespace    https://statbot.duckdns.org/
-// @version      1.2.0
+// @version      1.3.0
 // @updateURL    https://statbot.duckdns.org/goparttime-content.user.js
 // @downloadURL  https://statbot.duckdns.org/goparttime-content.user.js
 // @description  Dedicated Tab 3 ultra-fast executor on /tasks?peeker=1 to extract full post body content into StatBot at god speed without accepting. Never clicks Confirm.
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 /**
- * GoPartTime Task Content Peeker (Tab 3 Dedicated Script - GOD SPEED EDITION v1.2.0)
+ * GoPartTime Task Content Peeker (Tab 3 Dedicated Script - GOD SPEED EDITION v1.3.0)
  *
  * Runs exclusively in a dedicated browser tab opened at:
  *   https://goparttime.net/tasks?peeker=1
@@ -29,7 +29,12 @@
  * GoPartTime's Next.js Flight listing omits post body content (div.prose) from the main list.
  * The body is only loaded into the DOM when a card's drawer opens.
  *
- * FEATURES in v1.2.0:
+ * FEATURES in v1.3.0:
+ * - Waits for the drawer's prose body to actually hydrate before reading it
+ *   (v1.2.0 read an empty div.prose and permanently marked cards "peeked",
+ *   which is why workers saw "(No content)").
+ * - Cards are only recorded as peeked AFTER the server accepts the content;
+ *   failed/401 uploads retry with a cooldown instead of being lost.
  * - Direct in-page API key configuration (gear button + prominent warning banner if missing).
  * - Multi-storage synchronization: inherits API key seamlessly from Tab 1 (Auto Watcher) via localStorage.
  * - Handles 401 Unauthorized explicitly with visual diagnostics and instant click-to-fix prompt.
@@ -40,7 +45,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
   const DEFAULTS = {
     apiUrl: 'https://statbot.duckdns.org/api/v1/automation',
     apiKey: '',
@@ -49,6 +54,15 @@
   const SWEEP_INTERVAL_MS = 400;
   const RELOAD_IDLE_MS = 35 * 1000;
   const DRAWER_TIMEOUT_MS = 1200;
+  // The drawer mounts before its body finishes hydrating; reading div.prose the
+  // instant the drawer appears is what produced empty "(No content)" posts.
+  const CONTENT_TIMEOUT_MS = 2000;
+  const CONTENT_POLL_MS = 40;
+  const MAX_PEEK_ATTEMPTS = 3;
+  const SEND_RETRY_COOLDOWN_MS = 5000;
+  // Version-scoped: v1.2.0 cached every id as "peeked" even when the drawer
+  // body was still empty, so an upgrade must re-peek those cards once.
+  const PEEKED_STORAGE_KEY = 'rtm_peeker_extracted_ids_v130';
 
   let authErrorDetected = false;
   let statusBox = null;
@@ -205,7 +219,7 @@
   function loadPeekedIds() {
     const set = new Set();
     try {
-      const raw = sessionStorage.getItem('rtm_peeker_extracted_ids');
+      const raw = sessionStorage.getItem(PEEKED_STORAGE_KEY);
       if (raw) {
         const arr = JSON.parse(raw);
         if (Array.isArray(arr)) {
@@ -219,7 +233,7 @@
   function savePeekedId(set, id) {
     set.add(String(id));
     try {
-      sessionStorage.setItem('rtm_peeker_extracted_ids', JSON.stringify(Array.from(set)));
+      sessionStorage.setItem(PEEKED_STORAGE_KEY, JSON.stringify(Array.from(set)));
     } catch (e) { /* ignore */ }
   }
 
@@ -296,6 +310,48 @@
         }
       }, 25);
     });
+  }
+
+  /**
+   * Reads the post body from an open drawer. Returns empty strings until the
+   * drawer has hydrated its prose body — callers must wait for non-empty.
+   */
+  function readDrawerContent(drawer) {
+    if (!drawer) return { text: '', html: '', hasImages: false };
+    const proseEl = drawer.querySelector('div.prose');
+    const text = proseEl ? (proseEl.innerText || proseEl.textContent || '').trim() : '';
+    const html = proseEl && proseEl.innerHTML.trim() ? proseEl.innerHTML : '';
+    let hasImages = false;
+    if (!text && !html) {
+      // Image-only tasks legitimately have no prose body. Treat visible task
+      // media as content so those cards are not retried forever.
+      hasImages = Array.from(drawer.querySelectorAll('img')).some((img) => {
+        const src = (img.getAttribute('src') || '').trim();
+        const alt = (img.getAttribute('alt') || '').trim();
+        return (/^https?:\/\//.test(src) || /^https?:\/\//.test(alt)) &&
+          !img.closest('button') &&
+          !(img.naturalWidth && img.naturalWidth < 60);
+      });
+    }
+    return { text, html, hasImages };
+  }
+
+  /**
+   * Polls the currently open drawer until its body is readable (or timeout).
+   * Keeps the drawer reference fresh in case React remounts it.
+   */
+  async function waitForDrawerContent(drawer) {
+    const start = Date.now();
+    let current = drawer;
+    let content = readDrawerContent(current);
+    while (!content.text && !content.html && !content.hasImages) {
+      if (Date.now() - start > CONTENT_TIMEOUT_MS) break;
+      await sleep(CONTENT_POLL_MS);
+      const fresh = findOpenDrawer();
+      if (fresh) current = fresh;
+      content = readDrawerContent(current);
+    }
+    return { drawer: current, content };
   }
 
   function findCardAcceptButton(card) {
@@ -435,6 +491,7 @@
     }
 
     const peekedIds = loadPeekedIds();
+    const peekAttempts = new Map();
     let isSweeping = false;
     let lastActionAt = Date.now();
 
@@ -481,6 +538,11 @@
           // Fast check: card already tagged or peeked
           if (card.getAttribute('data-rtm-peeked')) continue;
 
+          // In-flight upload or post-failure cooldown for this card
+          if (card.getAttribute('data-rtm-sending')) continue;
+          const retryAt = Number(card.getAttribute('data-rtm-retry-at') || 0);
+          if (retryAt && Date.now() < retryAt) continue;
+
           const fiberId = getCardFiberId(card);
           if (fiberId && peekedIds.has(String(fiberId))) {
             card.setAttribute('data-rtm-peeked', fiberId);
@@ -503,42 +565,77 @@
           btn.click();
 
           // Wait for drawer to appear (checks every 25ms)
-          const drawer = await waitForDrawer(DRAWER_TIMEOUT_MS);
+          let drawer = await waitForDrawer(DRAWER_TIMEOUT_MS);
           if (!drawer) {
             closeOpenDrawerFast();
             await sleep(40);
             continue;
           }
 
-          // Extract content instantly
+          // The drawer mounts before its body hydrates: wait for readable
+          // content instead of reading an empty div.prose immediately.
+          const result = await waitForDrawerContent(drawer);
+          drawer = result.drawer;
+          const content = result.content;
+
           const detectedId = findField('Task ID', drawer) || fiberId;
           const titleInput = drawer.querySelector('input[name="title"]');
           const title = titleInput ? unescapeUnicode((titleInput.value || '').trim()) : null;
 
-          const proseEl = drawer.querySelector('div.prose');
-          const contentText = proseEl ? (proseEl.innerText || proseEl.textContent || '').trim() : '';
-          const contentHtml = proseEl ? proseEl.innerHTML : '';
-
           // IMMEDIATELY CLOSE THE DRAWER — ZERO WAIT
           closeOpenDrawerFast();
 
-          if (detectedId) {
-            card.setAttribute('data-rtm-peeked', detectedId);
-            savePeekedId(peekedIds, detectedId);
-            lastActionAt = Date.now();
+          const attemptKey = String(detectedId || fiberId || '');
+          const hasContent = !!(content.text || content.html || content.hasImages);
 
-            if (contentText || contentHtml) {
-              console.log(`[RTM Content Peeker] ⚡ Extracted #${detectedId} (${contentText.length} chars). Streaming to StatBot...`);
-
-              // Non-blocking fire-and-forget streaming
-              request('POST', '/task-content', {
-                subTaskId: detectedId,
-                title,
-                content: contentText,
-                contentHtml,
-              }).catch((err) => console.warn('[RTM Content Peeker] Stream failed:', err));
+          if (!detectedId || !hasContent) {
+            // Never mark an empty read as "done" — that is exactly how cards
+            // were stuck on "(No content)" forever. Retry a few sweeps, then
+            // give up (image-only/undetectable cards must not loop forever).
+            if (attemptKey) {
+              const attempts = (peekAttempts.get(attemptKey) || 0) + 1;
+              peekAttempts.set(attemptKey, attempts);
+              if (attempts >= MAX_PEEK_ATTEMPTS) {
+                card.setAttribute('data-rtm-peeked', detectedId || attemptKey);
+                savePeekedId(peekedIds, detectedId || attemptKey);
+                console.warn(`[RTM Content Peeker] ⚠️ #${detectedId || attemptKey} produced no readable content after ${attempts} attempts — giving up.`);
+              } else {
+                card.setAttribute('data-rtm-retry-at', String(Date.now() + 400));
+              }
             }
+            await waitForDrawerClosed(350);
+            await sleep(25);
+            continue;
           }
+
+          // Upload, and only record the card as peeked once the server has it.
+          // A failed/401 send is retried (with a cooldown) instead of being
+          // lost until the tab is reopened.
+          card.setAttribute('data-rtm-sending', '1');
+          lastActionAt = Date.now();
+          console.log(`[RTM Content Peeker] ⚡ Extracted #${detectedId} (${content.text.length} chars). Streaming to StatBot...`);
+          request('POST', '/task-content', {
+            subTaskId: detectedId,
+            title,
+            content: content.text,
+            contentHtml: content.html,
+          }).then((res) => {
+            card.removeAttribute('data-rtm-sending');
+            if (res && res.success) {
+              card.setAttribute('data-rtm-peeked', detectedId);
+              card.removeAttribute('data-rtm-retry-at');
+              savePeekedId(peekedIds, detectedId);
+            } else {
+              card.removeAttribute('data-rtm-peeked');
+              card.setAttribute('data-rtm-retry-at', String(Date.now() + SEND_RETRY_COOLDOWN_MS));
+              console.warn('[RTM Content Peeker] Stream rejected — will retry #' + detectedId);
+            }
+          }).catch((err) => {
+            card.removeAttribute('data-rtm-sending');
+            card.removeAttribute('data-rtm-peeked');
+            card.setAttribute('data-rtm-retry-at', String(Date.now() + SEND_RETRY_COOLDOWN_MS));
+            console.warn('[RTM Content Peeker] Stream failed:', err);
+          });
 
           // Ultra-short wait for drawer unmount before next card
           await waitForDrawerClosed(350);

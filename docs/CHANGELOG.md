@@ -2,6 +2,27 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-11-14
+
+### Local / not yet deployed — Worker "See Details" always showed `(No content)` (peeker ordering race + empty-drawer read)
+
+- **Owner Report**: Worker live-feed cards at `/worker` show `(No content)` when "See Details" is expanded, so the post body is never visible before claiming.
+- **Root Cause Analysis** (two independent causes, both hit the same symptom):
+  1. **Ordering race (primary).** `POST /automation/task-content` → `availableTasksService.updateTaskContent()` returned `false` and *discarded* the payload whenever the task was not already in the in-memory live pool. The companion peeker (Tab 3) sweeps a new drop within ~1s, but the watcher only reports the drop after its 1.5s settle window, so the pool entry is created *after* the content arrives. Every card therefore lost its content once, and the peeker had already marked the card as peeked (`data-rtm-peeked` + `sessionStorage`), so it was never sent again.
+  2. **Empty-drawer read.** `waitForDrawer()` resolved as soon as the drawer contained *either* `div.prose` or `input[name="title"]`. The drawer mounts before its prose body hydrates, so the script read an empty `div.prose`, sent nothing, and still permanently marked the card as peeked.
+- **Implementation**:
+  - `src/services/automation/available-tasks.service.ts`:
+    - Added a bounded **enrichment cache** (`enrichments`, 6h TTL, 1000 entries). `updateTaskContent()` now caches content/title even when the task is absent and returns `{ applied, queued }`; `setLiveTasks()` applies cached enrichment when a task is added (and to already-present tasks). Cached content also survives pool eviction and is re-applied when a task is re-added.
+    - `setLiveTasks()` title handling now falls back to the cached (drawer) title when the listing has none.
+  - `src/api/routes/automation.ts`: `POST /automation/task-content` now returns `{ updated, queued }`.
+  - `scripts/goparttime-content.user.js` + `dashboard/public/goparttime-content.user.js` (**v1.3.0**):
+    - Waits for readable content (`waitForDrawerContent`, `div.prose` text/HTML or task images, up to 2s) before reading/closing the drawer.
+    - Only records a card as peeked **after** the server accepts the upload; failed/401 uploads un-tag the card and retry after a 5s cooldown.
+    - Cards whose drawer stays empty are retried (max 3 attempts) instead of being abandoned forever.
+    - `sessionStorage` key bumped to `rtm_peeker_extracted_ids_v130` so v1.2.0's poisoned "already peeked" list is ignored once.
+  - `src/__tests__/available-tasks.test.ts`: updated for the new return shape and added regression tests for content-before-pool, eviction/re-add survival, and empty payloads (16/16 pass).
+- **Verification**: `npm run typecheck` clean; full suite **102/102 suites, 1,379/1,379 tests** pass (includes new regression tests in `available-tasks.test.ts` — 16/16). **Not deployed** — needs an app rebuild and a dashboard rebuild (to serve the v1.3.0 userscript), then a one-time Tampermonkey update of the peeker script. No migration, no env change.
+
 ## 2026-11-13
 
 ### Deployed (2026-11-13 at `51bd6c7` — userscripts v1.2.0/v1.7.2/v1.6.3, no migration) — Userscript Cross-Tab API Key Synchronization & Content Peeker Direct Configuration
