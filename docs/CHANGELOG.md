@@ -4,7 +4,7 @@
 
 ## 2026-11-14
 
-### Local / not yet deployed — Worker "See Details" always showed `(No content)` (peeker ordering race + empty-drawer read)
+### Deployed (2026-11-14 at `b6714854` — app + dashboard rebuild, no migration) — Worker "See Details" content fix
 
 - **Owner Report**: Worker live-feed cards at `/worker` show `(No content)` when "See Details" is expanded, so the post body is never visible before claiming.
 - **Root Cause Analysis** (two independent causes, both hit the same symptom):
@@ -21,7 +21,7 @@
     - Cards whose drawer stays empty are retried (max 3 attempts) instead of being abandoned forever.
     - `sessionStorage` key bumped to `rtm_peeker_extracted_ids_v130` so v1.2.0's poisoned "already peeked" list is ignored once.
   - `src/__tests__/available-tasks.test.ts`: updated for the new return shape and added regression tests for content-before-pool, eviction/re-add survival, and empty payloads (16/16 pass).
-- **Verification**: `npm run typecheck` clean; full suite **102/102 suites, 1,379/1,379 tests** pass (includes new regression tests in `available-tasks.test.ts` — 16/16). **Not deployed** — needs an app rebuild and a dashboard rebuild (to serve the v1.3.0 userscript), then a one-time Tampermonkey update of the peeker script. No migration, no env change.
+- **Verification**: `npm run typecheck` clean; full suite **102/102 suites, 1,379/1,379 tests** pass (includes new regression tests in `available-tasks.test.ts` — 16/16). **Deployed 2026-11-14 at `b6714854`** (app + dashboard rebuild) — 3 services Up, public health `200` healthy DB+Redis, boot "All systems online!", live-dist gates pass, served userscript v1.3.0, dashboard root `200`, `/task-content` + `/worker/available-tasks` `401` unauthenticated; backup `rtm-backup-20261114-065305-content-fix.tar.gz`. **Still required: install/enable the v1.3.0 Content Peeker in Tampermonkey** (`https://statbot.duckdns.org/goparttime-content.user.js`) — a v1.2.x install keeps its poisoned "already peeked" list. No migration, no env change.
 
 ## 2026-11-13
 
