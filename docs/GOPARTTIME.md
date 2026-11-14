@@ -57,9 +57,11 @@ A pipeline that lets workers **send an open GoPartTime task from goparttime.net 
    that stream snapshots continuously. Snapshots carry subTaskId/type/subreddit/title
    only — GoPartTime's listing payload does not contain the post body.
 3. Post bodies are enrichment-only and come from the companion peeker
-   (goparttime-content.user.js v1.3.0, tab 3 at /tasks?peeker=1): it clicks each card's
+   (goparttime-content.user.js v1.4.0, tab 3 at /tasks?peeker=1): it clicks each card's
    "Accept task", waits up to 2s for div.prose to hydrate, reads text/HTML, closes the
-   drawer WITHOUT confirming, and POSTs /api/v1/automation/task-content.
+   drawer WITHOUT confirming, and POSTs /api/v1/automation/task-content. The tab
+   full-page-reloads every 20s (deferred while a sweep/upload is in flight) so it always
+   holds the current drop; the hourly :10 drop reload is kept.
    The peeker runs ~1s ahead of the watcher's settled report, so the service caches
    enrichment (6h TTL, bounded) and applies it the moment the task enters the pool
    (and again if an empty scan evicts + a later scan re-adds it). This ordering is why

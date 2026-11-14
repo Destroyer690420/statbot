@@ -4,6 +4,19 @@
 
 ## 2026-11-14
 
+### Deployed (2026-11-14 at `5eae42a` — dashboard-only rebuild, no migration, no env change) — Content Peeker v1.4.0: 20s refresh loop
+
+- **Owner Request**: the Tab 3 content peeker must keep refreshing so it always holds the latest listing/content.
+- **Root Cause**: the only reload trigger was **35s of inactivity** (`RELOAD_IDLE_MS`, measured from the last peek/upload). A busy drop keeps the tab peeking continuously, so `lastActionAt` was always fresh and the page could sit on the same listing — and the same content — for as long as cards kept arriving. The `:10` hourly drop refresh was the only other path.
+- **Implementation** (`scripts/goparttime-content.user.js` + byte-identical `dashboard/public/goparttime-content.user.js`, **v1.4.0**):
+  - Removed `RELOAD_IDLE_MS` and the activity-based idle reload; added `REFRESH_INTERVAL_MS = 20s` measured from the **last refresh**, not the last peek, plus a dedicated `REFRESH_CHECK_MS = 1000` clock (`setInterval(() => refreshForLatest('periodic', false), …)`) so the cadence holds even when there is nothing left to peek.
+  - New `refreshForLatest(reason, force)` guard: never reloads mid-sweep, while a card carries `data-rtm-sending` (in-flight upload), or while a drawer is actually open (`data-state="open"`); a 60s escape hatch forces the reload if a sweep wedges so a stale listing can never be pinned forever.
+  - Refresh decisions made inside a sweep are deferred to `finally` (after `isSweeping = false`) — otherwise the in-flight guard always returned "busy" and no reload ever fired.
+  - The hourly `:10` drop refresh is kept as a forced refresh; the empty-listing branch now simply requests the periodic refresh instead of its own 35s timer.
+  - Cards that yield no readable content after 3 attempts are now **DOM-tagged only** (no `sessionStorage` write), so the next refresh re-tries them instead of blacklisting them for the session.
+  - `node --check` clean on both copies; dashboard build + container recreate on the host.
+- **Verification**: `git reset --hard` to `5eae42a` on `161.118.164.85`; `docker compose build dashboard` + `up -d dashboard` (app/redis untouched, app uptime unbroken); 3 services Up, `/api/v1/health` `200` `database: connected` / `redis: connected`, dashboard root `200`, served `https://statbot.duckdns.org/goparttime-content.user.js` reports `@version 1.4.0` with `REFRESH_INTERVAL_MS`, `REFRESH_CHECK_MS`, `lastRefreshAt` and no `lastActionAt`, `POST /api/v1/automation/task-content` `401` unauthenticated; backup `rtm-backup-20261114-071138-peeker-refresh.tar.gz`; host bundle deleted. **Manual step: update the installed userscript in Tampermonkey** (open the URL above, or the script's `@updateURL` picks up v1.4.0 on the next check).
+
 ### Deployed (2026-11-14 at `b6714854` — app + dashboard rebuild, no migration) — Worker "See Details" content fix
 
 - **Owner Report**: Worker live-feed cards at `/worker` show `(No content)` when "See Details" is expanded, so the post body is never visible before claiming.
