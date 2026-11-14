@@ -36,7 +36,10 @@ export async function handleMessageCreate(message: Message): Promise<void> {
   }
 
   try {
-    await outreachService.onWorkerMessage(message.channel.id, message.author.id, message.client);
+    // Explicit availability only: a normal message never claims a post. If a
+    // blast is open in this ticket the worker gets one nudge to use the
+    // Yes/No buttons on the availability message.
+    await outreachService.onWorkerTextMessage(message.channel.id, message.author.id, message.client);
 
     // Inactivity monitoring: any message from non-staff worker resets the ticket inactivity timer
     if (!getAllAdminIds().includes(message.author.id)) {

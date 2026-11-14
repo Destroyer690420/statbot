@@ -4,6 +4,18 @@
 
 ## 2026-11-14
 
+### Deployed (2026-11-14 — app-only rebuild, no migration, no env change) — Availability Yes/No buttons
+
+- **Owner Report**: when the availability message is sent in a ticket, *any* worker message — an insight screenshot, "ok", anything — silently counts as available and accepts a post. If the worker did not want that post it then sat unfinished with no way to decline.
+- **Root Cause**: availability and blast-slot winning were both driven by `messageCreate` ("first/any worker message after the send"), so unrelated activity could claim a post.
+- **Implementation**:
+  - `src/utils/outreach-availability.ts` (new): `outreach_avail:<blastId>:yes|no` custom-id build/parse, one action row (✅ Yes green / ❌ No grey), one-per-round nudge copy, worker-picking rule.
+  - `src/services/outreach.service.ts`: every blast message is sent with the two buttons (`sendBlastMessages`); new `onAvailabilityClaim(...)` marks Available + wins a slot ONLY on Yes, validates the exact blast is OPEN and actually messaged that ticket (an old message can never win a newer round), and returns a typed outcome (`claimed`, `claimed_no_post`, `already_claimed`, `daily_cap`, `ticket_busy`, `no_open_blast`, `wrong_blast`, `stale_cycle`, `not_selected`, `no_message_sent`, `admin`, `error`). New `onAvailabilityDecline(...)` records nothing for No. New `onWorkerTextMessage(...)` replaces the old claim hook: a plain message never claims and gets at most one nudge per ticket per round.
+  - `src/services/outreach-availability.service.ts` (new) + `interactionCreate.ts`: `outreach_avail:` buttons are handled separately from `blast:`/`outreach_add:`; only the ticket's worker (first non-bot, non-admin member) can answer, refusals are ephemeral and do not touch the message, and the worker's own answer removes the buttons and appends the decision to the message.
+  - `messageCreate.ts` now calls `onWorkerTextMessage` (nudge only). `DEFAULT_OUTREACH_MESSAGE` copy now says "Tap Yes if you want it" for fresh installs; stored `OutreachSettings` text is untouched (edit it in Settings if it tells workers to reply).
+- **Tests**: new `src/__tests__/outreach-availability.test.ts`; `blast-send-equivalence.test.ts` extended (component row on every send, stale/wrong-round refusal, daily-cap outcome, no-post outcome, one-nudge behaviour); `interaction-create-buttons.test.ts` routing. Full suite 103/103 suites / 1,403 tests, `npm run typecheck` clean; `npm run lint` still unusable repo-wide (ESLint 9 with no `eslint.config.js`, pre-existing).
+- **Deployment**: see the deployment banner in `docs/DEPLOYMENT.md` / this date's deployed entry below.
+
 ### Deployed (2026-11-14 at `5eae42a` — dashboard-only rebuild, no migration, no env change) — Content Peeker v1.4.0: 20s refresh loop
 
 - **Owner Request**: the Tab 3 content peeker must keep refreshing so it always holds the latest listing/content.

@@ -144,7 +144,7 @@ function makeChannel(opts: {
   id: string;
   name: string;
   members?: FakeMember[];
-  sendImpl?: (content: string) => Promise<{ id: string }>;
+  sendImpl?: (payload: unknown) => Promise<{ id: string }>;
   deleteImpl?: (id: string) => Promise<unknown>;
 }): TextChannel {
   // `Object.create(TextChannel.prototype)` gives a real `instanceof TextChannel`
@@ -162,7 +162,7 @@ function makeChannel(opts: {
   for (const m of opts.members ?? []) members.set(m.id, m);
   define('members', members);
 
-  define('send', jest.fn(async (content: string) =>
+  define('send', jest.fn(async (content: unknown) =>
     opts.sendImpl ? opts.sendImpl(content) : { id: `msg-${opts.id}` },
   ));
   define('messages', {
@@ -221,8 +221,14 @@ describe('sendBlastMessages - classification is unchanged', () => {
 
     expect(sent.filter((s) => s.ok).map((s) => s.channelId).sort()).toEqual(['c1', 'c2', 'c3']);
     expect(skipped).toEqual([]);
-    // Message content is still built with the worker's mention.
-    expect(channels.get('c1')!.send).toHaveBeenCalledWith('hello <@w1>');
+    // Message content is still built with the worker's mention, and the
+    // message carries exactly one Yes/No decision row for THIS blast.
+    const payload = (channels.get('c1')!.send as jest.Mock).mock.calls[0][0];
+    expect(payload.content).toBe('hello <@w1>');
+    const buttonIds = payload.components.flatMap((row: any) =>
+      row.toJSON().components.map((button: any) => button.custom_id),
+    );
+    expect(buttonIds).toEqual(['outreach_avail:blast-1:yes', 'outreach_avail:blast-1:no']);
   });
 
   it('skips a ticket with no non-bot worker', async () => {
@@ -809,7 +815,7 @@ describe('per-blast hook overrides (escalation routing)', () => {
     service.setBlastHooksFor('blast-e1', { onReply: overrideReply });
 
     const client = replyClient();
-    await service.onWorkerMessage('c1', 'w9', client);
+    await service.onAvailabilityClaim('c1', 'w9', client);
 
     expect(overrideReply).toHaveBeenCalledWith('blast-e1', 'c1', 'w9', client);
     expect(defaultReply).not.toHaveBeenCalled();
@@ -822,7 +828,7 @@ describe('per-blast hook overrides (escalation routing)', () => {
     const defaultClosed = jest.fn().mockResolvedValue(undefined);
     service.setBlastHooks({ onReply: defaultReply, onClosed: defaultClosed });
 
-    await service.onWorkerMessage('c1', 'w9', replyClient());
+    await service.onAvailabilityClaim('c1', 'w9', replyClient());
 
     expect(defaultReply).toHaveBeenCalledWith('blast-e1', 'c1', 'w9', expect.anything());
   });
@@ -862,7 +868,7 @@ describe('processWorkerMessage - per-ticket daily post limit', () => {
       new Map([['w9', 2]]),
     );
 
-    await service.onWorkerMessage('c1', 'w9', client());
+    await service.onAvailabilityClaim('c1', 'w9', client());
 
     expect(outreachRepository.recordReply).toHaveBeenCalledWith('blast-limit', 'c1', 'w9');
   });
@@ -873,9 +879,137 @@ describe('processWorkerMessage - per-ticket daily post limit', () => {
       new Map([['w9', 4]]),
     );
 
-    await service.onWorkerMessage('c1', 'w9', client());
+    await service.onAvailabilityClaim('c1', 'w9', client());
 
     expect(outreachRepository.recordReply).not.toHaveBeenCalled();
+  });
+});
+
+describe('onAvailabilityClaim - explicit Yes button gating', () => {
+  function yesSetup(overrides: Record<string, unknown> = {}) {
+    (outreachRepository.findByChannelId as jest.Mock).mockResolvedValue({
+      channelId: 'c1',
+      selected: true,
+      messageSentAt: new Date(),
+      availableAt: null,
+      ...overrides,
+    });
+    (outreachRepository.getBlast as jest.Mock).mockResolvedValue({
+      id: 'blast-btn',
+      status: 'OPEN',
+      slotsTotal: 2,
+      slotsFilled: 0,
+    });
+    (outreachRepository.getOpenBlast as jest.Mock).mockResolvedValue({
+      id: 'blast-btn',
+      status: 'OPEN',
+      slotsTotal: 2,
+      slotsFilled: 0,
+    });
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([
+      { blastId: 'blast-btn', channelId: 'c1', messageId: 'm1' },
+    ]);
+    (outreachRepository.hasWorkerReplied as jest.Mock).mockResolvedValue(false);
+    (outreachRepository.recordReply as jest.Mock).mockResolvedValue({ row: {}, duplicate: false });
+    (outreachRepository.countReplies as jest.Mock).mockResolvedValue(1);
+    (taskRepository.findAwaitingSubmissionInChannel as jest.Mock).mockResolvedValue(null);
+    (taskRepository.countGoPartTimePostsByWorkerInRange as jest.Mock).mockResolvedValue(new Map());
+    return makeClient(
+      new Map([['c1', makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w9', user: { bot: false } }] })]]),
+    );
+  }
+
+  it('marks a Yes answer available and records the win', async () => {
+    const client = yesSetup();
+    const hook = jest.fn().mockResolvedValue('claim-1');
+    service.setBlastHooks({ onReply: hook });
+
+    const result = await service.onAvailabilityClaim('c1', 'w9', client, 'blast-btn');
+
+    expect(result).toMatchObject({ outcome: 'claimed', available: true, wonSlot: true, assigned: true });
+    expect(outreachRepository.markAvailable).toHaveBeenCalledWith('c1', expect.any(Date));
+    expect(outreachRepository.recordReply).toHaveBeenCalledWith('blast-btn', 'c1', 'w9');
+    expect(hook).toHaveBeenCalledWith('blast-btn', 'c1', 'w9', client);
+  });
+
+  it('refuses a button from a round that is no longer open', async () => {
+    const client = yesSetup();
+    (outreachRepository.getBlast as jest.Mock).mockResolvedValue({
+      id: 'blast-btn',
+      status: 'CLOSED',
+      slotsTotal: 2,
+      slotsFilled: 2,
+    });
+
+    const result = await service.onAvailabilityClaim('c1', 'w9', client, 'blast-btn');
+
+    expect(result.outcome).toBe('no_open_blast');
+    expect(outreachRepository.recordReply).not.toHaveBeenCalled();
+    expect(outreachRepository.markAvailable).not.toHaveBeenCalled();
+  });
+
+  it('refuses a button when this ticket was not messaged in that blast', async () => {
+    const client = yesSetup();
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([
+      { blastId: 'blast-btn', channelId: 'other-channel', messageId: 'm2' },
+    ]);
+
+    const result = await service.onAvailabilityClaim('c1', 'w9', client, 'blast-btn');
+
+    expect(result.outcome).toBe('wrong_blast');
+    expect(outreachRepository.recordReply).not.toHaveBeenCalled();
+  });
+
+  it('returns the daily-cap reason and never consumes a slot', async () => {
+    const client = yesSetup({ dailyPostLimit: 4 });
+    (taskRepository.countGoPartTimePostsByWorkerInRange as jest.Mock).mockResolvedValue(
+      new Map([['w9', 4]]),
+    );
+
+    const result = await service.onAvailabilityClaim('c1', 'w9', client, 'blast-btn');
+
+    expect(result).toMatchObject({
+      outcome: 'daily_cap',
+      available: true,
+      dailyLimit: 4,
+      assignedToday: 4,
+      wonSlot: false,
+    });
+    expect(outreachRepository.recordReply).not.toHaveBeenCalled();
+  });
+
+  it('reports a win with no post when the hook finds nothing to assign', async () => {
+    const client = yesSetup();
+    service.setBlastHooks({ onReply: jest.fn().mockResolvedValue(null) });
+
+    const result = await service.onAvailabilityClaim('c1', 'w9', client, 'blast-btn');
+
+    expect(result).toMatchObject({ outcome: 'claimed_no_post', wonSlot: true, assigned: false });
+  });
+});
+
+describe('onWorkerTextMessage - a plain reply never claims', () => {
+  it('only nudges once for the open round', async () => {
+    (outreachRepository.findByChannelId as jest.Mock).mockResolvedValue({
+      channelId: 'c1',
+      selected: true,
+      messageSentAt: new Date(),
+      availableAt: null,
+    });
+    (outreachRepository.getOpenBlast as jest.Mock).mockResolvedValue({ id: 'blast-btn', status: 'OPEN' });
+    (outreachRepository.listBlastMessages as jest.Mock).mockResolvedValue([
+      { blastId: 'blast-btn', channelId: 'c1', messageId: 'm1' },
+    ]);
+    (outreachRepository.hasWorkerReplied as jest.Mock).mockResolvedValue(false);
+    const channel = makeChannel({ id: 'c1', name: 't1', members: [{ id: 'w9', user: { bot: false } }] });
+    const client = makeClient(new Map([['c1', channel]]));
+
+    await service.onWorkerTextMessage('c1', 'w9', client);
+    await service.onWorkerTextMessage('c1', 'w9', client);
+
+    expect(channel.send).toHaveBeenCalledTimes(1);
+    expect(outreachRepository.recordReply).not.toHaveBeenCalled();
+    expect(outreachRepository.markAvailable).not.toHaveBeenCalled();
   });
 });
 
@@ -912,9 +1046,9 @@ describe('fill cleanup keeps task holders, not mere repliers', () => {
   }
 
   async function fillWithThreeReplies(client: any) {
-    await service.onWorkerMessage('c1', 'w1', client);
-    await service.onWorkerMessage('c2', 'w2', client);
-    await service.onWorkerMessage('c3', 'w3', client);
+    await service.onAvailabilityClaim('c1', 'w1', client);
+    await service.onAvailabilityClaim('c2', 'w2', client);
+    await service.onAvailabilityClaim('c3', 'w3', client);
   }
 
   it('deletes repliers with failed or missing claims, keeps the holder', async () => {

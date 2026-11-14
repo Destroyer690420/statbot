@@ -9,6 +9,7 @@ import { mapWithConcurrency } from '../utils/bounded-concurrency';
 import { DEFAULT_OUTREACH_MESSAGE } from '../config/constants';
 import { AuditAction } from '../types';
 import { getAllAdminIds } from '../utils/permissions';
+import { availabilityComponents, availabilityTextNudge } from '../utils/outreach-availability';
 import { logger } from '../utils/logger';
 
 export { buildOutreachRows, formatOutreachMessage, OutreachRowInput, OutreachRow, TicketTaskStatus };
@@ -33,6 +34,39 @@ export interface SkippedTicket {
   channelId: string;
   channelName: string | null;
   reason: string;
+}
+
+/**
+ * Outcome of one explicit Yes click. Every non-claim reason is returned (not
+ * just logged) so the button handler can tell the worker exactly why they did
+ * not get a post.
+ */
+export type AvailabilityOutcome =
+  | 'claimed'
+  | 'claimed_no_post'
+  | 'already_claimed'
+  | 'not_selected'
+  | 'no_message_sent'
+  | 'stale_cycle'
+  | 'no_open_blast'
+  | 'wrong_blast'
+  | 'admin'
+  | 'daily_cap'
+  | 'ticket_busy'
+  | 'error';
+
+export interface AvailabilityClaimResult {
+  outcome: AvailabilityOutcome;
+  /** Daily-outreach Available flag after this decision. */
+  available: boolean;
+  /** The ticket's configured daily post allowance (daily-cap outcomes). */
+  dailyLimit?: number;
+  /** Posts assigned today IST at decision time (daily-cap outcomes). */
+  assignedToday?: number;
+  /** A blast slot was recorded for this ticket. */
+  wonSlot: boolean;
+  /** A post was actually handed to this worker by the blast hook. */
+  assigned: boolean;
 }
 
 /** A selected ticket after its channel has been resolved (or failed to be). */
@@ -150,6 +184,13 @@ class OutreachService {
    */
   private blastHookOverrides = new Map<string, BlastHooks>();
   private portalAccessUnavailableLogged = false;
+  /**
+   * Last blast id a worker in this ticket was nudged about. One nudge per
+   * ticket per round — text replies never claim, so the nudge just points at
+   * the buttons once. Bounded: a cleared map after 5000 tickets can at worst
+   * re-send one nudge for an still-open round.
+   */
+  private nudgedBlastByChannel = new Map<string, string>();
   /**
    * Serializes worker-message handling in Discord-arrival order. The chain
    * link happens synchronously here (no awaits before it), so near-simultaneous
@@ -633,7 +674,13 @@ class OutreachService {
       }
       try {
         const content = formatOutreachMessage(message, target.workerId);
-        const msg = await target.channel.send(content);
+        // Explicit Yes / No decision. Only the Yes button can mark the worker
+        // available or win a slot; an unrelated message (screenshot, chatter)
+        // can never claim a post by accident.
+        const msg = await target.channel.send({
+          content,
+          components: availabilityComponents(blast.id),
+        });
         // MUST be awaited before this send is considered done: the post-send
         // sweep reads these rows to learn which messages exist.
         await outreachRepository.recordBlastMessage(blast.id, target.channel.id, msg.id);
@@ -768,47 +815,159 @@ class OutreachService {
   }
 
   /**
-   * Bot hook: a worker messaged their ticket. Always maintains the daily
-   * Available flag; when a blast is open, replies are served strictly in
-   * arrival order (one win per worker per blast) and the first `slotsTotal`
-   * distinct repliers win, each taking exactly one claim. On fill the blast
-   * closes with its message deleted from every other contacted ticket.
-   * Manager and bot messages never count. Best-effort — never throws into
-   * message handling.
+   * Explicit YES only: the ticket worker tapped "Yes" on the availability
+   * message. This is the ONLY path that marks a worker Available or wins a
+   * blast slot — a normal text message no longer claims anything (see
+   * `onWorkerTextMessage`).
+   *
+   * `expectedBlastId` comes from the button's custom id, so a click on a stale
+   * message can never win a newer round: the exact blast must still be OPEN
+   * and must have messaged this ticket.
+   *
+   * Returns the outcome instead of only logging so the button handler can tell
+   * the worker why they did not get a post. Never throws.
    */
-  async onWorkerMessage(channelId: string, userId: string, discordClient?: Client): Promise<void> {
-    return this.workerMessageQueue(() => this.processWorkerMessage(channelId, userId, discordClient));
+  async onAvailabilityClaim(
+    channelId: string,
+    userId: string,
+    discordClient?: Client,
+    expectedBlastId?: string,
+  ): Promise<AvailabilityClaimResult> {
+    return this.workerMessageQueue(() =>
+      this.processAvailabilityClaim(channelId, userId, discordClient, expectedBlastId),
+    );
   }
 
-  private async processWorkerMessage(channelId: string, userId: string, discordClient?: Client): Promise<void> {
+  /** Explicit NO: the worker passed on this post. Nothing is recorded as
+   * available and no slot is consumed; the buttons are removed by the caller
+   * so the same message cannot be answered twice.
+   */
+  async onAvailabilityDecline(
+    channelId: string,
+    userId: string,
+    expectedBlastId: string,
+    discordClient?: Client,
+  ): Promise<boolean> {
     try {
-      if (getAllAdminIds().includes(userId)) return;
+      if (getAllAdminIds().includes(userId)) return false;
+      const blast = await outreachRepository.getBlast(expectedBlastId).catch(() => null);
+      if (!blast || blast.status !== 'OPEN') return false;
+      const messages = await outreachRepository.listBlastMessages(blast.id).catch(() => []);
+      if (!messages.some((m) => m.channelId === channelId)) return false;
+      logger.info('Worker declined the availability request', {
+        blastId: blast.id,
+        channelId,
+        userId,
+        hasClient: Boolean(discordClient),
+      });
+      return true;
+    } catch (error) {
+      logger.warn('Availability decline failed (non-fatal)', { channelId, userId, error });
+      return false;
+    }
+  }
+
+  /**
+   * A plain worker message in a ticket. It NEVER claims a post anymore — this
+   * was the bug where uploading an insight screenshot (or saying anything)
+   * silently accepted a post the worker did not want. If an availability
+   * message is open in this ticket, the worker gets one short nudge per round
+   * pointing at the Yes button. Best-effort and never throws.
+   */
+  async onWorkerTextMessage(channelId: string, userId: string, discordClient?: Client): Promise<void> {
+    try {
+      if (getAllAdminIds().includes(userId) || !discordClient) return;
+      const { dayStart } = getIstDayBoundaries();
+      const row = await outreachRepository.findByChannelId(channelId).catch(() => null);
+      if (!row || !row.selected) return;
+      if (isStaleDailyCycle(row.messageSentAt, dayStart)) return;
+
+      const blast = await outreachRepository.getOpenBlast().catch(() => null);
+      if (!blast) return;
+      const messages = await outreachRepository.listBlastMessages(blast.id).catch(() => []);
+      if (!messages.some((m) => m.channelId === channelId)) return;
+      if (await outreachRepository.hasWorkerReplied(blast.id, userId).catch(() => false)) return;
+      if (this.nudgedBlastByChannel.get(channelId) === blast.id) return;
+
+      const channel = await discordClient.channels.fetch(channelId).catch(() => null);
+      if (!channel || !(channel instanceof TextChannel)) return;
+
+      this.nudgedBlastByChannel.set(channelId, blast.id);
+      if (this.nudgedBlastByChannel.size > 5000) this.nudgedBlastByChannel.clear();
+      await channel
+        .send({ content: availabilityTextNudge(userId), allowedMentions: { users: [userId] } })
+        .catch(() => undefined);
+      logger.info('Worker nudged to use the availability buttons', {
+        blastId: blast.id,
+        channelId,
+        userId,
+      });
+    } catch (error) {
+      logger.warn('Availability text nudge failed (non-fatal)', { channelId, userId, error });
+    }
+  }
+
+  private async processAvailabilityClaim(
+    channelId: string,
+    userId: string,
+    discordClient?: Client,
+    expectedBlastId?: string,
+  ): Promise<AvailabilityClaimResult> {
+    const denied = (outcome: AvailabilityOutcome): AvailabilityClaimResult => ({
+      outcome,
+      available: false,
+      wonSlot: false,
+      assigned: false,
+    });
+    try {
+      if (getAllAdminIds().includes(userId)) return denied('admin');
 
       const { dayStart, dayEnd } = getIstDayBoundaries();
       const row = await outreachRepository.findByChannelId(channelId);
-      if (!row || !row.selected) return;
+      if (!row || !row.selected) return denied('not_selected');
 
       if (isStaleDailyCycle(row.messageSentAt, dayStart)) {
         await outreachRepository.resetCycle(channelId);
-        return;
+        return denied('stale_cycle');
       }
-      if (!row.messageSentAt) return;
+      if (!row.messageSentAt) return denied('no_message_sent');
+
+      // Resolve the exact round first: an old round's buttons must not win
+      // the current one, even if that old message is still in the ticket.
+      const blast = expectedBlastId
+        ? await outreachRepository.getBlast(expectedBlastId).catch(() => null)
+        : await outreachRepository.getOpenBlast().catch(() => null);
+      if (!blast || blast.status !== 'OPEN') return denied('no_open_blast');
+      if (expectedBlastId) {
+        const sentMessages = await outreachRepository.listBlastMessages(blast.id).catch(() => []);
+        if (!sentMessages.some((m) => m.channelId === channelId)) return denied('wrong_blast');
+      }
+
       if (!row.availableAt) {
         await outreachRepository.markAvailable(channelId, new Date());
         logger.info('Worker marked available for daily outreach', { channelId, userId });
       }
 
-      const blast = await outreachRepository.getOpenBlast().catch(() => null);
-      if (!blast || !discordClient) return;
+      // No client means no hook can hand out a post — do not burn a slot.
+      if (!discordClient) {
+        return { outcome: 'claimed_no_post', available: true, wonSlot: false, assigned: false };
+      }
 
-      // Daily cap re-checked at reply time: capped workers never consume slots.
-      // The cap comes from this ticket's configured limit (multiple Reddit IDs
-      // = more posts/day), not the legacy 2-post constant.
+      // Daily cap re-checked at decision time: capped workers never consume
+      // slots. The cap comes from this ticket's configured limit (multiple
+      // Reddit IDs = more posts/day), not the legacy 2-post constant.
       const assignedToday = await this.countPostsAssignedToday(userId, dayStart, dayEnd);
       const dailyLimit = row.dailyPostLimit ?? DAILY_POST_CAP;
       if (isAtDailyCap(assignedToday, dailyLimit)) {
-        logger.info('Blast reply ignored: worker at daily cap', { channelId, userId, blastId: blast.id });
-        return;
+        logger.info('Availability yes ignored: worker at daily cap', { channelId, userId, blastId: blast.id });
+        return {
+          outcome: 'daily_cap',
+          available: true,
+          dailyLimit,
+          assignedToday,
+          wonSlot: false,
+          assigned: false,
+        };
       }
 
       // Busy tickets never consume slots: recording first and skipping the
@@ -817,37 +976,65 @@ class OutreachService {
       // tickets can never take two tasks from one burst.
       const awaiting = await taskRepository.findAwaitingSubmissionInChannel(channelId).catch(() => null);
       if (awaiting) {
-        logger.info('Blast reply ignored: ticket busy', { channelId, userId, blastId: blast.id });
-        return;
+        logger.info('Availability yes ignored: ticket busy', { channelId, userId, blastId: blast.id });
+        return { outcome: 'ticket_busy', available: true, dailyLimit, assignedToday, wonSlot: false, assigned: false };
       }
       const alreadyWon = await outreachRepository.hasWorkerReplied(blast.id, userId).catch(() => false);
       if (alreadyWon) {
-        logger.info('Blast reply ignored: worker already won this blast', { channelId, userId, blastId: blast.id });
-        return;
+        logger.info('Availability yes ignored: worker already won this blast', {
+          channelId,
+          userId,
+          blastId: blast.id,
+        });
+        return { outcome: 'already_claimed', available: true, wonSlot: false, assigned: false };
       }
 
+      // The hook needs the client (claim creation, reassignment). Without one
+      // the worker is still marked available, but nothing can be claimed.
       const { duplicate } = await outreachRepository.recordReply(blast.id, channelId, userId);
-      if (duplicate) return;
+      if (duplicate) {
+        return { outcome: 'already_claimed', available: true, wonSlot: false, assigned: false };
+      }
 
       const filled = await outreachRepository.countReplies(blast.id);
-      logger.info('Blast reply recorded', { blastId: blast.id, channelId, userId, filled, slots: blast.slotsTotal });
+      logger.info('Availability yes recorded', {
+        blastId: blast.id,
+        channelId,
+        userId,
+        filled,
+        slots: blast.slotsTotal,
+      });
 
       // Burst automation: convert the win into an accept claim (best-effort;
       // a missing hook means a manual blast — nothing happens).
-      try {
-        await this.hooksFor(blast.id).onReply?.(blast.id, channelId, userId, discordClient);
-      } catch (error) {
-        logger.warn('Blast reply hook failed', { blastId: blast.id, channelId, error });
+      let assigned = false;
+      if (discordClient) {
+        try {
+          const hookResult = await this.hooksFor(blast.id).onReply?.(blast.id, channelId, userId, discordClient);
+          assigned = Boolean(hookResult);
+        } catch (error) {
+          logger.warn('Availability yes hook failed', { blastId: blast.id, channelId, error });
+        }
       }
 
-      if (!isBlastFull(filled, blast.slotsTotal)) return;
+      if (discordClient && isBlastFull(filled, blast.slotsTotal)) {
+        // Slots full: close the blast and remove our message everywhere
+        // except task holders' tickets — a reply without a post (pool
+        // exhausted, failed/expired claim) holds nothing and its message goes.
+        await this.closeBlastWithCleanup(discordClient, blast.id, filled, blast.slotsTotal);
+      }
 
-      // Slots full: close the blast and remove our message everywhere
-      // except task holders' tickets — a reply without a post (pool
-      // exhausted, failed/expired claim) holds nothing and its message goes.
-      await this.closeBlastWithCleanup(discordClient, blast.id, filled, blast.slotsTotal);
+      return {
+        outcome: assigned ? 'claimed' : 'claimed_no_post',
+        available: true,
+        dailyLimit,
+        assignedToday,
+        wonSlot: true,
+        assigned,
+      };
     } catch (error) {
-      logger.error('Outreach onWorkerMessage failed', { channelId, userId, error });
+      logger.error('Outreach availability claim failed', { channelId, userId, error });
+      return denied('error');
     }
   }
 

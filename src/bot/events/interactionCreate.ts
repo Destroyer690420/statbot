@@ -22,6 +22,7 @@ import * as logincodeCmd from '../commands/logincode';
 import * as insightsGuideCmd from '../commands/insights-guide';
 import { handleBlastButton } from '../../services/automation/blast-approval.service';
 import { handleOutreachAddButton } from '../../services/outreach-selection.service';
+import { handleAvailabilityButton } from '../../services/outreach-availability.service';
 import { inactiveTicketService } from '../../services/inactive-ticket.service';
 
 const commands = new Map<string, { execute: (interaction: ChatInputCommandInteraction) => Promise<void> }>();
@@ -55,6 +56,14 @@ export async function handleInteractionCreate(interaction: Interaction): Promise
         await handleOutreachAddButton(interaction);
       } catch (error) {
         logger.error('Button handling failed', { error });
+      }
+      return;
+    }
+    if (interaction.customId.startsWith('outreach_avail:')) {
+      try {
+        await handleAvailabilityButton(interaction);
+      } catch (error) {
+        logger.error('Availability button handling failed', { error });
       }
       return;
     }

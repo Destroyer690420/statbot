@@ -9,6 +9,7 @@
 
 const mockHandleBlastButton = jest.fn();
 const mockHandleOutreachAddButton = jest.fn();
+const mockHandleAvailabilityButton = jest.fn();
 const mockCommandExecute = jest.fn();
 
 jest.mock('../services/automation/blast-approval.service', () => ({
@@ -17,6 +18,10 @@ jest.mock('../services/automation/blast-approval.service', () => ({
 
 jest.mock('../services/outreach-selection.service', () => ({
   handleOutreachAddButton: (...args: unknown[]) => mockHandleOutreachAddButton(...args),
+}));
+
+jest.mock('../services/outreach-availability.service', () => ({
+  handleAvailabilityButton: (...args: unknown[]) => mockHandleAvailabilityButton(...args),
 }));
 
 jest.mock('../services/inactive-ticket.service', () => ({
@@ -64,6 +69,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockHandleBlastButton.mockResolvedValue(true);
   mockHandleOutreachAddButton.mockResolvedValue(true);
+  mockHandleAvailabilityButton.mockResolvedValue(undefined);
 });
 
 describe('routing outreach_add buttons', () => {
@@ -102,6 +108,35 @@ describe('routing outreach_add buttons', () => {
     await handleInteractionCreate(makeButton('outreach_added:1234567890123456789') as never);
 
     expect(mockHandleOutreachAddButton).not.toHaveBeenCalled();
+  });
+});
+
+describe('routing availability buttons', () => {
+  it.each(['outreach_avail:blast-1:yes', 'outreach_avail:blast-1:no'])(
+    'sends %s to its own handler',
+    async (customId) => {
+      await handleInteractionCreate(makeButton(customId) as never);
+
+      expect(mockHandleAvailabilityButton).toHaveBeenCalledTimes(1);
+      expect(mockHandleBlastButton).not.toHaveBeenCalled();
+      expect(mockHandleOutreachAddButton).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not route a lookalike availability id', async () => {
+    await handleInteractionCreate(makeButton('outreach_availability:blast-1:yes') as never);
+
+    expect(mockHandleAvailabilityButton).not.toHaveBeenCalled();
+  });
+
+  it('contains handler failures instead of falling through', async () => {
+    mockHandleAvailabilityButton.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(
+      handleInteractionCreate(makeButton('outreach_avail:blast-1:yes') as never),
+    ).resolves.toBeUndefined();
+
+    expect(mockHandleBlastButton).not.toHaveBeenCalled();
   });
 });
 

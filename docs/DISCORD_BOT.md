@@ -116,6 +116,10 @@ reply, a link   -> Reddit lookup (src/services/reddit-profile-check.service.ts)
 
 **The approver notice is a DM, and carries the button** (`src/utils/outreach-add-button.ts`, `src/services/outreach-selection.service.ts`). A pass DMs the approver (same `user.send({ content, components })` pattern as `deliverDigest` in `blast-approval.service.ts`): the worker, `u/name`, the karma, a **`ticket: <#channelId>` jump link** naming the ticket (shaped like the `ticket:` line in `formatUnverifiableDm`), and one **`add to daily outreach`** button (`outreach_add:<channelId>`, routed in `interactionCreate` alongside the `blast:` buttons).
 
+### Availability decision buttons (tickets)
+
+`interactionCreate` also routes the `outreach_avail:` prefix to `handleAvailabilityButton` (`src/services/outreach-availability.service.ts`). Every daily-availability/blast message carries **✅ Yes** and **❌ No** (`outreach_avail:<blastId>:yes|no`); only the ticket's worker may answer, only Yes can mark Available and win a slot, and the answer removes the buttons. See `docs/OUTREACH.md` §11.
+
 Why a DM rather than in-ticket: the worker was seeing both the "passed / add this ticket" notice and, after the click, the in-place "added to the daily outreach list" edit. Now the button's `editReply` touches only the approver's DM message — the ticket channel carries nothing about outreach at all. The jump link replaces the old hand-matching: one click reaches the right ticket.
 
 - **One ticket message, deliberately.** The ticket gets only the short verified+guide line; the button never sits inside a worker-facing message.
