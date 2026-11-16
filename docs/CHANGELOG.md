@@ -4,12 +4,12 @@
 
 ## 2026-11-16
 
-### Local (NOT deployed) — Admin DM on task delivery failure
+### Deployed (2026-11-16 at `2714da2` — app-only rebuild, no migration, no env change) — Admin DM on task delivery failure
 
 - **Owner Request**: if any task delivery fails, the admin (`1299323714101317715`) should get a DM from the Reddit Task Manager about it.
 - **Implementation**: `src/utils/delivery-failure.ts` (pure, single-line/truncated DM formatter with stage labels) and `src/services/delivery-failure-notifier.service.ts` (best-effort `client.users.fetch(OWNER_USER_ID)` → DM, `allowedMentions: { parse: [] }`, never throws, logs success/failure). Wired into all five assignment-failure paths in `src/services/goparttime.service.ts`: `enqueue` (Redis enqueue failed after task creation), `delivery` (background send/image failure or missing ticket channel, via `failDelivery`), `reassign`, and `retry`. Stand-down paths and successful deliveries do not notify.
 - **Tests**: new `src/__tests__/delivery-failure-notifier.test.ts` (formatter sanitization, DM recipient/content/no-mention, null client, fetch/send failures) plus assertions in `delivery-order.test.ts` that a failed send DMs and a stand-down/success does not. Full suite **104/104 suites, 1,412/1,412 tests**, `npm run typecheck` clean; lint still blocked by the pre-existing ESLint 9 flat-config gap.
-- **Deployment**: **pending** — app-only rebuild required, no migration/env change.
+- **Deployment**: app-only rebuild at `2714da2`; verified live with 3 services Up, health 200 healthy DB+Redis, boot "All systems online!", dist gates present and an in-container fake-client call proving the DM content + admin id (no real DM sent during verification), 0 new errors. Backup `rtm-backup-20261116-delivery-dm.tar.gz`; no migration/env change.
 
 ### Deployed (2026-11-16 at `ef33250` — app-only rebuild, no migration, no env change) — Worker claim-time guard
 
