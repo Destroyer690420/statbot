@@ -2,6 +2,15 @@
 
 > Compiled from git history (68 commits, branch `main`, single author) on 2026-08-11. Dates are commit-author dates. Entries before 2026-07-19 do not exist (initial commit). Grouped by day, newest first. Commit hashes reference `git log`.
 
+## 2026-11-16
+
+### Deployed (2026-11-16 at `ef33250` — app-only rebuild, no migration, no env change) — Worker claim-time guard
+
+- **Owner Report**: the bot reportedly accepted 7 posts on 2026-11-16, but they did not show up in the workers' tickets or on the Accepted Tasks page.
+- **Root Cause**: the "bot" was the manager's companion watcher acting on **13 worker-panel claims made in ~40 s by one worker** in ticket `1562313184121987152`. `checkWorkerEligibility()` only counted existing `Task` rows, not pending claims, so every click passed (daily limit 2, only 1 prior task). The companion accepted 7 posts on GoPartTime between 12:11–12:13; 1 created/delivered a task (`1510864`), 1 delivery failed on an image HTTP 400 and the row was deleted from `/accepted` 23 s later, and 5 were rejected by `/assign`'s "Another task is still awaiting submission in this ticket" guard and recorded only as invisible `NEEDS_PUSH` automation logs.
+- **Implementation** (`ef33250`): `automationRepository.hasActiveClaim()` (one PENDING claim per channel/worker) and `listClaimsForWorkerInRange()` (daily-cap accounting); `availableTasksService.checkWorkerEligibility()` now counts unpaired PENDING/CLAIMED claims on top of tasks created today and refuses a new claim while another is in flight; `claimTask()` serializes parallel claims per ticket in-process. Brand-neutral errors only.
+- **Tests / Verification**: new cases in `src/__tests__/available-tasks.test.ts` (pending-claim block, unpaired claims count toward cap, no double count for paired/failed/expired claims, parallel same-ticket claims serialized). Full suite 103/103 suites / 1,407 tests, `npm run typecheck` clean; `npm run lint` still unusable repo-wide (pre-existing missing ESLint 9 flat config). App-only rebuild + live verification recorded in `docs/DEPLOYMENT.md`.
+
 ## 2026-11-14
 
 ### Deployed (2026-11-14 — app-only rebuild, no migration, no env change) — Availability Yes/No buttons
