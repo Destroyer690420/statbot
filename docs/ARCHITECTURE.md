@@ -130,7 +130,8 @@ flowchart TB
 | `task.service` | Task CRUD, status transitions, archive/restore | — |
 | `state-machine` | Transition legality table (pure) | side effects |
 | `reminder.service` | Reminder CRUD, scheduling timing, job-id bookkeeping | sending (worker does it) |
-| `goparttime.service` | External payload validation, assignment, delivery, submission, activation | — |
+| `goparttime.service` | External payload validation, assignment, delivery, submission, activation; calls the notifier on every assignment-FAILED path | — |
+| `delivery-failure-notifier.service` | Best-effort admin DM (OWNER_USER_ID) with task/stage/error when a task delivery fails; never throws | changing the delivery outcome, sending to anyone but the single admin |
 | `payout.service` | Weekly windows, eligible tasks, batches, items | commissions (separate) |
 | `commission.service` | Referral CRUD + commission math + batches + rates | — |
 | `owner-earnings.service` | Hardcoded revenue/cost model; estimates | — |
@@ -139,7 +140,7 @@ flowchart TB
 | `settings.service` | Payout/commission rate rows | — |
 | `insight-storage.service` | Download+saves screenshots, 60h cleanup | — |
 
-Cross-cutting helpers: `src/utils/permissions.ts` (admin/manager IDs), `src/utils/logger.ts` (winston; file transports only in non-production), `src/utils/id-generator.ts`.
+Cross-cutting helpers: `src/utils/permissions.ts` (admin/manager IDs), `src/utils/logger.ts` (winston; file transports only in non-production), `src/utils/id-generator.ts`, `src/utils/delivery-failure.ts` (pure admin-DM formatter for failed task deliveries).
 
 Task-media helpers (both mirror the same "download → enforce a size policy → never silently drop" shape, and both are dependency-light on purpose so they stay unit-testable without a full environment):
 - `src/utils/image-processor.ts` — sharp. ≤10 MB byte-identical, >10 MB WebP quality ladder to ~9 MB.

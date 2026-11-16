@@ -37,6 +37,9 @@ jest.mock('../services/feedback.service', () => ({
   scheduleFeedbackForTask: jest.fn(),
   removeFeedbackJob: jest.fn(),
 }));
+jest.mock('../services/delivery-failure-notifier.service', () => ({
+  notifyDeliveryFailure: jest.fn().mockResolvedValue(true),
+}));
 jest.mock('../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
@@ -57,6 +60,7 @@ import { taskRepository } from '../database/repositories';
 import { auditLogService } from '../services/audit.service';
 import { scheduleNudgeForTask } from '../services/nudge.service';
 import { scheduleFeedbackForTask } from '../services/feedback.service';
+import { notifyDeliveryFailure } from '../services/delivery-failure-notifier.service';
 import { goparttimeService } from '../services/goparttime.service';
 import { TaskStatus, TaskType, AuditAction } from '../types';
 
@@ -134,6 +138,7 @@ beforeEach(() => {
   taskRepo.updateAssignment.mockResolvedValue(undefined);
   auditSvc.log.mockResolvedValue(undefined);
   (scheduleFeedbackForTask as jest.Mock).mockResolvedValue({ scheduled: true, reason: 'test' });
+  (notifyDeliveryFailure as jest.Mock).mockResolvedValue(true);
 });
 
 describe('deliverPendingTask — send order (images 1, 2, 3)', () => {
@@ -185,6 +190,7 @@ describe('deliverPendingTask — send order (images 1, 2, 3)', () => {
       expect.stringContaining('Assigned from external source'),
     );
     expect(scheduleNudgeForTask as jest.Mock).toHaveBeenCalledWith('Post #1');
+    expect(notifyDeliveryFailure).not.toHaveBeenCalled();
     // scheduleFeedbackClock is fire-and-forget — flush the queue first.
     await new Promise((r) => setTimeout(r, 50));
     expect(scheduleFeedbackForTask as jest.Mock).toHaveBeenCalled();
@@ -216,6 +222,7 @@ describe('deliverPendingTask — idempotency and stand-down', () => {
     expect(sentArgs).toHaveLength(0);
     expect(taskRepo.compareAndSetAssignmentSent).not.toHaveBeenCalled();
     expect(taskRepo.updateAssignment).not.toHaveBeenCalled();
+    expect(notifyDeliveryFailure).not.toHaveBeenCalled();
     expect(auditSvc.log).toHaveBeenCalledWith(
       AuditAction.TASK_ASSIGNED,
       'Post #1',
@@ -243,5 +250,15 @@ describe('deliverPendingTask — idempotency and stand-down', () => {
       assignmentError: 'Discord exploded',
     });
     expect(taskRepo.compareAndSetAssignmentSent).not.toHaveBeenCalled();
+    expect(notifyDeliveryFailure).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        taskId: 'Post #1',
+        channelId: 'ch1',
+        workerId: 'worker1',
+        stage: 'delivery',
+        error: 'Discord exploded',
+      }),
+    );
   });
 });

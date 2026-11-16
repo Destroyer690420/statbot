@@ -20,6 +20,8 @@ import { getAllAdminIds } from '../utils/permissions';
 import { transition } from './state-machine';
 import { scheduleNudgeForTask } from './nudge.service';
 import { isDeliverySuperseded } from '../utils/delivery-queue';
+import { DeliveryFailureStage } from '../utils/delivery-failure';
+import { notifyDeliveryFailure } from './delivery-failure-notifier.service';
 import { logger } from '../utils/logger';
 
 /** Thrown when a delivery run must yield to a newer flow (reassign). */
@@ -133,6 +135,14 @@ class GoPartTimeService {
         `Assignment failed (external task ${externalTaskId}): ${message}`,
       );
       logger.error('GoPartTime assignment failed', { taskId: task.id, externalTaskId, error: message });
+      await notifyDeliveryFailure(discordClient, {
+        taskId: task.id,
+        externalTaskId,
+        channelId: channel.id,
+        workerId: member.id,
+        stage: 'enqueue',
+        error: message,
+      });
       return {
         task: { ...task, assignmentStatus: 'FAILED', assignmentError: message },
         created: true,
@@ -176,7 +186,11 @@ class GoPartTimeService {
 
     const channel = await this.resolveChannel(discordClient, task.channelId);
     if (!(channel instanceof TextChannel)) {
-      return this.failDelivery(task, 'Ticket channel not found. Make sure the ticket exists and the bot can see it.');
+      return this.failDelivery(
+        task,
+        'Ticket channel not found. Make sure the ticket exists and the bot can see it.',
+        discordClient,
+      );
     }
 
     // Crash-redelivery: a previous run may have left partial sends behind
@@ -236,7 +250,7 @@ class GoPartTimeService {
       // (reassigned mid-flight), leave it to the newer flow.
       if (await shouldContinue()) {
         const message = error instanceof Error ? error.message : String(error);
-        return this.failDelivery(task, message);
+        return this.failDelivery(task, message, discordClient);
       }
       return this.standDownDelivery(task, channel, sentThisRun, 'row moved during failure');
     }
@@ -267,13 +281,26 @@ class GoPartTimeService {
     return { delivered: false, reason };
   }
 
-  /** Genuine delivery failure: FAILED + error, exactly like the old path. */
-  private async failDelivery(task: Task, message: string): Promise<{ delivered: boolean; reason: string }> {
+  /** Genuine delivery failure: FAILED + error + admin DM (never throws). */
+  private async failDelivery(
+    task: Task,
+    message: string,
+    client: Client,
+    stage: DeliveryFailureStage = 'delivery',
+  ): Promise<{ delivered: boolean; reason: string }> {
     await taskRepository.updateAssignment(task.id, { assignmentStatus: 'FAILED', assignmentError: message });
     await auditLogService
       .log(AuditAction.TASK_ASSIGNED, task.id, null, `Assignment failed (external task ${task.externalTaskId || task.id}): ${message}`)
       .catch(() => undefined);
     logger.error('GoPartTime delivery failed', { taskId: task.id, error: message });
+    await notifyDeliveryFailure(client, {
+      taskId: task.id,
+      externalTaskId: task.externalTaskId,
+      channelId: task.channelId,
+      workerId: task.assignedUserId,
+      stage,
+      error: message,
+    });
     return { delivered: false, reason: message };
   }
 
@@ -657,6 +684,14 @@ deliveryMessages: null as any,
         null,
         `Reassignment failed (task ${task.externalTaskId || task.id}): ${message}`,
       );
+      await notifyDeliveryFailure(discordClient, {
+        taskId: task.id,
+        externalTaskId: task.externalTaskId,
+        channelId: task.channelId,
+        workerId: task.assignedUserId,
+        stage: 'reassign',
+        error: message,
+      });
       throw new Error(`Reassign failed: ${message}`);
     }
   }
@@ -742,6 +777,14 @@ deliveryMessages: null as any,
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await taskRepository.updateAssignment(task.id, { assignmentStatus: 'FAILED', assignmentError: message });
+      await notifyDeliveryFailure(discordClient, {
+        taskId: task.id,
+        externalTaskId: task.externalTaskId,
+        channelId: task.channelId,
+        workerId: task.assignedUserId,
+        stage: 'retry',
+        error: message,
+      });
       throw new Error(`Retry failed: ${message}`);
     }
   }
