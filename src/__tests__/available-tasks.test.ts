@@ -14,6 +14,8 @@ jest.mock('../database/repositories', () => ({
   automationRepository: {
     listBlocked: jest.fn().mockResolvedValue([]),
     createClaim: jest.fn().mockImplementation((data) => Promise.resolve({ id: 'claim-123', ...data })),
+    hasActiveClaim: jest.fn().mockResolvedValue(false),
+    listClaimsForWorkerInRange: jest.fn().mockResolvedValue([]),
   },
   outreachRepository: {
     findByChannelId: jest.fn().mockResolvedValue({ channelId: 'ch-1', selected: true, dailyPostLimit: 2 }),
@@ -47,7 +49,10 @@ describe('AvailableTasksService', () => {
     jest.clearAllMocks();
     (availableTasksService as any).tasks.clear();
     (availableTasksService as any).inFlightClaims.clear();
+    (availableTasksService as any).inFlightChannelClaims.clear();
     (availableTasksService as any).enrichments.clear();
+    (automationRepository.hasActiveClaim as jest.Mock).mockResolvedValue(false);
+    (automationRepository.listClaimsForWorkerInRange as jest.Mock).mockResolvedValue([]);
   });
 
   describe('setLiveTasks and filtering', () => {
@@ -160,6 +165,58 @@ describe('AvailableTasksService', () => {
       expect(status.canClaim).toBe(true);
       expect(status.reason).toBeNull();
     });
+
+    it('blocks a second claim while a claim is still awaiting the companion verdict', async () => {
+      (outreachRepository.findByChannelId as jest.Mock).mockResolvedValueOnce({
+        channelId: 'ch-1',
+        selected: true,
+        dailyPostLimit: 4,
+      });
+      (automationRepository.hasActiveClaim as jest.Mock).mockResolvedValueOnce(true);
+
+      const status = await availableTasksService.checkWorkerEligibility('w-1', 'ch-1');
+      expect(status.canClaim).toBe(false);
+      expect(status.reason).toContain('already have a post being processed');
+      expect(automationRepository.hasActiveClaim).toHaveBeenCalledWith('w-1', 'ch-1');
+    });
+
+    it('counts accepted claims that never became tasks toward the daily cap', async () => {
+      (outreachRepository.findByChannelId as jest.Mock).mockResolvedValueOnce({
+        channelId: 'ch-1',
+        selected: true,
+        dailyPostLimit: 2,
+      });
+      (taskRepository.countGoPartTimePostsByWorkerInRange as jest.Mock).mockResolvedValueOnce(new Map());
+      (automationRepository.listClaimsForWorkerInRange as jest.Mock).mockResolvedValueOnce([
+        { externalTaskId: '501', status: 'CLAIMED' },
+        { externalTaskId: '502', status: 'NEEDS_PUSH' },
+      ]);
+      (taskRepository.findBySourceExternal as jest.Mock).mockResolvedValue(null);
+
+      const status = await availableTasksService.checkWorkerEligibility('w-1', 'ch-1');
+      expect(status.canClaim).toBe(false);
+      expect(status.completedToday).toBe(2);
+      expect(status.reason).toContain('Daily limit reached');
+    });
+
+    it('does not double-count a claim whose task already exists', async () => {
+      (outreachRepository.findByChannelId as jest.Mock).mockResolvedValueOnce({
+        channelId: 'ch-1',
+        selected: true,
+        dailyPostLimit: 2,
+      });
+      (taskRepository.countGoPartTimePostsByWorkerInRange as jest.Mock).mockResolvedValueOnce(new Map([['w-1', 1]]));
+      (automationRepository.listClaimsForWorkerInRange as jest.Mock).mockResolvedValueOnce([
+        { externalTaskId: '501', status: 'CLAIMED' },
+        { externalTaskId: '502', status: 'FAILED' },
+        { externalTaskId: '503', status: 'EXPIRED' },
+      ]);
+      (taskRepository.findBySourceExternal as jest.Mock).mockResolvedValueOnce({ id: 'Post #501' });
+
+      const status = await availableTasksService.checkWorkerEligibility('w-1', 'ch-1');
+      expect(status.canClaim).toBe(true);
+      expect(status.completedToday).toBe(1);
+    });
   });
 
   describe('claimTask', () => {
@@ -188,6 +245,27 @@ describe('AvailableTasksService', () => {
           workerId: 'w-1',
         }),
       );
+    });
+
+    it('serializes parallel claims from the same ticket', async () => {
+      await availableTasksService.setLiveTasks([
+        { subTaskId: '303', type: 'post', subreddit: 'science', title: 'First' },
+        { subTaskId: '304', type: 'post', subreddit: 'science', title: 'Second' },
+      ]);
+
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      (automationRepository.createClaim as jest.Mock).mockImplementationOnce(
+        (data) => gate.then(() => ({ id: 'claim-123', ...data })),
+      );
+
+      const first = availableTasksService.claimTask('303', 'w-1', 'ch-1');
+      const second = await availableTasksService.claimTask('304', 'w-1', 'ch-1');
+      expect(second.ok).toBe(false);
+      expect(second.error).toContain('previous claim is still being processed');
+
+      release();
+      expect((await first).ok).toBe(true);
     });
 
     it('rejects double-claim with specific user error string', async () => {

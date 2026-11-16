@@ -79,6 +79,8 @@ export interface UpdateTaskContentResult {
 export class AvailableTasksService {
   private tasks = new Map<string, AvailableTask>();
   private inFlightClaims = new Set<string>();
+  /** Serializes claim creation per ticket so two parallel HTTP calls cannot both pass the guards. */
+  private inFlightChannelClaims = new Set<string>();
   private enrichments = new Map<string, EnrichmentEntry>();
 
   /**
@@ -307,19 +309,54 @@ export class AvailableTasksService {
     // 2. Count tasks created today in IST for this worker
     const { dayStart, dayEnd } = getIstDayBoundaries();
     const countsMap = await taskRepository.countGoPartTimePostsByWorkerInRange([workerId], dayStart, dayEnd).catch(() => new Map<string, number>());
-    const completedToday = countsMap.get(workerId) ?? 0;
+    // Claims that have not produced a Task row yet must consume the daily slot
+    // too — otherwise a worker can reserve the whole day in seconds while the
+    // companion is still working through the queue. Claims that already became
+    // a task are skipped so the same post is never counted twice (including
+    // tasks later deleted from the dashboard: those still consumed a post).
+    const dayClaims = await Promise.resolve()
+      .then(() => automationRepository.listClaimsForWorkerInRange(workerId, dayStart, dayEnd))
+      .catch(() => [] as Array<{ externalTaskId: string; status: string }>);
+    const unpairedClaims = await Promise.all(
+      dayClaims
+        .filter((claim) => claim.status !== 'FAILED' && claim.status !== 'EXPIRED')
+        .map((claim) =>
+          Promise.resolve()
+            .then(() => taskRepository.findBySourceExternal(GOPARTTIME_SOURCE, claim.externalTaskId))
+            .then((existing) => (existing ? 0 : 1))
+            .catch(() => 0),
+        ),
+    );
+    const completedToday = (countsMap.get(workerId) ?? 0) + unpairedClaims.reduce((sum, n) => sum + n, 0);
 
     if (completedToday >= dailyLimit) {
       return {
         canClaim: false,
-        reason: `Daily limit reached (${completedToday}/${dailyLimit} posts completed today).`,
+        reason: `Daily limit reached (${completedToday}/${dailyLimit} posts today).`,
         dailyLimit,
         completedToday,
         hasActiveTask: false,
       };
     }
 
-    // 3. Check for active in-flight task awaiting submission in this ticket
+    // 3. One post at a time per ticket: a pending burst/panel claim already
+    // owns this worker's slot. The companion can take minutes to accept a
+    // post; letting a second claim through made every later push fail with
+    // "Another task is still awaiting submission in this ticket".
+    const hasActiveClaim = await Promise.resolve()
+      .then(() => automationRepository.hasActiveClaim(workerId, channelId))
+      .catch(() => false);
+    if (hasActiveClaim) {
+      return {
+        canClaim: false,
+        reason: 'You already have a post being processed. Please wait for it to appear in your ticket before claiming another.',
+        dailyLimit,
+        completedToday,
+        hasActiveTask: false,
+      };
+    }
+
+    // 4. Check for active in-flight task awaiting submission in this ticket
     const awaiting = await taskRepository.findAwaitingSubmissionInChannel(channelId).catch(() => null);
     if (awaiting) {
       return {
@@ -341,9 +378,26 @@ export class AvailableTasksService {
   }
 
   /**
-   * Atomically claims a task for a worker.
+   * Atomically claims a task for a worker. One claim per ticket at a time,
+   * including two HTTP requests racing in the same process.
    */
   async claimTask(
+    subTaskId: string,
+    workerId: string,
+    channelId: string,
+  ): Promise<{ ok: boolean; claimId?: string; error?: string }> {
+    if (this.inFlightChannelClaims.has(channelId)) {
+      return { ok: false, error: 'Your previous claim is still being processed. Please try again shortly.' };
+    }
+    this.inFlightChannelClaims.add(channelId);
+    try {
+      return await this.claimTaskUnlocked(subTaskId, workerId, channelId);
+    } finally {
+      this.inFlightChannelClaims.delete(channelId);
+    }
+  }
+
+  private async claimTaskUnlocked(
     subTaskId: string,
     workerId: string,
     channelId: string,

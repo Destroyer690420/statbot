@@ -317,6 +317,32 @@ export class AutomationRepository {
     return getDb().automationClaim.findUnique({ where: { id: pick.id } });
   }
 
+  /**
+   * One post at a time per ticket/worker. True while any claim for this
+   * channel or worker is still waiting for a companion verdict — burst
+   * claims, panel claims and retries all share the same in-flight slot.
+   * The worker panel checks this BEFORE creating another claim, so a worker
+   * cannot reserve a dozen posts while a slow companion works the queue.
+   */
+  async hasActiveClaim(workerId: string, channelId: string): Promise<boolean> {
+    const row = await getDb().automationClaim.findFirst({
+      where: {
+        status: 'PENDING',
+        OR: [{ channelId }, { workerId }],
+      },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
+  /** Claims created for a worker inside an IST-day window (daily-cap accounting). */
+  async listClaimsForWorkerInRange(workerId: string, from: Date, to: Date) {
+    return getDb().automationClaim.findMany({
+      where: { workerId, createdAt: { gte: from, lte: to } },
+      select: { externalTaskId: true, status: true },
+    });
+  }
+
   async listPendingClaims() {
     return getDb().automationClaim.findMany({
       where: { status: 'PENDING' },
